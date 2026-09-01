@@ -1,0 +1,114 @@
+package stream.cliamp.mobile.playback
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Typeface
+import androidx.core.content.res.ResourcesCompat
+import stream.cliamp.mobile.R
+import stream.cliamp.mobile.data.Station
+import stream.cliamp.mobile.data.StationSource
+import java.io.ByteArrayOutputStream
+
+/**
+ * Radio has no cover art, and the directory's favicons are 32px JPEGs of wildly
+ * varying quality. Rather than ship a blank square, we draw the same striped
+ * plate the player screen shows.
+ *
+ * This matters more than it looks: Android's media player derives the whole
+ * chip's background and accent colours from the artwork, so with no artwork the
+ * notification is grey system chrome, and with this it picks up the phosphor.
+ */
+object StationArtwork {
+
+    private const val SIZE = 512
+    private val cache = object : LinkedHashMap<String, ByteArray>(8, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?) = size > 12
+    }
+
+    fun forStation(context: Context, station: Station): ByteArray? = synchronized(cache) {
+        cache.getOrPut(station.id) { render(context, station) }
+    }
+
+    private inline fun <K, V> LinkedHashMap<K, V>.getOrPut(key: K, produce: () -> V): V =
+        get(key) ?: produce().also { put(key, it) }
+
+    private fun render(context: Context, station: Station): ByteArray {
+        val bmp = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+        // ground
+        paint.color = Color.parseColor("#0A0D0A")
+        c.drawRect(0f, 0f, SIZE.toFloat(), SIZE.toFloat(), paint)
+
+        // 135-degree stripes, same geometry as the in-app plate
+        c.save()
+        c.rotate(-45f, SIZE / 2f, SIZE / 2f)
+        val stripe = 22f
+        val diag = SIZE * 1.5f
+        var x = SIZE / 2f - diag
+        var i = 0
+        while (x < SIZE / 2f + diag) {
+            paint.color = if (i % 2 == 0) Color.parseColor("#1A201B") else Color.parseColor("#141815")
+            c.drawRect(x, SIZE / 2f - diag, x + stripe, SIZE / 2f + diag, paint)
+            x += stripe
+            i++
+        }
+        c.restore()
+
+        // the cliamp mark, eight descending bars, in phosphor
+        paint.color = Color.parseColor("#73E889")
+        val bars = listOf(
+            0f to 122.88f, 51.2f to 71.68f, 102.4f to 20.48f, 153.6f to 92.16f,
+            204.8f to 0f, 256f to 81.92f, 307.2f to 40.96f, 358.4f to 112.64f,
+        )
+        val heights = listOf(71.68f, 174.08f, 276.48f, 133.12f, 317.44f, 153.6f, 235.52f, 92.16f)
+        // The media player crops this square to a wide chip and keeps the
+        // middle band, so the mark is sized to survive that crop whole rather
+        // than to fill the square.
+        val scale = 200f / 378.88f
+        val offX = (SIZE - 378.88f * scale) / 2f
+        val offY = (SIZE - 317.44f * scale) / 2f - 10f
+        bars.forEachIndexed { idx, (bx, by) ->
+            c.drawRect(
+                offX + bx * scale,
+                offY + by * scale,
+                offX + (bx + 20.48f) * scale,
+                offY + (by + heights[idx]) * scale,
+                paint,
+            )
+        }
+
+        // caption, matching the player's "[ slug - cliamp radio ]"
+        val mono = runCatching { ResourcesCompat.getFont(context, R.font.jetbrains_mono_regular) }
+            .getOrNull() ?: Typeface.MONOSPACE
+        paint.typeface = mono
+        paint.textSize = 26f
+        paint.color = Color.parseColor("#7B827C")
+        val caption = when {
+            station.source == StationSource.Cliamp -> "[ ${station.slug} · cliamp radio ]"
+            station.countryCode.isNotBlank() -> "[ ${station.countryCode.lowercase()} · live stream ]"
+            else -> "[ live stream ]"
+        }
+        c.drawText(caption.take(34), 34f, SIZE - 40f, paint)
+
+        // hairline frame
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 2f
+        paint.color = Color.parseColor("#2A302B")
+        c.drawRect(1f, 1f, SIZE - 1f, SIZE - 1f, paint)
+
+        return ByteArrayOutputStream().use { out ->
+            bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
+            bmp.recycle()
+            out.toByteArray()
+        }
+    }
+
+    @Suppress("unused")
+    private val unusedPath = Path()
+}

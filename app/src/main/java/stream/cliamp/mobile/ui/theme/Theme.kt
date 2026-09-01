@@ -1,0 +1,86 @@
+package stream.cliamp.mobile.ui.theme
+
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.ripple
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
+
+/**
+ * We ride on MaterialTheme only far enough to keep m3 components (ripples,
+ * text selection) coherent. All real styling comes from [LocalPalette] and
+ * [CliampType] - the concept has no Material surfaces, elevation or shape scale.
+ */
+/** Read by every mechanical control so one switch silences the whole app. */
+val LocalHapticsEnabled = staticCompositionLocalOf { true }
+
+@Composable
+fun CliampTheme(
+    dark: Boolean = true,
+    haptics: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    val palette = if (dark) DarkPalette else LightPalette
+    val scheme = if (dark) {
+        darkColorScheme(
+            primary = palette.accent,
+            onPrimary = palette.onAccent,
+            background = palette.ground,
+            onBackground = palette.ink,
+            surface = palette.panel,
+            onSurface = palette.ink,
+            error = palette.destructive,
+        )
+    } else {
+        lightColorScheme(
+            primary = palette.accent,
+            onPrimary = palette.onAccent,
+            background = palette.ground,
+            onBackground = palette.ink,
+            surface = palette.panel,
+            onSurface = palette.ink,
+            error = palette.destructive,
+        )
+    }
+
+    CompositionLocalProvider(
+        LocalPalette provides palette,
+        LocalHapticsEnabled provides haptics,
+        LocalContentColor provides palette.ink,
+        LocalTextStyle provides CliampType.rowPrimary,
+        LocalIndication provides ripple(color = palette.accent),
+    ) {
+        MaterialTheme(colorScheme = scheme) {
+            Box(Modifier.fillMaxSize().background(palette.ground)) { content() }
+        }
+    }
+}
+
+/** Terse text helper: everything is monospace, so style + colour is all we pass. */
+@Composable
+fun Mono(
+    text: String,
+    style: TextStyle,
+    color: androidx.compose.ui.graphics.Color = LocalContentColor.current,
+    modifier: Modifier = Modifier,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: androidx.compose.ui.text.style.TextOverflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+) = Text(
+    text = text,
+    style = style,
+    color = color,
+    modifier = modifier,
+    maxLines = maxLines,
+    overflow = overflow,
+)
