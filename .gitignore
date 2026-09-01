@@ -10,3 +10,8 @@ captures/
 
 # machine-specific: points at the local Android SDK
 local.properties
+
+# signing: never commit these
+*.jks
+*.keystore
+keystore.properties

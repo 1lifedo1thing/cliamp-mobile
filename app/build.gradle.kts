@@ -1,8 +1,29 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
+
+/**
+ * Signing comes from keystore.properties locally and from environment variables
+ * in CI. Both are gitignored or secret; neither is in the repo.
+ */
+val keystoreProperties = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
+fun signing(key: String, env: String): String? =
+    (keystoreProperties.getProperty(key) ?: System.getenv(env))?.takeIf { it.isNotBlank() }
+
+val releaseStore = signing("storeFile", "KEYSTORE_FILE")
+val releaseStorePassword = signing("storePassword", "KEYSTORE_PASSWORD")
+val releaseKeyAlias = signing("keyAlias", "KEY_ALIAS")
+val releaseKeyPassword = signing("keyPassword", "KEY_PASSWORD")
+val hasReleaseSigning = listOf(releaseStore, releaseStorePassword, releaseKeyAlias, releaseKeyPassword)
+    .all { it != null } && rootProject.file(releaseStore!!).exists()
 
 android {
     namespace = "stream.cliamp.mobile"
@@ -12,8 +33,20 @@ android {
         applicationId = "stream.cliamp.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.0.1"
+        // A tagged release overrides both; a local build keeps the defaults.
+        versionCode = (System.getenv("CLIAMP_VERSION_CODE")?.toIntOrNull()) ?: 1
+        versionName = System.getenv("CLIAMP_VERSION")?.removePrefix("v") ?: "0.0.1"
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(releaseStore!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
@@ -21,7 +54,14 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            // Falling back to the debug key would be worse than it looks: CI
+            // generates a fresh debug keystore per run, so every build would be
+            // signed differently and could not install over the previous one.
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
         debug {
             applicationIdSuffix = ".debug"

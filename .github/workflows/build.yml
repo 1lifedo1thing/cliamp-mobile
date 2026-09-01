@@ -1,0 +1,55 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      # gradle.properties pins the JDK to a path on the author's machine
+      # because the system default there is 26, which Gradle 9.3 will not run
+      # on. The runner has its own JDK, so the pin has to go.
+      - name: Unpin the local JDK
+        run: sed -i '/^org\.gradle\.java\.home=/d' gradle.properties
+
+      - name: Install SDK packages
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+
+      - run: chmod +x gradlew
+
+      - name: Debug build
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      # Release is built too, unsigned. R8 only runs on release, and it is
+      # where the interesting breakage lives: a missing keep rule compiles
+      # fine and then dies at startup.
+      - name: Release build (R8)
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cliamp-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
