@@ -8,6 +8,39 @@ Built from the `Cliamp Mobile.dc.html` concept: one monospace face, hairline rul
 instead of cards, phosphor green as the only accent, and transport keys with real
 mechanical travel.
 
+## Install
+
+Grab the APK from [releases](https://github.com/bjarneo/cliamp-mobile/releases), or:
+
+```sh
+gh release download --repo bjarneo/cliamp-mobile --pattern "*.apk"
+adb install -r cliamp-*.apk
+```
+
+## Releases
+
+Two workflows, first-party actions only.
+
+`build.yml` compiles debug and release on every push. Release is in there on purpose:
+R8 only runs on release, and a missing keep rule compiles clean then dies at startup.
+
+`release.yml` fires on a `v*` tag, builds a signed APK and attaches it to a GitHub
+release. Version comes from the tag, `versionCode` from the run number, so each build
+installs over the last.
+
+```sh
+git tag -a v0.0.2 -m "cliamp 0.0.2"
+git push origin v0.0.2
+```
+
+Signing uses a stable release key held in repository secrets, not the debug key. CI
+generates a fresh debug keystore every run, so debug-signed releases would each carry a
+different key and could never be upgraded over. The workflow refuses to publish an APK
+whose certificate reads `CN=Android Debug`.
+
+`cliamp-release.jks` and `keystore.properties` are gitignored and exist only on the
+author's machine. Losing both means no future build can install over an existing one.
+
 ## Build
 
 ```sh
