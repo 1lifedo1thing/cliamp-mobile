@@ -141,12 +141,26 @@ redirect first; on a slow connection that window closes and the system kills the
 
 ## Design
 
-`docs/design.md` in the concept folder is the source of truth for palette, type scale,
-control geometry and the brick meter. Colours in `ui/theme/Palette.kt` are straight
-sRGB conversions of the concept's oklch values.
+`docs/design.md` is the source of truth for palette, type scale, control geometry and the
+brick meter. It is the concept's own document, copied in verbatim, so it still refers to
+the `Cliamp Mobile.dc.html` artboards that live outside this repo.
 
-Two rules worth repeating: amber means "this lives on a remote host" and nothing else,
-red is only ever destructive, and there is never a third accent hue.
+Colours in `ui/theme/Palette.kt` are straight sRGB conversions of its oklch values. Two
+rules worth repeating: amber means "this lives somewhere else" and nothing else, red is
+only ever destructive, and there is never a third accent hue.
+
+Where the build departs from the document, and why:
+
+| Concept | Here | Why |
+| --- | --- | --- |
+| Scrubber with playhead | `--- STREAMING ---` rule | Live radio cannot seek. Matches `renderSeekBar()` in the cliamp TUI. |
+| Striped art placeholder | Station og:image, plate as fallback | A station's own branding is not invented art. The plate still covers the misses. |
+| Amber means remote host | Also means reconnecting | Red is reserved for destructive actions, so amber was the only honest choice left. |
+| Identity strip on the player | Removed | Its format readout moved into the meta line under the title. |
+| Three descending bars as the mark | The real eight-bar logo | The concept's mark was a stand-in for exactly this. |
+| Remote hosts screen | cliamp radio statistics | Same amber semantics, pointed at the thing that actually is remote. |
+| One monospace face everywhere | System mono in the widget | Android widgets cannot load `res/font`. |
+| Animated brick meter | Static rule in widget and notification | Neither surface can animate. |
 
 ## Licence
 
