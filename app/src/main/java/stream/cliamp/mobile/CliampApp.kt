@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.Prefs
+import stream.cliamp.mobile.net.Http
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.widget.CliampWidgetReceiver
@@ -29,6 +30,7 @@ class CliampApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        Http.init(this)
         repository.bootstrap()
 
         // The last station is restored but never auto-played unless asked:

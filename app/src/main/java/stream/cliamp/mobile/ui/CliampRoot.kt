@@ -63,6 +63,7 @@ fun CliampRoot(
     val station by PlaybackBus.station.collectAsState()
     val streamTitle by PlaybackBus.streamTitle.collectAsState()
     val favorites by prefs.favorites.collectAsState(initial = emptyList())
+    val reconnect by PlaybackBus.reconnectAttempt.collectAsState()
 
     val onPlay: (Station, List<Station>) -> Unit = { s, from ->
         player.play(s, from)
@@ -147,6 +148,7 @@ fun CliampRoot(
                 streamTitle = streamTitle,
                 playing = playerState.playing,
                 buffering = playerState.buffering,
+                reconnecting = reconnect,
                 onToggle = { player.toggle() },
                 onOpen = { tab = Tab.Play },
             )

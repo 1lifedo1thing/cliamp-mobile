@@ -1,6 +1,7 @@
 package stream.cliamp.mobile.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -16,18 +17,25 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.data.Station
+import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.playback.PlayerConnection
@@ -60,6 +68,7 @@ fun NowPlayingScreen(
     val streamTitle by PlaybackBus.streamTitle.collectAsState()
     val format by PlaybackBus.format.collectAsState()
     val error by PlaybackBus.error.collectAsState()
+    val reconnect by PlaybackBus.reconnectAttempt.collectAsState()
     val stats by repository.stats.collectAsState()
     val favorites by prefs.favorites.collectAsState(initial = emptyList())
     val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
@@ -100,6 +109,7 @@ fun NowPlayingScreen(
                     Icon(CliampIcons.PlayTiny, null, Modifier.size(width = 9.dp, height = 10.dp), tint = p.accent)
                     Mono(
                         when {
+                            reconnect > 0 -> "RECONNECTING · $reconnect"
                             error != null -> "STREAM ERROR"
                             state.buffering -> "BUFFERING"
                             state.playing -> "ON AIR"
@@ -107,7 +117,11 @@ fun NowPlayingScreen(
                             else -> "NOTHING TUNED"
                         },
                         CliampType.nowPlayingLabel,
-                        if (error != null) p.destructiveInk else p.accent,
+                        when {
+                            reconnect > 0 -> p.amber
+                            error != null -> p.destructiveInk
+                            else -> p.accent
+                        },
                     )
                 }
                 Mono(
@@ -156,14 +170,19 @@ fun NowPlayingScreen(
 
                 StreamingRule(
                     label = when {
+                        reconnect > 0 -> "reconnecting"
                         error != null -> "no signal"
                         state.buffering -> "buffering"
                         state.playing -> "streaming"
                         station != null -> "paused"
                         else -> "stopped"
                     },
-                    color = if (error != null) p.destructiveInk else p.accent,
-                    dim = !state.playing,
+                    color = when {
+                        reconnect > 0 -> p.amber
+                        error != null -> p.destructiveInk
+                        else -> p.accent
+                    },
+                    dim = !state.playing && reconnect == 0,
                 )
                 Row(
                     Modifier.fillMaxWidth(),
@@ -245,13 +264,23 @@ fun NowPlayingScreen(
 }
 
 /**
- * Station art is never invented either. Directory entries do carry a favicon
- * URL, but they are 32px JPEGs of wildly varying quality; the striped plate
- * with a caption is more honest and reads better at 284dp.
+ * Art is never invented, but it is not always absent either. Directory stations
+ * usually publish an og:image on their homepage, and that is the station's own
+ * branding rather than something we made up, so it is shown when it exists and
+ * the striped plate stands in when it does not.
+ *
+ * The logo is contained, not cropped: most og:images are 1200x630 wordmarks and
+ * a square centre crop cuts them in half.
  */
 @Composable
 private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
+    var art by remember(station?.id) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(station?.id) {
+        art = null
+        val s = station ?: return@LaunchedEffect
+        art = StationArtSource.bitmapFor(s)?.asImageBitmap()
+    }
     val caption = when {
         station == null -> "[ no station tuned ]"
         station.source == StationSource.Cliamp -> "[ ${station.slug} · cliamp radio ]"
@@ -261,8 +290,20 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
     val badge = station?.codec?.uppercase()?.takeIf { it.isNotBlank() }
         ?: station?.let { if (it.bitrate > 0) "${it.bitrate}K" else null }
 
-    StripedArt(modifier = modifier, caption = caption, badge = badge) {
-        if (station?.source == StationSource.Cliamp) {
+    StripedArt(
+        modifier = modifier,
+        caption = if (art == null) caption else null,
+        badge = badge,
+    ) {
+        art?.let { bmp ->
+            Image(
+                bitmap = bmp,
+                contentDescription = station?.name,
+                modifier = Modifier.fillMaxSize().padding(14.dp),
+                contentScale = ContentScale.Fit,
+            )
+        }
+        if (art == null && station?.source == StationSource.Cliamp) {
             Icon(
                 CliampIcons.Mark,
                 null,

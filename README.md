@@ -34,6 +34,38 @@ with `sdk.dir`. Release builds are signed with the debug key; swap `signingConfi
 Playback runs in a `MediaSessionService`, so the lockscreen, notification and Bluetooth
 controls all drive the same player.
 
+## Artwork
+
+Streams carry no cover art, so the app looks for the station's own branding: the
+og:image on its homepage, then the apple-touch-icon, then the favicon the directory
+recorded. About 23 of 25 top stations yield something usable. Whatever turns up is
+letterboxed onto the striped plate rather than centre-cropped, because most og:images
+are 1200x630 wordmarks and a square crop cuts them in half.
+
+cliamp's own channels are excluded on purpose. cliamp.stream has an og:image, but it is
+a marketing screenshot of the desktop app; the generated plate is per-channel, already
+square, and reads better.
+
+Artwork loads after playback starts, never before, so a slow homepage cannot sit between
+the tap and the audio.
+
+## Reconnecting
+
+Live radio dies in two ways and only one of them raises an error.
+
+A hard failure (socket dropped, server 502, DNS gone) surfaces as `onPlayerError`, after
+which ExoPlayer parks in `STATE_IDLE` and never retries on its own. A silent stall keeps
+the connection open but stops delivering, leaving the player in `STATE_BUFFERING`
+indefinitely with no error at all. The second is the common one on a train.
+
+`Reconnector` handles both: exponential backoff (1s, 2s, 4s, 8s, 15s, then every 30s)
+for errors, a 20 second watchdog for stalls, and a `ConnectivityManager` callback so
+coming back into signal retries immediately instead of waiting out the backoff. Malformed
+containers and unsupported codecs are not retried, since those will never succeed.
+
+The player shows `RECONNECTING . n` in amber while this runs. Red stays reserved for
+destructive actions.
+
 ## Notification
 
 Radio has no cover art, so the app draws its own: the striped plate and the phosphor

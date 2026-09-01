@@ -19,6 +19,7 @@ data class Station(
     val bitrate: Int = 0,
     val votes: Int = 0,
     val homepage: String = "",
+    val favicon: String = "",
     val uuid: String = "",
 ) {
     /** `mp3 · 128k · Germany`, skipping whatever the directory did not know. */

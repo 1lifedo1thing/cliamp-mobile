@@ -29,14 +29,23 @@ object StationArtwork {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?) = size > 12
     }
 
+    /** Fast path: no network, drawn locally, safe to call before playback starts. */
     fun forStation(context: Context, station: Station): ByteArray? = synchronized(cache) {
-        cache.getOrPut(station.id) { render(context, station) }
+        cache.getOrPut(station.id) { render(context, station, null) }
     }
+
+    /**
+     * Slow path: the station's own branding letterboxed onto the plate. The
+     * logo is contained rather than cropped - most og:images are wide, and a
+     * centre crop guillotines the wordmark.
+     */
+    fun withArt(context: Context, station: Station, art: Bitmap): ByteArray =
+        render(context, station, art)
 
     private inline fun <K, V> LinkedHashMap<K, V>.getOrPut(key: K, produce: () -> V): V =
         get(key) ?: produce().also { put(key, it) }
 
-    private fun render(context: Context, station: Station): ByteArray {
+    private fun render(context: Context, station: Station, art: Bitmap?): ByteArray {
         val bmp = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -59,6 +68,28 @@ object StationArtwork {
             i++
         }
         c.restore()
+
+        if (art != null) {
+            val inset = 34f
+            val box = SIZE - inset * 2
+            val k = minOf(box / art.width, box / art.height)
+            val w = art.width * k
+            val h = art.height * k
+            val dst = android.graphics.RectF(
+                (SIZE - w) / 2f, (SIZE - h) / 2f,
+                (SIZE + w) / 2f, (SIZE + h) / 2f,
+            )
+            c.drawBitmap(art, null, dst, Paint(Paint.FILTER_BITMAP_FLAG))
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 2f
+            paint.color = Color.parseColor("#2A302B")
+            c.drawRect(1f, 1f, SIZE - 1f, SIZE - 1f, paint)
+            return ByteArrayOutputStream().use { out ->
+                bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
+                bmp.recycle()
+                out.toByteArray()
+            }
+        }
 
         // the cliamp mark, eight descending bars, in phosphor
         paint.color = Color.parseColor("#73E889")

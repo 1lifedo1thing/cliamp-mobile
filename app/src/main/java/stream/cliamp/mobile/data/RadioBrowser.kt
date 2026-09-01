@@ -138,6 +138,7 @@ private data class RbStation(
         bitrate = bitrate,
         votes = votes,
         homepage = homepage,
+        favicon = favicon,
         uuid = stationuuid,
     )
 }

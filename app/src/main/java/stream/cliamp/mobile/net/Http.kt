@@ -15,8 +15,16 @@ import java.util.concurrent.TimeUnit
 object Http {
     const val USER_AGENT = "cliamp-mobile/${BuildConfig.VERSION_NAME} (+https://cliamp.stream)"
 
+    @Volatile private var cacheDir: java.io.File? = null
+
+    /** Called once from Application so artwork lookups can be cached on disk. */
+    fun init(context: android.content.Context) {
+        cacheDir = java.io.File(context.cacheDir, "http")
+    }
+
     val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
+            .apply { cacheDir?.let { cache(okhttp3.Cache(it, 48L * 1024 * 1024)) } }
             .connectTimeout(12, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .callTimeout(30, TimeUnit.SECONDS)

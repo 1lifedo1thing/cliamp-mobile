@@ -43,6 +43,7 @@ import stream.cliamp.mobile.MainActivity
 import stream.cliamp.mobile.R
 import stream.cliamp.mobile.data.CliampRadio
 import stream.cliamp.mobile.data.Station
+import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.net.Http
 import stream.cliamp.mobile.widget.CliampWidgetReceiver
 
@@ -58,6 +59,8 @@ class PlaybackService : MediaSessionService() {
     private lateinit var player: ExoPlayer
     private val fx = AudioFx(bands = SPECTRUM_BANDS)
     @Volatile private var spectrumWanted = true
+    private var artworkJob: kotlinx.coroutines.Job? = null
+    private var reconnector: Reconnector? = null
     private lateinit var prefs0: stream.cliamp.mobile.data.Prefs
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -102,6 +105,11 @@ class PlaybackService : MediaSessionService() {
 
         player.addListener(PlayerEvents())
         player.addAnalyticsListener(FormatEvents())
+
+        reconnector = Reconnector(this, player, scope) { retrying, attempt ->
+            PlaybackBus.publishReconnect(if (retrying) attempt else 0)
+            if (retrying) PlaybackBus.publishError(null)
+        }.also { it.attach() }
 
         val open = PendingIntent.getActivity(
             this, 0,
@@ -204,6 +212,32 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    /**
+     * Station branding arrives over the network, so it must not sit between the
+     * tap and the audio. The item starts with the locally drawn plate and this
+     * swaps in the real thing whenever it turns up, reusing the same
+     * replaceMediaItem trick the ICY title uses.
+     */
+    private fun loadArtwork(station: Station) {
+        artworkJob?.cancel()
+        artworkJob = scope.launch {
+            val art = StationArtSource.bitmapFor(station) ?: return@launch
+            if (PlaybackBus.station.value?.url != station.url) return@launch
+            val item = player.currentMediaItem ?: return@launch
+            val bytes = StationArtwork.withArt(this@PlaybackService, station, art)
+            player.replaceMediaItem(
+                player.currentMediaItemIndex,
+                item.buildUpon()
+                    .setMediaMetadata(
+                        item.mediaMetadata.buildUpon()
+                            .setArtworkData(bytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                            .build()
+                    )
+                    .build(),
+            )
+        }
+    }
+
     /** Same walk the widget does: favourites if any, otherwise cliamp's channels. */
     private suspend fun stepStation(delta: Int) {
         val list = prefs0.favorites.first().ifEmpty { CliampRadio.builtin }
@@ -259,6 +293,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        reconnector?.detach()
         fx.release()
         scope.cancel()
         // the session must go first; releasing the player under a live
@@ -309,7 +344,13 @@ class PlaybackService : MediaSessionService() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            PlaybackBus.publishError(error.errorCodeName.removePrefix("ERROR_CODE_").lowercase().replace('_', ' '))
+            // the reconnector decides whether this is fatal; only say so once
+            // it has given up, otherwise the UI flashes red mid-retry
+            if (reconnector?.isRetrying != true) {
+                PlaybackBus.publishError(
+                    error.errorCodeName.removePrefix("ERROR_CODE_").lowercase().replace('_', ' ')
+                )
+            }
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -327,6 +368,9 @@ class PlaybackService : MediaSessionService() {
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) {
+                PlaybackBus.station.value?.let(::loadArtwork)
+            }
             // replaceMediaItem (how the ICY title reaches the notification)
             // surfaces here too; clearing the title on that would fight the
             // very update that caused it.

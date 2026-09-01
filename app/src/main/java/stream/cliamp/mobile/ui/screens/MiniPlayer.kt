@@ -37,6 +37,7 @@ fun MiniPlayer(
     streamTitle: String,
     playing: Boolean,
     buffering: Boolean,
+    reconnecting: Int = 0,
     onToggle: () -> Unit,
     onOpen: () -> Unit,
 ) {
@@ -66,13 +67,14 @@ fun MiniPlayer(
                 Mono(station.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
                 Mono(
                     when {
+                        reconnecting > 0 -> "reconnecting · $reconnecting"
                         buffering -> "buffering…"
                         streamTitle.isNotBlank() -> streamTitle
                         station.source == StationSource.Cliamp -> "cliamp radio"
                         else -> station.meta.ifBlank { "live stream" }
                     },
                     CliampType.rowSecondary,
-                    if (buffering) p.amber else p.inkTertiary,
+                    if (buffering || reconnecting > 0) p.amber else p.inkTertiary,
                     maxLines = 1,
                 )
             }

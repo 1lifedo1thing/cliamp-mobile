@@ -28,6 +28,10 @@ object PlaybackBus {
     private val _format = MutableStateFlow(StreamFormat())
     val format: StateFlow<StreamFormat> = _format.asStateFlow()
 
+    /** Non-zero while a dropped stream is being retried; the value is the attempt. */
+    private val _reconnectAttempt = MutableStateFlow(0)
+    val reconnectAttempt: StateFlow<Int> = _reconnectAttempt.asStateFlow()
+
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
@@ -43,6 +47,7 @@ object PlaybackBus {
     fun publishStation(v: Station?) { _station.value = v; if (v != null) _streamTitle.value = "" }
     fun publishFormat(v: StreamFormat) { _format.value = v }
     fun publishError(v: String?) { _error.value = v }
+    fun publishReconnect(attempt: Int) { _reconnectAttempt.value = attempt }
     fun publishAudioSessionId(v: Int) { _audioSessionId.value = v }
     fun publishEqBandLabels(v: List<String>) { _eqBandLabels.value = v }
 }
