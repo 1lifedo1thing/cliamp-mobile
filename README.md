@@ -142,8 +142,12 @@ redirect first; on a slow connection that window closes and the system kills the
 ## Design
 
 `docs/design.md` is the source of truth for palette, type scale, control geometry and the
-brick meter. It is the concept's own document, copied in verbatim, so it still refers to
-the `Cliamp Mobile.dc.html` artboards that live outside this repo.
+brick meter, and `docs/Cliamp Mobile.dc.html` holds the twelve artboards it refers to.
+Both are the concept's own documents, copied in verbatim.
+
+Open the HTML in any browser. It renders standalone: the canvas runtime it was authored
+with is not included, and does not need to be, because the artboards are plain HTML and
+CSS and the font link and keyframes still apply from the body.
 
 Colours in `ui/theme/Palette.kt` are straight sRGB conversions of its oklch values. Two
 rules worth repeating: amber means "this lives somewhere else" and nothing else, red is
