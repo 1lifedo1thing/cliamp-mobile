@@ -1,0 +1,4 @@
+[tools]
+# JDK for Gradle 9.3 (requires 17-21). mise sets JAVA_HOME when you enter
+# this directory, so gradle.properties no longer hardcodes a path.
+java = "temurin-21"
