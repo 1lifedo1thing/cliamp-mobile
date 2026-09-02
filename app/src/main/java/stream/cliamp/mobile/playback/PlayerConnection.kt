@@ -10,6 +10,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -151,7 +152,13 @@ class PlayerConnection(
         PlaybackBus.publishError(null)
         PlaybackBus.publishFormat(StreamFormat())
 
-        scope.launch {
+        // The tapped station is published and rendered first, on the calling
+        // thread, so the music screen and mini bar update the instant a song is
+        // touched. MediaController insists its methods run on the main thread,
+        // but launching on the plain Main dispatcher (not `immediate`) yields
+        // to the looper first, so that already-published new title and plate
+        // draw a frame before the blocking setMediaItems/prepare work runs.
+        scope.launch(Dispatchers.Main) {
             val c = controller ?: return@launch
             // Any queue of finite tracks is a real playlist, so Media3 plays
             // one after another regardless of where they came from: local files
