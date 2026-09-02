@@ -97,7 +97,6 @@ fun LocalScreen(
     recent: List<Station>,
     onPlay: (Station, List<Station>) -> Unit,
     onToggleFavorite: (Station) -> Unit,
-    onOpenPlayer: () -> Unit,
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
@@ -146,7 +145,9 @@ fun LocalScreen(
 
     val filtered = filterSongs(songs, query)
     val showing = allPlaylists.firstOrNull { it.station.slug == openSlug }
-    val playAndOpen: (Station, List<Station>) -> Unit = { s, list -> onPlay(s, list); onOpenPlayer() }
+    // Playing starts minimized; the full player only opens when the mini-player
+    // bar at the bottom is tapped.
+    val justPlay: (Station, List<Station>) -> Unit = { s, list -> onPlay(s, list) }
 
     // Pinned smart playlists — auto-populated from global state, non-removable.
     // The "local songs" row is always at the very top, above everything else.
@@ -243,7 +244,7 @@ fun LocalScreen(
                     pl = openSmartPlaylist,
                     current = current,
                     playing = playing,
-                    onPlay = playAndOpen,
+                    onPlay = justPlay,
                     onToggleFavorite = onToggleFavorite,
                     favorites = favorites.map { it.url }.toSet(),
                 )
@@ -254,7 +255,7 @@ fun LocalScreen(
                     allSongs = filtered,
                     current = current,
                     playing = playing,
-                    onPlay = playAndOpen,
+                    onPlay = justPlay,
                     onRemove = { id -> scope.launch { playlists.removeSong(showing.station.slug, id) } },
                     onAdd = { id -> scope.launch { playlists.addSong(showing.station.slug, id) } },
                     adding = addingTo != null,

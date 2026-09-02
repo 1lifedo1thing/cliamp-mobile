@@ -61,6 +61,7 @@ fun NowPlayingScreen(
     prefs: Prefs,
     player: PlayerConnection,
     onOpenScope: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -78,6 +79,14 @@ fun NowPlayingScreen(
     val isFav = station != null && favorites.any { it.url == station!!.url }
 
     Column(Modifier.fillMaxSize().background(p.ground).statusBarsPadding()) {
+        Mono(
+            "‹ back",
+            CliampType.tabLabel,
+            p.inkTertiary,
+            Modifier
+                .clickable(onClick = onBack)
+                .padding(start = Gutter, top = 6.dp, end = 16.dp, bottom = 2.dp),
+        )
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
         // it is the first thing to give way. Compose has no shrink factor, so
         // we measure the column and hand the plate whatever is left over -

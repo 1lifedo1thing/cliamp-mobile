@@ -63,7 +63,6 @@ fun StationsScreen(
     onPlay: (Station, List<Station>) -> Unit,
     onToggleFavorite: (Station) -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenPlayer: () -> Unit,
 ) {
     val p = LocalPalette.current
     var source by remember { mutableStateOf(Source.All) }
@@ -142,7 +141,7 @@ fun StationsScreen(
                             active = current?.url == s.url,
                             playing = playing && current?.url == s.url,
                             favorite = true,
-                            onPlay = { onPlay(s, radioFavorites); onOpenPlayer() },
+                            onPlay = { onPlay(s, radioFavorites) },
                             onToggleFavorite = { onToggleFavorite(s) },
                         )
                     }
@@ -161,7 +160,7 @@ fun StationsScreen(
                         active = current?.url == s.url,
                         playing = playing && current?.url == s.url,
                         favorite = favorites.any { it.url == s.url },
-                        onPlay = { onPlay(s, cliamp); onOpenPlayer() },
+                        onPlay = { onPlay(s, cliamp) },
                         onToggleFavorite = { onToggleFavorite(s) },
                     )
                 }
@@ -200,7 +199,7 @@ fun StationsScreen(
                         active = current?.url == s.url,
                         playing = playing && current?.url == s.url,
                         favorite = favorites.any { it.url == s.url },
-                        onPlay = { onPlay(s, directory.stations); onOpenPlayer() },
+                        onPlay = { onPlay(s, directory.stations) },
                         onToggleFavorite = { onToggleFavorite(s) },
                     )
                 }

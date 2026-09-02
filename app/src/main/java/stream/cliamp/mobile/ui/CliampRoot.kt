@@ -108,13 +108,13 @@ fun CliampRoot(
                     prefs = prefs,
                     player = player,
                     onOpenScope = { overlay = Overlay.Scope },
+                    onBack = { overlay = Overlay.None },
                 )
                 Overlay.Queue -> QueueScreen(
                     player = player,
                     current = station,
                     playing = playerState.playing,
                     onPlay = onPlay,
-                    onOpenPlayer = { overlay = Overlay.Player },
                     onBack = { overlay = Overlay.None },
                 )
                 Overlay.Scope -> ScopeScreen(
@@ -181,7 +181,6 @@ fun CliampRoot(
                         onPlay = onPlay,
                         onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
                         onOpenSettings = { overlay = Overlay.Settings },
-                        onOpenPlayer = { overlay = Overlay.Player },
                     )
                     Tab.Lib -> LocalScreen(
                         localLibrary = localLibrary,
@@ -192,7 +191,6 @@ fun CliampRoot(
                         recent = recent,
                         onPlay = onPlay,
                         onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
-                        onOpenPlayer = { overlay = Overlay.Player },
                     )
                     Tab.Cmd -> CommandScreen(
                         repository = repository,
@@ -200,7 +198,6 @@ fun CliampRoot(
                         onPlay = onPlay,
                         onOpenScope = { overlay = Overlay.Scope },
                         onOpenSettings = { overlay = Overlay.Settings },
-                        onOpenPlayer = { overlay = Overlay.Player },
                     )
                 }
             }
