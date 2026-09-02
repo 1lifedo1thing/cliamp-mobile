@@ -8,10 +8,32 @@ object ProviderCatalog {
 
     val navidrome = ProviderSpec(
         key = "navidrome",
-        name = "Navidrome / Subsonic",
+        name = "Navidrome",
         intro = listOf(
             "self-hosted music server speaking the subsonic api.",
-            "also works with gonic, airsonic and other subsonic servers.",
+            "login with username and password.",
+        ),
+        fields = listOf(
+            FieldSpec(
+                key = "url",
+                label = "Server URL",
+                help = "e.g. music.example.com — https is assumed",
+                keyboard = FieldKeyboard.Url,
+            ),
+            FieldSpec(key = "user", label = "Username"),
+            FieldSpec(key = "password", label = "Password", secret = true),
+        ),
+        validate = { v ->
+            SubsonicClient(v["url"].orEmpty(), v["user"].orEmpty(), v["password"].orEmpty()).ping()
+        },
+    )
+
+    val subsonic = ProviderSpec(
+        key = "subsonic",
+        name = "Subsonic",
+        intro = listOf(
+            "generic subsonic api server.",
+            "works with gonic, airsonic, supersonic and other subsonic servers.",
         ),
         fields = listOf(
             FieldSpec(
@@ -248,7 +270,7 @@ object ProviderCatalog {
         },
     )
 
-    val all: List<ProviderSpec> = listOf(navidrome, jellyfin, emby, plex, abs, lyrion)
+    val all: List<ProviderSpec> = listOf(navidrome, subsonic, jellyfin, emby, plex, abs, lyrion)
 
     fun byKey(key: String): ProviderSpec? = all.firstOrNull { it.key == key }
 }
