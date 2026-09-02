@@ -104,6 +104,8 @@ fun LocalScreen(
     onAddToQueue: (Station) -> Unit,
     onOpenPlayer: () -> Unit,
     providers: List<ProviderAccount> = emptyList(),
+    showProviders: Boolean = false,
+    onShowProviders: (Boolean) -> Unit = {},
     onOpenProvider: (ProviderAccount) -> Unit = {},
     onAddProvider: (ProviderSpec) -> Unit = {},
 ) {
@@ -113,7 +115,6 @@ fun LocalScreen(
 
     var query by remember { mutableStateOf("") }
     var searchOpen by remember { mutableStateOf(false) }
-    var showProviders by remember { mutableStateOf(false) }
     var openSlug by remember { mutableStateOf<String?>(null) }
     var openSmart by remember { mutableStateOf<SmartKind?>(null) }
     var addingTo by remember { mutableStateOf<String?>(null) }
@@ -173,7 +174,7 @@ fun LocalScreen(
             addingTo != null -> addingTo = null
             showing != null -> openSlug = null
             openSmartPlaylist != null -> openSmart = null
-            showProviders -> showProviders = false
+            showProviders -> onShowProviders(false)
             else -> {}
         }
     }
@@ -190,7 +191,8 @@ fun LocalScreen(
                     when {
                         showing != null -> showing.station.name
                         openSmartPlaylist != null -> openSmartPlaylist.label
-                        else -> "Library"
+                        showProviders -> "providers"
+                        else -> "playlists"
                     },
                     CliampType.screenTitle, p.ink, maxLines = 1,
                 )
@@ -201,8 +203,8 @@ fun LocalScreen(
                     Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, bottom = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
-                    Chip("library", selected = !showProviders, onClick = { showProviders = false })
-                    Chip("providers", selected = showProviders, onClick = { showProviders = true })
+                    Chip("playlists", selected = !showProviders, onClick = { onShowProviders(false) })
+                    Chip("providers", selected = showProviders, onClick = { onShowProviders(true) })
                 }
             }
             if (showing != null) {
@@ -636,14 +638,17 @@ private fun ProvidersView(
                                 .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(CliampIcons.Plus, "add", Modifier.size(13.dp), tint = p.accent)
+                            Icon(CliampIcons.Server, null, Modifier.size(14.dp), tint = p.inkTertiary)
                         }
                     },
                     trailing = {
-                        Mono("+ add", CliampType.tabLabel, p.accent,
-                            Modifier.clip(RoundedCornerShape(4.dp))
+                        Icon(
+                            CliampIcons.Plus, "add",
+                            Modifier.size(11.dp).clip(RoundedCornerShape(4.dp))
                                 .background(p.accent.copy(alpha = 0.14f))
-                                .padding(horizontal = 8.dp, vertical = 5.dp))
+                                .padding(6.dp),
+                            tint = p.accent,
+                        )
                     },
                 ) {
                     Mono(spec.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)

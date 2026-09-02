@@ -62,6 +62,9 @@ private sealed interface Overlay {
     data class Browse(val accountId: String) : Overlay
 }
 
+/** Tabs within the Library screen. */
+private enum class LibSubTab { Library, Providers }
+
 @UnstableApi
 @Composable
 fun CliampRoot(
@@ -77,6 +80,10 @@ fun CliampRoot(
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf(Tab.Lib) }
     var overlay by remember { mutableStateOf<Overlay>(Overlay.None) }
+    // Which Library sub-tab is showing. Lifted here so that closing an overlay
+    // that was opened from the providers pane (add wizard or a provider's browse)
+    // lands back on providers rather than the library list.
+    var libSubTab by remember { mutableStateOf(LibSubTab.Library) }
 
     val playerState by player.state.collectAsState()
     val station by PlaybackBus.station.collectAsState()
@@ -183,8 +190,16 @@ fun CliampRoot(
                         onAddToQueue = { player.addToQueue(it) },
                         onOpenPlayer = { overlay = Overlay.Player },
                         providers = providerAccounts,
-                        onOpenProvider = { a -> overlay = Overlay.Browse(a.id) },
-                        onAddProvider = { spec -> overlay = Overlay.Wizard(spec.key, null) },
+                        showProviders = libSubTab == LibSubTab.Providers,
+                        onShowProviders = { v -> libSubTab = if (v) LibSubTab.Providers else LibSubTab.Library },
+                        onOpenProvider = { a ->
+                            libSubTab = LibSubTab.Providers
+                            overlay = Overlay.Browse(a.id)
+                        },
+                        onAddProvider = { spec ->
+                            libSubTab = LibSubTab.Providers
+                            overlay = Overlay.Wizard(spec.key, null)
+                        },
                     )
                     Tab.Cmd -> CommandScreen(
                         repository = repository,
