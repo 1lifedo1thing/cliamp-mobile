@@ -86,6 +86,17 @@ fun StationsScreen(
         if (nearEnd && source != Source.Cliamp && source != Source.Favs) repository.nextPage()
     }
 
+    // A global search in the command/tab writes its temporary query into the
+    // shared directory feed. The Stations tab is "every radio" - it must not
+    // inherit that, or a leftover search would silently filter the whole list.
+    // Whenever this tab is active and the feed is stuck on a search, nudge it
+    // back to the default full browse.
+    LaunchedEffect(directory.query) {
+        if (directory.query is DirectoryQuery.Search) {
+            repository.loadDirectory(DirectoryQuery.TopVoted, reset = true)
+        }
+    }
+
     Column(Modifier.fillMaxSize().background(p.ground)) {
         ScreenHeader {
             Row(
