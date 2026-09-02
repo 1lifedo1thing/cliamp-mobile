@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.data.provider.ProviderCatalog
+import stream.cliamp.mobile.data.provider.ProviderSpec
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
@@ -40,7 +41,7 @@ import stream.cliamp.mobile.ui.theme.Mono
 @Composable
 fun ProvidersScreen(
     accounts: List<ProviderAccount>,
-    onAdd: () -> Unit,
+    onAdd: (ProviderSpec) -> Unit,
     onOpen: (ProviderAccount) -> Unit,
     onEdit: (ProviderAccount) -> Unit,
     onRemove: (ProviderAccount) -> Unit,
@@ -62,7 +63,7 @@ fun ProvidersScreen(
                         .size(30.dp)
                         .clip(RoundedCornerShape(6.dp))
                         .border(1.dp, p.keyBorder, RoundedCornerShape(6.dp))
-                        .clickable(onClick = onAdd),
+                        .clickable { ProviderCatalog.all.firstOrNull()?.let(onAdd) },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(CliampIcons.Plus, "add provider", Modifier.size(13.dp), tint = p.accent)
@@ -149,7 +150,7 @@ fun ProvidersScreen(
                     SectionLabel("available")
                     ProviderCatalog.all.forEach { spec ->
                         ListRow(
-                            onClick = onAdd,
+                            onClick = { onAdd(spec) },
                             verticalPadding = 12.dp,
                             leading = {
                                 Icon(CliampIcons.Plus, null, Modifier.size(12.dp), tint = p.accent)

@@ -30,10 +30,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.provider.ProviderAccount
-import stream.cliamp.mobile.data.provider.SubsonicAlbum
-import stream.cliamp.mobile.data.provider.SubsonicArtist
-import stream.cliamp.mobile.data.provider.SubsonicTrack
-import stream.cliamp.mobile.data.provider.subsonic
+import stream.cliamp.mobile.data.provider.ProviderAlbum
+import stream.cliamp.mobile.data.provider.ProviderArtist
+import stream.cliamp.mobile.data.provider.ProviderTrack
+import stream.cliamp.mobile.data.provider.browseClient
 import stream.cliamp.mobile.data.provider.toStation
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
@@ -47,7 +47,7 @@ import stream.cliamp.mobile.ui.theme.Mono
 private enum class Root(val label: String, val listType: String) {
     Newest("newest", "newest"),
     Frequent("most played", "frequent"),
-    AZ("a-z", "alphabeticalByName"),
+    AZ("a-z", "az"),
     Artists("artists", ""),
     Starred("starred", ""),
 }
@@ -60,9 +60,11 @@ private sealed interface Node {
 }
 
 /**
- * Browses one provider's library: albums, artists and starred tracks, drilling
- * into an album's track list. Playing a track queues the whole album, which is
- * what you almost always want from a server and costs one extra call.
+ * Browses one provider's library: albums, artists, starred tracks, drilling
+ * into an album's track list. Playing a track queues the whole album.
+ *
+ * The screen only knows the generic [ProviderBrowseClient]; Subsonic and
+ * Jellyfin/Emby behind it. Roots some providers do not offer are just hidden.
  */
 @Composable
 fun ProviderBrowseScreen(
@@ -73,13 +75,21 @@ fun ProviderBrowseScreen(
     onOpenPlayer: () -> Unit,
 ) {
     val p = LocalPalette.current
-    val client = remember(account.id) { account.subsonic() }
+    val client = remember(account.id) { account.browseClient() }
+    // Roots with no semantics on the server are dropped from the chip row.
+    val roots = remember(account.providerKey) {
+        if (account.providerKey == "jellyfin" || account.providerKey == "emby") {
+            listOf(Root.Newest, Root.AZ, Root.Artists)
+        } else {
+            Root.entries
+        }
+    }
 
     var stack by remember(account.id) { mutableStateOf<List<Node>>(listOf(Node.Home)) }
-    var root by remember(account.id) { mutableStateOf(Root.Newest) }
-    var albums by remember { mutableStateOf<List<SubsonicAlbum>>(emptyList()) }
-    var artists by remember { mutableStateOf<List<SubsonicArtist>>(emptyList()) }
-    var tracks by remember { mutableStateOf<List<SubsonicTrack>>(emptyList()) }
+    var root by remember(account.id) { mutableStateOf(roots.first()) }
+    var albums by remember { mutableStateOf<List<ProviderAlbum>>(emptyList()) }
+    var artists by remember { mutableStateOf<List<ProviderArtist>>(emptyList()) }
+    var tracks by remember { mutableStateOf<List<ProviderTrack>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
     var failure by remember { mutableStateOf<String?>(null) }
 
@@ -152,7 +162,7 @@ fun ProviderBrowseScreen(
                         .padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
-                    Root.entries.forEach { r -> Chip(r.label, root == r, onClick = { root = r }) }
+                    roots.forEach { r -> Chip(r.label, root == r, onClick = { root = r }) }
                 }
             } else {
                 Spacer(Modifier.height(10.dp))
@@ -182,7 +192,9 @@ fun ProviderBrowseScreen(
                     ListRow(
                         onClick = { stack = stack + Node.Artist(a.id, a.name) },
                         verticalPadding = 11.dp,
-                        trailing = { Mono("${a.albumCount}", CliampType.meta, p.inkFaint) },
+                        trailing = {
+                            if (a.albumCount > 0) Mono("${a.albumCount}", CliampType.meta, p.inkFaint)
+                        },
                     ) {
                         Mono(a.name, CliampType.rowPrimary, p.ink, maxLines = 1)
                     }
@@ -196,7 +208,9 @@ fun ProviderBrowseScreen(
                     ListRow(
                         onClick = { stack = stack + Node.Album(a.id, a.name, a.artist) },
                         verticalPadding = 11.dp,
-                        trailing = { Mono("${a.songCount}", CliampType.meta, p.inkFaint) },
+                        trailing = {
+                            if (a.songCount > 0) Mono("${a.songCount}", CliampType.meta, p.inkFaint)
+                        },
                     ) {
                         Mono(a.name, CliampType.rowPrimary, p.ink, maxLines = 1)
                         Mono(
@@ -216,7 +230,7 @@ fun ProviderBrowseScreen(
                     val t = tracks[i]
                     ListRow(
                         onClick = {
-                            val queue = tracks.map { it.toStation(account, client) }
+                            val queue = tracks.map { it.toStation(account, client.trackCover(it.id)) }
                             onPlay(queue[i], queue)
                             onOpenPlayer()
                         },

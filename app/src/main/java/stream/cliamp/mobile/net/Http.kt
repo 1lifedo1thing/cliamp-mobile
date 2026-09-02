@@ -4,8 +4,10 @@ import kotlinx.coroutines.Dispatchers
 import stream.cliamp.mobile.BuildConfig
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 /**
@@ -39,11 +41,55 @@ object Http {
         explicitNulls = false
     }
 
-    suspend fun text(url: String): String = withContext(Dispatchers.IO) {
-        val req = Request.Builder().url(url).header("User-Agent", USER_AGENT).build()
-        client.newCall(req).execute().use { r ->
-            if (!r.isSuccessful) error("HTTP ${r.code} for $url")
-            r.body.string()
+    suspend fun text(url: String): String = text(url, emptyMap())
+
+    /** GET [url] with extra headers; used by providers that auth via headers. */
+    suspend fun text(url: String, headers: Map<String, String>): String = withContext(Dispatchers.IO) {
+        request(url, headers) { r -> r.body.string() }
+    }
+
+    /** GET returning the raw response for callers that need status/codec. */
+    suspend fun call(url: String, headers: Map<String, String> = emptyMap()): okhttp3.Response =
+        execute(url, headers, method = null, body = null)
+
+    /** POST [body] as JSON with [headers]. */
+    suspend fun postJson(
+        url: String,
+        body: String,
+        headers: Map<String, String> = emptyMap(),
+    ): String = withContext(Dispatchers.IO) {
+        request(url, headers, method = "POST", body = body) { r -> r.body.string() }
+    }
+
+    private suspend fun execute(
+        url: String,
+        headers: Map<String, String>,
+        method: String?,
+        body: String?,
+    ): okhttp3.Response = withContext(Dispatchers.IO) {
+        val b = Request.Builder().url(url).header("User-Agent", USER_AGENT)
+        headers.forEach { (k, v) -> b.header(k, v) }
+        if (method != null && body != null) {
+            b.method(method, body.toRequestBody("application/json; charset=utf-8".toMediaType()))
+        } else if (method != null) {
+            b.method(method, null)
+        }
+        client.newCall(b.build()).execute()
+    }
+
+    private suspend fun <T> request(
+        url: String,
+        headers: Map<String, String>,
+        method: String? = null,
+        body: String? = null,
+        block: (okhttp3.Response) -> T,
+    ): T {
+        val r = execute(url, headers, method, body)
+        return if (!r.isSuccessful) {
+            r.close()
+            error("HTTP ${r.code} for $url")
+        } else {
+            r.use { block(it) }
         }
     }
 
