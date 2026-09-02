@@ -22,13 +22,17 @@ import androidx.compose.ui.Modifier
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.Prefs
+import stream.cliamp.mobile.data.LocalLibrary
+import stream.cliamp.mobile.data.PlaylistStore
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.ui.components.CliampTabBar
+import stream.cliamp.mobile.ui.components.QueueBar
 import stream.cliamp.mobile.ui.components.Tab
 import stream.cliamp.mobile.ui.screens.CommandScreen
+import stream.cliamp.mobile.ui.screens.LocalScreen
 import stream.cliamp.mobile.ui.screens.MiniPlayer
 import stream.cliamp.mobile.ui.screens.NowPlayingScreen
 import stream.cliamp.mobile.ui.screens.QueueScreen
@@ -44,6 +48,7 @@ private sealed interface Overlay {
     data object Scope : Overlay
     data object Stats : Overlay
     data object Settings : Overlay
+    data object Queue : Overlay
 }
 
 @UnstableApi
@@ -52,6 +57,8 @@ fun CliampRoot(
     repository: Repository,
     prefs: Prefs,
     player: PlayerConnection,
+    localLibrary: LocalLibrary,
+    playlists: PlaylistStore,
     dark: Boolean,
 ) {
     val p = LocalPalette.current
@@ -63,7 +70,9 @@ fun CliampRoot(
     val station by PlaybackBus.station.collectAsState()
     val streamTitle by PlaybackBus.streamTitle.collectAsState()
     val favorites by prefs.favorites.collectAsState(initial = emptyList())
+    val recent by prefs.history.collectAsState(initial = emptyList())
     val reconnect by PlaybackBus.reconnectAttempt.collectAsState()
+    val queue by player.queue.collectAsState(initial = emptyList())
 
     val onPlay: (Station, List<Station>) -> Unit = { s, from ->
         player.play(s, from)
@@ -77,9 +86,18 @@ fun CliampRoot(
         }
     }
 
-    Column(Modifier.fillMaxSize().background(p.ground)) {
+    Box(Modifier.fillMaxSize().background(p.ground)) {
+        Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (overlay) {
+                Overlay.Queue -> QueueScreen(
+                    player = player,
+                    current = station,
+                    playing = playerState.playing,
+                    onPlay = onPlay,
+                    onOpenPlayer = { overlay = Overlay.None; tab = Tab.Play },
+                    onBack = { overlay = Overlay.None },
+                )
                 Overlay.Scope -> ScopeScreen(
                     prefs = prefs,
                     station = station,
@@ -105,7 +123,7 @@ fun CliampRoot(
                         player = player,
                         onOpenScope = { overlay = Overlay.Scope },
                     )
-                    Tab.Lib -> StationsScreen(
+                    Tab.Stations -> StationsScreen(
                         repository = repository,
                         prefs = prefs,
                         current = station,
@@ -113,16 +131,21 @@ fun CliampRoot(
                         favorites = favorites,
                         onPlay = onPlay,
                         onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
+                        onAddToQueue = { player.addToQueue(it) },
                         onOpenStats = { overlay = Overlay.Stats },
                         onOpenSettings = { overlay = Overlay.Settings },
                         onOpenPlayer = { tab = Tab.Play },
                     )
-                    Tab.Queue -> QueueScreen(
-                        prefs = prefs,
-                        player = player,
+                    Tab.Lib -> LocalScreen(
+                        localLibrary = localLibrary,
+                        playlists = playlists,
                         current = station,
                         playing = playerState.playing,
+                        favorites = favorites,
+                        recent = recent,
                         onPlay = onPlay,
+                        onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
+                        onAddToQueue = { player.addToQueue(it) },
                         onOpenPlayer = { tab = Tab.Play },
                     )
                     Tab.Cmd -> CommandScreen(
@@ -157,5 +180,11 @@ fun CliampRoot(
         if (overlay == Overlay.None) {
             CliampTabBar(current = tab, onSelect = { tab = it })
         }
+        }
+
+        QueueBar(
+            count = queue.size,
+            onOpen = { overlay = Overlay.Queue },
+        )
     }
 }

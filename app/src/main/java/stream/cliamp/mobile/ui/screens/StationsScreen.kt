@@ -62,12 +62,17 @@ fun StationsScreen(
     favorites: List<Station>,
     onPlay: (Station, List<Station>) -> Unit,
     onToggleFavorite: (Station) -> Unit,
+    onAddToQueue: (Station) -> Unit,
     onOpenStats: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenPlayer: () -> Unit,
 ) {
     val p = LocalPalette.current
     var source by remember { mutableStateOf(Source.All) }
+
+    // The LIB tab's favourites row shows radio stations only — local songs
+    // live in their own smart playlists on the PLAYLISTS tab.
+    val radioFavorites = favorites.filterNot { it.source == StationSource.Local }
 
     val cliamp by repository.cliamp.collectAsState()
     val stats by repository.stats.collectAsState()
@@ -132,19 +137,20 @@ fun StationsScreen(
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
 
             if (source == Source.Favs || source == Source.All) {
-                if (favorites.isNotEmpty()) {
+                if (radioFavorites.isNotEmpty()) {
                     item {
-                        SectionLabel("favourites — ${favorites.size}")
+                        SectionLabel("favourites — ${radioFavorites.size}")
                     }
-                    items(favorites, key = { "fav:${it.url}" }) { s ->
+                    items(radioFavorites, key = { "fav:${it.url}" }) { s ->
                         StationRow(
                             station = s,
                             listeners = repository.listeners(s),
                             active = current?.url == s.url,
                             playing = playing && current?.url == s.url,
                             favorite = true,
-                            onPlay = { onPlay(s, favorites); onOpenPlayer() },
+                            onPlay = { onPlay(s, radioFavorites); onOpenPlayer() },
                             onToggleFavorite = { onToggleFavorite(s) },
+                            onAddToQueue = { onAddToQueue(s) },
                         )
                     }
                 } else if (source == Source.Favs) {
@@ -171,6 +177,7 @@ fun StationsScreen(
                         favorite = favorites.any { it.url == s.url },
                         onPlay = { onPlay(s, cliamp); onOpenPlayer() },
                         onToggleFavorite = { onToggleFavorite(s) },
+                        onAddToQueue = { onAddToQueue(s) },
                     )
                 }
             }
@@ -211,6 +218,7 @@ fun StationsScreen(
                         favorite = favorites.any { it.url == s.url },
                         onPlay = { onPlay(s, directory.stations); onOpenPlayer() },
                         onToggleFavorite = { onToggleFavorite(s) },
+                        onAddToQueue = { onAddToQueue(s) },
                     )
                 }
                 item {
@@ -237,6 +245,7 @@ private fun StationRow(
     favorite: Boolean,
     onPlay: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onAddToQueue: () -> Unit,
 ) {
     val p = LocalPalette.current
     ListRow(
@@ -273,6 +282,12 @@ private fun StationRow(
                     "favourite",
                     Modifier.size(15.dp).clickable(onClick = onToggleFavorite),
                     tint = if (favorite) p.accent else p.inkFaint,
+                )
+                Icon(
+                    CliampIcons.Plus,
+                    "add to queue",
+                    Modifier.size(16.dp).clickable(onClick = onAddToQueue),
+                    tint = p.inkFaint,
                 )
             }
         },

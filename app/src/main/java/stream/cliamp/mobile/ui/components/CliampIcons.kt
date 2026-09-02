@@ -47,6 +47,11 @@ private fun rrect(x: Float, y: Float, w: Float, h: Float, r: Float): String = bu
     append("v${-(h - 2 * r)}a$r $r 0 0 1 $r ${-r}z")
 }
 
+private fun circle(cx: Float, cy: Float, r: Float): String =
+    "M${cx - r} $cy" +
+        "a$r $r 0 1 1 ${2 * r} 0" +
+        "a$r $r 0 1 1 ${-2 * r} 0z"
+
 object CliampIcons {
 
     /**
@@ -87,6 +92,7 @@ object CliampIcons {
     val PlayRow = solid(14f, 14f, "M1 1l12 6-12 6z")
     val PlayTab = solid(18f, 18f, "M2 1l14 8-14 8z")
     val PlayWide = solid(12f, 13f, "M0 0l12 6.5L0 13z")
+    val MusicNote = solid(16f, 16f, "M6 2.5L14 1v9.5", "M6 2.5L14 1", "M6 14a2.4 2.4 0 11-2.4-2.4c.9 0 1.6.4 2 1z", "M14 11a2.4 2.4 0 11-2.4-2.4c.9 0 1.6.4 2 1z")
 
     val Prev = solid(22f, 18f, "M12 9L22 1v16z", "M2 9L12 1v16z", rect(0f, 1f, 2.4f, 16f))
     val Next = solid(22f, 18f, "M10 9L0 17V1z", "M20 9L10 17V1z", rect(19.6f, 1f, 2.4f, 16f))
@@ -98,18 +104,45 @@ object CliampIcons {
     val Star = stroked(16f, 16f, 1.8f, "M8 1.5l1.9 4.2 4.6.5-3.4 3.1.9 4.5L8 11.6 4 13.8l.9-4.5L1.5 6.2l4.6-.5z")
     val StarFilled = solid(16f, 16f, "M8 1.5l1.9 4.2 4.6.5-3.4 3.1.9 4.5L8 11.6 4 13.8l.9-4.5L1.5 6.2l4.6-.5z")
 
+    /**
+     * A broadcast signal radiating from a transmitter: a small solid dot at the
+     * base of the mist plus three concentric, symmetric arcs. Reads immediately
+     * as "radio / stations" at tab size and sits cleanly beside the playlists
+     * vinyl disc and the queue line-list.
+     */
+    val StationsTab = ImageVector.Builder(
+        defaultWidth = 18.dp, defaultHeight = 18.dp, viewportWidth = 18f, viewportHeight = 18f,
+    ).apply {
+        val cx = 9f
+        val cy = 7.6f
+        // transmitter dot
+        val dot = addPathNodes("M$cx 6a1.6 1.6 0 1 1 -0.001 0")
+        addPath(dot, fill = SolidColor(Color.White))
+        // three concentric radiating arcs
+        addPath(addPathNodes("M${cx - 2.4f} $cy a 2.4 2.4 0 0 1 4.8 0"), stroke = SolidColor(Color.White), strokeLineWidth = 1.5f)
+        addPath(addPathNodes("M${cx - 4.3f} $cy a 4.3 4.3 0 0 1 8.6 0"), stroke = SolidColor(Color.White), strokeLineWidth = 1.5f)
+        addPath(addPathNodes("M${cx - 6.3f} $cy a 6.3 6.3 0 0 1 12.6 0"), stroke = SolidColor(Color.White), strokeLineWidth = 1.5f)
+    }.build()
+    /**
+     * A book-stack: two upright stroked books with a slanted volume on top.
+     * Reads as "library" at tab size and stays distinct from the queue's
+     * line-list and STATIONS' broadcast-signal.
+     */
     val LibTab = stroked(18f, 18f, 1.7f, rect(1f, 1f, 5f, 16f), rect(8f, 1f, 5f, 16f), "M15 2l2 15")
     val QueueTabLines = stroked(18f, 18f, 1.7f, "M1 4h16M1 9h11M1 14h11")
-    val QueueTabArrow = solid(18f, 18f, "M15 11l3 2-3 2z")
     val CmdTab = stroked(18f, 18f, 1.7f, rrect(0.9f, 1.9f, 16.2f, 14.2f, 2f), "M4.5 7l2.2 2.2L4.5 11.4M8.6 11.8h5")
     val CmdSmall = stroked(18f, 18f, 1.7f, rrect(0.9f, 1.9f, 16.2f, 14.2f, 2f), "M4.5 7l2.2 2.2L4.5 11.4")
 
     val Search = stroked(16f, 16f, 1.8f, "M6.6 1.5a5.1 5.1 0 100 10.2 5.1 5.1 0 100-10.2z", "M10.4 10.4L15 15")
     val Plus = solid(14f, 14f, rect(6f, 0f, 2f, 14f), rect(0f, 6f, 14f, 2f))
     val Minus = solid(12f, 12f, rect(0f, 5f, 12f, 2f))
+    val Check = stroked(13f, 13f, 2.2f, "M1.5 7l3.2 3.2L11.5 3")
+    val Xmark = stroked(12f, 12f, 1.8f, "M2 2l8 8M10 2l-8 8")
     val CaretDown = solid(10f, 10f, "M0 2h10L5 8z")
     val CaretRight = solid(10f, 10f, "M2 0v10l6-5z")
     val Download = stroked(16f, 16f, 1.6f, "M8 1v9", "M4.5 6.5L8 10l3.5-3.5", "M1.5 13.5h13")
+    /** Vertical ellipsis: row overflow menu. */
+    val More = solid(16f, 16f, circle(8f, 3f, 2.2f), circle(8f, 8f, 2.2f), circle(8f, 13f, 2.2f))
     val Lines = solid(16f, 14f, rect(0f, 0f, 16f, 2f), rect(0f, 6f, 16f, 2f), rect(0f, 12f, 16f, 2f))
     val ListShort = stroked(16f, 16f, 1.7f, "M1 3h14M1 8h9M1 13h9")
     val MeterSmall = solid(
