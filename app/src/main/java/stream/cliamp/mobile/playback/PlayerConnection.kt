@@ -2,6 +2,7 @@ package stream.cliamp.mobile.playback
 
 import android.content.ComponentName
 import android.content.Context
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -77,6 +78,9 @@ class PlayerConnection(
             positionMs = c.currentPosition.coerceAtLeast(0),
             bufferedMs = (c.bufferedPosition - c.currentPosition).coerceAtLeast(0),
             volume = c.volume,
+            durationMs = c.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L,
+            seekable = c.isCurrentMediaItemSeekable,
+            live = c.isCurrentMediaItemLive,
             hasPrev = qi > 0,
             hasNext = qi >= 0 && qi < _queue.value.lastIndex,
         )
@@ -205,6 +209,20 @@ class PlayerConnection(
         sync()
     }
 
+    /**
+     * Seeks by fraction rather than milliseconds so the caller does not need to
+     * know the duration, and so a drag on a 3 minute track and a 3 hour one
+     * behave the same.
+     */
+    fun seekTo(fraction: Float) {
+        val c = controller ?: return
+        if (!c.isCurrentMediaItemSeekable) return
+        val d = c.duration
+        if (d == C.TIME_UNSET || d <= 0) return
+        c.seekTo((d * fraction.coerceIn(0f, 1f)).toLong())
+        sync()
+    }
+
     fun setVolume(v: Float) {
         controller?.volume = v.coerceIn(0f, 1f)
         sync()
@@ -228,4 +246,11 @@ data class PlayerState(
     val volume: Float = 1f,
     val hasPrev: Boolean = false,
     val hasNext: Boolean = false,
-)
+    /** 0 when the source has no known length, which is the live-stream case. */
+    val durationMs: Long = 0L,
+    val seekable: Boolean = false,
+    val live: Boolean = false,
+) {
+    /** A scrubber is only honest when there is a length to scrub through. */
+    val scrubbable: Boolean get() = seekable && !live && durationMs > 0
+}

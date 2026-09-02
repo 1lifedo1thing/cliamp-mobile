@@ -45,6 +45,7 @@ import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.MechKey
 import stream.cliamp.mobile.ui.components.MeterSize
+import stream.cliamp.mobile.ui.components.Scrubber
 import stream.cliamp.mobile.ui.components.StreamingRule
 import stream.cliamp.mobile.ui.components.StripedArt
 import stream.cliamp.mobile.ui.components.ToggleKey
@@ -136,7 +137,15 @@ fun NowPlayingScreen(
                 Mono(
                     buildList {
                         station?.let { s ->
-                            add(if (s.source == StationSource.Cliamp) "cliamp radio" else "directory")
+                            add(
+                                when (s.source) {
+                                    StationSource.Cliamp -> "cliamp radio"
+                                    StationSource.Directory -> "directory"
+                                    StationSource.Local -> "on device"
+                                    StationSource.Provider -> "provider"
+                                    StationSource.Custom -> "custom"
+                                }
+                            )
                             if (s.country.isNotBlank() && s.source != StationSource.Cliamp) add(s.country.lowercase())
                             format.summary(s.meta).takeIf { it.isNotBlank() }?.let(::add)
                             if (s.votes > 0) add("${compact(s.votes)} votes")
@@ -164,35 +173,58 @@ fun NowPlayingScreen(
                     gap = MeterSize.NowPlaying.gap,
                 )
 
-                StreamingRule(
-                    label = when {
-                        reconnect > 0 -> "reconnecting"
-                        error != null -> "no signal"
-                        state.buffering -> "buffering"
-                        state.playing -> "streaming"
-                        station != null -> "paused"
-                        else -> "stopped"
-                    },
-                    color = when {
-                        reconnect > 0 -> p.amber
-                        error != null -> p.destructiveInk
-                        else -> p.accent
-                    },
-                    dim = !state.playing && reconnect == 0,
-                )
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom,
-                ) {
-                    Mono(clock(state.positionMs), CliampType.rowSecondary, p.inkSecondary)
-                    Mono(
-                        if (state.playing) "${state.bufferedMs / 1000}s buffered"
-                        else "tap the meter for scope · eq",
-                        CliampType.meta,
-                        p.inkFaint,
-                        maxLines = 1,
+                // What the transport shows follows what the player says the
+                // source can do, not what kind of station it is. A local file
+                // and a provider track scrub; ICY radio does not.
+                if (state.scrubbable && reconnect == 0 && error == null) {
+                    Scrubber(
+                        fraction = state.positionMs.toFloat() / state.durationMs,
+                        onSeek = { player.seekTo(it) },
                     )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        Mono(clock(state.positionMs), CliampType.rowSecondary, p.inkSecondary)
+                        Mono("drag anywhere", CliampType.meta, p.inkFaint, maxLines = 1)
+                        Mono(
+                            "-" + clock((state.durationMs - state.positionMs).coerceAtLeast(0)),
+                            CliampType.rowSecondary,
+                            p.inkSecondary,
+                        )
+                    }
+                } else {
+                    StreamingRule(
+                        label = when {
+                            reconnect > 0 -> "reconnecting"
+                            error != null -> "no signal"
+                            state.buffering -> "buffering"
+                            state.playing -> "streaming"
+                            station != null -> "paused"
+                            else -> "stopped"
+                        },
+                        color = when {
+                            reconnect > 0 -> p.amber
+                            error != null -> p.destructiveInk
+                            else -> p.accent
+                        },
+                        dim = !state.playing && reconnect == 0,
+                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        Mono(clock(state.positionMs), CliampType.rowSecondary, p.inkSecondary)
+                        Mono(
+                            if (state.playing) "${state.bufferedMs / 1000}s buffered"
+                            else "tap the meter for scope · eq",
+                            CliampType.meta,
+                            p.inkFaint,
+                            maxLines = 1,
+                        )
+                    }
                 }
             }
 

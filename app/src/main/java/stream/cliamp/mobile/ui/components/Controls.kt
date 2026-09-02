@@ -29,7 +29,11 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -343,6 +347,58 @@ fun MechSliderVertical(
                     }
             )
         }
+    }
+}
+
+/**
+ * Full-width track, 4dp tall, with a 3dp vertical playhead in ink. Straight out
+ * of the design doc, which specifies exactly this and a label under it naming
+ * the gesture.
+ *
+ * Only drawn for sources that can actually seek. [StreamingRule] covers the
+ * rest, and the player picks between them from what the player reports rather
+ * than from the kind of station, so an on-demand HLS stream scrubs and an ICY
+ * radio stream does not.
+ */
+@Composable
+fun Scrubber(
+    fraction: Float,
+    modifier: Modifier = Modifier,
+    onSeek: (Float) -> Unit,
+) {
+    val p = LocalPalette.current
+    var dragging by remember { mutableStateOf(false) }
+    var dragFraction by remember { mutableFloatStateOf(0f) }
+    // While dragging, follow the finger; the player's own position lags behind
+    // the gesture and would make the playhead stutter backwards.
+    val shown = (if (dragging) dragFraction else fraction).coerceIn(0f, 1f)
+
+    BoxWithConstraints(
+        modifier
+            .fillMaxWidth()
+            .height(24.dp)
+            .pointerInput(Unit) {
+                detectTapGestures { onSeek((it.x / size.width).coerceIn(0f, 1f)) }
+            }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { dragging = true; dragFraction = (it.x / size.width).coerceIn(0f, 1f) },
+                    onDragEnd = { dragging = false; onSeek(dragFraction) },
+                    onDragCancel = { dragging = false },
+                ) { change, _ ->
+                    dragFraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                }
+            }
+    ) {
+        Box(Modifier.align(Alignment.CenterStart).fillMaxWidth().height(4.dp).background(p.track))
+        Box(Modifier.align(Alignment.CenterStart).fillMaxWidth(shown).height(4.dp).background(p.accent))
+        Box(
+            Modifier
+                .offset(x = (maxWidth * shown - 1.5.dp).coerceIn(0.dp, maxWidth - 3.dp))
+                .width(3.dp)
+                .fillMaxHeight()
+                .background(p.peak)
+        )
     }
 }
 

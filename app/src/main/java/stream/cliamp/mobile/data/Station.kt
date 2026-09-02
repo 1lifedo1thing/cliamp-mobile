@@ -3,7 +3,7 @@ package stream.cliamp.mobile.data
 import kotlinx.serialization.Serializable
 
 /** Where a station came from. Drives both grouping and the accent it gets. */
-enum class StationSource { Cliamp, Directory, Custom, Local }
+enum class StationSource { Cliamp, Directory, Custom, Local, Provider }
 
 @Serializable
 data class Station(
