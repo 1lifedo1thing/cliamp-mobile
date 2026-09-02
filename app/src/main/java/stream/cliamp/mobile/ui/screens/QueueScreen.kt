@@ -57,7 +57,7 @@ fun QueueScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                Mono("‹ queue", CliampType.screenTitle, p.ink, Modifier.clickable { onBack() })
+                Mono("‹ Queue", CliampType.screenTitle, p.ink, Modifier.clickable { onBack() })
             }
         }
 

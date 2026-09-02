@@ -179,7 +179,6 @@ fun CliampRoot(
                         favorites = favorites,
                         onPlay = onPlay,
                         onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
-                        onAddToQueue = { player.addToQueue(it) },
                         onOpenSettings = { overlay = Overlay.Settings },
                         onOpenPlayer = { tab = Tab.Play },
                     )
@@ -192,7 +191,6 @@ fun CliampRoot(
                         recent = recent,
                         onPlay = onPlay,
                         onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
-                        onAddToQueue = { player.addToQueue(it) },
                         onOpenPlayer = { tab = Tab.Play },
                     )
                     Tab.Cmd -> CommandScreen(
@@ -228,9 +226,11 @@ fun CliampRoot(
         }
         }
 
-        QueueBar(
-            count = queue.size,
-            onOpen = { overlay = Overlay.Queue },
-        )
+        if (overlay == Overlay.None) {
+            QueueBar(
+                count = queue.size,
+                onOpen = { overlay = Overlay.Queue },
+            )
+        }
     }
 }

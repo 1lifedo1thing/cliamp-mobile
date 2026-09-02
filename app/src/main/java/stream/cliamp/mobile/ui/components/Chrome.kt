@@ -111,7 +111,7 @@ fun IdentityBar(left: String, right: String, modifier: Modifier = Modifier) {
 }
 
 enum class Tab(val label: String) {
-    Play("PLAY"), Lib("LIB"), Stations("STATIONS"), Servers("SERVERS"), Cmd(":CMD")
+    Play("PLAY"), Lib("Library"), Stations("STATIONS"), Servers("SERVERS"), Cmd(":CMD")
 }
 
 /**

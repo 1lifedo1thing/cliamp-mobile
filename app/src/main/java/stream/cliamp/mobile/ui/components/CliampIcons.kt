@@ -92,7 +92,7 @@ object CliampIcons {
     val PlayRow = solid(14f, 14f, "M1 1l12 6-12 6z")
     val PlayTab = solid(18f, 18f, "M2 1l14 8-14 8z")
     val PlayWide = solid(12f, 13f, "M0 0l12 6.5L0 13z")
-    val MusicNote = solid(16f, 16f, "M6 2.5L14 1v9.5", "M6 2.5L14 1", "M6 14a2.4 2.4 0 11-2.4-2.4c.9 0 1.6.4 2 1z", "M14 11a2.4 2.4 0 11-2.4-2.4c.9 0 1.6.4 2 1z")
+    val MusicNote = solid(16f, 16f, circle(5f, 12f, 2.5f), rect(7.5f, 2f, 1.5f, 8.5f), "M9 2l5 2.5v1L9 8z")
 
     val Prev = solid(22f, 18f, "M12 9L22 1v16z", "M2 9L12 1v16z", rect(0f, 1f, 2.4f, 16f))
     val Next = solid(22f, 18f, "M10 9L0 17V1z", "M20 9L10 17V1z", rect(19.6f, 1f, 2.4f, 16f))
@@ -152,7 +152,7 @@ object CliampIcons {
     )
     val Speaker = stroked(20f, 20f, 1.7f, "M2 7l5-4v14l-5-4z", "M11 6.5a4 4 0 010 7")
     val SpeakerSolid = solid(20f, 20f, "M2 7l5-4v14l-5-4z")
-    val Clock = stroked(20f, 20f, 1.7f, "M10 1.8a8.2 8.2 0 100 16.4 8.2 8.2 0 100-16.4z", "M10 5.5v5l3.5 2")
+    val Clock = stroked(16f, 16f, 1.8f, "M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0 -13z", "M8 4.5v4l2.5 1.5")
     val Globe = stroked(20f, 20f, 1.6f, "M10 1.8a8.2 8.2 0 100 16.4 8.2 8.2 0 100-16.4z", "M1.8 10h16.4", "M10 1.8c4 4.4 4 11.9 0 16.4c-4-4.5-4-12 0-16.4z")
 
     val SignalBars = solid(
