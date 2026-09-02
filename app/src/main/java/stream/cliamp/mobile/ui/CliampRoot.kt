@@ -151,9 +151,15 @@ fun CliampRoot(
                 Tab.Cmd -> CommandScreen(
                     repository = repository,
                     prefs = prefs,
+                    localLibrary = localLibrary,
+                    providers = providers,
                     onPlay = onPlay,
                     onOpenScope = { overlay = Overlay.Scope },
                     onOpenSettings = { overlay = Overlay.Settings },
+                    onOpenProvider = { account ->
+                        libSubTab = LibSubTab.Providers
+                        overlay = Overlay.Browse(account.id)
+                    },
                 )
             }
 
