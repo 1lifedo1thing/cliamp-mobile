@@ -29,7 +29,7 @@ import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.ui.components.CliampTabBar
-import stream.cliamp.mobile.ui.components.QueueBar
+import stream.cliamp.mobile.ui.components.SettingsArm
 import stream.cliamp.mobile.ui.components.Tab
 import stream.cliamp.mobile.ui.screens.CommandScreen
 import stream.cliamp.mobile.ui.screens.LocalScreen
@@ -176,7 +176,6 @@ fun CliampRoot(
                         favorites = favorites,
                         onPlay = onPlay,
                         onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
-                        onOpenSettings = { overlay = Overlay.Settings },
                     )
                     Tab.Lib -> LocalScreen(
                         localLibrary = localLibrary,
@@ -212,20 +211,27 @@ fun CliampRoot(
             }
         }
 
-        AnimatedVisibility(
-            visible = overlay == Overlay.None && station != null,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically(),
-        ) {
-            MiniPlayer(
-                station = station,
-                streamTitle = streamTitle,
-                playing = playerState.playing,
-                buffering = playerState.buffering,
-                reconnecting = reconnect,
-                onToggle = { player.toggle() },
-                onOpen = { overlay = Overlay.Player },
-            )
+        // The mini bar never goes away (except while the full player is open):
+        // it always shows the current or last-played station, or the empty
+        // "nothing playing" state. Queue access lives here, beside the play key.
+        if (overlay != Overlay.Player) {
+            AnimatedVisibility(
+                visible = true,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
+                MiniPlayer(
+                    station = station ?: recent.firstOrNull(),
+                    streamTitle = streamTitle,
+                    playing = playerState.playing,
+                    buffering = playerState.buffering,
+                    reconnecting = reconnect,
+                    queueCount = queue.size,
+                    onOpenQueue = { overlay = Overlay.Queue },
+                    onToggle = { player.toggle() },
+                    onOpen = { overlay = Overlay.Player },
+                )
+            }
         }
 
         // The player is an overlay, but it is a destination rather than a
@@ -239,9 +245,8 @@ fun CliampRoot(
         }
 
         if (overlay == Overlay.None) {
-            QueueBar(
-                count = queue.size,
-                onOpen = { overlay = Overlay.Queue },
+            SettingsArm(
+                onOpenSettings = { overlay = Overlay.Settings },
             )
         }
     }
