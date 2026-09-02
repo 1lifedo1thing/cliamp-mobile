@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.Prefs
+import stream.cliamp.mobile.data.provider.ProviderStore
 import stream.cliamp.mobile.net.Http
 import stream.cliamp.mobile.data.LocalLibrary
 import stream.cliamp.mobile.data.PlaylistStore
@@ -27,6 +28,7 @@ class CliampApp : Application() {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val prefs: Prefs by lazy { Prefs(this) }
+    val providers: ProviderStore by lazy { ProviderStore(this) }
     val repository: Repository by lazy { Repository(prefs, appScope) }
     val localLibrary: LocalLibrary by lazy { LocalLibrary(this) }
     val playlists: PlaylistStore by lazy { PlaylistStore(this) }

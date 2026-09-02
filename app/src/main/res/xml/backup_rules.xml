@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The provider DataStore holds server credentials. They are encrypted with a
+  Keystore key that is itself never backed up, so a restored copy would be
+  undecryptable anyway; excluding it avoids restoring an account that silently
+  cannot authenticate.
+-->
+<full-backup-content>
+    <exclude domain="file" path="datastore/providers.preferences_pb" />
+</full-backup-content>

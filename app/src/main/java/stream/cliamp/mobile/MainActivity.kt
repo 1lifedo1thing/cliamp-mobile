@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
                     player = app.player,
                     localLibrary = app.localLibrary,
                     playlists = app.playlists,
+                    providers = app.providers,
                     dark = dark,
                 )
             }

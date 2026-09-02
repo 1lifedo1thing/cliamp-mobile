@@ -37,6 +37,11 @@ import stream.cliamp.mobile.ui.screens.MiniPlayer
 import stream.cliamp.mobile.ui.screens.NowPlayingScreen
 import stream.cliamp.mobile.ui.screens.QueueScreen
 import stream.cliamp.mobile.ui.screens.ScopeScreen
+import stream.cliamp.mobile.data.provider.ProviderAccount
+import stream.cliamp.mobile.data.provider.ProviderCatalog
+import stream.cliamp.mobile.data.provider.ProviderStore
+import stream.cliamp.mobile.ui.screens.ProviderWizard
+import stream.cliamp.mobile.ui.screens.ProvidersScreen
 import stream.cliamp.mobile.ui.screens.SettingsScreen
 import stream.cliamp.mobile.ui.screens.StationsScreen
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -47,6 +52,9 @@ private sealed interface Overlay {
     data object Scope : Overlay
     data object Settings : Overlay
     data object Queue : Overlay
+
+    /** The add-provider wizard. [account] non-null means edit rather than add. */
+    data class Wizard(val providerKey: String, val account: ProviderAccount?) : Overlay
 }
 
 @UnstableApi
@@ -57,6 +65,7 @@ fun CliampRoot(
     player: PlayerConnection,
     localLibrary: LocalLibrary,
     playlists: PlaylistStore,
+    providers: ProviderStore,
     dark: Boolean,
 ) {
     val p = LocalPalette.current
@@ -70,6 +79,7 @@ fun CliampRoot(
     val favorites by prefs.favorites.collectAsState(initial = emptyList())
     val recent by prefs.history.collectAsState(initial = emptyList())
     val reconnect by PlaybackBus.reconnectAttempt.collectAsState()
+    val providerAccounts by providers.accounts.collectAsState(initial = emptyList())
     val queue by player.queue.collectAsState(initial = emptyList())
 
     val onPlay: (Station, List<Station>) -> Unit = { s, from ->
@@ -103,6 +113,22 @@ fun CliampRoot(
                     playing = playerState.playing,
                     onBack = { overlay = Overlay.None },
                 )
+                is Overlay.Wizard -> {
+                    val spec = ProviderCatalog.byKey((overlay as Overlay.Wizard).providerKey)
+                    if (spec == null) {
+                        overlay = Overlay.None
+                    } else {
+                        ProviderWizard(
+                            spec = spec,
+                            existing = (overlay as Overlay.Wizard).account,
+                            onCancel = { overlay = Overlay.None },
+                            onSave = { account ->
+                                scope.launch { providers.save(account) }
+                                overlay = Overlay.None
+                            },
+                        )
+                    }
+                }
                 Overlay.Settings -> SettingsScreen(
                     prefs = prefs,
                     repository = repository,
@@ -114,6 +140,16 @@ fun CliampRoot(
                         prefs = prefs,
                         player = player,
                         onOpenScope = { overlay = Overlay.Scope },
+                    )
+                    Tab.Servers -> ProvidersScreen(
+                        accounts = providerAccounts,
+                        onAdd = {
+                            ProviderCatalog.all.firstOrNull()?.let {
+                                overlay = Overlay.Wizard(it.key, null)
+                            }
+                        },
+                        onOpen = { a -> overlay = Overlay.Wizard(a.providerKey, a) },
+                        onRemove = { a -> scope.launch { providers.remove(a.id) } },
                     )
                     Tab.Stations -> StationsScreen(
                         repository = repository,
