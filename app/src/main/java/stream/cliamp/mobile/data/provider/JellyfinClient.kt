@@ -33,13 +33,15 @@ class JellyfinClient(
         get() = token.ifBlank { cachedToken(base) }.ifBlank { "" }
 
     /** Returns a short label for the wizard: server name + version. */
-    suspend fun ping(): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun ping(): Result<ProviderIdentity> = withContext(Dispatchers.IO) {
         runCatching {
             if (authToken.isBlank()) login()
             val body = Http.text("$base/System/Info/Public", emptyMap())
             val info = Http.json.decodeFromString<PublicSystemInfo>(body)
-            listOfNotNull(info.serverName, info.version).joinToString(" ")
-                .ifBlank { providerKey }
+            ProviderIdentity(
+                name = info.serverName.orEmpty().ifBlank { providerKey },
+                detail = info.version.orEmpty(),
+            )
         }
     }
 

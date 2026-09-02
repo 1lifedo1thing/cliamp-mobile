@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.provider.ProviderStore
+import stream.cliamp.mobile.data.provider.audiobookshelf
 import stream.cliamp.mobile.data.provider.jellyfin
 import stream.cliamp.mobile.data.provider.plex
 import stream.cliamp.mobile.data.provider.subsonic
@@ -50,6 +51,7 @@ class CliampApp : Application() {
             when (account.providerKey) {
                 "jellyfin", "emby" -> account.jellyfin().stream(trackId)
                 "plex" -> account.plex().stream(trackId)
+                "abs" -> account.audiobookshelf().stream(trackId)
                 else -> ResolvedStream(account.subsonic().streamUrl(trackId))
             }
         }

@@ -165,7 +165,64 @@ object ProviderCatalog {
         },
     )
 
-    val all: List<ProviderSpec> = listOf(navidrome, jellyfin, emby, plex)
+    val abs = ProviderSpec(
+        key = "abs",
+        name = "Audiobookshelf",
+        intro = listOf(
+            "self-hosted audiobook and podcast server.",
+            "api key, or a username and password.",
+        ),
+        picker = PickerSpec(
+            key = "_auth",
+            label = "sign in with",
+            options = listOf(
+                PickerOption("token", "API Key"),
+                PickerOption("password", "Username & Password"),
+            ),
+            default = "token",
+        ),
+        fields = listOf(
+            FieldSpec(
+                key = "url",
+                label = "Server URL",
+                help = "e.g. abs.example.com — https is assumed",
+                keyboard = FieldKeyboard.Url,
+            ),
+            FieldSpec(
+                key = "token",
+                label = "API Key",
+                secret = true,
+                onlyIf = { it["_auth"] == "token" },
+            ),
+            FieldSpec(
+                key = "user",
+                label = "Username",
+                onlyIf = { it["_auth"] == "password" },
+            ),
+            FieldSpec(
+                key = "password",
+                label = "Password",
+                secret = true,
+                onlyIf = { it["_auth"] == "password" },
+            ),
+        ),
+        extraValidate = { v ->
+            when (v["_auth"]) {
+                "password" -> if (v["user"].isNullOrBlank()) "username is required" else null
+                else -> if (v["token"].isNullOrBlank()) "api key is required" else null
+            }
+        },
+        validate = { v ->
+            AudiobookshelfClient(
+                v["url"].orEmpty(),
+                v["token"].orEmpty(),
+                v["user"].orEmpty(),
+                v["password"].orEmpty(),
+            ).ping()
+        },
+    )
+
+    val all: List<ProviderSpec> = listOf(navidrome, jellyfin, emby, plex, abs)
 
     fun byKey(key: String): ProviderSpec? = all.firstOrNull { it.key == key }
 
@@ -173,5 +230,5 @@ object ProviderCatalog {
      * Named here rather than left implicit so the picker can say what is coming
      * without pretending it works yet.
      */
-    val planned = listOf("Audiobookshelf", "Lyrion")
+    val planned = listOf("Lyrion")
 }

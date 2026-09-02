@@ -19,3 +19,10 @@ fun ProviderAccount.plex(): PlexClient = PlexClient(
     values["url"].orEmpty(),
     values["token"].orEmpty(),
 )
+
+fun ProviderAccount.audiobookshelf(): AudiobookshelfClient = AudiobookshelfClient(
+    values["url"].orEmpty(),
+    values["token"].orEmpty(),
+    values["user"].orEmpty(),
+    values["password"].orEmpty(),
+)

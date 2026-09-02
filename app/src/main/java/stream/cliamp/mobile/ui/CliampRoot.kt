@@ -42,7 +42,7 @@ import stream.cliamp.mobile.data.provider.ProviderCatalog
 import stream.cliamp.mobile.data.provider.ProviderStore
 import stream.cliamp.mobile.ui.screens.ProviderBrowseScreen
 import stream.cliamp.mobile.ui.screens.ProviderWizard
-import stream.cliamp.mobile.ui.screens.ProvidersScreen
+
 import stream.cliamp.mobile.ui.screens.SettingsScreen
 import stream.cliamp.mobile.ui.screens.StationsScreen
 import stream.cliamp.mobile.ui.theme.LocalPalette

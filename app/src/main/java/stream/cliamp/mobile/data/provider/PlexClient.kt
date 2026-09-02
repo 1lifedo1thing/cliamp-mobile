@@ -37,12 +37,11 @@ class PlexClient(
         return key
     }
 
-    suspend fun ping(): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun ping(): Result<ProviderIdentity> = withContext(Dispatchers.IO) {
         runCatching {
             val body = Http.text(get("", emptyMap()))
-            val name = Http.json.decodeFromString<RootContainer>(body).mediaContainer.title
-                .orEmpty()
-            listOfNotNull(name).joinToString(" ").ifBlank { "plex" }
+            val title = Http.json.decodeFromString<RootContainer>(body).mediaContainer.title.orEmpty()
+            ProviderIdentity(name = title.ifBlank { "plex" })
         }
     }
 

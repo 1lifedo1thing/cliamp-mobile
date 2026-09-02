@@ -79,9 +79,9 @@ fun ProviderBrowseScreen(
     // Roots with no semantics on the server are dropped from the chip row.
     val roots = remember(account.providerKey) {
         if (account.providerKey == "jellyfin" || account.providerKey == "emby" ||
-            account.providerKey == "plex"
+            account.providerKey == "plex" || account.providerKey == "abs"
         ) {
-            listOf(Root.Newest, Root.AZ, Root.Artists)
+            listOf(Root.Newest, Root.AZ)
         } else {
             Root.entries
         }
