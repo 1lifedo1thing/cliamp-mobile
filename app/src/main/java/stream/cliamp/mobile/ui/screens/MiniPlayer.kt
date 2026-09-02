@@ -1,31 +1,44 @@
 package stream.cliamp.mobile.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import stream.cliamp.mobile.data.LocalArt
 import stream.cliamp.mobile.data.Station
+import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.ui.components.BrickMeter
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
+import stream.cliamp.mobile.ui.components.MeterFrame
 import stream.cliamp.mobile.ui.components.MeterSize
 import stream.cliamp.mobile.ui.components.rememberMeter
 import stream.cliamp.mobile.ui.theme.CliampType
@@ -61,13 +74,9 @@ fun MiniPlayer(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            BrickMeter(
+            MiniArt(
+                station = station,
                 frame = frame,
-                modifier = Modifier.size(width = 40.dp, height = MeterSize.Mini.height),
-                brick = MeterSize.Mini.brick,
-                gap = MeterSize.Mini.gap,
-                columnGap = 2.dp,
-                showPeaks = false,
             )
             if (empty) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -116,5 +125,47 @@ fun MiniPlayer(
                 )
             }
         }
+    }
+}
+
+/**
+ * The mini bar's leading slot: a small square cover thumbnail for anything
+ * that has real art, falling back to the brick meter for radio (which has no
+ * artwork of its own, and whose signature look is the meter anyway).
+ */
+@Composable
+private fun MiniArt(station: Station?, frame: MeterFrame) {
+    val p = LocalPalette.current
+    val context = LocalContext.current
+    var art by remember(station?.id) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    LaunchedEffect(station?.id) {
+        art = null
+        val s = station ?: return@LaunchedEffect
+        art = when {
+            s.source == StationSource.Local ->
+                LocalArt.bitmapForSmall(s.cover, context.contentResolver)
+                    ?: StationArtSource.bitmapForSmall(s) // else embedded album art
+            s.cover.startsWith("http") -> StationArtSource.bitmapForUrl(s.cover)
+            else -> null // radio: no scraping in the tiny bar, keep the meter
+        }?.asImageBitmap()
+    }
+    if (art != null) {
+        Image(
+            bitmap = art!!,
+            contentDescription = station?.name,
+            modifier = Modifier
+                .size(width = 40.dp, height = MeterSize.Mini.height)
+                .clip(RoundedCornerShape(8.dp)),
+            contentScale = ContentScale.Crop,
+        )
+    } else {
+        BrickMeter(
+            frame = frame,
+            modifier = Modifier.size(width = 40.dp, height = MeterSize.Mini.height),
+            brick = MeterSize.Mini.brick,
+            gap = MeterSize.Mini.gap,
+            columnGap = 2.dp,
+            showPeaks = false,
+        )
     }
 }

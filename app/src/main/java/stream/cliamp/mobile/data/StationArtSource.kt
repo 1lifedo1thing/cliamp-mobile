@@ -2,11 +2,22 @@ package stream.cliamp.mobile.data
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
+import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 import stream.cliamp.mobile.net.Http
 import java.net.URI
+
+/**
+ * Cover work - reading files, MediaMetadataRetriever, decoding - all funnelled
+ * through one thread pool capped at two workers. A fast-scrolled list otherwise
+ * fires a dozen concurrent decodes that allocate many megabytes of bitmaps and
+ * saturate the disk, spiking memory pressure so hard that the whole app stalls
+ * and ANRs. One shared, narrow pool keeps that bounded and predictable.
+ */
+val CoverIo = Dispatchers.IO.limitedParallelism(2)
 
 /**
  * Radio streams carry no cover art, so the next best thing is the station's own
@@ -24,25 +35,97 @@ object StationArtSource {
     private const val MAX_IMAGE = 4 * 1024 * 1024
     private const val TARGET = 512
 
+    /** Thumbnails (row icons, the mini player) never need full detail. */
+    private const val TARGET_SMALL = 96
+
     /** Formats BitmapFactory cannot decode, however cheerfully they are served. */
     private val undecodable = setOf("image/x-icon", "image/vnd.microsoft.icon", "image/svg+xml")
 
     private val resolved = LruCache<String, String>(128)
-    private val bitmaps = LruCache<String, Bitmap>(8)
-    private val misses = LruCache<String, Boolean>(128)
+    private val bitmaps = LruCache<String, Bitmap>(128)
+    private val smallBitmaps = LruCache<String, Bitmap>(192)
+    private val misses = LruCache<String, Boolean>(256)
+
+    /** Directory holding decoded embedded-art bytes, keyed by audio path hash. */
+    private var cacheDir: java.io.File? = null
+
+    /** Call once at startup with an application context. */
+    fun init(context: android.content.Context) {
+        cacheDir = java.io.File(context.cacheDir, "covers").apply { mkdirs() }
+    }
+
+    private fun coverFile(path: String): java.io.File {
+        val name = java.security.MessageDigest.getInstance("MD5")
+            .digest(path.toByteArray()).joinToString("") { "%02x".format(it) }
+        return java.io.File(cacheDir, "$name.jpg")
+    }
+
+    /** Pulls the album art embedded inside a local audio file. [fileUri] is a `file://` URI. */
+    private suspend fun embeddedArt(fileUri: String, target: Int): Bitmap? = withContext(CoverIo) {
+        val path = Uri.parse(fileUri).path ?: return@withContext null
+        // Serve a previously-decoded copy from disk instantly; only reach into
+        // the audio file when we have never seen this track before.
+        val cached = coverFile(path)
+        if (cached.isFile) {
+            runCatching { decodeFile(cached.absolutePath, target) }.getOrNull()
+        } else {
+            decodeEmbedded(path)?.let { bytes ->
+                runCatching { cached.writeBytes(bytes) }
+                decodeScaled(bytes, target)
+            }
+        }
+    }
+
+    /** Reads the embedded album art bytes out of an audio file, or null. */
+    private fun decodeEmbedded(path: String): ByteArray? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(path)
+            retriever.embeddedPicture
+        } catch (_: Exception) {
+            null
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
 
     suspend fun bitmapFor(station: Station): Bitmap? {
         if (station.source == StationSource.Cliamp) return null
         bitmaps.get(station.id)?.let { return it }
         if (misses.get(station.id) == true) return null
 
-        val url = imageUrl(station)
-        if (url == null) {
-            misses.put(station.id, true)
-            return null
+        val bmp = if (station.source == StationSource.Local) {
+            // A local file's cover is usually embedded in the audio track
+            // itself; there is no homepage to scrape. Draw that first.
+            embeddedArt(station.url, TARGET)
+        } else {
+            val url = imageUrl(station)
+            if (url == null) {
+                misses.put(station.id, true)
+                return null
+            }
+            download(url)
         }
-        val bmp = download(url)
         if (bmp == null) misses.put(station.id, true) else bitmaps.put(station.id, bmp)
+        return bmp
+    }
+
+    /**
+     * Low-quality art for tiny surfaces (row thumbnails, the mini player).
+     * Decodes at [TARGET_SMALL] and serves its own cache so a 100-row list
+     * doesn't hold a dozen full-size bitmaps in memory.
+     */
+    suspend fun bitmapForSmall(station: Station): Bitmap? {
+        if (station.source == StationSource.Cliamp) return null
+        smallBitmaps.get(station.id)?.let { return it }
+        val bmp = if (station.source == StationSource.Local) {
+            embeddedArt(station.url, TARGET_SMALL)
+        } else {
+            val url = imageUrl(station)
+            if (url == null) return null
+            downloadSmall(url)
+        }
+        if (bmp != null) smallBitmaps.put(station.id, bmp)
         return bmp
     }
 
@@ -116,7 +199,21 @@ object StationArtSource {
                 if (ct.isNotEmpty() && (!ct.startsWith("image/") || ct in undecodable)) return@use null
                 val bytes = r.body.byteStream().readAtMost(MAX_IMAGE) ?: return@use null
                 if (bytes.size < 64) return@use null
-                decodeScaled(bytes)
+                decodeScaled(bytes, TARGET)
+            }
+        }.getOrNull()
+    }
+
+    private suspend fun downloadSmall(url: String): Bitmap? = withContext(Dispatchers.IO) {
+        runCatching {
+            val req = Request.Builder().url(url).header("User-Agent", Http.USER_AGENT).build()
+            Http.client.newCall(req).execute().use { r ->
+                if (!r.isSuccessful) return@use null
+                val ct = r.header("Content-Type").orEmpty().substringBefore(';').trim().lowercase()
+                if (ct.isNotEmpty() && (!ct.startsWith("image/") || ct in undecodable)) return@use null
+                val bytes = r.body.byteStream().readAtMost(MAX_IMAGE) ?: return@use null
+                if (bytes.size < 64) return@use null
+                decodeScaled(bytes, TARGET_SMALL)
             }
         }.getOrNull()
     }
@@ -136,16 +233,28 @@ object StationArtSource {
         return out.toByteArray()
     }
 
-    private fun decodeScaled(bytes: ByteArray): Bitmap? {
+    private fun decodeScaled(bytes: ByteArray, target: Int): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
         var sample = 1
-        while (bounds.outWidth / (sample * 2) >= TARGET && bounds.outHeight / (sample * 2) >= TARGET) {
+        while (bounds.outWidth / (sample * 2) >= target && bounds.outHeight / (sample * 2) >= target) {
             sample *= 2
         }
         val opts = BitmapFactory.Options().apply { inSampleSize = sample }
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+    }
+
+    /** Scaled decode straight from a file on disk (e.g. the archived cover). */
+    private fun decodeFile(path: String, target: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= target && bounds.outHeight / (sample * 2) >= target) {
+            sample *= 2
+        }
+        return BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
     }
 }
 

@@ -19,6 +19,7 @@ import stream.cliamp.mobile.playback.ResolvedStream
 import stream.cliamp.mobile.playback.StreamResolver
 import stream.cliamp.mobile.net.Http
 import stream.cliamp.mobile.data.LocalLibrary
+import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.PlaylistStore
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.playback.PlayerConnection
@@ -43,6 +44,7 @@ class CliampApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Http.init(this)
+        StationArtSource.init(this)
 
         // Provider stream URLs are signed per request, so they are resolved
         // here at play time rather than stored.

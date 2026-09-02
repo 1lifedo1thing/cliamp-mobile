@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.LruCache
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
@@ -22,33 +21,67 @@ import kotlinx.coroutines.withContext
 object LocalArt {
 
     private const val TARGET = 512
-    private val bitmaps = LruCache<String, Bitmap>(16)
-    private val misses = LruCache<String, Boolean>(64)
+    private const val TARGET_SMALL = 96
+    private val bitmaps = LruCache<String, Bitmap>(96)
+    private val smallBitmaps = LruCache<String, Bitmap>(192)
+    private val misses = LruCache<String, Boolean>(128)
 
-    suspend fun bitmapFor(cover: String?, resolver: ContentResolver): Bitmap? {
+    suspend fun bitmapFor(cover: String?, resolver: ContentResolver): Bitmap? =
+        bitmapForAt(cover, resolver, TARGET, bitmaps)
+
+    /** Low-quality art for row thumbnails and the mini player. */
+    suspend fun bitmapForSmall(cover: String?, resolver: ContentResolver): Bitmap? =
+        bitmapForAt(cover, resolver, TARGET_SMALL, smallBitmaps)
+
+    private suspend fun bitmapForAt(
+        cover: String?,
+        resolver: ContentResolver,
+        target: Int,
+        cache: LruCache<String, Bitmap>,
+    ): Bitmap? {
         if (cover.isNullOrBlank()) return null
-        bitmaps.get(cover)?.let { return it }
+        cache.get(cover)?.let { return it }
         if (misses.get(cover) == true) return null
-        val bmp = decode(cover, resolver)
-        if (bmp == null) misses.put(cover, true) else bitmaps.put(cover, bmp)
+        val bmp = decode(cover, resolver, target)
+        if (bmp == null) misses.put(cover, true) else cache.put(cover, bmp)
         return bmp
     }
 
-    private suspend fun decode(cover: String, resolver: ContentResolver): Bitmap? =
-        withContext(Dispatchers.IO) {
+    private suspend fun decode(cover: String, resolver: ContentResolver, target: Int): Bitmap? =
+        withContext(CoverIo) {
             runCatching {
                 val uri = Uri.parse(cover)
-                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@withContext null
-                var sample = 1
-                while (bounds.outWidth / (sample * 2) >= TARGET && bounds.outHeight / (sample * 2) >= TARGET) {
-                    sample *= 2
-                }
-                val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-                resolver.openInputStream(uri)?.use {
-                    BitmapFactory.decodeStream(it, null, opts)
+                if (uri.scheme == "file") {
+                    // Local-song covers are plain on-disk files; ContentResolver
+                    // cannot open file:// URIs, so decode the path directly.
+                    decodeFile(uri.path, target)
+                } else {
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@withContext null
+                    val sample = sampleFor(bounds.outWidth, bounds.outHeight, target)
+                    val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+                    resolver.openInputStream(uri)?.use {
+                        BitmapFactory.decodeStream(it, null, opts)
+                    }
                 }
             }.getOrNull()
         }
+
+    private fun decodeFile(path: String?, target: Int): Bitmap? {
+        if (path.isNullOrBlank()) return null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        val opts = BitmapFactory.Options().apply { inSampleSize = sampleFor(bounds.outWidth, bounds.outHeight, target) }
+        return BitmapFactory.decodeFile(path, opts)
+    }
+
+    private fun sampleFor(width: Int, height: Int, target: Int): Int {
+        var sample = 1
+        while (width / (sample * 2) >= target && height / (sample * 2) >= target) {
+            sample *= 2
+        }
+        return sample
+    }
 }

@@ -317,6 +317,7 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
             // and only radio needs the og:image discovery dance
             s.source == StationSource.Local ->
                 stream.cliamp.mobile.data.LocalArt.bitmapFor(s.cover, context.contentResolver)
+                    ?: StationArtSource.bitmapFor(s) // else embedded album art
             s.cover.startsWith("http") -> StationArtSource.bitmapForUrl(s.cover)
             else -> StationArtSource.bitmapFor(s)
         }?.asImageBitmap()
