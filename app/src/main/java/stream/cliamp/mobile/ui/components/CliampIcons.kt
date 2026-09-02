@@ -112,40 +112,34 @@ object CliampIcons {
     val StarFilled = solid(16f, 16f, "M8 1.5l1.9 4.2 4.6.5-3.4 3.1.9 4.5L8 11.6 4 13.8l.9-4.5L1.5 6.2l4.6-.5z")
 
     /**
-     * A broadcast signal radiating from a transmitter: a small solid dot at the
-     * base of the mist plus three concentric, symmetric arcs. Reads immediately
-     * as "radio / stations" at tab size and sits cleanly beside the playlists
-     * vinyl disc and the queue line-list.
-     */
-    /**
-     * A tuning dial: a scale with tick marks and a needle parked between two
-     * stations.
-     *
-     * Two earlier attempts failed for the same underlying reason. Concentric
-     * arcs radiating from a dot is the conventional broadcast glyph, but it
-     * breaks the doc's straight-paths-only rule and smudges at 17dp. A tower
-     * with two legs and a cross brace obeys the rule and then reads as the
-     * letter A, because that is what a triangle with a horizontal bar is. A
-     * dial has no such collision, and tuning is what stations are for.
+     * A broadcast signal from a transmitter: a small solid dot at the bottom
+     * with straight radiating beams sweeping upward on each side. The beams are
+     * straight paths (not concentric arcs), so the glyph stays inside the
+     * straight-paths-only rule while still reading as "radio / stations" at tab
+     * size, and sits cleanly beside the playlists vinyl disc and the queue
+     * line-list.
      */
     val StationsTab = ImageVector.Builder(
         defaultWidth = 18.dp, defaultHeight = 18.dp, viewportWidth = 18f, viewportHeight = 18f,
     ).apply {
+        // transmitter
+        addPath(addPathNodes(circle(9f, 13.4f, 1.5f)), fill = SolidColor(Color.White))
+        // radiating straight beams
         listOf(
-            "M1.4 14.0h15.2",     // scale
-            "M4.8 14.0V11.0",     // ticks
-            "M9.0 14.0V12.1",
-            "M13.2 14.0V11.0",
+            "M9 12.4L2.6 4.8",
+            "M9 12.4L4.8 5.6",
+            "M9 12.4L15.4 4.8",
+            "M9 12.4L13.2 5.6",
+            "M9 12.4L9 1.5",
         ).forEach {
             addPath(
                 addPathNodes(it),
                 stroke = SolidColor(Color.White),
-                strokeLineWidth = 1.7f,
+                strokeLineWidth = 1.5f,
                 strokeLineCap = StrokeCap.Butt,
                 strokeLineJoin = StrokeJoin.Miter,
             )
         }
-        addPath(addPathNodes(rect(6.5f, 2.6f, 1.8f, 11.4f)), fill = SolidColor(Color.White))
     }.build()
 
     /**

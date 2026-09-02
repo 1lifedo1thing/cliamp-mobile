@@ -191,8 +191,7 @@ fun LocalScreen(
                     when {
                         showing != null -> showing.station.name
                         openSmartPlaylist != null -> openSmartPlaylist.label
-                        showProviders -> "providers"
-                        else -> "playlists"
+                        else -> "Library"
                     },
                     CliampType.screenTitle, p.ink, maxLines = 1,
                 )
