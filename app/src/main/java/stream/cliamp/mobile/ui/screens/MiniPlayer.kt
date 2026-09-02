@@ -2,6 +2,7 @@ package stream.cliamp.mobile.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,11 +40,15 @@ fun MiniPlayer(
     playing: Boolean,
     buffering: Boolean,
     reconnecting: Int = 0,
+    queueCount: Int,
+    onOpenQueue: () -> Unit,
     onToggle: () -> Unit,
     onOpen: () -> Unit,
 ) {
     val p = LocalPalette.current
-    if (station == null) return
+    // The bar never goes away: it shows the current or last-played station,
+    // or the empty "nothing playing" state when nothing has played yet.
+    val empty = station == null
     val frame = rememberMeter(columns = MeterSize.Mini.columns, live = playing)
 
     Column(Modifier.fillMaxWidth().background(p.panel)) {
@@ -63,21 +69,37 @@ fun MiniPlayer(
                 columnGap = 2.dp,
                 showPeaks = false,
             )
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Mono(station.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
-                Mono(
-                    when {
-                        reconnecting > 0 -> "reconnecting · $reconnecting"
-                        buffering -> "buffering…"
-                        streamTitle.isNotBlank() -> streamTitle
-                        station.source == StationSource.Cliamp -> "cliamp radio"
-                        else -> station.meta.ifBlank { "live stream" }
-                    },
-                    CliampType.rowSecondary,
-                    if (buffering || reconnecting > 0) p.amber else p.inkTertiary,
-                    maxLines = 1,
-                )
+            if (empty) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Mono("nothing playing", CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+                    Mono("pick a station to start", CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                }
+            } else {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Mono(station!!.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+                    Mono(
+                        when {
+                            reconnecting > 0 -> "reconnecting · $reconnecting"
+                            buffering -> "buffering…"
+                            streamTitle.isNotBlank() -> streamTitle
+                            station!!.source == StationSource.Cliamp -> "cliamp radio"
+                            else -> station!!.meta.ifBlank { "live stream" }
+                        },
+                        CliampType.rowSecondary,
+                        if (buffering || reconnecting > 0) p.amber else p.inkTertiary,
+                        maxLines = 1,
+                    )
+                }
             }
+            // Queue sits before the play key on the right edge of the bar.
+            Icon(
+                CliampIcons.QueueTabLines,
+                "queue",
+                Modifier
+                    .size(16.dp)
+                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onOpenQueue),
+                tint = p.ink,
+            )
             Box(
                 Modifier
                     .size(38.dp)
