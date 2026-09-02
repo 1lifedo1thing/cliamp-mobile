@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Self-hosted music servers — Navidrome, Subsonic, Jellyfin, Emby, Plex,
+    Audiobookshelf, Lyrion — are usually run behind plain http:// on a home LAN.
+    Android forbids cleartext once targetSdk is 28+, which silently kills every
+    such connection. Users opt in to cleartext here on purpose (the app exists to
+    reach those servers); an account is only saved after the server answers, so
+    a mis-typed http:// URL fails loudly at the probe instead of mid-session.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
