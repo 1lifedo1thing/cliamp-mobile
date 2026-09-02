@@ -169,7 +169,12 @@ class PlayerConnection(
             if (playlist != null) {
                 pushWindow(c, playlist, _queueIndex.value)
             } else {
-                windowBase = 0
+                // A single track (or live stream) is pushed as one media item,
+                // so Media3's index 0 has to map back to the tapped station in
+                // [_queue], not to the head of the list that produced it. This
+                // keeps sync() publishing the tapped song instead of the top
+                // search match whenever a search result is played alone.
+                windowBase = _queueIndex.value
                 c.setMediaItem(PlaybackService.mediaItem(context, station, StreamResolver.resolve(station.url)))
             }
             c.prepare()

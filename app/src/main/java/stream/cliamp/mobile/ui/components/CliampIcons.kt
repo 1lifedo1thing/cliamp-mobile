@@ -149,10 +149,10 @@ object CliampIcons {
      */
     val LibTab = stroked(18f, 18f, 1.7f, rect(1f, 1f, 5f, 16f), rect(8f, 1f, 5f, 16f), "M15 2l2 15")
     val QueueTabLines = stroked(18f, 18f, 1.7f, "M1 4h16M1 9h11M1 14h11")
-    val CmdTab = stroked(18f, 18f, 1.7f, rrect(0.9f, 1.9f, 16.2f, 14.2f, 2f), "M4.5 7l2.2 2.2L4.5 11.4M8.6 11.8h5")
     val CmdSmall = stroked(18f, 18f, 1.7f, rrect(0.9f, 1.9f, 16.2f, 14.2f, 2f), "M4.5 7l2.2 2.2L4.5 11.4")
-
-    val Search = stroked(16f, 16f, 1.8f, "M6.6 1.5a5.1 5.1 0 100 10.2 5.1 5.1 0 100-10.2z", "M10.4 10.4L15 15")
+    val Search = stroked(16f, 16f, 1.8f, circle(11.7f, 6.6f, 5.1f), "M10.4 10.4L15 15")
+    /** The magnifier used as the app-wide finder's tab glyph. */
+    val SearchTab = stroked(18f, 18f, 1.6f, circle(8f, 8f, 4.4f), "M11.2 11.4L15.8 16")
     val Plus = solid(14f, 14f, rect(6f, 0f, 2f, 14f), rect(0f, 6f, 14f, 2f))
     val Minus = solid(12f, 12f, rect(0f, 5f, 12f, 2f))
     val Check = stroked(13f, 13f, 2.2f, "M1.5 7l3.2 3.2L11.5 3")

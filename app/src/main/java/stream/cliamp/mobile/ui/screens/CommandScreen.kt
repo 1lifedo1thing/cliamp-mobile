@@ -1,6 +1,8 @@
 package stream.cliamp.mobile.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,8 +30,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -44,6 +52,7 @@ import stream.cliamp.mobile.data.LocalLibrary
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.data.Station
+import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.data.provider.ProviderStore
 import stream.cliamp.mobile.playback.PlaybackBus
@@ -64,7 +73,7 @@ import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
 
 private enum class Scope(val label: String) {
-    All("all"), Media("media"), Radio("radio"), Tags("tags"), Providers("providers"), Cmds("cmds"),
+    All("all"), Media("local"), Radio("radio"), Tags("tags"), Providers("providers"), Cmds("cmds"),
 }
 
 /**
@@ -176,22 +185,14 @@ fun CommandScreen(
                     .padding(top = 10.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Mono(":", CliampType.trackTitleCompact, p.accent)
-                Spacer(Modifier.width(6.dp))
                 CliampTextField(
                     value = query,
                     onValueChange = { query = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = "fuzzy find anything",
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    placeholder = "Search",
                     imeAction = ImeAction.Go,
                     onAction = { run(query) },
                     autoFocus = true,
-                )
-                Spacer(Modifier.width(10.dp))
-                Mono(
-                    if (query.isBlank()) "" else "${results.size} hits",
-                    CliampType.rowSecondary,
-                    p.inkTertiary,
                 )
             }
             Row(
@@ -231,13 +232,54 @@ fun CommandScreen(
 
 private fun sectionOf(hit: SearchHit): String {
     val head = when (hit) {
-        is SearchHit.Song, is SearchHit.Favorite -> "media"
+        is SearchHit.Song, is SearchHit.Favorite -> "local"
         is SearchHit.StationHit -> "radio"
         is SearchHit.Tag -> "tags"
         is SearchHit.Provider -> "providers"
         is SearchHit.Command -> "commands"
     }
     return if (hit is SearchHit.Tag) "tags — global" else "$head — global"
+}
+
+@Composable
+private fun HitArt(hit: SearchHit, accent: androidx.compose.ui.graphics.Color) {
+    val p = LocalPalette.current
+    // Commands, tags and provider rows carry no art; the type glyph is right.
+    val station = when (hit) {
+        is SearchHit.Song -> hit.station
+        is SearchHit.Favorite -> hit.station
+        is SearchHit.StationHit -> hit.station
+        else -> null
+    }
+    if (station == null) {
+        Icon(
+            iconOf(hit), null, Modifier.size(15.dp),
+            tint = if (hit is SearchHit.Command) accent else p.inkTertiary,
+        )
+        return
+    }
+
+    var art by remember(station.id) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(station.id) {
+        delay(90)
+        art = StationArtSource.bitmapForSmall(station)?.asImageBitmap()
+    }
+    Box(
+        Modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(5.dp))
+            .then(
+                if (art != null) Modifier.background(p.panel)
+                else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(5.dp))
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (art != null) {
+            Image(art!!, station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        } else {
+            Icon(iconOf(hit), null, Modifier.size(15.dp), tint = p.inkTertiary)
+        }
+    }
 }
 
 @Composable
@@ -258,9 +300,7 @@ private fun HitRow(
             onClick()
         },
         verticalPadding = 10.dp,
-        leading = {
-            Icon(iconOf(hit), null, Modifier.size(15.dp), tint = if (hit is SearchHit.Command) accent else p.inkTertiary)
-        },
+        leading = { HitArt(hit, accent) },
         trailing = { Mono(hit.origin, CliampType.meta, p.inkFaint) },
     ) {
         val title = when (hit) {

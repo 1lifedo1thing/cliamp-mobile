@@ -59,17 +59,16 @@ import stream.cliamp.mobile.data.LocalLibrary
 import stream.cliamp.mobile.data.PlaylistStore
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.durationLabel
-import stream.cliamp.mobile.ui.components.Chip
-import stream.cliamp.mobile.ui.components.CliampIcons
-import androidx.compose.ui.text.input.ImeAction
 import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.data.provider.ProviderCatalog
 import stream.cliamp.mobile.data.provider.ProviderSpec
+import stream.cliamp.mobile.ui.components.Chip
+import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampTextField
-import stream.cliamp.mobile.ui.components.ListRow
-import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
+import stream.cliamp.mobile.ui.components.ListRow
+import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.components.IconLabelButton
 import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.ScreenHeader
@@ -126,8 +125,6 @@ fun LocalScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var query by remember { mutableStateOf("") }
-    var searchOpen by remember { mutableStateOf(false) }
     var openSlug by remember { mutableStateOf<String?>(null) }
     var openSmart by remember { mutableStateOf<SmartKind?>(null) }
     var addingTo by remember { mutableStateOf<String?>(null) }
@@ -140,9 +137,8 @@ fun LocalScreen(
     val libError by localLibrary.error.collectAsState()
     val allPlaylists by playlists.playlists.collectAsState(initial = emptyList())
     val pinnedSlugs by playlists.pinnedSlugs.collectAsState(initial = emptySet())
-    val filteredPlaylists = filterPlaylists(allPlaylists, query)
-    val pinnedPlaylists = filteredPlaylists.filter { it.station.slug in pinnedSlugs }
-    val unpinnedPlaylists = filteredPlaylists.filterNot { it.station.slug in pinnedSlugs }
+    val pinnedPlaylists = allPlaylists.filter { it.station.slug in pinnedSlugs }
+    val unpinnedPlaylists = allPlaylists.filterNot { it.station.slug in pinnedSlugs }
 
     val audioPerm = if (Build.VERSION.SDK_INT >= 33)
         Manifest.permission.READ_MEDIA_AUDIO
@@ -165,7 +161,7 @@ fun LocalScreen(
         if (haveAudio) localLibrary.refresh()
     }
 
-    val filtered = filterSongs(songs, query)
+    val filtered = songs
     val showing = allPlaylists.firstOrNull { it.station.slug == openSlug }
     // Playing starts minimized; the full player only opens when the mini-player
     // bar at the bottom is tapped.
@@ -239,32 +235,6 @@ fun LocalScreen(
                     Chip("‹ back", selected = false, onClick = { openSmart = null })
                 }
             }
-            Row(
-                Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, bottom = 6.dp)
-                    .clip(RoundedCornerShape(4.dp)).clickable { searchOpen = true },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Mono("▸ ", CliampType.chip, p.inkTertiary)
-                CliampTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = "search songs, artists, albums",
-                    textStyle = CliampType.rowPrimary,
-                    imeAction = ImeAction.Search,
-                    onAction = { searchOpen = false },
-                    autoFocus = searchOpen,
-                )
-                if (query.isNotBlank()) {
-                    Icon(
-                        CliampIcons.Xmark, "clear search",
-                        Modifier.size(14.dp).clip(RoundedCornerShape(4.dp))
-                            .clickable { query = ""; searchOpen = true }
-                            .padding(2.dp),
-                        tint = p.inkTertiary,
-                    )
-                }
-            }
         }
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -302,9 +272,7 @@ fun LocalScreen(
                     smart = smartPlaylists,
                     pinnedPlaylists = pinnedPlaylists,
                     playlists = unpinnedPlaylists,
-                    query = query,
                     songs = songs,
-                    searchResults = filtered,
                     current = current,
                     playing = playing,
                     onPlay = justPlay,
@@ -340,66 +308,11 @@ fun LocalScreen(
         }
         }
 
-        if (searchOpen) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .clickable(
-                        indication = null,
-                        interactionSource = remember { MutableInteractionSource() },
-                    ) { searchOpen = false }
-            )
-        }
-
     }
 }
 
 private fun checkAudio(context: android.content.Context, perm: String): Boolean =
     context.checkSelfPermission(perm) == android.content.pm.PackageManager.PERMISSION_GRANTED
-
-private fun filterSongs(songs: List<Station>, q: String): List<Station> {
-    if (q.isBlank()) return songs
-    return songs.filter { s ->
-        fuzzyMatch("${s.name} ${s.artist} ${s.album}", q)
-    }
-}
-
-private fun filterPlaylists(playlists: List<PlaylistStore.Playlist>, q: String): List<PlaylistStore.Playlist> {
-    if (q.isBlank()) return playlists
-    return playlists.filter { fuzzyMatch(it.station.name, q) }
-}
-
-/**
- * Lenient, typo-tolerant search. The query is split into whitespace tokens and
- * every token must appear in the haystack as a character subsequence, so "bckst
- * wngs" still matches "Backstreets Wannabe". Tokens are tried against the whole
- * haystack rather than a single word, which keeps multi-word album/artist names
- * matchable even when the words are out of order.
- */
-private fun fuzzyMatch(haystack: String, query: String): Boolean {
-    val text = haystack.lowercase()
-    val tokens = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
-        .sortedByDescending { it.length }
-    if (tokens.isEmpty()) return false
-    var from = 0
-    for (token in tokens) {
-        val idx = subsequenceIndex(text, token, from)
-        if (idx < 0) return false
-        from = idx + token.length
-    }
-    return true
-}
-
-/** Index of [needle] as a non-contiguous subsequence of [text] at or after [from], or -1. */
-private fun subsequenceIndex(text: String, needle: String, from: Int): Int {
-    var ni = 0
-    var i = from
-    while (i < text.length && ni < needle.length) {
-        if (text[i] == needle[ni]) ni++
-        i++
-    }
-    return if (ni == needle.length) i - 1 else -1
-}
 
 @Composable
 private fun CenterNote(text: String, color: androidx.compose.ui.graphics.Color) {
@@ -429,9 +342,7 @@ private fun PlaylistList(
     smart: List<SmartPlaylist>,
     pinnedPlaylists: List<PlaylistStore.Playlist>,
     playlists: List<PlaylistStore.Playlist>,
-    query: String,
     songs: List<Station>,
-    searchResults: List<Station>,
     current: Station?,
     playing: Boolean,
     onPlay: (Station, List<Station>) -> Unit,
@@ -477,40 +388,6 @@ private fun PlaylistList(
             }
             items(smart, key = { it.key }) { sp ->
                 SmartPlaylistRow(sp = sp, onOpen = { onOpenSmart(sp) }, context = context, loading = loading)
-            }
-
-            // Search results: apart from matching playlists, surface each
-            // matching song directly so a hit on a song shows the song itself.
-            if (query.isNotBlank()) {
-                if (searchResults.isNotEmpty()) {
-                    item { SectionLabel("songs — ${searchResults.size}") }
-                    items(searchResults, key = { it.url }) { s ->
-                        ListRow(
-                            onClick = { onPlay(s, searchResults) },
-                            verticalPadding = 9.dp,
-                            leading = {
-                                SongCover(s = s, current = current, playing = playing)
-                            },
-                            trailing = {
-                                Icon(
-                                    if (s.url in favorites) CliampIcons.StarFilled else CliampIcons.Star,
-                                    "favourite",
-                                    Modifier.size(15.dp).clickable { onToggleFavorite(s) },
-                                    tint = if (s.url in favorites) p.accent else p.inkFaint,
-                                )
-                            },
-                        ) {
-                            Mono(s.name, CliampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
-                            Mono(
-                                buildList {
-                                    if (s.artist.isNotBlank()) add(s.artist)
-                                    if (s.album.isNotBlank()) add(s.album)
-                                }.joinToString(" · ").ifBlank { s.meta },
-                                CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
-                            )
-                        }
-                    }
-                }
             }
 
             items(pinnedPlaylists, key = { it.station.slug }) { pl ->
