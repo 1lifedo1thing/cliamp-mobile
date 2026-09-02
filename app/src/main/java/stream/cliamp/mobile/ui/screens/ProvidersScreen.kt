@@ -42,6 +42,7 @@ fun ProvidersScreen(
     accounts: List<ProviderAccount>,
     onAdd: () -> Unit,
     onOpen: (ProviderAccount) -> Unit,
+    onEdit: (ProviderAccount) -> Unit,
     onRemove: (ProviderAccount) -> Unit,
 ) {
     val p = LocalPalette.current
@@ -110,15 +111,31 @@ fun ProvidersScreen(
                             }
                         },
                         trailing = {
-                            Mono(
-                                "DROP",
-                                CliampType.tabLabel,
-                                p.destructiveInk,
-                                Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .clickable { onRemove(a) }
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                // Browsing is the primary action now, so editing
+                                // moves out of the row tap and onto its own control.
+                                Mono(
+                                    "EDIT",
+                                    CliampType.tabLabel,
+                                    p.inkSecondary,
+                                    Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .clickable { onEdit(a) }
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                )
+                                Mono(
+                                    "DROP",
+                                    CliampType.tabLabel,
+                                    p.destructiveInk,
+                                    Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .clickable { onRemove(a) }
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                )
+                            }
                         },
                     ) {
                         Mono(a.label.ifBlank { spec?.name ?: a.providerKey }, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)

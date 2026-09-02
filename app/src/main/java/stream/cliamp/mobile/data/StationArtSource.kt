@@ -46,6 +46,20 @@ object StationArtSource {
         return bmp
     }
 
+    /**
+     * Art whose URL we already know, rather than one that has to be discovered
+     * from a homepage. Provider covers arrive this way: getCoverArt gives a
+     * real, already-signed URL, so none of the og:image guessing applies.
+     */
+    suspend fun bitmapForUrl(url: String): Bitmap? {
+        if (url.isBlank()) return null
+        bitmaps.get(url)?.let { return it }
+        if (misses.get(url) == true) return null
+        val bmp = download(url)
+        if (bmp == null) misses.put(url, true) else bitmaps.put(url, bmp)
+        return bmp
+    }
+
     private suspend fun imageUrl(station: Station): String? {
         resolved.get(station.id)?.let { return it }
         val fromPage = station.homepage.takeIf { it.startsWith("http") }?.let { scrape(it) }

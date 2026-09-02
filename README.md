@@ -62,10 +62,35 @@ with `sdk.dir`. Release builds are signed with the debug key; swap `signingConfi
 | :CMD | Command bar with its own keyboard: `:play`, `:tag`, `:country`, `:eq`, `:random` |
 | SCOPE | 32-column spectrum off the real FFT, 7-band equaliser, presets |
 | STATS | cliamp radio listeners, 31-day session history, top countries and cities |
+| SERVERS | Music servers: add one through a wizard, then browse and play it |
 | SETTINGS | Buffer depth, cellular, haptics, visualiser, dark/light/system palette |
 
 Playback runs in a `MediaSessionService`, so the lockscreen, notification and Bluetooth
 controls all drive the same player.
+
+## Providers
+
+Point cliamp at a music server you own. Navidrome first, and because it speaks Subsonic
+the same client covers gonic, airsonic and other Subsonic servers.
+
+Adding one runs a wizard: server URL, username, password, then a probe against
+`/rest/ping.view`. Nothing is written until the server answers, so a typo fails in the
+wizard rather than surfacing later as an empty library. Browsing gives newest, most
+played, A-Z, artists and starred, drilling into an album's tracks; playing a track queues
+the whole album.
+
+Two things worth knowing about the design:
+
+- **The spec is declarative**, ported from cliamp desktop's `cmd/setup.go`. A provider is
+  a name, an intro, a list of fields and a validate function, so adding the next one is a
+  data change rather than a screen. `FieldSpec.onlyIf` is carried over because Jellyfin
+  accepts either an API token or user plus password.
+- **Credentials go through the Android Keystore**, AES-256-GCM, not the preferences
+  DataStore the settings use. Subsonic signs every request with `md5(password + salt)`, so
+  the password has to stay retrievable rather than being traded for a token once. For the
+  same reason a track's stored url is an opaque `cliamp-provider://` reference signed at
+  play time: a real stream URL embeds a token that never expires, and persisting one to
+  history would put a replayable credential in a plain file.
 
 ## Artwork
 
@@ -157,8 +182,8 @@ Where the build departs from the document, and why:
 
 | Concept | Here | Why |
 | --- | --- | --- |
-| Scrubber with playhead | `--- STREAMING ---` rule | Live radio cannot seek. Matches `renderSeekBar()` in the cliamp TUI. |
-| Striped art placeholder | Station og:image, plate as fallback | A station's own branding is not invented art. The plate still covers the misses. |
+| Scrubber with playhead | Both, chosen per source | Seekable sources get the scrubber; live streams get `--- STREAMING ---`, matching `renderSeekBar()` in the cliamp TUI. |
+| Striped art placeholder | Real art where it exists, plate as fallback | Local tags, provider `getCoverArt`, then a station's og:image. None of that is invented art; the plate still covers the misses. |
 | Amber means remote host | Also means reconnecting | Red is reserved for destructive actions, so amber was the only honest choice left. |
 | Identity strip on the player | Removed | Its format readout moved into the meta line under the title. |
 | Three descending bars as the mark | The real eight-bar logo | The concept's mark was a stand-in for exactly this. |

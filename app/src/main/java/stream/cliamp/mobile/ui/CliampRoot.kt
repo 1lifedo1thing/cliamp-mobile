@@ -40,6 +40,7 @@ import stream.cliamp.mobile.ui.screens.ScopeScreen
 import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.data.provider.ProviderCatalog
 import stream.cliamp.mobile.data.provider.ProviderStore
+import stream.cliamp.mobile.ui.screens.ProviderBrowseScreen
 import stream.cliamp.mobile.ui.screens.ProviderWizard
 import stream.cliamp.mobile.ui.screens.ProvidersScreen
 import stream.cliamp.mobile.ui.screens.SettingsScreen
@@ -55,6 +56,9 @@ private sealed interface Overlay {
 
     /** The add-provider wizard. [account] non-null means edit rather than add. */
     data class Wizard(val providerKey: String, val account: ProviderAccount?) : Overlay
+
+    /** Browsing one provider's library. */
+    data class Browse(val accountId: String) : Overlay
 }
 
 @UnstableApi
@@ -113,6 +117,21 @@ fun CliampRoot(
                     playing = playerState.playing,
                     onBack = { overlay = Overlay.None },
                 )
+                is Overlay.Browse -> {
+                    val id = (overlay as Overlay.Browse).accountId
+                    val account = providerAccounts.firstOrNull { it.id == id }
+                    if (account == null) {
+                        overlay = Overlay.None
+                    } else {
+                        ProviderBrowseScreen(
+                            account = account,
+                            onBack = { overlay = Overlay.None },
+                            onEdit = { overlay = Overlay.Wizard(account.providerKey, account) },
+                            onPlay = onPlay,
+                            onOpenPlayer = { overlay = Overlay.None; tab = Tab.Play },
+                        )
+                    }
+                }
                 is Overlay.Wizard -> {
                     val spec = ProviderCatalog.byKey((overlay as Overlay.Wizard).providerKey)
                     if (spec == null) {
@@ -148,7 +167,8 @@ fun CliampRoot(
                                 overlay = Overlay.Wizard(it.key, null)
                             }
                         },
-                        onOpen = { a -> overlay = Overlay.Wizard(a.providerKey, a) },
+                        onOpen = { a -> overlay = Overlay.Browse(a.id) },
+                        onEdit = { a -> overlay = Overlay.Wizard(a.providerKey, a) },
                         onRemove = { a -> scope.launch { providers.remove(a.id) } },
                     )
                     Tab.Stations -> StationsScreen(

@@ -308,17 +308,23 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
     LaunchedEffect(station?.id) {
         art = null
         val s = station ?: return@LaunchedEffect
-        art = if (s.source == StationSource.Local) {
-            stream.cliamp.mobile.data.LocalArt.bitmapFor(s.cover, context.contentResolver)?.asImageBitmap()
-        } else {
-            StationArtSource.bitmapFor(s)?.asImageBitmap()
-        }
+        art = when {
+            // local files carry a content:// uri, provider covers an http one,
+            // and only radio needs the og:image discovery dance
+            s.source == StationSource.Local ->
+                stream.cliamp.mobile.data.LocalArt.bitmapFor(s.cover, context.contentResolver)
+            s.cover.startsWith("http") -> StationArtSource.bitmapForUrl(s.cover)
+            else -> StationArtSource.bitmapFor(s)
+        }?.asImageBitmap()
     }
     val caption = when {
         station == null -> "[ no station tuned ]"
         station.source == StationSource.Local ->
             if (station.album.isNotBlank()) "[ ${station.album.lowercase()} · ${station.artist.lowercase()} ]"
             else "[ local file ]"
+        station.source == StationSource.Provider ->
+            if (station.album.isNotBlank()) "[ ${station.album.lowercase()} · ${station.artist.lowercase()} ]"
+            else "[ provider ]"
         station.source == StationSource.Cliamp -> "[ ${station.slug} · cliamp radio ]"
         station.countryCode.isNotBlank() -> "[ ${station.countryCode.lowercase()} · live stream ]"
         else -> "[ live stream ]"

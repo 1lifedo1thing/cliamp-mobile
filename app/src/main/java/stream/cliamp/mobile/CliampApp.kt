@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.provider.ProviderStore
+import stream.cliamp.mobile.data.provider.subsonic
+import stream.cliamp.mobile.playback.StreamResolver
 import stream.cliamp.mobile.net.Http
 import stream.cliamp.mobile.data.LocalLibrary
 import stream.cliamp.mobile.data.PlaylistStore
@@ -37,6 +39,13 @@ class CliampApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Http.init(this)
+
+        // Provider stream URLs are signed per request, so they are resolved
+        // here at play time rather than stored.
+        StreamResolver.providerResolver = { accountId, trackId ->
+            providers.read().firstOrNull { it.id == accountId }
+                ?.let { it.subsonic().streamUrl(trackId) }
+        }
         repository.bootstrap()
 
         // The last station is restored but never auto-played unless asked:

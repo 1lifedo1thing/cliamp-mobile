@@ -42,6 +42,51 @@ class SubsonicClient(
 
     fun streamUrl(id: String): String = endpoint("stream.view", mapOf("id" to id))
 
+    /**
+     * Provider albums have real cover art, so the og:image fallback that radio
+     * stations need is not wanted here.
+     */
+    fun coverArtUrl(id: String, size: Int = 512): String =
+        endpoint("getCoverArt.view", mapOf("id" to id, "size" to size.toString()))
+
+    /** `type` is one of newest, recent, frequent, alphabeticalByName, starred. */
+    suspend fun albums(type: String, offset: Int = 0, size: Int = 100): Result<List<SubsonicAlbum>> =
+        call("getAlbumList2.view", mapOf("type" to type, "size" to size.toString(), "offset" to offset.toString())) {
+            it.albumList2?.album.orEmpty()
+        }
+
+    suspend fun artists(): Result<List<SubsonicArtist>> =
+        call("getArtists.view") { env ->
+            env.artists?.index?.flatMap { it.artist }.orEmpty()
+        }
+
+    suspend fun artistAlbums(artistId: String): Result<List<SubsonicAlbum>> =
+        call("getArtist.view", mapOf("id" to artistId)) { it.artist2?.album.orEmpty() }
+
+    suspend fun albumTracks(albumId: String): Result<List<SubsonicTrack>> =
+        call("getAlbum.view", mapOf("id" to albumId)) { it.album?.song.orEmpty() }
+
+    suspend fun starred(): Result<List<SubsonicTrack>> =
+        call("getStarred2.view") { it.starred2?.song.orEmpty() }
+
+    suspend fun search(query: String): Result<SubsonicSearch> =
+        call("search3.view", mapOf("query" to query, "songCount" to "40", "albumCount" to "20", "artistCount" to "20")) {
+            it.searchResult3 ?: SubsonicSearch()
+        }
+
+    private suspend fun <T> call(
+        view: String,
+        params: Map<String, String> = emptyMap(),
+        pick: (SubsonicResponse) -> T,
+    ): Result<T> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = Http.text(endpoint(view, params))
+            val res = Http.json.decodeFromString<SubsonicEnvelope>(body).response
+            if (!res.isOk) error(res.error?.message ?: "request refused")
+            pick(res)
+        }
+    }
+
     private fun endpoint(view: String, extra: Map<String, String> = emptyMap()): String {
         val salt = ByteArray(8).also { SecureRandom().nextBytes(it) }.toHex()
         val token = MessageDigest.getInstance("MD5")
@@ -78,6 +123,65 @@ class SubsonicClient(
 }
 
 @Serializable
+data class SubsonicAlbum(
+    val id: String = "",
+    val name: String = "",
+    val artist: String = "",
+    val artistId: String = "",
+    val coverArt: String = "",
+    val songCount: Int = 0,
+    val year: Int = 0,
+    val duration: Int = 0,
+)
+
+@Serializable
+data class SubsonicArtist(
+    val id: String = "",
+    val name: String = "",
+    val albumCount: Int = 0,
+    val coverArt: String = "",
+)
+
+@Serializable
+data class SubsonicTrack(
+    val id: String = "",
+    val title: String = "",
+    val album: String = "",
+    val artist: String = "",
+    val albumId: String = "",
+    val coverArt: String = "",
+    val duration: Int = 0,
+    val track: Int = 0,
+    val suffix: String = "",
+    val bitRate: Int = 0,
+)
+
+@Serializable
+data class SubsonicSearch(
+    val artist: List<SubsonicArtist> = emptyList(),
+    val album: List<SubsonicAlbum> = emptyList(),
+    val song: List<SubsonicTrack> = emptyList(),
+)
+
+@Serializable
+private data class AlbumList2(val album: List<SubsonicAlbum> = emptyList())
+
+@Serializable
+private data class ArtistIndexes(val index: List<ArtistIndex> = emptyList())
+
+@Serializable
+private data class ArtistIndex(val name: String = "", val artist: List<SubsonicArtist> = emptyList())
+
+@Serializable
+private data class ArtistDetail(val album: List<SubsonicAlbum> = emptyList())
+
+@Serializable
+private data class AlbumDetail(val song: List<SubsonicTrack> = emptyList())
+
+@Serializable
+private data class Starred2(val song: List<SubsonicTrack> = emptyList())
+
+@Serializable
 private data class SubsonicEnvelope(
     @SerialName("subsonic-response") val response: SubsonicResponse = SubsonicResponse(),
 )
@@ -89,6 +193,12 @@ private data class SubsonicResponse(
     val type: String? = null,
     val serverVersion: String? = null,
     val error: SubsonicError? = null,
+    val albumList2: AlbumList2? = null,
+    val artists: ArtistIndexes? = null,
+    @SerialName("artist") val artist2: ArtistDetail? = null,
+    val album: AlbumDetail? = null,
+    val starred2: Starred2? = null,
+    val searchResult3: SubsonicSearch? = null,
 ) {
     val isOk: Boolean get() = status.equals("ok", ignoreCase = true)
 }
