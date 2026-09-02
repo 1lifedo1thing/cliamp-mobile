@@ -113,6 +113,7 @@ fun LocalScreen(
 
     var query by remember { mutableStateOf("") }
     var searchOpen by remember { mutableStateOf(false) }
+    var showProviders by remember { mutableStateOf(false) }
     var openSlug by remember { mutableStateOf<String?>(null) }
     var openSmart by remember { mutableStateOf<SmartKind?>(null) }
     var addingTo by remember { mutableStateOf<String?>(null) }
@@ -166,12 +167,13 @@ fun LocalScreen(
     val openSmartPlaylist = smartPlaylists.firstOrNull { it.kind == openSmart }
     val paneVisible = openSmartPlaylist == null && showing == null
 
-    val canGoBack = showing != null || openSmartPlaylist != null || addingTo != null
+    val canGoBack = showProviders || showing != null || openSmartPlaylist != null || addingTo != null
     BackHandler(enabled = canGoBack) {
         when {
             addingTo != null -> addingTo = null
             showing != null -> openSlug = null
             openSmartPlaylist != null -> openSmart = null
+            showProviders -> showProviders = false
             else -> {}
         }
     }
@@ -192,6 +194,16 @@ fun LocalScreen(
                     },
                     CliampType.screenTitle, p.ink, maxLines = 1,
                 )
+            }
+            if (showing == null && openSmartPlaylist == null) {
+                // Sub-tabs: the library list, and a dedicated providers pane.
+                Row(
+                    Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    Chip("library", selected = !showProviders, onClick = { showProviders = false })
+                    Chip("providers", selected = showProviders, onClick = { showProviders = true })
+                }
             }
             if (showing != null) {
                 // playlist detail sub-header
@@ -246,6 +258,11 @@ fun LocalScreen(
                 !haveAudio -> PermissionPrompt(onGrant = { permissionLauncher.launch(audioPerm) })
                 loading && songs.isEmpty() -> CenterNote("reading the library…", p.inkFaint)
                 libError != null && songs.isEmpty() -> CenterNote(libError!!, p.destructiveInk)
+                showProviders -> ProvidersView(
+                    providers = providers,
+                    onOpenProvider = onOpenProvider,
+                    onAddProvider = onAddProvider,
+                )
                 openSmartPlaylist != null -> SmartPlaylistDetail(
                     pl = openSmartPlaylist,
                     current = current,
@@ -303,9 +320,6 @@ fun LocalScreen(
                     onPin = { slug, pinned -> scope.launch { playlists.setPinned(slug, pinned) } },
                     onOpen = { openSlug = it.station.slug },
                     onOpenSmart = { openSmart = it.kind },
-                    providers = providers,
-                    onOpenProvider = onOpenProvider,
-                    onAddProvider = onAddProvider,
                 )
             }
         }
@@ -422,9 +436,6 @@ private fun PlaylistList(
     onPin: (String, Boolean) -> Unit,
     onOpen: (PlaylistStore.Playlist) -> Unit,
     onOpenSmart: (SmartPlaylist) -> Unit,
-    providers: List<ProviderAccount>,
-    onOpenProvider: (ProviderAccount) -> Unit,
-    onAddProvider: (ProviderSpec) -> Unit,
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
@@ -498,70 +509,6 @@ private fun PlaylistList(
                 }
             }
 
-            // Providers are library sources, so they belong beside the local
-            // ones rather than in a tab of their own. One block holds every
-            // provider, split into two labelled groups: connected accounts
-            // (open their browse) and the runnable types not yet added.
-            val connectedKeys = providers.map { it.providerKey }.toSet()
-            val available = ProviderCatalog.all.filter { it.key !in connectedKeys }
-            item {
-                SectionLabel("providers — ${providers.size}/${ProviderCatalog.all.size}") { }
-            }
-            if (providers.isNotEmpty()) {
-                item {
-                    Mono("connected", CliampType.meta, p.inkTertiary,
-                        Modifier.padding(start = Gutter, bottom = 2.dp))
-                }
-                items(providers, key = { "prov:${it.id}" }) { acc ->
-                    ListRow(
-                        onClick = { onOpenProvider(acc) },
-                        verticalPadding = 11.dp,
-                        leading = {
-                            Box(
-                                Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
-                                    .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(CliampIcons.Server, null, Modifier.size(14.dp), tint = p.amber)
-                            }
-                        },
-                        trailing = { Icon(CliampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary) },
-                    ) {
-                        Mono(acc.label.ifBlank { "provider" }, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
-                        Mono(acc.url, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
-                    }
-                }
-            }
-            if (available.isNotEmpty()) {
-                item {
-                    Mono("available", CliampType.meta, p.inkTertiary,
-                        Modifier.padding(start = Gutter, top = if (providers.isEmpty()) 0.dp else 10.dp, bottom = 2.dp))
-                }
-                items(available, key = { "add:${it.key}" }) { spec ->
-                    ListRow(
-                        onClick = { onAddProvider(spec) },
-                        verticalPadding = 11.dp,
-                        leading = {
-                            Box(
-                                Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
-                                    .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(CliampIcons.Plus, "add", Modifier.size(13.dp), tint = p.accent)
-                            }
-                        },
-                        trailing = {
-                            Mono("+ add", CliampType.tabLabel, p.accent,
-                                Modifier.clip(RoundedCornerShape(4.dp))
-                                    .background(p.accent.copy(alpha = 0.14f))
-                                    .padding(horizontal = 8.dp, vertical = 5.dp))
-                        },
-                    ) {
-                        Mono(spec.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
-                        Mono(spec.intro.firstOrNull().orEmpty(), CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
-                    }
-                }
-            }
             items(pinnedPlaylists, key = { it.station.slug }) { pl ->
                 if (pl.station.slug == renamingSlug) {
                     InlineNameField(
@@ -625,6 +572,86 @@ private fun PlaylistList(
             item { Spacer(Modifier.height(20.dp)) }
         }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+/** Dedicated providers pane: connected accounts, then every addable type. */
+@Composable
+private fun ProvidersView(
+    providers: List<ProviderAccount>,
+    onOpenProvider: (ProviderAccount) -> Unit,
+    onAddProvider: (ProviderSpec) -> Unit,
+) {
+    val p = LocalPalette.current
+    val connectedKeys = providers.map { it.providerKey }.toSet()
+    val available = ProviderCatalog.all.filter { it.key !in connectedKeys }
+    LazyColumn(Modifier.fillMaxSize()) {
+        item {
+            SectionLabel("connected — ${providers.size}") { }
+        }
+        if (providers.isEmpty()) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 8.dp)) {
+                    Mono("nothing connected yet", CliampType.rowSecondary, p.inkFaint)
+                }
+            }
+        } else {
+            items(providers, key = { "prov:${it.id}" }) { acc ->
+                ListRow(
+                    onClick = { onOpenProvider(acc) },
+                    verticalPadding = 11.dp,
+                    leading = {
+                        Box(
+                            Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
+                                .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(CliampIcons.Server, null, Modifier.size(14.dp), tint = p.amber)
+                        }
+                    },
+                    trailing = { Icon(CliampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary) },
+                ) {
+                    Mono(acc.label.ifBlank { "provider" }, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+                    Mono(acc.url, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                }
+            }
+        }
+        item {
+            SectionLabel("available — ${available.size}") { }
+        }
+        if (available.isEmpty()) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 8.dp)) {
+                    Mono("every provider is connected", CliampType.rowSecondary, p.inkFaint)
+                }
+            }
+        } else {
+            items(available, key = { "add:${it.key}" }) { spec ->
+                ListRow(
+                    onClick = { onAddProvider(spec) },
+                    verticalPadding = 11.dp,
+                    leading = {
+                        Box(
+                            Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
+                                .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(CliampIcons.Plus, "add", Modifier.size(13.dp), tint = p.accent)
+                        }
+                    },
+                    trailing = {
+                        Mono("+ add", CliampType.tabLabel, p.accent,
+                            Modifier.clip(RoundedCornerShape(4.dp))
+                                .background(p.accent.copy(alpha = 0.14f))
+                                .padding(horizontal = 8.dp, vertical = 5.dp))
+                    },
+                ) {
+                    Mono(spec.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+                    Mono(spec.intro.firstOrNull().orEmpty(), CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                }
+            }
+        }
+        item { Spacer(Modifier.height(20.dp)) }
     }
 }
 
