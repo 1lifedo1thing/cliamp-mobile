@@ -211,10 +211,11 @@ fun CliampRoot(
             }
         }
 
-        // The mini bar never goes away (except while the full player is open):
-        // it always shows the current or last-played station, or the empty
-        // "nothing playing" state. Queue access lives here, beside the play key.
-        if (overlay != Overlay.Player) {
+        // The mini bar stays on the tab shell and the full player: it always
+        // shows the current or last-played station, or the empty "nothing
+        // playing" state. It hides with the tabs on modal overlays (settings,
+        // queue, provider flows) so those screens don't get a stray bar.
+        if (overlay == Overlay.None || overlay == Overlay.Player) {
             AnimatedVisibility(
                 visible = true,
                 enter = fadeIn() + expandVertically(),
