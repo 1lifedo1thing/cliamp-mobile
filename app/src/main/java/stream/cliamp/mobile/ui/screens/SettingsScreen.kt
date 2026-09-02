@@ -46,6 +46,8 @@ import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.MechSlider
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.theme.CliampType
+import stream.cliamp.mobile.ui.theme.DarkPalette
+import stream.cliamp.mobile.ui.theme.LightPalette
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.OmarchyPalettes
 import stream.cliamp.mobile.ui.theme.OmarchyThemeKeys
@@ -140,15 +142,22 @@ fun SettingsScreen(
             selected = visualizer,
             onSelect = { scope.launch { prefs.setVisualizer(it) } },
         )
-        ChoiceRow(
-            title = "Palette",
-            options = listOf("dark", "light", "system"),
-            selected = palette,
-            onSelect = { scope.launch { prefs.setPalette(it) } },
-        )
         HairlineDivider()
 
-        SectionLabel("omarchy themes — ${OmarchyThemeKeys.size}")
+        SectionLabel("themes — ${OmarchyThemeKeys.size + 3}")
+        listOf(
+            "dark" to DarkPalette,
+            "light" to LightPalette,
+            "system" to if (p.dark) DarkPalette else LightPalette,
+        ).forEach { (key, theme) ->
+            ThemeRow(
+                key = key,
+                theme = theme,
+                selected = palette == key,
+                subtitle = if (key == "system") "follows the device" else null,
+                onSelect = { scope.launch { prefs.setPalette(key) } },
+            )
+        }
         OmarchyThemeKeys.forEach { key ->
             ThemeRow(
                 key = key,
@@ -262,6 +271,7 @@ private fun ThemeRow(
     key: String,
     theme: stream.cliamp.mobile.ui.theme.CliampPalette,
     selected: Boolean,
+    subtitle: String? = null,
     onSelect: () -> Unit,
 ) {
     val p = LocalPalette.current
@@ -299,7 +309,7 @@ private fun ThemeRow(
                         if (selected) p.accent else p.ink,
                         maxLines = 1,
                     )
-                    Mono(if (theme.dark) "dark" else "light", CliampType.meta, p.inkFaint)
+                    Mono(subtitle ?: if (theme.dark) "dark" else "light", CliampType.meta, p.inkFaint)
                 }
             }
             if (selected) Mono("ACTIVE", CliampType.tabLabel, p.accent)
