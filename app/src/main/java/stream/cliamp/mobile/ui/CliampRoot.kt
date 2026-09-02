@@ -185,7 +185,8 @@ fun CliampRoot(
                         providers = providerAccounts,
                         onOpenProvider = { a -> overlay = Overlay.Browse(a.id) },
                         onAddProvider = {
-                            ProviderCatalog.all.firstOrNull()?.let {
+                            val connected = providerAccounts.map { it.providerKey }.toSet()
+                            ProviderCatalog.all.firstOrNull { it.key !in connected }?.let {
                                 overlay = Overlay.Wizard(it.key, null)
                             }
                         },
