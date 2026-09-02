@@ -42,7 +42,7 @@ import stream.cliamp.mobile.data.provider.ProviderCatalog
 import stream.cliamp.mobile.data.provider.ProviderStore
 import stream.cliamp.mobile.ui.screens.ProviderBrowseScreen
 import stream.cliamp.mobile.ui.screens.ProviderWizard
-import stream.cliamp.mobile.ui.screens.ProvidersScreen
+
 import stream.cliamp.mobile.ui.screens.SettingsScreen
 import stream.cliamp.mobile.ui.screens.StationsScreen
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -185,7 +185,8 @@ fun CliampRoot(
                         providers = providerAccounts,
                         onOpenProvider = { a -> overlay = Overlay.Browse(a.id) },
                         onAddProvider = {
-                            ProviderCatalog.all.firstOrNull()?.let {
+                            val connected = providerAccounts.map { it.providerKey }.toSet()
+                            ProviderCatalog.all.firstOrNull { it.key !in connected }?.let {
                                 overlay = Overlay.Wizard(it.key, null)
                             }
                         },

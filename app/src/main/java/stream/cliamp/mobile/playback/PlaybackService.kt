@@ -404,10 +404,10 @@ class PlaybackService : MediaSessionService() {
         const val CMD_FAVOURITE = "stream.cliamp.mobile.FAVOURITE"
 
         /** Metadata the notification and lockscreen read. */
-        fun mediaItem(context: Context, station: Station, resolvedUrl: String): MediaItem =
+        fun mediaItem(context: Context, station: Station, resolved: ResolvedStream): MediaItem =
             MediaItem.Builder()
                 .setMediaId(station.id)
-                .setUri(resolvedUrl)
+                .setUri(resolved.url)
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(station.name)
