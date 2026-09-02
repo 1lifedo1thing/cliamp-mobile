@@ -338,11 +338,19 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
         badge = badge,
     ) {
         art?.let { bmp ->
+            // Real album art is square and fills the plate edge to edge. Radio
+            // art does not: og:images are typically 1200x630 wordmarks, and
+            // cropping one to a square cuts it in half, so those stay inset
+            // and contained.
+            val albumArt = station?.source == StationSource.Local ||
+                station?.source == StationSource.Provider
             Image(
                 bitmap = bmp,
                 contentDescription = station?.name,
-                modifier = Modifier.fillMaxSize().padding(14.dp),
-                contentScale = ContentScale.Fit,
+                modifier =
+                    if (albumArt) Modifier.fillMaxSize()
+                    else Modifier.fillMaxSize().padding(14.dp),
+                contentScale = if (albumArt) ContentScale.Crop else ContentScale.Fit,
             )
         }
         if (art == null && station?.source == StationSource.Cliamp) {
