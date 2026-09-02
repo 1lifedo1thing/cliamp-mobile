@@ -3,6 +3,7 @@ package stream.cliamp.mobile.ui.screens
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -25,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -44,6 +47,8 @@ import stream.cliamp.mobile.ui.components.MechSlider
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
+import stream.cliamp.mobile.ui.theme.OmarchyPalettes
+import stream.cliamp.mobile.ui.theme.OmarchyThemeKeys
 import stream.cliamp.mobile.ui.theme.Mono
 import kotlin.math.roundToInt
 
@@ -143,6 +148,17 @@ fun SettingsScreen(
         )
         HairlineDivider()
 
+        SectionLabel("omarchy themes — ${OmarchyThemeKeys.size}")
+        OmarchyThemeKeys.forEach { key ->
+            ThemeRow(
+                key = key,
+                theme = OmarchyPalettes.getValue(key),
+                selected = palette == key,
+                onSelect = { scope.launch { prefs.setPalette(key) } },
+            )
+        }
+        HairlineDivider()
+
         SectionLabel("home screen")
         Row(
             Modifier
@@ -231,6 +247,62 @@ private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChang
                 Mono(subtitle, CliampType.rowSecondary, p.inkTertiary)
             }
             CliampToggle(checked, onChange)
+        }
+        Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
+    }
+}
+
+/**
+ * A theme row that shows the theme rather than describing it: ground, accent,
+ * ink and amber as swatches. A list of twenty-two names tells you nothing;
+ * four squares tell you everything that matters at a glance.
+ */
+@Composable
+private fun ThemeRow(
+    key: String,
+    theme: stream.cliamp.mobile.ui.theme.CliampPalette,
+    selected: Boolean,
+    onSelect: () -> Unit,
+) {
+    val p = LocalPalette.current
+    Column {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onSelect)
+                .padding(horizontal = Gutter, vertical = 11.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // the swatch is the theme's own ground, so it reads as a chip
+                // of that theme rather than of the current one
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(theme.ground)
+                        .border(1.dp, theme.frameBorder, RoundedCornerShape(4.dp))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    listOf(theme.accent, theme.ink, theme.amber).forEach { c ->
+                        Box(Modifier.size(8.dp).clip(RoundedCornerShape(2.dp)).background(c))
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Mono(
+                        key.replace('-', ' '),
+                        if (selected) CliampType.rowPrimaryMedium else CliampType.rowPrimary,
+                        if (selected) p.accent else p.ink,
+                        maxLines = 1,
+                    )
+                    Mono(if (theme.dark) "dark" else "light", CliampType.meta, p.inkFaint)
+                }
+            }
+            if (selected) Mono("ACTIVE", CliampType.tabLabel, p.accent)
         }
         Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
     }

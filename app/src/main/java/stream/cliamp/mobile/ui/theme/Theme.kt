@@ -25,13 +25,26 @@ import androidx.compose.ui.text.TextStyle
 /** Read by every mechanical control so one switch silences the whole app. */
 val LocalHapticsEnabled = staticCompositionLocalOf { true }
 
+/**
+ * Resolves the stored theme preference. "dark", "light" and "system" are the
+ * app's own two palettes; anything else is an Omarchy theme key, and an unknown
+ * key falls back rather than crashing, so a theme removed from the machine does
+ * not brick the app.
+ */
+fun paletteFor(preference: String, systemDark: Boolean): CliampPalette = when (preference) {
+    "dark" -> DarkPalette
+    "light" -> LightPalette
+    "system" -> if (systemDark) DarkPalette else LightPalette
+    else -> OmarchyPalettes[preference] ?: if (systemDark) DarkPalette else LightPalette
+}
+
 @Composable
 fun CliampTheme(
-    dark: Boolean = true,
+    palette: CliampPalette = DarkPalette,
     haptics: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val palette = if (dark) DarkPalette else LightPalette
+    val dark = palette.dark
     val scheme = if (dark) {
         darkColorScheme(
             primary = palette.accent,

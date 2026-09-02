@@ -13,6 +13,7 @@ import androidx.core.view.WindowCompat
 import androidx.media3.common.util.UnstableApi
 import stream.cliamp.mobile.ui.CliampRoot
 import stream.cliamp.mobile.ui.theme.CliampTheme
+import stream.cliamp.mobile.ui.theme.paletteFor
 
 @UnstableApi
 class MainActivity : ComponentActivity() {
@@ -38,24 +39,15 @@ class MainActivity : ComponentActivity() {
         permissions.launch(wanted.toTypedArray())
 
         setContent {
-            val palette by app.prefs.palette.collectAsState(initial = "dark")
-            val dark = when (palette) {
-                "light" -> false
-                "system" -> resources.configuration.uiMode and
-                    android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
-                    android.content.res.Configuration.UI_MODE_NIGHT_YES
-                else -> true
-            }
+            val preference by app.prefs.palette.collectAsState(initial = "dark")
+            val systemDark = resources.configuration.uiMode and
+                android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES
+            val palette = paletteFor(preference, systemDark)
             val haptics by app.prefs.haptics.collectAsState(initial = true)
-            // the platform draws the clock and battery, so it needs telling
-            // which way the ground went
-            androidx.compose.runtime.LaunchedEffect(dark) {
-                WindowCompat.getInsetsController(window, window.decorView).apply {
-                    isAppearanceLightStatusBars = !dark
-                    isAppearanceLightNavigationBars = !dark
-                }
-            }
-            CliampTheme(dark = dark, haptics = haptics) {
+            val dark = palette.dark
+
+            CliampTheme(palette = palette, haptics = haptics) {
                 CliampRoot(
                     repository = app.repository,
                     prefs = app.prefs,

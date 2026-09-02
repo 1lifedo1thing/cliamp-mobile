@@ -215,7 +215,9 @@ fun CliampRoot(
         // shows the current or last-played station, or the empty "nothing
         // playing" state. It hides with the tabs on modal overlays (settings,
         // queue, provider flows) so those screens don't get a stray bar.
-        if (overlay == Overlay.None || overlay == Overlay.Player) {
+        // Not on Overlay.Player: the full player already shows all of this,
+        // so a mini player beneath it is the same track twice.
+        if (overlay == Overlay.None) {
             AnimatedVisibility(
                 visible = true,
                 enter = fadeIn() + expandVertically(),
