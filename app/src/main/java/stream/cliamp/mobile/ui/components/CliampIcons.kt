@@ -112,30 +112,36 @@ object CliampIcons {
     val StarFilled = solid(16f, 16f, "M8 1.5l1.9 4.2 4.6.5-3.4 3.1.9 4.5L8 11.6 4 13.8l.9-4.5L1.5 6.2l4.6-.5z")
 
     /**
-     * A broadcast signal from a transmitter: a small solid dot at the bottom
-     * with straight radiating beams sweeping upward on each side. The beams are
-     * straight paths (not concentric arcs), so the glyph stays inside the
-     * straight-paths-only rule while still reading as "radio / stations" at tab
-     * size, and sits cleanly beside the playlists vinyl disc and the queue
+     * Radio waves: a symmetric stack of three domed waves rising from a
+     * transmitter dot set on a grounding baseline. Balanced left and right, the
+     * glyph reads as a complete, planted radio mark at tab size. Each dome is a
+     * straight-line polyline, so it stays inside the straight-paths-only rule,
+     * and it sits cleanly beside the playlists vinyl disc and the queue
      * line-list.
      */
     val StationsTab = ImageVector.Builder(
         defaultWidth = 18.dp, defaultHeight = 18.dp, viewportWidth = 18f, viewportHeight = 18f,
     ).apply {
+        // grounding baseline
+        addPath(
+            addPathNodes("M1.5 16.6h15"),
+            stroke = SolidColor(Color.White),
+            strokeLineWidth = 1.3f,
+            strokeLineCap = StrokeCap.Butt,
+            strokeLineJoin = StrokeJoin.Miter,
+        )
         // transmitter
-        addPath(addPathNodes(circle(9f, 13.4f, 1.5f)), fill = SolidColor(Color.White))
-        // radiating straight beams
+        addPath(addPathNodes(circle(9f, 14.9f, 1.3f)), fill = SolidColor(Color.White))
+        // three domed waves (left -> over the top -> right)
         listOf(
-            "M9 12.4L2.6 4.8",
-            "M9 12.4L4.8 5.6",
-            "M9 12.4L15.4 4.8",
-            "M9 12.4L13.2 5.6",
-            "M9 12.4L9 1.5",
+            "M5.5 14.2L5.97 12.45L7.25 11.17L9 10.7L10.75 11.17L12.03 12.45L12.5 14.2",
+            "M3 14.2L3.8 11.2L6 9L9 8.2L12 9L14.2 11.2L15 14.2",
+            "M1 14.2L2.07 10.2L5 7.27L9 6.2L13 7.27L15.93 10.2L17 14.2",
         ).forEach {
             addPath(
                 addPathNodes(it),
                 stroke = SolidColor(Color.White),
-                strokeLineWidth = 1.5f,
+                strokeLineWidth = 1.4f,
                 strokeLineCap = StrokeCap.Butt,
                 strokeLineJoin = StrokeJoin.Miter,
             )
