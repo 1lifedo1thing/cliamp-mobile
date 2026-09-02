@@ -10,6 +10,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +36,20 @@ class PlayerConnection(
 
     private val _queue = MutableStateFlow<List<Station>>(emptyList())
     private val _queueIndex = MutableStateFlow(-1)
+
+    /**
+     * Logical index (into [_queue]) of the first item pushed to Media3. When a
+     * queue is huge - hundreds of local songs - the tapped track plus a small
+     * tail is pushed instead of the whole thing, so play starts instantly. The
+     * offset maps Media3's window back onto the logical queue in [sync].
+     */
+    private var windowBase = 0
+
+    /** Pending window-roll-forward job, cancelled if the window advances sooner. */
+    private var _extending: Job? = null
+
+    /** Queues larger than this are played lazily from a window, not in full. */
+    private val WINDOW = 60
 
     /** The list prev/next walks. Set whenever the user plays from a list. */
     val queue: StateFlow<List<Station>> = _queue.asStateFlow()
@@ -74,11 +89,30 @@ class PlayerConnection(
         // When Media3 advances a playlist it does so internally, so the index
         // has to be read back or the screen keeps showing the previous track.
         val q = _queue.value
-        if (c.mediaItemCount > 1 && q.isNotEmpty()) {
+        if (c.mediaItemCount > 0 && q.isNotEmpty()) {
             val playerIndex = c.currentMediaItemIndex
-            if (playerIndex in q.indices && playerIndex != _queueIndex.value) {
-                _queueIndex.value = playerIndex
-                PlaybackBus.publishStation(q[playerIndex])
+            val logical = windowBase + playerIndex
+            if (logical in q.indices && logical != _queueIndex.value) {
+                _queueIndex.value = logical
+                PlaybackBus.publishStation(q[logical])
+            }
+
+            // A huge queue is played as a window; when that window is nearly
+            // spent, roll it forward so the album never silently stops at the
+            // boundary. Guarded so the poller and onEvents can't double-push.
+            if (q.size > WINDOW && playerIndex >= c.mediaItemCount - 2) {
+                val next = (windowBase + playerIndex + 1).coerceIn(0, q.lastIndex)
+                if (next > windowBase && next <= q.lastIndex) {
+                    _extending?.cancel()
+                    _extending = scope.launch {
+                        delay(1500)
+                        val c2 = controller ?: return@launch
+                        if (c2.currentMediaItemIndex >= c2.mediaItemCount - 2 && next < q.size) {
+                            pushWindow(c2, q, next)
+                            sync()
+                        }
+                    }
+                }
             }
         }
 
@@ -126,17 +160,35 @@ class PlayerConnection(
             // station URLs would be waste.
             val playlist = queue.takeIf { list -> list.all { it.isTrack } && list.size > 1 }
             if (playlist != null) {
-                val items = playlist.map { s ->
-                    PlaybackService.mediaItem(context, s, StreamResolver.resolve(s.url))
-                }
-                c.setMediaItems(items, _queueIndex.value.coerceIn(0, items.lastIndex), 0L)
+                pushWindow(c, playlist, _queueIndex.value)
             } else {
+                windowBase = 0
                 c.setMediaItem(PlaybackService.mediaItem(context, station, StreamResolver.resolve(station.url)))
             }
             c.prepare()
             c.play()
             sync()
         }
+    }
+
+    /**
+     * Pushes [queue] into Media3. For small queues the whole list goes in; for
+     * a huge one (hundreds of songs) only [WINDOW] covers starting at [start],
+     * so playback begins immediately instead of waiting for Media3 to set up
+     * every track. [sync] maps the window back onto [start] when it advances.
+     */
+    private suspend fun pushWindow(c: Player, queue: List<Station>, start: Int) {
+        windowBase = if (queue.size > WINDOW) start else 0
+        val window = if (queue.size > WINDOW) {
+            queue.subList(start, minOf(start + WINDOW, queue.size))
+        } else {
+            queue
+        }
+        val items = window.map { s ->
+            PlaybackService.mediaItem(context, s, StreamResolver.resolve(s.url))
+        }
+        val index = if (queue.size > WINDOW) (_queueIndex.value - start) else _queueIndex.value
+        c.setMediaItems(items, index.coerceIn(0, items.lastIndex), 0L)
     }
 
     fun toggle() {
