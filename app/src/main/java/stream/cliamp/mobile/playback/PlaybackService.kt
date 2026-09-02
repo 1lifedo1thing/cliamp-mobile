@@ -75,21 +75,26 @@ class PlaybackService : MediaSessionService() {
         val sources = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(DefaultDataSource.Factory(this, http))
 
-        // Live radio cannot re-buffer from the past, so hold a deep buffer and
-        // never start playing off a nearly-empty one.
+        // Buffer tuning has to serve two very different cases in one player.
+        // Live radio cannot re-buffer from the past, so it wants a deep ceiling
+        // and a long recovery after a re-buffer. On-demand files (local songs,
+        // provider tracks) can re-buffer from anywhere; waiting on a deep
+        // pre-roll was what made every song take 1-2s to *start* - the old 30s
+        // minimum and 5s play-start threshold forced several seconds of reading
+        // plus decoding before a single sample reached the speaker. Lower the
+        // floor and play-start bar so local tracks begin in under a second, and
+        // keep the generous ceiling so radio can still hold a deep buffer.
+        // Media3 requires bufferForPlaybackAfterRebufferMs <= minBufferMs, so
+        // both sit at 2s and radio's blip-tolerance comes from the deep ceiling
+        // (radio streams that truly die are re-armed by the Reconnector anyway).
         prefs0 = (application as CliampApp).prefs
         val targetBufferMs = runBlocking { prefs0.bufferSeconds.first() } * 1_000
         val load = DefaultLoadControl.Builder()
-            // Radio cannot re-buffer from the past, so the two thresholds that
-            // decide when to *start* matter more than the ceiling. Starting on
-            // 2.5s meant the first hiccup emptied the buffer, and resuming on a
-            // third of the target meant it emptied again straight away, which is
-            // the stutter that reads as "losing the station".
             .setBufferDurationsMs(
-                targetBufferMs.coerceIn(10_000, 60_000),
-                (targetBufferMs * 4).coerceIn(60_000, 180_000),
-                5_000,
-                (targetBufferMs / 2).coerceIn(8_000, 20_000),
+                2_000,                                          // sustain on ~2s
+                (targetBufferMs * 4).coerceIn(60_000, 180_000), // radio depth ceiling
+                500,                                            // start as soon as ~0.5s in
+                2_000,                                          // must be <= minBufferMs
             )
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
