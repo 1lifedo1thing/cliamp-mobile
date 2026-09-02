@@ -109,6 +109,54 @@ fun CliampRoot(
     Box(Modifier.fillMaxSize().background(p.ground)) {
         Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
+            // The active tab stays composed regardless of which overlay is up,
+            // so opening the player (or queue/scope/settings) and coming back
+            // lands on the exact page you left: the Library detail, provider
+            // pane, scroll and search all survive. Overlays are drawn on top;
+            // each paints its own opaque surface, so they occlude cleanly.
+            when (tab) {
+                Tab.Stations -> StationsScreen(
+                    repository = repository,
+                    prefs = prefs,
+                    current = station,
+                    playing = playerState.playing,
+                    favorites = favorites,
+                    onPlay = onPlay,
+                    onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
+                )
+                Tab.Lib -> LocalScreen(
+                    localLibrary = localLibrary,
+                    playlists = playlists,
+                    current = station,
+                    playing = playerState.playing,
+                    favorites = favorites,
+                    recent = recent,
+                    onPlay = onPlay,
+                    onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
+                    onAddToQueue = { player.addToQueue(it) },
+                    onOpenPlayer = { overlay = Overlay.Player },
+                    providers = providerAccounts,
+                    showProviders = libSubTab == LibSubTab.Providers,
+                    onShowProviders = { v -> libSubTab = if (v) LibSubTab.Providers else LibSubTab.Library },
+                    onOpenProvider = { a ->
+                        libSubTab = LibSubTab.Providers
+                        overlay = Overlay.Browse(a.id)
+                    },
+                    onAddProvider = { spec ->
+                        libSubTab = LibSubTab.Providers
+                        overlay = Overlay.Wizard(spec.key, null)
+                    },
+                    backEnabled = overlay == Overlay.None,
+                )
+                Tab.Cmd -> CommandScreen(
+                    repository = repository,
+                    prefs = prefs,
+                    onPlay = onPlay,
+                    onOpenScope = { overlay = Overlay.Scope },
+                    onOpenSettings = { overlay = Overlay.Settings },
+                )
+            }
+
             when (overlay) {
                 Overlay.Player -> NowPlayingScreen(
                     repository = repository,
@@ -167,47 +215,7 @@ fun CliampRoot(
                     repository = repository,
                     onBack = { overlay = Overlay.None },
                 )
-                Overlay.None -> when (tab) {
-                    Tab.Stations -> StationsScreen(
-                        repository = repository,
-                        prefs = prefs,
-                        current = station,
-                        playing = playerState.playing,
-                        favorites = favorites,
-                        onPlay = onPlay,
-                        onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
-                    )
-                    Tab.Lib -> LocalScreen(
-                        localLibrary = localLibrary,
-                        playlists = playlists,
-                        current = station,
-                        playing = playerState.playing,
-                        favorites = favorites,
-                        recent = recent,
-                        onPlay = onPlay,
-                        onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
-                        onAddToQueue = { player.addToQueue(it) },
-                        onOpenPlayer = { overlay = Overlay.Player },
-                        providers = providerAccounts,
-                        showProviders = libSubTab == LibSubTab.Providers,
-                        onShowProviders = { v -> libSubTab = if (v) LibSubTab.Providers else LibSubTab.Library },
-                        onOpenProvider = { a ->
-                            libSubTab = LibSubTab.Providers
-                            overlay = Overlay.Browse(a.id)
-                        },
-                        onAddProvider = { spec ->
-                            libSubTab = LibSubTab.Providers
-                            overlay = Overlay.Wizard(spec.key, null)
-                        },
-                    )
-                    Tab.Cmd -> CommandScreen(
-                        repository = repository,
-                        prefs = prefs,
-                        onPlay = onPlay,
-                        onOpenScope = { overlay = Overlay.Scope },
-                        onOpenSettings = { overlay = Overlay.Settings },
-                    )
-                }
+                Overlay.None -> Unit
             }
         }
 

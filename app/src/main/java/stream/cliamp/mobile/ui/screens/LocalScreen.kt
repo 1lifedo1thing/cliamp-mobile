@@ -116,6 +116,11 @@ fun LocalScreen(
     onShowProviders: (Boolean) -> Unit = {},
     onOpenProvider: (ProviderAccount) -> Unit = {},
     onAddProvider: (ProviderSpec) -> Unit = {},
+    // False while an overlay (player, queue, settings…) is on top of this tab.
+    // The tab stays composed underneath so its navigation state survives, but
+    // its own back handling must stand down or it would steal the back press
+    // from the overlay.
+    backEnabled: Boolean = true,
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
@@ -177,7 +182,7 @@ fun LocalScreen(
     val paneVisible = openSmartPlaylist == null && showing == null
 
     val canGoBack = showProviders || showing != null || openSmartPlaylist != null || addingTo != null
-    BackHandler(enabled = canGoBack) {
+    BackHandler(enabled = backEnabled && canGoBack) {
         when {
             addingTo != null -> addingTo = null
             showing != null -> openSlug = null
