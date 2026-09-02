@@ -135,7 +135,7 @@ fun CliampRoot(
                             onBack = { overlay = Overlay.None },
                             onEdit = { overlay = Overlay.Wizard(account.providerKey, account) },
                             onPlay = onPlay,
-                            onOpenPlayer = { overlay = Overlay.None; tab = Tab.Play },
+                            onOpenPlayer = { overlay = Overlay.Player },
                         )
                     }
                 }
