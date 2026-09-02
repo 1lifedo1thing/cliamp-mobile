@@ -46,9 +46,6 @@ class Repository(
     private val _cliamp = MutableStateFlow(CliampRadio.builtin)
     val cliamp: StateFlow<List<Station>> = _cliamp.asStateFlow()
 
-    private val _stats = MutableStateFlow<CliampStats?>(null)
-    val stats: StateFlow<CliampStats?> = _stats.asStateFlow()
-
     private val _directory = MutableStateFlow(DirectoryState())
     val directory: StateFlow<DirectoryState> = _directory.asStateFlow()
 
@@ -66,15 +63,10 @@ class Repository(
 
     fun bootstrap() {
         scope.launch { _cliamp.value = CliampRadio.fetchStations() }
-        scope.launch { refreshStats() }
         scope.launch { _directoryStats.value = RadioBrowser.stats() }
         scope.launch { _tags.value = RadioBrowser.topTags(60) }
         scope.launch { _countries.value = RadioBrowser.topCountries(80) }
         loadDirectory(DirectoryQuery.TopVoted, reset = true)
-    }
-
-    suspend fun refreshStats() {
-        CliampRadio.fetchStats()?.let { _stats.value = it }
     }
 
     fun loadDirectory(query: DirectoryQuery, reset: Boolean) {
@@ -130,8 +122,4 @@ class Repository(
         scope.launch { prefs.setLastStation(station) }
     }
 
-    /** Live listener count for a cliamp channel, or null if it is not one. */
-    fun listeners(station: Station): Int? =
-        if (station.source != StationSource.Cliamp) null
-        else _stats.value?.stations?.get(station.slug)?.activeListeners
 }

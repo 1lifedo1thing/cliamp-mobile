@@ -81,7 +81,6 @@ private val commands = listOf(
     Command(":stop", "drop the stream"),
     Command(":scope", "open scope and eq"),
     Command(":eq", "flat | rock | headphone", takesArg = true),
-    Command(":stats", "cliamp radio listeners"),
     Command(":settings", "playback, feel, storage"),
     Command(":clear", "empty the bar"),
 )
@@ -98,7 +97,6 @@ fun CommandScreen(
     prefs: Prefs,
     onPlay: (Station, List<Station>) -> Unit,
     onOpenScope: () -> Unit,
-    onOpenStats: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenPlayer: () -> Unit,
 ) {
@@ -172,7 +170,6 @@ fun CommandScreen(
             }
             ":stop" -> { scope.launch { }; "use the transport key to stop" }
             ":scope" -> { onOpenScope(); null }
-            ":stats" -> { onOpenStats(); null }
             ":settings" -> { onOpenSettings(); null }
             ":eq" -> { scope.launch { prefs.setEqPreset(arg.ifBlank { "flat" }); prefs.setEqEnabled(true) }; "eq → ${arg.ifBlank { "flat" }}" }
             ":clear" -> { query = ""; null }

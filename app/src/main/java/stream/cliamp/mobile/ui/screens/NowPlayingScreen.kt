@@ -70,15 +70,11 @@ fun NowPlayingScreen(
     val format by PlaybackBus.format.collectAsState()
     val error by PlaybackBus.error.collectAsState()
     val reconnect by PlaybackBus.reconnectAttempt.collectAsState()
-    val stats by repository.stats.collectAsState()
     val favorites by prefs.favorites.collectAsState(initial = emptyList())
     val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
 
     val spectrumSource = PlaybackBus.spectrum.collectAsState()
     val isFav = station != null && favorites.any { it.url == station!!.url }
-    val listeners = station?.let { s ->
-        if (s.source == StationSource.Cliamp) stats?.stations?.get(s.slug)?.activeListeners else null
-    }
 
     Column(Modifier.fillMaxSize().background(p.ground).statusBarsPadding()) {
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
@@ -145,7 +141,6 @@ fun NowPlayingScreen(
                             format.summary(s.meta).takeIf { it.isNotBlank() }?.let(::add)
                             if (s.votes > 0) add("${compact(s.votes)} votes")
                         }
-                        listeners?.let { add("$it listening") }
                     }.joinToString(" · ").ifBlank { "12 cliamp channels · 50k+ directory" },
                     CliampType.body,
                     p.inkTertiary,

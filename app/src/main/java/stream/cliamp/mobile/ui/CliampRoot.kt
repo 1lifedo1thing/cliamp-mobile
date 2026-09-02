@@ -39,14 +39,12 @@ import stream.cliamp.mobile.ui.screens.QueueScreen
 import stream.cliamp.mobile.ui.screens.ScopeScreen
 import stream.cliamp.mobile.ui.screens.SettingsScreen
 import stream.cliamp.mobile.ui.screens.StationsScreen
-import stream.cliamp.mobile.ui.screens.StatsScreen
 import stream.cliamp.mobile.ui.theme.LocalPalette
 
 /** Screens that stack on top of a tab rather than replacing it. */
 private sealed interface Overlay {
     data object None : Overlay
     data object Scope : Overlay
-    data object Stats : Overlay
     data object Settings : Overlay
     data object Queue : Overlay
 }
@@ -105,12 +103,6 @@ fun CliampRoot(
                     playing = playerState.playing,
                     onBack = { overlay = Overlay.None },
                 )
-                Overlay.Stats -> StatsScreen(
-                    repository = repository,
-                    prefs = prefs,
-                    onBack = { overlay = Overlay.None },
-                    onPlay = { s -> onPlay(s, repository.cliamp.value) },
-                )
                 Overlay.Settings -> SettingsScreen(
                     prefs = prefs,
                     repository = repository,
@@ -132,7 +124,6 @@ fun CliampRoot(
                         onPlay = onPlay,
                         onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
                         onAddToQueue = { player.addToQueue(it) },
-                        onOpenStats = { overlay = Overlay.Stats },
                         onOpenSettings = { overlay = Overlay.Settings },
                         onOpenPlayer = { tab = Tab.Play },
                     )
@@ -153,7 +144,6 @@ fun CliampRoot(
                         prefs = prefs,
                         onPlay = onPlay,
                         onOpenScope = { overlay = Overlay.Scope },
-                        onOpenStats = { overlay = Overlay.Stats },
                         onOpenSettings = { overlay = Overlay.Settings },
                         onOpenPlayer = { tab = Tab.Play },
                     )

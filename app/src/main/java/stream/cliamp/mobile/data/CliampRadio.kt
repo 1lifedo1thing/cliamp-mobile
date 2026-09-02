@@ -14,7 +14,6 @@ object CliampRadio {
 
     const val BASE = "https://radio.cliamp.stream"
     const val PLAYLIST_URL = "$BASE/streams.m3u"
-    const val STATS_URL = "$BASE/statistics"
 
     private fun seed(slug: String, name: String) = Station(
         id = "cliamp:$slug",
@@ -74,51 +73,4 @@ object CliampRadio {
             .getOrDefault(emptyList())
             .ifEmpty { builtin }
 
-    suspend fun fetchStats(): CliampStats? =
-        runCatching { Http.json.decodeFromString<CliampStats>(Http.text(STATS_URL)) }.getOrNull()
 }
-
-@Serializable
-data class CliampStats(
-    @SerialName("total_sessions") val totalSessions: Long = 0,
-    @SerialName("total_listen_hours") val totalListenHours: Double = 0.0,
-    @SerialName("peak_listeners") val peakListeners: Int = 0,
-    val stations: Map<String, StationStats> = emptyMap(),
-) {
-    val activeListeners: Int get() = stations.values.sumOf { it.activeListeners }
-}
-
-@Serializable
-data class StationStats(
-    @SerialName("total_sessions") val totalSessions: Long = 0,
-    @SerialName("total_listen_hours") val totalListenHours: Double = 0.0,
-    @SerialName("peak_listeners") val peakListeners: Int = 0,
-    @SerialName("active_listeners") val activeListeners: Int = 0,
-    @SerialName("active_listener_countries") val activeCountries: List<CountryStat> = emptyList(),
-    @SerialName("top_countries") val topCountries: List<CountryStat> = emptyList(),
-    @SerialName("top_cities") val topCities: List<CityStat> = emptyList(),
-    val daily: List<DailyStat> = emptyList(),
-)
-
-@Serializable
-data class CountryStat(
-    val country: String = "",
-    @SerialName("country_code") val countryCode: String = "",
-    val sessions: Long = 0,
-    @SerialName("listen_hours") val listenHours: Double = 0.0,
-)
-
-@Serializable
-data class CityStat(
-    val city: String = "",
-    @SerialName("country_code") val countryCode: String = "",
-    val sessions: Long = 0,
-    @SerialName("listen_hours") val listenHours: Double = 0.0,
-)
-
-@Serializable
-data class DailyStat(
-    val date: String = "",
-    val sessions: Long = 0,
-    @SerialName("listen_hours") val listenHours: Double = 0.0,
-)

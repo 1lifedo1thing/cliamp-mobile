@@ -300,36 +300,6 @@ fun ListRow(
     }
 }
 
-/** Cards appear only for things with state: a host, a transfer, a station card. */
-@Composable
-fun Panel(
-    modifier: Modifier = Modifier,
-    radius: androidx.compose.ui.unit.Dp = 12.dp,
-    borderColor: Color? = null,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    val p = LocalPalette.current
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(radius))
-            .background(p.panel)
-            .border(1.dp, borderColor ?: p.hairlineRegion, RoundedCornerShape(radius))
-    ) { content() }
-}
-
-@Composable
-fun StatusPill(text: String, color: Color, modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(color.copy(alpha = 0.14f))
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-    ) {
-        Mono(text.uppercase(), CliampType.tabLabel, color)
-    }
-}
-
 @Composable
 fun IconLabelButton(
     icon: ImageVector,

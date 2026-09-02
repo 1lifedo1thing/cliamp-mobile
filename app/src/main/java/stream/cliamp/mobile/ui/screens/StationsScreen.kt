@@ -63,7 +63,6 @@ fun StationsScreen(
     onPlay: (Station, List<Station>) -> Unit,
     onToggleFavorite: (Station) -> Unit,
     onAddToQueue: (Station) -> Unit,
-    onOpenStats: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenPlayer: () -> Unit,
 ) {
@@ -75,7 +74,6 @@ fun StationsScreen(
     val radioFavorites = favorites.filterNot { it.source == StationSource.Local }
 
     val cliamp by repository.cliamp.collectAsState()
-    val stats by repository.stats.collectAsState()
     val directory by repository.directory.collectAsState()
     val dirStats by repository.directoryStats.collectAsState()
     val tags by repository.tags.collectAsState()
@@ -99,18 +97,16 @@ fun StationsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Mono("Stations", CliampType.screenTitle, p.ink)
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        CliampIcons.MeterSmall, "cliamp radio stats",
-                        Modifier.size(16.dp).clickable(onClick = onOpenStats),
-                        tint = p.amber,
-                    )
-                    Icon(
-                        CliampIcons.ListShort, "settings",
-                        Modifier.size(16.dp).clickable(onClick = onOpenSettings),
-                        tint = p.inkSecondary,
-                    )
-                }
+                // QueueBar floats over the top-right corner of every screen, so
+                // this has to sit clear of it or it is covered and untappable.
+                Icon(
+                    CliampIcons.ListShort, "settings",
+                    Modifier
+                        .padding(end = 56.dp)
+                        .size(16.dp)
+                        .clickable(onClick = onOpenSettings),
+                    tint = p.inkSecondary,
+                )
             }
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
@@ -144,7 +140,6 @@ fun StationsScreen(
                     items(radioFavorites, key = { "fav:${it.url}" }) { s ->
                         StationRow(
                             station = s,
-                            listeners = repository.listeners(s),
                             active = current?.url == s.url,
                             playing = playing && current?.url == s.url,
                             favorite = true,
@@ -160,18 +155,11 @@ fun StationsScreen(
 
             if (source == Source.All || source == Source.Cliamp) {
                 item {
-                    SectionLabel("cliamp radio — ${cliamp.size}") {
-                        Mono(
-                            stats?.let { "${it.activeListeners} listening" } ?: "…",
-                            CliampType.meta,
-                            p.amber,
-                        )
-                    }
+                    SectionLabel("cliamp radio — ${cliamp.size}")
                 }
                 items(cliamp, key = { "cl:${it.url}" }) { s ->
                     StationRow(
                         station = s,
-                        listeners = repository.listeners(s),
                         active = current?.url == s.url,
                         playing = playing && current?.url == s.url,
                         favorite = favorites.any { it.url == s.url },
@@ -212,7 +200,6 @@ fun StationsScreen(
                 items(directory.stations, key = { "dir:${it.url}" }) { s ->
                     StationRow(
                         station = s,
-                        listeners = null,
                         active = current?.url == s.url,
                         playing = playing && current?.url == s.url,
                         favorite = favorites.any { it.url == s.url },
@@ -239,7 +226,6 @@ fun StationsScreen(
 @Composable
 private fun StationRow(
     station: Station,
-    listeners: Int?,
     active: Boolean,
     playing: Boolean,
     favorite: Boolean,
@@ -272,9 +258,7 @@ private fun StationRow(
         },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (listeners != null) {
-                    Mono("$listeners", CliampType.rowSecondary, if (listeners > 0) p.amber else p.inkFaint)
-                } else if (station.votes > 0) {
+                if (station.votes > 0) {
                     Mono(compact(station.votes), CliampType.meta, p.inkFaint)
                 }
                 Icon(

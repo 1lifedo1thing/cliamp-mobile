@@ -80,45 +80,6 @@ fun BrickMeter(
     }
 }
 
-/**
- * Static variant for data that is not a live signal - the 31-day session
- * history on the stats screen reuses the same grid so the app has one way of
- * drawing a series, not two.
- */
-@Composable
-fun BrickBars(
-    values: List<Float>,
-    modifier: Modifier = Modifier,
-    brick: Dp = 4.dp,
-    gap: Dp = 3.dp,
-    columnGap: Dp = 3.dp,
-    litColor: Color = LocalPalette.current.accent,
-    unlitColor: Color = LocalPalette.current.unlit,
-) {
-    Canvas(modifier) {
-        val n = values.size
-        if (n == 0) return@Canvas
-        val brickPx = brick.toPx()
-        val gapPx = gap.toPx()
-        val colGapPx = columnGap.toPx()
-        val step = brickPx + gapPx
-        val colW = (size.width - colGapPx * (n - 1)) / n
-        if (colW <= 0f) return@Canvas
-        val rows = ((size.height + gapPx) / step).toInt().coerceAtLeast(1)
-        for (c in 0 until n) {
-            val x = c * (colW + colGapPx)
-            val litRows = (values[c].coerceIn(0f, 1f) * rows).toInt()
-            for (r in 0 until rows) {
-                drawRect(
-                    color = if (r < litRows) litColor else unlitColor,
-                    topLeft = Offset(x, size.height - (r + 1) * step + gapPx),
-                    size = Size(colW, brickPx),
-                )
-            }
-        }
-    }
-}
-
 /** Column count/geometry presets, straight from the concept. */
 enum class MeterSize(val columns: Int, val brick: Dp, val gap: Dp, val height: Dp) {
     NowPlaying(24, 4.dp, 3.dp, 66.dp),
