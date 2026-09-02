@@ -117,41 +117,27 @@ enum class Tab(val label: String) {
 }
 
 /**
- * Compact, fixed queue access: a floating queue icon with a count badge,
- * pinned top-right above every tab. It takes no layout space — it overlays
- * the screen via [Modifier.offset] and [align], so the tabs keep their own
- * full bleed.
+ * A single bare settings icon floating in the top-right corner of every tab.
+ * It takes no layout space — it overlays the screen via [Modifier.offset] and
+ * [align], so the tabs keep their own full bleed. (The queue moved into the
+ * mini player bar.)
  */
 @Composable
-fun BoxScope.QueueBar(
-    count: Int,
-    onOpen: () -> Unit,
+fun BoxScope.SettingsArm(
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
-    Box(
+    Icon(
+        CliampIcons.Settings, "settings",
         modifier
             .align(Alignment.TopEnd)
             .offset(y = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
             .padding(top = 12.dp, end = Gutter)
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (p.dark) p.keyFace else p.ground)
-            .border(1.dp, p.keyBorder, RoundedCornerShape(6.dp))
-            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onOpen)
-            .padding(horizontal = 9.dp, vertical = 6.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            Box(Modifier.size(14.dp), contentAlignment = Alignment.Center) {
-                Icon(CliampIcons.QueueTabLines, null, Modifier.size(14.dp), tint = p.ink)
-            }
-            Mono(
-                if (count == 1) "1" else "$count",
-                CliampType.tabLabel,
-                p.ink,
-            )
-        }
-    }
+            .size(17.dp)
+            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onOpenSettings),
+        tint = p.inkSecondary,
+    )
 }
 
 @Composable

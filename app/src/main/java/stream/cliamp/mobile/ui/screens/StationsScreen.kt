@@ -62,7 +62,6 @@ fun StationsScreen(
     favorites: List<Station>,
     onPlay: (Station, List<Station>) -> Unit,
     onToggleFavorite: (Station) -> Unit,
-    onOpenSettings: () -> Unit,
 ) {
     val p = LocalPalette.current
     var source by remember { mutableStateOf(Source.All) }
@@ -95,16 +94,9 @@ fun StationsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Mono("Stations", CliampType.screenTitle, p.ink)
-                // QueueBar floats over the top-right corner of every screen, so
-                // this has to sit clear of it or it is covered and untappable.
-                Icon(
-                    CliampIcons.ListShort, "settings",
-                    Modifier
-                        .padding(end = 56.dp)
-                        .size(16.dp)
-                        .clickable(onClick = onOpenSettings),
-                    tint = p.inkSecondary,
-                )
+                // Settings and queue float in the top-right corner on every
+                // tab via the QueueBar, so nothing else sits over it here.
+                Spacer(Modifier.width(56.dp))
             }
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
