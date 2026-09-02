@@ -1,16 +1,17 @@
 package stream.cliamp.mobile.data
 
-import android.media.MediaMetadataRetriever
+import android.content.Context
 import android.net.Uri
+import android.provider.MediaStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 
 /**
- * A song picked out of the local Music folder. The [station] form is what the
- * rest of the app plays: a local file is just a Station whose `url` is a file
- * URI, so the whole playback pipeline behaves exactly as it does for a stream.
+ * A song picked out of the device. The [station] form is what the rest of the
+ * app plays: a local file is just a Station whose `url` is a file/content URI,
+ * so the whole playback pipeline behaves exactly as it does for a stream.
  */
 data class LocalSong(
     val path: String,
@@ -47,11 +48,20 @@ fun durationLabel(ms: Long): String {
 }
 
 /**
- * Reads audio files straight off the Music folder on disk, recursing into
- * subfolders, rather than querying MediaStore. Nothing here is cached to disk —
- * we just walk the tree on demand and keep a plain StateFlow for the UI.
+ * The local library: every audio file on the device. This is enumerated via
+ * MediaStore, exactly the way Samsung Music and friends do it — a fast,
+ * OS-maintained index of every track in internal storage, an SD card, folders
+ * like Download/Melodify, and anywhere else — so nothing is "missed" just
+ * because it doesn't live in a Music folder.
+ *
+ * The result is cached to disk: the first ever load queries MediaStore, but
+ * every later one reads the cached snapshot instantly and refreshes in the
+ * background, so opening the Library is never slow again.
  */
-class LocalLibrary {
+class LocalLibrary(context: Context) {
+
+    private val resolver = context.contentResolver
+    private val cacheFile = File(context.cacheDir, "local_library.tsv")
 
     private val _songs = MutableStateFlow<List<Station>>(emptyList())
     val songs: StateFlow<List<Station>> = _songs.asStateFlow()
@@ -62,91 +72,139 @@ class LocalLibrary {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    private val audioExts = setOf("mp3", "m4a", "mp4", "aac", "ogg", "oga", "opus", "flac", "wav", "wma", "aiff", "aif", "mid", "midi")
-
     fun refresh() {
-        _loading.value = true
+        // Serve whatever we already have now. On a warm launch that is the disk
+        // cache, so the list paints instantly and never flashes a scan message;
+        // on a cold install the cache is empty and the UI shows "scanning…"
+        // until the MediaStore query below fills it.
+        val cached = readCache()
+        if (_songs.value.isEmpty() && !cached.isNullOrEmpty()) {
+            _songs.value = cached
+        }
+        _loading.value = _songs.value.isEmpty()
+        _error.value = null
         Thread {
             val found = runCatching { querySongs() }.getOrElse { e ->
-                _error.value = e.message ?: "could not read the library"
-                emptyList()
+                if (_songs.value.isEmpty()) _error.value = e.message ?: "could not read the library"
+                _songs.value
             }
-            _songs.value = found
+            if (found.isNotEmpty()) {
+                _songs.value = found
+                writeCache(found)
+            }
             _loading.value = false
         }.start()
     }
 
     private fun querySongs(): List<Station> {
-        val root = File(
-            android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MUSIC).absolutePath
-        ).takeIf { it.isDirectory }
-            ?: File(android.os.Environment.getExternalStorageDirectory(), "Music").takeIf { it.isDirectory }
-            ?: return emptyList()
-        val walker = FileWalker(listOf("cover.jpg", "cover.png", "folder.jpg", "folder.png", "albumart.jpg", "albumart.png", "front.jpg", "front.png"))
-        walker.visit(root)
-        val list = walker.songs.map { it.station }.sortedBy { it.name.lowercase() }
-        return list
+        val out = ArrayList<LocalSong>(256)
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.DATA,
+        )
+        resolver.query(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            projection, null, null, MediaStore.Audio.Media.TITLE + " COLLATE NOCASE",
+        )?.use { c ->
+            val cId = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+            val cTitle = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+            val cArtist = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+            val cAlbum = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+            val cDur = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            // DATA is deprecated but still populated on current devices, and it
+            // is what lets us play via a readable file path and pull on-disk
+            // cover art. When it is absent a track is simply skipped.
+            val cData = runCatching { c.getColumnIndex(MediaStore.Audio.Media.DATA) }.getOrNull() ?: -1
+            while (c.moveToNext()) {
+                val id = c.getLong(cId)
+                val data = if (cData >= 0) c.getString(cData) else null
+                if (data.isNullOrBlank()) continue
+                val file = File(data)
+                if (!file.isFile) continue
+                val artist = c.getString(cArtist) ?: "unknown artist"
+                val album = c.getString(cAlbum) ?: ""
+                val title = c.getString(cTitle)?.takeIf { it.isNotBlank() } ?: file.nameWithoutExtension
+                val cover = nearestCover(file.parentFile).orEmpty()
+                out += LocalSong(
+                    path = data,
+                    title = title,
+                    artist = artist,
+                    album = album,
+                    durationMs = c.getLong(cDur),
+                    uri = Uri.fromFile(file),
+                    cover = cover,
+                )
+            }
+        }
+        return out.map { it.station }.sortedBy { it.name.lowercase() }
     }
 
-    private inner class FileWalker(coverNames: List<String>) {
-        private val covers = coverNames.toSet()
-        val songs = mutableListOf<LocalSong>()
-
-        fun visit(dir: File) {
-            val files = dir.listFiles() ?: return
-            files.sortedBy { it.name.lowercase() }.forEach { f ->
-                if (f.isDirectory) visit(f)
-                else if (f.isFile && isAudio(f.name)) index(f)
-            }
+    /** Companion cover image in the track's own folder, if the user keeps one. */
+    private fun nearestCover(dir: File?): String? {
+        if (dir == null) return null
+        val covers = listOf("cover.jpg", "cover.png", "folder.jpg", "folder.png", "albumart.jpg", "albumart.png", "front.jpg", "front.png")
+        val named = covers.firstNotNullOfOrNull { name ->
+            File(dir, name).takeIf { it.isFile }
         }
-
-        private fun index(f: File) {
-            val meta = readMeta(f)
-            val cover = nearestCover(f.parentFile ?: return).orEmpty()
-            songs += LocalSong(
-                path = f.absolutePath,
-                title = meta.title ?: f.nameWithoutExtension,
-                artist = meta.artist ?: "unknown artist",
-                album = meta.album ?: "",
-                durationMs = meta.durationMs,
-                uri = Uri.fromFile(f),
-                cover = cover,
-            )
+        if (named != null) return Uri.fromFile(named).toString()
+        // Fall back to any image in the same folder (some viewers drop a
+        // "folder.jpg"-style file with a different name). If none, leaving it
+        // blank lets the embedded-art fallback in LocalArt/StationArtSource win.
+        val image = dir.listFiles()?.firstOrNull {
+            it.isFile && it.extension.lowercase() in setOf("jpg", "jpeg", "png")
         }
-
-        private fun nearestCover(dir: File): String? {
-            val named = covers.firstNotNullOfOrNull { name ->
-                File(dir, name).takeIf { it.isFile }
-            }
-            if (named != null) return Uri.fromFile(named).toString()
-            // fall back to any image in the same folder (embedded art lives here)
-            val image = dir.listFiles()?.firstOrNull {
-                it.isFile && it.extension.lowercase() in setOf("jpg", "jpeg", "png")
-            }
-            return image?.let { Uri.fromFile(it).toString() }
-        }
+        return image?.let { Uri.fromFile(it).toString() }
     }
 
-    private fun isAudio(name: String): Boolean =
-        name.substringAfterLast('.', "").lowercase() in audioExts
+    // ── disk cache ──────────────────────────────────────────────────────────
 
-    private data class Meta(val title: String?, val artist: String?, val album: String?, val durationMs: Long)
+    private fun readCache(): List<Station>? {
+        if (!cacheFile.isFile) return null
+        return runCatching {
+            val out = ArrayList<Station>(256)
+            cacheFile.bufferedReader().useLines { lines ->
+                for (line in lines) {
+                    val parts = line.split('\u0001')
+                    if (parts.size < 6) continue
+                    val path = parts[0]
+                    if (!File(path).isFile) continue // dropped since last time
+                    out += LocalSong(
+                        path = path,
+                        title = parts[1],
+                        artist = parts[2],
+                        album = parts[3],
+                        durationMs = parts[4].toLongOrNull() ?: 0L,
+                        uri = Uri.fromFile(File(path)),
+                        cover = parts[5],
+                    ).station
+                }
+            }
+            out
+        }.getOrNull()
+    }
 
-    private fun readMeta(f: File): Meta {
-        val retriever = MediaMetadataRetriever()
-        return try {
-            retriever.setDataSource(f.absolutePath)
-            val dur = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-            Meta(
-                title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE),
-                artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST),
-                album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM),
-                durationMs = dur,
-            )
-        } catch (_: Exception) {
-            Meta(null, null, null, 0L)
-        } finally {
-            runCatching { retriever.release() }
+    private fun writeCache(songs: List<Station>) {
+        runCatching {
+            cacheFile.bufferedWriter().use { w ->
+                for (s in songs) {
+                    val path = s.url.removePrefix("file://")
+                    w.write(
+                        listOf(
+                            path,
+                            s.name,
+                            s.artist,
+                            s.album,
+                            s.durationMs.toString(),
+                            s.cover,
+                        ).joinToString("\u0001")
+                    )
+                    w.write("\n")
+                }
+            }
         }
     }
 }
