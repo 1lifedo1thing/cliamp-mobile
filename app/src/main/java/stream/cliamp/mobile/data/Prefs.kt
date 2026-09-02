@@ -42,7 +42,7 @@ class Prefs(private val context: Context) {
     val haptics: Flow<Boolean> = context.dataStore.data.map { it[K.haptics] ?: true }
     val visualizer: Flow<String> = context.dataStore.data.map { it[K.visualizer] ?: "spectrum" }
     val cellular: Flow<Boolean> = context.dataStore.data.map { it[K.cellular] ?: true }
-    val bufferSeconds: Flow<Int> = context.dataStore.data.map { it[K.bufferSeconds] ?: 20 }
+    val bufferSeconds: Flow<Int> = context.dataStore.data.map { it[K.bufferSeconds] ?: 30 }
     val eqEnabled: Flow<Boolean> = context.dataStore.data.map { it[K.eqEnabled] ?: false }
     val eqPreset: Flow<String> = context.dataStore.data.map { it[K.eqPreset] ?: "flat" }
     val autoResume: Flow<Boolean> = context.dataStore.data.map { it[K.autoResume] ?: false }

@@ -55,37 +55,31 @@ private fun circle(cx: Float, cy: Float, r: Float): String =
 object CliampIcons {
 
     /**
-     * The cliamp mark: the eight-bar spectrum from Cliamp.svg. Tinted with the
-     * accent in app chrome; [CliampLogoColours] keeps the brand colours for the
-     * launcher icon and the about row, where the palette rules do not apply.
+     * The cliamp mark: three descending bars, from Cliamp Icon 02. Tinted with
+     * the accent in app chrome; [MarkColour] carries the green tile for places
+     * where the brand mark stands on its own.
      */
     val Mark = solid(
-        378.88f, 317.44f,
-        "M0.0,122.88h20.48v71.68h-20.48z",
-        "M51.2,71.68h20.48v174.08h-20.48z",
-        "M102.4,20.48h20.48v276.48h-20.48z",
-        "M153.6,92.16h20.48v133.12h-20.48z",
-        "M204.8,0.0h20.48v317.44h-20.48z",
-        "M256.0,81.92h20.48v153.6h-20.48z",
-        "M307.2,40.96h20.48v235.52h-20.48z",
-        "M358.4,112.64h20.48v92.16h-20.48z",
+        48f, 48f,
+        rect(6f, 8f, 36f, 7f),
+        rect(6f, 20.5f, 22f, 7f),
+        rect(6f, 33f, 30f, 7f),
     )
 
-    /** Full-colour brand mark, same geometry, used sparingly. */
+    /** The mark on its tile, in the icon's own colours. */
     val MarkColour: ImageVector = ImageVector.Builder(
-        defaultWidth = 378.88f.dp, defaultHeight = 317.44f.dp,
-        viewportWidth = 378.88f, viewportHeight = 317.44f,
+        defaultWidth = 48f.dp, defaultHeight = 48f.dp,
+        viewportWidth = 48f, viewportHeight = 48f,
     ).apply {
+        addPath(
+            addPathNodes(rrect(0f, 0f, 48f, 48f, 7.2f)),
+            fill = SolidColor(Color(0xFF5EE08A)),
+        )
         listOf(
-            Color(0xFF00FF41) to "M0.0,122.88h20.48v71.68h-20.48z",
-            Color(0xFFFFE000) to "M51.2,71.68h20.48v174.08h-20.48z",
-            Color(0xFFFF9500) to "M102.4,20.48h20.48v276.48h-20.48z",
-            Color(0xFF00FF41) to "M153.6,92.16h20.48v133.12h-20.48z",
-            Color(0xFFFF3B1F) to "M204.8,0.0h20.48v317.44h-20.48z",
-            Color(0xFF00FF41) to "M256.0,81.92h20.48v153.6h-20.48z",
-            Color(0xFFFF9500) to "M307.2,40.96h20.48v235.52h-20.48z",
-            Color(0xFF00FF41) to "M358.4,112.64h20.48v92.16h-20.48z",
-        ).forEach { (c, d) -> addPath(addPathNodes(d), fill = SolidColor(c)) }
+            rect(6f, 8f, 36f, 7f),
+            rect(6f, 20.5f, 22f, 7f),
+            rect(6f, 33f, 30f, 7f),
+        ).forEach { addPath(addPathNodes(it), fill = SolidColor(Color(0xFF061308))) }
     }.build()
 
     val PlayTiny = solid(9f, 10f, "M0 0l9 5-9 5z")

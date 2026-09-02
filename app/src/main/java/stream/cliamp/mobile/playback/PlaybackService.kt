@@ -67,7 +67,7 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        val http = OkHttpDataSource.Factory(Http.client)
+        val http = OkHttpDataSource.Factory(Http.streamClient)
             .setUserAgent(Http.USER_AGENT)
             // without this header the server never interleaves song titles
             .setDefaultRequestProperties(mapOf(IcyHeaders.REQUEST_HEADER_ENABLE_METADATA_NAME to "1"))
@@ -80,11 +80,16 @@ class PlaybackService : MediaSessionService() {
         prefs0 = (application as CliampApp).prefs
         val targetBufferMs = runBlocking { prefs0.bufferSeconds.first() } * 1_000
         val load = DefaultLoadControl.Builder()
+            // Radio cannot re-buffer from the past, so the two thresholds that
+            // decide when to *start* matter more than the ceiling. Starting on
+            // 2.5s meant the first hiccup emptied the buffer, and resuming on a
+            // third of the target meant it emptied again straight away, which is
+            // the stutter that reads as "losing the station".
             .setBufferDurationsMs(
-                targetBufferMs.coerceIn(5_000, 60_000),
-                (targetBufferMs * 4).coerceIn(30_000, 180_000),
-                2_500,
-                (targetBufferMs / 3).coerceIn(2_000, 10_000),
+                targetBufferMs.coerceIn(10_000, 60_000),
+                (targetBufferMs * 4).coerceIn(60_000, 180_000),
+                5_000,
+                (targetBufferMs / 2).coerceIn(8_000, 20_000),
             )
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()

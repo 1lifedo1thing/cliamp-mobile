@@ -24,6 +24,30 @@ object Http {
         cacheDir = java.io.File(context.cacheDir, "http")
     }
 
+    /**
+     * The client that carries audio. Deliberately not [client].
+     *
+     * A radio stream is a response body that never ends, and the API client
+     * carries a 30 second callTimeout, which covers the whole call including
+     * reading that body. It is not currently firing, because Media3 drives its
+     * own read loop, but a call timeout on a client used for endless bodies is
+     * a trap waiting for a Media3 upgrade to spring. The response cache is
+     * dropped for the same reason: there is nothing useful to cache in a live
+     * stream, and it would only churn disk.
+     *
+     * readTimeout is the one that matters here. It is per-read, so it bounds a
+     * silent stall without bounding the stream, and the Reconnector picks up
+     * from there.
+     */
+    val streamClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .callTimeout(0, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
+
     val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .apply { cacheDir?.let { cache(okhttp3.Cache(it, 48L * 1024 * 1024)) } }
