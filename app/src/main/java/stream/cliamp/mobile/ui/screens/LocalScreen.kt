@@ -116,6 +116,7 @@ fun LocalScreen(
     var addingTo by remember { mutableStateOf<String?>(null) }
     var creatingName by remember { mutableStateOf(false) }
     var renamingSlug by remember { mutableStateOf<String?>(null) }
+    var nameText by remember { mutableStateOf("") }
 
     val songs by localLibrary.songs.collectAsState()
     val loading by localLibrary.loading.collectAsState()
@@ -149,7 +150,9 @@ fun LocalScreen(
 
     val filtered = filterSongs(songs, query)
     val showing = allPlaylists.firstOrNull { it.station.slug == openSlug }
-    val playAndOpen: (Station, List<Station>) -> Unit = { s, list -> onPlay(s, list); onOpenPlayer() }
+    // Playing starts minimized; the full player only opens when the mini-player
+    // bar at the bottom is tapped.
+    val justPlay: (Station, List<Station>) -> Unit = { s, list -> onPlay(s, list) }
 
     // Pinned smart playlists — auto-populated from global state, non-removable.
     // The "local songs" row is always at the very top, above everything else.
@@ -183,7 +186,7 @@ fun LocalScreen(
                     when {
                         showing != null -> showing.station.name
                         openSmartPlaylist != null -> openSmartPlaylist.label
-                        else -> "library"
+                        else -> "Library"
                     },
                     CliampType.screenTitle, p.ink, maxLines = 1,
                 )
@@ -245,9 +248,8 @@ fun LocalScreen(
                     pl = openSmartPlaylist,
                     current = current,
                     playing = playing,
-                    onPlay = playAndOpen,
+                    onPlay = justPlay,
                     onToggleFavorite = onToggleFavorite,
-                    onAddToQueue = onAddToQueue,
                     favorites = favorites.map { it.url }.toSet(),
                 )
                 showing != null -> PlaylistDetailShown(
@@ -257,7 +259,7 @@ fun LocalScreen(
                     allSongs = filtered,
                     current = current,
                     playing = playing,
-                    onPlay = playAndOpen,
+                    onPlay = justPlay,
                     onRemove = { id -> scope.launch { playlists.removeSong(showing.station.slug, id) } },
                     onAdd = { id -> scope.launch { playlists.addSong(showing.station.slug, id) } },
                     adding = addingTo != null,
@@ -271,14 +273,19 @@ fun LocalScreen(
                     songs = songs,
                     creating = creatingName,
                     renamingSlug = renamingSlug,
+                    editText = nameText,
+                    onEditTextChange = { nameText = it },
                     onCreate = { name -> scope.launch { playlists.create(name) }; creatingName = false },
-                    onBeginCreate = { creatingName = true },
+                    onBeginCreate = { creatingName = true; nameText = "" },
                     onCancel = { creatingName = false; renamingSlug = null },
                     onRename = { slug, name ->
                         scope.launch { playlists.rename(slug, name) }
                         renamingSlug = null
                     },
-                    onBeginRename = { renamingSlug = it },
+                    onBeginRename = { slug ->
+                        renamingSlug = slug
+                        nameText = allPlaylists.firstOrNull { it.station.slug == slug }?.station?.name.orEmpty()
+                    },
                     onDelete = { slug ->
                         scope.launch { playlists.delete(slug) }
                         if (renamingSlug == slug) renamingSlug = null
@@ -306,6 +313,7 @@ fun LocalScreen(
                     ) { searchOpen = false }
             )
         }
+
     }
 }
 
@@ -360,6 +368,8 @@ private fun PlaylistList(
     songs: List<Station>,
     creating: Boolean,
     renamingSlug: String?,
+    editText: String,
+    onEditTextChange: (String) -> Unit,
     onCreate: (String) -> Unit,
     onBeginCreate: () -> Unit,
     onCancel: () -> Unit,
@@ -447,7 +457,8 @@ private fun PlaylistList(
             items(pinnedPlaylists, key = { it.station.slug }) { pl ->
                 if (pl.station.slug == renamingSlug) {
                     InlineNameField(
-                        initial = pl.station.name,
+                        text = editText,
+                        onTextChange = onEditTextChange,
                         placeholder = "rename playlist",
                         onDone = { onRename(pl.station.slug, it) },
                         onCancel = onCancel,
@@ -469,7 +480,8 @@ private fun PlaylistList(
             if (creating) {
                 item {
                     InlineNameField(
-                        initial = "",
+                        text = editText,
+                        onTextChange = onEditTextChange,
                         placeholder = "name this playlist",
                         onDone = onCreate,
                         onCancel = onCancel,
@@ -482,7 +494,8 @@ private fun PlaylistList(
             items(playlists, key = { it.station.slug }) { pl ->
                 if (pl.station.slug == renamingSlug) {
                     InlineNameField(
-                        initial = pl.station.name,
+                        text = editText,
+                        onTextChange = onEditTextChange,
                         placeholder = "rename playlist",
                         onDone = { onRename(pl.station.slug, it) },
                         onCancel = onCancel,
@@ -661,40 +674,39 @@ private fun MenuItem(label: String, color: androidx.compose.ui.graphics.Color, a
     }
 }
 
-/** A monospace, palette-styled input for naming playlists. */
+/** A monospace, palette-styled input row for naming playlists. The keyboard
+ * The platform IME handles entry; the field takes focus on appearing. */
 @Composable
 private fun InlineNameField(
-    initial: String,
+    text: String,
     placeholder: String,
+    onTextChange: (String) -> Unit,
     onDone: (String) -> Unit,
     onCancel: () -> Unit,
 ) {
     val p = LocalPalette.current
-    var text by remember { mutableStateOf(initial) }
-    Column(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth().padding(Gutter)
-                .clip(RoundedCornerShape(6.dp)).border(1.dp, p.chipBorder, RoundedCornerShape(6.dp))
-                .background(p.panel).padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            CliampTextField(
-                value = text,
-                onValueChange = { text = it.take(48) },
-                modifier = Modifier.weight(1f),
-                placeholder = placeholder,
-                textStyle = CliampType.rowPrimary,
-                onAction = { onDone(text) },
-                autoFocus = true,
-            )
-            Mono("SAVE", CliampType.tabLabel, p.accent,
-                Modifier.clip(RoundedCornerShape(4.dp)).background(p.accent.copy(alpha = 0.14f))
-                    .clickable { onDone(text) }.padding(horizontal = 9.dp, vertical = 7.dp))
-            Mono("CANCEL", CliampType.tabLabel, p.inkTertiary,
-                Modifier.clip(RoundedCornerShape(4.dp)).border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))
-                    .clickable(onClick = onCancel).padding(horizontal = 9.dp, vertical = 7.dp))
-        }
+    Row(
+        Modifier.fillMaxWidth().padding(Gutter)
+            .clip(RoundedCornerShape(6.dp)).border(1.dp, p.chipBorder, RoundedCornerShape(6.dp))
+            .background(p.panel).padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        CliampTextField(
+            value = text,
+            onValueChange = { onTextChange(it.take(48)) },
+            modifier = Modifier.weight(1f),
+            placeholder = placeholder,
+            textStyle = CliampType.rowPrimary,
+            onAction = { onDone(text) },
+            autoFocus = true,
+        )
+        Mono("SAVE", CliampType.tabLabel, p.accent,
+            Modifier.clip(RoundedCornerShape(4.dp)).background(p.accent.copy(alpha = 0.14f))
+                .clickable { onDone(text) }.padding(horizontal = 9.dp, vertical = 7.dp))
+        Mono("CANCEL", CliampType.tabLabel, p.inkTertiary,
+            Modifier.clip(RoundedCornerShape(4.dp)).border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))
+                .clickable(onClick = onCancel).padding(horizontal = 9.dp, vertical = 7.dp))
     }
 }
 
@@ -816,7 +828,6 @@ private fun SmartPlaylistDetail(
     playing: Boolean,
     onPlay: (Station, List<Station>) -> Unit,
     onToggleFavorite: (Station) -> Unit,
-    onAddToQueue: (Station) -> Unit,
     favorites: Set<String>,
 ) {
     val p = LocalPalette.current
@@ -864,14 +875,6 @@ private fun SmartPlaylistDetail(
                                 Modifier.size(15.dp).clickable { onToggleFavorite(s) },
                                 tint = if (s.url in favorites) p.accent else p.inkFaint,
                             )
-                            if (pl.kind == SmartKind.LocalSongs) {
-                                Icon(
-                                    CliampIcons.Plus,
-                                    "add to queue",
-                                    Modifier.size(16.dp).clickable { onAddToQueue(s) },
-                                    tint = p.inkFaint,
-                                )
-                            }
                         }
                     },
                 ) {

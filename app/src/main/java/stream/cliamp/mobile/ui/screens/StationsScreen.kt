@@ -62,9 +62,7 @@ fun StationsScreen(
     favorites: List<Station>,
     onPlay: (Station, List<Station>) -> Unit,
     onToggleFavorite: (Station) -> Unit,
-    onAddToQueue: (Station) -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenPlayer: () -> Unit,
 ) {
     val p = LocalPalette.current
     var source by remember { mutableStateOf(Source.All) }
@@ -143,9 +141,8 @@ fun StationsScreen(
                             active = current?.url == s.url,
                             playing = playing && current?.url == s.url,
                             favorite = true,
-                            onPlay = { onPlay(s, radioFavorites); onOpenPlayer() },
+                            onPlay = { onPlay(s, radioFavorites) },
                             onToggleFavorite = { onToggleFavorite(s) },
-                            onAddToQueue = { onAddToQueue(s) },
                         )
                     }
                 } else if (source == Source.Favs) {
@@ -163,9 +160,8 @@ fun StationsScreen(
                         active = current?.url == s.url,
                         playing = playing && current?.url == s.url,
                         favorite = favorites.any { it.url == s.url },
-                        onPlay = { onPlay(s, cliamp); onOpenPlayer() },
+                        onPlay = { onPlay(s, cliamp) },
                         onToggleFavorite = { onToggleFavorite(s) },
-                        onAddToQueue = { onAddToQueue(s) },
                     )
                 }
             }
@@ -203,9 +199,8 @@ fun StationsScreen(
                         active = current?.url == s.url,
                         playing = playing && current?.url == s.url,
                         favorite = favorites.any { it.url == s.url },
-                        onPlay = { onPlay(s, directory.stations); onOpenPlayer() },
+                        onPlay = { onPlay(s, directory.stations) },
                         onToggleFavorite = { onToggleFavorite(s) },
-                        onAddToQueue = { onAddToQueue(s) },
                     )
                 }
                 item {
@@ -231,7 +226,6 @@ private fun StationRow(
     favorite: Boolean,
     onPlay: () -> Unit,
     onToggleFavorite: () -> Unit,
-    onAddToQueue: () -> Unit,
 ) {
     val p = LocalPalette.current
     ListRow(
@@ -266,12 +260,6 @@ private fun StationRow(
                     "favourite",
                     Modifier.size(15.dp).clickable(onClick = onToggleFavorite),
                     tint = if (favorite) p.accent else p.inkFaint,
-                )
-                Icon(
-                    CliampIcons.Plus,
-                    "add to queue",
-                    Modifier.size(16.dp).clickable(onClick = onAddToQueue),
-                    tint = p.inkFaint,
                 )
             }
         },

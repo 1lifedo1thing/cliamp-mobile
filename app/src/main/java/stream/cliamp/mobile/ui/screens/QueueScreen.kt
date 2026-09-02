@@ -44,7 +44,6 @@ fun QueueScreen(
     current: Station?,
     playing: Boolean,
     onPlay: (Station, List<Station>) -> Unit,
-    onOpenPlayer: () -> Unit,
     onBack: () -> Unit,
 ) {
     val p = LocalPalette.current
@@ -57,7 +56,7 @@ fun QueueScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                Mono("‹ queue", CliampType.screenTitle, p.ink, Modifier.clickable { onBack() })
+                Mono("‹ Queue", CliampType.screenTitle, p.ink, Modifier.clickable { onBack() })
             }
         }
 
@@ -82,7 +81,7 @@ fun QueueScreen(
             itemsIndexed(queue, key = { _, s -> s.url }) { idx, s ->
                 val active = current?.url == s.url
                 ListRow(
-                    onClick = { onPlay(s, queue); onOpenPlayer() },
+                    onClick = { onPlay(s, queue) },
                     verticalPadding = 11.dp,
                     leading = {
                         Box(

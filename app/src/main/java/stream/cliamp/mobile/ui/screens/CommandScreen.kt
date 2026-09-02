@@ -97,7 +97,6 @@ fun CommandScreen(
     onPlay: (Station, List<Station>) -> Unit,
     onOpenScope: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenPlayer: () -> Unit,
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -144,7 +143,7 @@ fun CommandScreen(
                 val hit = (localHits + directory.stations)
                     .firstOrNull { arg.isBlank() || it.name.contains(arg, ignoreCase = true) }
                 if (hit != null) {
-                    onPlay(hit, stationHits); onOpenPlayer(); null
+                    onPlay(hit, stationHits); null
                 } else "no station matches \"$arg\""
             }
             ":tag" -> {
@@ -159,7 +158,7 @@ fun CommandScreen(
             }
             ":random" -> {
                 val pool = directory.stations.ifEmpty { cliamp }
-                pool.randomOrNull()?.let { onPlay(it, pool); onOpenPlayer() }
+                pool.randomOrNull()?.let { onPlay(it, pool) }
                 null
             }
             ":fav" -> {
@@ -268,7 +267,7 @@ fun CommandScreen(
                     itemsIndexed(stationHits.take(200), key = { _, it -> "hit:${it.url}" }) { i, s ->
                         val index = i + 1
                         ListRow(
-                            onClick = { onPlay(s, stationHits); onOpenPlayer() },
+                            onClick = { onPlay(s, stationHits) },
                             verticalPadding = 10.dp,
                             leading = {
                                 Mono("%02d".format(index.coerceAtMost(99)), CliampType.rowSecondary, p.inkFaint)

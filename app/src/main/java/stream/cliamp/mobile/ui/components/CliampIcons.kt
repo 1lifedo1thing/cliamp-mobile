@@ -92,16 +92,13 @@ object CliampIcons {
     val PlayRow = solid(14f, 14f, "M1 1l12 6-12 6z")
     val PlayTab = solid(18f, 18f, "M2 1l14 8-14 8z")
     val PlayWide = solid(12f, 13f, "M0 0l12 6.5L0 13z")
-    /**
-     * A quaver with straight edges: a slanted head, a stem and a flag, all
-     * parallelograms. The previous one built its note heads from arcs and
-     * filled them as open paths, which at 14dp collapsed into a smudge.
-     */
     val MusicNote = solid(
         16f, 16f,
-        "M1.8 10.6L7.2 9.0L7.2 12.8L1.8 14.4z",   // head
-        rect(5.8f, 1.8f, 1.7f, 10.2f),             // stem
-        "M7.5 1.8L14.2 3.6L14.2 6.5L7.5 4.7z",     // flag
+        circle(4f, 12f, 2.1f),
+        circle(11.5f, 12f, 2.1f),
+        rect(4.4f, 3f, 1.5f, 9f),
+        rect(11.4f, 3f, 1.5f, 9f),
+        rect(4.4f, 3f, 8.5f, 2.4f),
     )
 
     val Prev = solid(22f, 18f, "M12 9L22 1v16z", "M2 9L12 1v16z", rect(0f, 1f, 2.4f, 16f))
