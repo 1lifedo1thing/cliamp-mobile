@@ -170,6 +170,17 @@ object CliampIcons {
     val More = solid(16f, 16f, circle(8f, 3f, 2.2f), circle(8f, 8f, 2.2f), circle(8f, 13f, 2.2f))
     val Lines = solid(16f, 14f, rect(0f, 0f, 16f, 2f), rect(0f, 6f, 16f, 2f), rect(0f, 12f, 16f, 2f))
     val ListShort = stroked(16f, 16f, 1.7f, "M1 3h14M1 8h9M1 13h9")
+    /**
+     * Sliders: three horizontal rails, each with a knob positioned at a
+     * different setting offset. A well-known "settings / controls" glyph built
+     * from straight paths only, so it stays inside the straight-paths-only rule.
+     */
+    val Settings = stroked(
+        16f, 16f, 1.7f,
+        "M2 3.5h12", "M6 1.5v4",
+        "M2 8h12", "M11 6v4",
+        "M2 12.5h12", "M8 10.5v4",
+    )
     val MeterSmall = solid(
         14f, 14f,
         rect(0f, 9f, 2.4f, 5f), rect(3.9f, 5f, 2.4f, 9f),
