@@ -217,8 +217,13 @@ fun CliampRoot(
             )
         }
 
-        if (overlay == Overlay.None) {
-            CliampTabBar(current = tab, onSelect = { tab = it })
+        // The player is an overlay, but it is a destination rather than a
+        // modal: keeping the menu means you can leave it without a back press.
+        if (overlay == Overlay.None || overlay == Overlay.Player) {
+            CliampTabBar(
+                current = tab,
+                onSelect = { tab = it; overlay = Overlay.None },
+            )
         }
         }
 

@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,6 +31,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.launch
@@ -48,7 +51,6 @@ import stream.cliamp.mobile.ui.components.MeterSize
 import stream.cliamp.mobile.ui.components.Scrubber
 import stream.cliamp.mobile.ui.components.StreamingRule
 import stream.cliamp.mobile.ui.components.StripedArt
-import stream.cliamp.mobile.ui.components.ToggleKey
 import stream.cliamp.mobile.ui.components.rememberMeter
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -110,6 +112,7 @@ fun NowPlayingScreen(
 
             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Row(
+                    Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -130,6 +133,27 @@ fun NowPlayingScreen(
                             else -> p.accent
                         },
                     )
+
+                    Spacer(Modifier.weight(1f))
+
+                    // Shuffle, scope and favourite were full-width keys, which
+                    // gave three secondary actions the same visual weight as
+                    // the transport. They sit up here as small icons instead,
+                    // leaving the keys to prev/play/next alone.
+                    SmallAction(CliampIcons.Shuffle, "shuffle") {
+                        val pool = repository.directory.value.stations
+                            .ifEmpty { repository.cliamp.value }
+                        pool.randomOrNull()?.let { s ->
+                            player.play(s, pool)
+                            repository.reportPlay(s)
+                        }
+                    }
+                    SmallAction(CliampIcons.MeterSmall, "scope and equaliser", onClick = onOpenScope)
+                    SmallAction(
+                        if (isFav) CliampIcons.StarFilled else CliampIcons.Star,
+                        if (isFav) "remove favourite" else "favourite",
+                        tint = if (isFav) p.accent else p.inkTertiary,
+                    ) { station?.let { s -> scope.launch { prefs.toggleFavorite(s) } } }
                 }
                 Mono(
                     station?.name ?: "pick a station",
@@ -264,35 +288,6 @@ fun NowPlayingScreen(
                     ) { Icon(CliampIcons.Next, "next station", Modifier.size(width = 21.dp, height = 17.dp)) }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                    ToggleKey(
-                        icon = CliampIcons.Shuffle,
-                        label = "SHUF",
-                        on = false,
-                        modifier = Modifier.weight(1f),
-                        onClick = {
-                            val pool = repository.directory.value.stations.ifEmpty { repository.cliamp.value }
-                            pool.randomOrNull()?.let { s ->
-                                player.play(s, pool)
-                                repository.reportPlay(s)
-                            }
-                        },
-                    )
-                    ToggleKey(
-                        icon = CliampIcons.MeterSmall,
-                        label = "SCOPE",
-                        on = false,
-                        modifier = Modifier.weight(1f),
-                        onClick = onOpenScope,
-                    )
-                    ToggleKey(
-                        icon = if (isFav) CliampIcons.StarFilled else CliampIcons.Star,
-                        label = "FAV",
-                        on = isFav,
-                        modifier = Modifier.weight(1f),
-                        onClick = { station?.let { s -> scope.launch { prefs.toggleFavorite(s) } } },
-                    )
-                }
             }
         }
         }
@@ -379,6 +374,26 @@ private fun compact(n: Int): String = when {
     n >= 1_000_000 -> "%.1fm".format(n / 1_000_000f)
     n >= 1_000 -> "%.1fk".format(n / 1_000f)
     else -> n.toString()
+}
+
+/** A 15dp icon in a 28dp tap target, sized for a secondary action. */
+@Composable
+private fun SmallAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    tint: androidx.compose.ui.graphics.Color? = null,
+    onClick: () -> Unit,
+) {
+    val p = LocalPalette.current
+    Box(
+        Modifier
+            .size(28.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, description, Modifier.size(15.dp), tint = tint ?: p.inkSecondary)
+    }
 }
 
 private fun clock(ms: Long): String {
