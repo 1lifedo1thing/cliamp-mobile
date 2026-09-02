@@ -50,6 +50,18 @@ class PlayerConnection(
     /** Pending window-roll-forward job, cancelled if the window advances sooner. */
     private var _extending: Job? = null
 
+    /**
+     * Raised while [play] is rebuilding the Media3 queue. [sync] maps Media3's
+     * window index back onto the new logical queue, but during the transition
+     * Media3 still holds the previous items, so a poller tick can collide the
+     * old window with the fresh [_queue] and jump to - and publish - the wrong
+     * track (e.g. tapping a song in the middle of a list plays the first item).
+     * While the queue swap is in flight sync stays out of that bookkeeping and
+     * only refreshes transport state; [play] finalises the index itself.
+     */
+    @Volatile
+    private var swapping = false
+
     /** Queues larger than this are played lazily from a window, not in full. */
     private val WINDOW = 60
 
@@ -91,7 +103,7 @@ class PlayerConnection(
         // When Media3 advances a playlist it does so internally, so the index
         // has to be read back or the screen keeps showing the previous track.
         val q = _queue.value
-        if (c.mediaItemCount > 0 && q.isNotEmpty()) {
+        if (!swapping && c.mediaItemCount > 0 && q.isNotEmpty()) {
             val playerIndex = c.currentMediaItemIndex
             val logical = windowBase + playerIndex
             if (logical in q.indices && logical != _queueIndex.value) {
@@ -153,6 +165,15 @@ class PlayerConnection(
         PlaybackBus.publishError(null)
         PlaybackBus.publishFormat(StreamFormat())
 
+        // Snapshot the tapped index on the calling thread. The 500ms sync()
+        // poller maps Media3's window back onto [_queue], and until the rebuilt
+        // queue is in place Media3 still reports the PREVIOUS position - which
+        // against the new [_queue] can look like the first item. That collision
+        // alone makes tapping a middle song play the top result. Holding the
+        // intended index here (and raising [swapping] while Media3 is being
+        // rewritten) keeps the poller out of that bookkeeping.
+        val start = _queueIndex.value.coerceIn(0, queue.lastIndex.coerceAtLeast(0))
+
         // The tapped station is published and rendered first, on the calling
         // thread, so the music screen and mini bar update the instant a song is
         // touched. MediaController insists its methods run on the main thread,
@@ -167,19 +188,24 @@ class PlayerConnection(
             // a live stream has no end to advance from and pre-resolving sixty
             // station URLs would be waste.
             val playlist = queue.takeIf { list -> list.all { it.isTrack } && list.size > 1 }
-            if (playlist != null) {
-                pushWindow(c, playlist, _queueIndex.value)
-            } else {
-                // A single track (or live stream) is pushed as one media item,
-                // so Media3's index 0 has to map back to the tapped station in
-                // [_queue], not to the head of the list that produced it. This
-                // keeps sync() publishing the tapped song instead of the top
-                // search match whenever a search result is played alone.
-                windowBase = _queueIndex.value
-                c.setMediaItem(buildItem(station))
+            swapping = true
+            try {
+                if (playlist != null) {
+                    pushWindow(c, playlist, start)
+                } else {
+                    // A single track (or live stream) is pushed as one media item,
+                    // so Media3's index 0 has to map back to the tapped station in
+                    // [_queue], not to the head of the list that produced it. This
+                    // keeps sync() publishing the tapped song instead of the top
+                    // search match whenever a search result is played alone.
+                    windowBase = start
+                    c.setMediaItem(buildItem(station))
+                }
+                c.prepare()
+                c.play()
+            } finally {
+                swapping = false
             }
-            c.prepare()
-            c.play()
             sync()
         }
     }
@@ -198,7 +224,11 @@ class PlayerConnection(
             queue
         }
         val items = window.map { buildItem(it) }
-        val index = if (queue.size > WINDOW) (_queueIndex.value - start) else _queueIndex.value
+        // A windowed queue starts its Media3 playlist at the tapped item (0 past
+        // the window's own head); a short queue is pushed whole, so the starting
+        // window index is [start] itself. Never derived from the live queueIndex,
+        // which a sync() tick may have repurposed while we built the items.
+        val index = if (queue.size > WINDOW) 0 else start
         c.setMediaItems(items, index.coerceIn(0, items.lastIndex), 0L)
     }
 
