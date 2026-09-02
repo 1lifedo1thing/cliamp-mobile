@@ -150,11 +150,13 @@ private fun MiniArt(station: Station?, frame: MeterFrame) {
         }?.asImageBitmap()
     }
     if (art != null) {
+        // Real cover art gets a square thumbnail so the plate reads as a little
+        // album square; the brick meter fallback below stays squat instead.
         Image(
             bitmap = art!!,
             contentDescription = station?.name,
             modifier = Modifier
-                .size(width = 40.dp, height = MeterSize.Mini.height)
+                .size(40.dp)
                 .clip(RoundedCornerShape(8.dp)),
             contentScale = ContentScale.Crop,
         )
