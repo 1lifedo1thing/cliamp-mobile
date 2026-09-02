@@ -170,7 +170,10 @@ class LocalLibrary(context: Context) {
                 for (line in lines) {
                     val parts = line.split('\u0001')
                     if (parts.size < 6) continue
-                    val path = parts[0]
+                    // MediaStore's DATA column percent-encodes paths (spaces ->
+                    // %20), which is what the cache stores; decode before it is
+                    // used as a real filesystem path so nothing is dropped.
+                    val path = Uri.decode(parts[0])
                     if (!File(path).isFile) continue // dropped since last time
                     out += LocalSong(
                         path = path,
