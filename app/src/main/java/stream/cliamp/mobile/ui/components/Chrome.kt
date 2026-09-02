@@ -111,7 +111,7 @@ fun IdentityBar(left: String, right: String, modifier: Modifier = Modifier) {
 }
 
 enum class Tab(val label: String) {
-    Play("PLAY"), Lib("Library"), Stations("STATIONS"), Servers("SERVERS"), Cmd(":CMD")
+    Lib("Library"), Stations("STATIONS"), Servers("SERVERS"), Cmd(":CMD")
 }
 
 /**
@@ -193,7 +193,6 @@ private fun TabItem(
     ) {
         Box(Modifier.height(17.dp), contentAlignment = Alignment.Center) {
             when (tab) {
-                Tab.Play -> Icon(CliampIcons.PlayTab, null, Modifier.size(17.dp), tint = tint)
                 Tab.Lib -> Icon(CliampIcons.LibTab, null, Modifier.size(17.dp), tint = tint)
                 Tab.Stations -> Icon(CliampIcons.StationsTab, null, Modifier.size(17.dp), tint = tint)
                 Tab.Servers -> Icon(CliampIcons.Globe, null, Modifier.size(17.dp), tint = tint)

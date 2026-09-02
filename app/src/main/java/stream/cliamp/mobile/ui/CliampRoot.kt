@@ -53,6 +53,7 @@ private sealed interface Overlay {
     data object Scope : Overlay
     data object Settings : Overlay
     data object Queue : Overlay
+    data object Player : Overlay
 
     /** The add-provider wizard. [account] non-null means edit rather than add. */
     data class Wizard(val providerKey: String, val account: ProviderAccount?) : Overlay
@@ -102,12 +103,18 @@ fun CliampRoot(
         Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (overlay) {
+                Overlay.Player -> NowPlayingScreen(
+                    repository = repository,
+                    prefs = prefs,
+                    player = player,
+                    onOpenScope = { overlay = Overlay.Scope },
+                )
                 Overlay.Queue -> QueueScreen(
                     player = player,
                     current = station,
                     playing = playerState.playing,
                     onPlay = onPlay,
-                    onOpenPlayer = { overlay = Overlay.None; tab = Tab.Play },
+                    onOpenPlayer = { overlay = Overlay.Player },
                     onBack = { overlay = Overlay.None },
                 )
                 Overlay.Scope -> ScopeScreen(
@@ -154,12 +161,6 @@ fun CliampRoot(
                     onBack = { overlay = Overlay.None },
                 )
                 Overlay.None -> when (tab) {
-                    Tab.Play -> NowPlayingScreen(
-                        repository = repository,
-                        prefs = prefs,
-                        player = player,
-                        onOpenScope = { overlay = Overlay.Scope },
-                    )
                     Tab.Servers -> ProvidersScreen(
                         accounts = providerAccounts,
                         onAdd = {
@@ -180,7 +181,7 @@ fun CliampRoot(
                         onPlay = onPlay,
                         onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
                         onOpenSettings = { overlay = Overlay.Settings },
-                        onOpenPlayer = { tab = Tab.Play },
+                        onOpenPlayer = { overlay = Overlay.Player },
                     )
                     Tab.Lib -> LocalScreen(
                         localLibrary = localLibrary,
@@ -191,7 +192,7 @@ fun CliampRoot(
                         recent = recent,
                         onPlay = onPlay,
                         onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
-                        onOpenPlayer = { tab = Tab.Play },
+                        onOpenPlayer = { overlay = Overlay.Player },
                     )
                     Tab.Cmd -> CommandScreen(
                         repository = repository,
@@ -199,14 +200,14 @@ fun CliampRoot(
                         onPlay = onPlay,
                         onOpenScope = { overlay = Overlay.Scope },
                         onOpenSettings = { overlay = Overlay.Settings },
-                        onOpenPlayer = { tab = Tab.Play },
+                        onOpenPlayer = { overlay = Overlay.Player },
                     )
                 }
             }
         }
 
         AnimatedVisibility(
-            visible = overlay == Overlay.None && tab != Tab.Play && station != null,
+            visible = overlay == Overlay.None && station != null,
             enter = fadeIn() + expandVertically(),
             exit = fadeOut() + shrinkVertically(),
         ) {
@@ -217,7 +218,7 @@ fun CliampRoot(
                 buffering = playerState.buffering,
                 reconnecting = reconnect,
                 onToggle = { player.toggle() },
-                onOpen = { tab = Tab.Play },
+                onOpen = { overlay = Overlay.Player },
             )
         }
 
