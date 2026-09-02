@@ -499,57 +499,67 @@ private fun PlaylistList(
             }
 
             // Providers are library sources, so they belong beside the local
-            // ones rather than in a tab of their own. Connected accounts open
-            // their browse view; every runnable provider type stays listed so
-            // any of them can be added from here, not just the first one.
+            // ones rather than in a tab of their own. One block holds every
+            // provider, split into two labelled groups: connected accounts
+            // (open their browse) and the runnable types not yet added.
             val connectedKeys = providers.map { it.providerKey }.toSet()
+            val available = ProviderCatalog.all.filter { it.key !in connectedKeys }
             item {
                 SectionLabel("providers — ${providers.size}/${ProviderCatalog.all.size}") { }
             }
-            items(providers, key = { "prov:${it.id}" }) { acc ->
-                ListRow(
-                    onClick = { onOpenProvider(acc) },
-                    verticalPadding = 11.dp,
-                    leading = {
-                        Box(
-                            Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
-                                .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(CliampIcons.Server, null, Modifier.size(14.dp), tint = p.amber)
-                        }
-                    },
-                    trailing = { Icon(CliampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary) },
-                ) {
-                    Mono(acc.label.ifBlank { "provider" }, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
-                    Mono(acc.url, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+            if (providers.isNotEmpty()) {
+                item {
+                    Mono("connected", CliampType.meta, p.inkTertiary,
+                        Modifier.padding(start = Gutter, bottom = 2.dp))
+                }
+                items(providers, key = { "prov:${it.id}" }) { acc ->
+                    ListRow(
+                        onClick = { onOpenProvider(acc) },
+                        verticalPadding = 11.dp,
+                        leading = {
+                            Box(
+                                Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
+                                    .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(CliampIcons.Server, null, Modifier.size(14.dp), tint = p.amber)
+                            }
+                        },
+                        trailing = { Icon(CliampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary) },
+                    ) {
+                        Mono(acc.label.ifBlank { "provider" }, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+                        Mono(acc.url, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                    }
                 }
             }
-            items(
-                ProviderCatalog.all.filter { it.key !in connectedKeys },
-                key = { "add:${it.key}" },
-            ) { spec ->
-                ListRow(
-                    onClick = { onAddProvider(spec) },
-                    verticalPadding = 11.dp,
-                    leading = {
-                        Box(
-                            Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
-                                .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(CliampIcons.Plus, "add", Modifier.size(13.dp), tint = p.accent)
-                        }
-                    },
-                    trailing = {
-                        Mono("+ add", CliampType.tabLabel, p.accent,
-                            Modifier.clip(RoundedCornerShape(4.dp))
-                                .background(p.accent.copy(alpha = 0.14f))
-                                .padding(horizontal = 8.dp, vertical = 5.dp))
-                    },
-                ) {
-                    Mono(spec.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
-                    Mono(spec.intro.firstOrNull().orEmpty(), CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+            if (available.isNotEmpty()) {
+                item {
+                    Mono("available", CliampType.meta, p.inkTertiary,
+                        Modifier.padding(start = Gutter, top = if (providers.isEmpty()) 0.dp else 10.dp, bottom = 2.dp))
+                }
+                items(available, key = { "add:${it.key}" }) { spec ->
+                    ListRow(
+                        onClick = { onAddProvider(spec) },
+                        verticalPadding = 11.dp,
+                        leading = {
+                            Box(
+                                Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
+                                    .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(CliampIcons.Plus, "add", Modifier.size(13.dp), tint = p.accent)
+                            }
+                        },
+                        trailing = {
+                            Mono("+ add", CliampType.tabLabel, p.accent,
+                                Modifier.clip(RoundedCornerShape(4.dp))
+                                    .background(p.accent.copy(alpha = 0.14f))
+                                    .padding(horizontal = 8.dp, vertical = 5.dp))
+                        },
+                    ) {
+                        Mono(spec.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+                        Mono(spec.intro.firstOrNull().orEmpty(), CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                    }
                 }
             }
             items(pinnedPlaylists, key = { it.station.slug }) { pl ->
