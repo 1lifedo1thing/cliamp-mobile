@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationSource
 
@@ -175,7 +176,7 @@ class PlayerConnection(
                 // keeps sync() publishing the tapped song instead of the top
                 // search match whenever a search result is played alone.
                 windowBase = _queueIndex.value
-                c.setMediaItem(PlaybackService.mediaItem(context, station, StreamResolver.resolve(station.url)))
+                c.setMediaItem(buildItem(station))
             }
             c.prepare()
             c.play()
@@ -196,12 +197,24 @@ class PlayerConnection(
         } else {
             queue
         }
-        val items = window.map { s ->
-            PlaybackService.mediaItem(context, s, StreamResolver.resolve(s.url))
-        }
+        val items = window.map { buildItem(it) }
         val index = if (queue.size > WINDOW) (_queueIndex.value - start) else _queueIndex.value
         c.setMediaItems(items, index.coerceIn(0, items.lastIndex), 0L)
     }
+
+    /**
+     * Resolves [station]'s stream URL and builds its Media3 item on a
+     * background thread. Building an item renders the station's 512px artwork
+     * (a first-time PNG encode, plus a synchronised cache read on every hit) -
+     * enough to stall the main thread for every track in a queue window, which
+     * is exactly the jank felt touching a song in a long list. The tapped
+     * station is already published and composed synchronously when this runs,
+     * so the tap leg only ever brings back the finished items.
+     */
+    private suspend fun buildItem(station: Station): MediaItem =
+        withContext(Dispatchers.Default) {
+            PlaybackService.mediaItem(context, station, StreamResolver.resolve(station.url))
+        }
 
     fun toggle() {
         val c = controller ?: return
