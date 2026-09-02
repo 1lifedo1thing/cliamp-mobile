@@ -184,12 +184,7 @@ fun CliampRoot(
                         onOpenPlayer = { overlay = Overlay.Player },
                         providers = providerAccounts,
                         onOpenProvider = { a -> overlay = Overlay.Browse(a.id) },
-                        onAddProvider = {
-                            val connected = providerAccounts.map { it.providerKey }.toSet()
-                            ProviderCatalog.all.firstOrNull { it.key !in connected }?.let {
-                                overlay = Overlay.Wizard(it.key, null)
-                            }
-                        },
+                        onAddProvider = { spec -> overlay = Overlay.Wizard(spec.key, null) },
                     )
                     Tab.Cmd -> CommandScreen(
                         repository = repository,

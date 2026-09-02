@@ -222,13 +222,33 @@ object ProviderCatalog {
         },
     )
 
-    val all: List<ProviderSpec> = listOf(navidrome, jellyfin, emby, plex, abs)
+    val lyrion = ProviderSpec(
+        key = "lyrion",
+        name = "Lyrion",
+        intro = listOf(
+            "squeezebox / logitech media server with a json-rpc api.",
+            "username and password only if the server asks for them.",
+        ),
+        fields = listOf(
+            FieldSpec(
+                key = "url",
+                label = "Server URL",
+                help = "e.g. squeezebox.example.com:9000 — https is assumed",
+                keyboard = FieldKeyboard.Url,
+            ),
+            FieldSpec(key = "user", label = "Username", required = false),
+            FieldSpec(key = "password", label = "Password", secret = true, required = false),
+        ),
+        validate = { v ->
+            LyrionClient(
+                v["url"].orEmpty(),
+                v["user"].orEmpty(),
+                v["password"].orEmpty(),
+            ).ping()
+        },
+    )
+
+    val all: List<ProviderSpec> = listOf(navidrome, jellyfin, emby, plex, abs, lyrion)
 
     fun byKey(key: String): ProviderSpec? = all.firstOrNull { it.key == key }
-
-    /**
-     * Named here rather than left implicit so the picker can say what is coming
-     * without pretending it works yet.
-     */
-    val planned = listOf("Lyrion")
 }

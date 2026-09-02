@@ -55,6 +55,8 @@ import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import androidx.compose.ui.text.input.ImeAction
 import stream.cliamp.mobile.data.provider.ProviderAccount
+import stream.cliamp.mobile.data.provider.ProviderCatalog
+import stream.cliamp.mobile.data.provider.ProviderSpec
 import stream.cliamp.mobile.ui.components.CliampTextField
 import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.SectionLabel
@@ -103,7 +105,7 @@ fun LocalScreen(
     onOpenPlayer: () -> Unit,
     providers: List<ProviderAccount> = emptyList(),
     onOpenProvider: (ProviderAccount) -> Unit = {},
-    onAddProvider: () -> Unit = {},
+    onAddProvider: (ProviderSpec) -> Unit = {},
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
@@ -271,6 +273,12 @@ fun LocalScreen(
                     playlists = unpinnedPlaylists,
                     query = query,
                     songs = songs,
+                    searchResults = filtered,
+                    current = current,
+                    playing = playing,
+                    onPlay = justPlay,
+                    onToggleFavorite = onToggleFavorite,
+                    favorites = favorites.map { it.url }.toSet(),
                     creating = creatingName,
                     renamingSlug = renamingSlug,
                     editText = nameText,
@@ -321,19 +329,47 @@ private fun checkAudio(context: android.content.Context, perm: String): Boolean 
     context.checkSelfPermission(perm) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
 private fun filterSongs(songs: List<Station>, q: String): List<Station> {
-    val needle = q.trim().lowercase()
-    if (needle.isEmpty()) return songs
+    if (q.isBlank()) return songs
     return songs.filter { s ->
-        s.name.lowercase().contains(needle) ||
-            s.artist.lowercase().contains(needle) ||
-            s.album.lowercase().contains(needle)
+        fuzzyMatch("${s.name} ${s.artist} ${s.album}", q)
     }
 }
 
 private fun filterPlaylists(playlists: List<PlaylistStore.Playlist>, q: String): List<PlaylistStore.Playlist> {
-    val needle = q.trim().lowercase()
-    if (needle.isEmpty()) return playlists
-    return playlists.filter { it.station.name.lowercase().contains(needle) }
+    if (q.isBlank()) return playlists
+    return playlists.filter { fuzzyMatch(it.station.name, q) }
+}
+
+/**
+ * Lenient, typo-tolerant search. The query is split into whitespace tokens and
+ * every token must appear in the haystack as a character subsequence, so "bckst
+ * wngs" still matches "Backstreets Wannabe". Tokens are tried against the whole
+ * haystack rather than a single word, which keeps multi-word album/artist names
+ * matchable even when the words are out of order.
+ */
+private fun fuzzyMatch(haystack: String, query: String): Boolean {
+    val text = haystack.lowercase()
+    val tokens = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        .sortedByDescending { it.length }
+    if (tokens.isEmpty()) return false
+    var from = 0
+    for (token in tokens) {
+        val idx = subsequenceIndex(text, token, from)
+        if (idx < 0) return false
+        from = idx + token.length
+    }
+    return true
+}
+
+/** Index of [needle] as a non-contiguous subsequence of [text] at or after [from], or -1. */
+private fun subsequenceIndex(text: String, needle: String, from: Int): Int {
+    var ni = 0
+    var i = from
+    while (i < text.length && ni < needle.length) {
+        if (text[i] == needle[ni]) ni++
+        i++
+    }
+    return if (ni == needle.length) i - 1 else -1
 }
 
 @Composable
@@ -366,6 +402,12 @@ private fun PlaylistList(
     playlists: List<PlaylistStore.Playlist>,
     query: String,
     songs: List<Station>,
+    searchResults: List<Station>,
+    current: Station?,
+    playing: Boolean,
+    onPlay: (Station, List<Station>) -> Unit,
+    onToggleFavorite: (Station) -> Unit,
+    favorites: Set<String>,
     creating: Boolean,
     renamingSlug: String?,
     editText: String,
@@ -382,7 +424,7 @@ private fun PlaylistList(
     onOpenSmart: (SmartPlaylist) -> Unit,
     providers: List<ProviderAccount>,
     onOpenProvider: (ProviderAccount) -> Unit,
-    onAddProvider: () -> Unit,
+    onAddProvider: (ProviderSpec) -> Unit,
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
@@ -410,48 +452,104 @@ private fun PlaylistList(
                 SmartPlaylistRow(sp = sp, onOpen = { onOpenSmart(sp) }, context = context)
             }
 
-            // Providers are library sources, so they belong beside the local
-            // ones rather than in a tab of their own.
-            item {
-                SectionLabel("providers — ${providers.size}") {
-                    Mono(
-                        text = "+ add",
-                        style = CliampType.meta,
-                        color = p.accent,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable(onClick = onAddProvider)
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                    )
+            // Search results: apart from matching playlists, surface each
+            // matching song directly so a hit on a song shows the song itself.
+            if (query.isNotBlank()) {
+                if (searchResults.isNotEmpty()) {
+                    item { SectionLabel("songs — ${searchResults.size}") }
+                    items(searchResults, key = { it.url }) { s ->
+                        ListRow(
+                            onClick = { onPlay(s, searchResults) },
+                            verticalPadding = 9.dp,
+                            leading = {
+                                Box(
+                                    Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
+                                        .then(if (current?.url == s.url) Modifier.background(p.accent)
+                                              else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        if (current?.url == s.url && playing) CliampIcons.Pause else CliampIcons.PlayRow,
+                                        "play",
+                                        Modifier.size(if (current?.url == s.url && playing) 9.dp else 11.dp),
+                                        tint = if (current?.url == s.url) p.onAccent else p.inkTertiary,
+                                    )
+                                }
+                            },
+                            trailing = {
+                                Icon(
+                                    if (s.url in favorites) CliampIcons.StarFilled else CliampIcons.Star,
+                                    "favourite",
+                                    Modifier.size(15.dp).clickable { onToggleFavorite(s) },
+                                    tint = if (s.url in favorites) p.accent else p.inkFaint,
+                                )
+                            },
+                        ) {
+                            Mono(s.name, CliampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
+                            Mono(
+                                buildList {
+                                    if (s.artist.isNotBlank()) add(s.artist)
+                                    if (s.album.isNotBlank()) add(s.album)
+                                }.joinToString(" · ").ifBlank { s.meta },
+                                CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
+                            )
+                        }
+                    }
                 }
             }
-            if (providers.isEmpty()) {
-                item {
-                    ListRow(onClick = onAddProvider, verticalPadding = 11.dp, leading = {
-                        Icon(CliampIcons.Server, null, Modifier.size(14.dp), tint = p.inkTertiary)
-                    }) {
-                        Mono("add a music server", CliampType.rowPrimary, p.inkSecondary, maxLines = 1)
-                        Mono("navidrome, subsonic", CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
-                    }
+
+            // Providers are library sources, so they belong beside the local
+            // ones rather than in a tab of their own. Connected accounts open
+            // their browse view; every runnable provider type stays listed so
+            // any of them can be added from here, not just the first one.
+            val connectedKeys = providers.map { it.providerKey }.toSet()
+            item {
+                SectionLabel("providers — ${providers.size}/${ProviderCatalog.all.size}") { }
+            }
+            items(providers, key = { "prov:${it.id}" }) { acc ->
+                ListRow(
+                    onClick = { onOpenProvider(acc) },
+                    verticalPadding = 11.dp,
+                    leading = {
+                        Box(
+                            Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
+                                .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(CliampIcons.Server, null, Modifier.size(14.dp), tint = p.amber)
+                        }
+                    },
+                    trailing = { Icon(CliampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary) },
+                ) {
+                    Mono(acc.label.ifBlank { "provider" }, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+                    Mono(acc.url, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
                 }
-            } else {
-                items(providers, key = { "prov:${it.id}" }) { acc ->
-                    ListRow(
-                        onClick = { onOpenProvider(acc) },
-                        verticalPadding = 11.dp,
-                        leading = {
-                            Box(
-                                Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
-                                    .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(CliampIcons.Server, null, Modifier.size(14.dp), tint = p.amber)
-                            }
-                        },
-                    ) {
-                        Mono(acc.label.ifBlank { "provider" }, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
-                        Mono(acc.url, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
-                    }
+            }
+            items(
+                ProviderCatalog.all.filter { it.key !in connectedKeys },
+                key = { "add:${it.key}" },
+            ) { spec ->
+                ListRow(
+                    onClick = { onAddProvider(spec) },
+                    verticalPadding = 11.dp,
+                    leading = {
+                        Box(
+                            Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
+                                .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(CliampIcons.Plus, "add", Modifier.size(13.dp), tint = p.accent)
+                        }
+                    },
+                    trailing = {
+                        Mono("+ add", CliampType.tabLabel, p.accent,
+                            Modifier.clip(RoundedCornerShape(4.dp))
+                                .background(p.accent.copy(alpha = 0.14f))
+                                .padding(horizontal = 8.dp, vertical = 5.dp))
+                    },
+                ) {
+                    Mono(spec.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+                    Mono(spec.intro.firstOrNull().orEmpty(), CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
                 }
             }
             items(pinnedPlaylists, key = { it.station.slug }) { pl ->
