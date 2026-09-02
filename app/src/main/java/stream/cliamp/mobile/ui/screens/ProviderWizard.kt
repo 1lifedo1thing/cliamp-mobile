@@ -1,9 +1,6 @@
 package stream.cliamp.mobile.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -32,21 +29,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.provider.FieldKeyboard
 import stream.cliamp.mobile.data.provider.FieldSpec
 import stream.cliamp.mobile.data.provider.ProviderAccount
+import stream.cliamp.mobile.data.provider.ProviderIdentity
 import stream.cliamp.mobile.data.provider.ProviderSpec
 import stream.cliamp.mobile.data.provider.SubsonicClient
 import stream.cliamp.mobile.ui.components.Chip
+import stream.cliamp.mobile.ui.components.CliampTextField
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
@@ -59,7 +55,7 @@ import stream.cliamp.mobile.ui.theme.Mono
 private sealed interface Probe {
     data object Idle : Probe
     data object Running : Probe
-    data class Ok(val detail: String) : Probe
+    data class Ok(val identity: ProviderIdentity) : Probe
     data class Failed(val reason: String) : Probe
 }
 
@@ -161,6 +157,9 @@ fun ProviderWizard(
                     field = field,
                     value = values.value[field.key].orEmpty(),
                     last = i == visible.lastIndex,
+                    // the first field takes focus so the wizard is typeable on
+                    // arrival instead of needing a tap first
+                    autoFocus = i == 0 && existing == null,
                     onValue = { set(field.key, it) },
                     onNext = { focus.moveFocus(FocusDirection.Next) },
                     onDone = { focus.clearFocus(); runProbe() },
@@ -187,7 +186,12 @@ fun ProviderWizard(
                         CliampType.meta, p.inkFaint,
                     )
                     Probe.Running -> Mono("reaching the server…", CliampType.rowSecondary, p.amber)
-                    is Probe.Ok -> Mono("connected · ${s.detail}", CliampType.rowSecondary, p.accent)
+                    is Probe.Ok -> Mono(
+                        listOf("connected", s.identity.name, s.identity.detail)
+                            .filter { it.isNotBlank() }
+                            .joinToString(" · "),
+                        CliampType.rowSecondary, p.accent,
+                    )
                     is Probe.Failed -> Mono(s.reason, CliampType.rowSecondary, p.destructiveInk)
                 }
             }
@@ -209,7 +213,7 @@ fun ProviderWizard(
                             ProviderAccount(
                                 id = existing?.id ?: "${spec.key}:${System.currentTimeMillis()}",
                                 providerKey = spec.key,
-                                label = ok.detail.ifBlank { spec.name },
+                                label = ok.identity.name.ifBlank { spec.name },
                                 values = values.value,
                             )
                         )
@@ -240,6 +244,7 @@ private fun FieldRow(
     field: FieldSpec,
     value: String,
     last: Boolean,
+    autoFocus: Boolean,
     onValue: (String) -> Unit,
     onNext: () -> Unit,
     onDone: () -> Unit,
@@ -255,35 +260,17 @@ private fun FieldRow(
             Mono(field.label, CliampType.rowSecondary, if (focused) p.accent else p.inkTertiary)
             if (!field.required) Mono("optional", CliampType.meta, p.inkFaint)
         }
-        BasicTextField(
+        CliampTextField(
             value = value,
             onValueChange = onValue,
-            singleLine = true,
-            textStyle = CliampType.trackTitleSmall.copy(color = p.ink),
-            cursorBrush = SolidColor(p.accent),
-            visualTransformation =
-                if (field.secret) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = when {
-                    field.keyboard == FieldKeyboard.Url -> KeyboardType.Uri
-                    field.secret -> KeyboardType.Password
-                    else -> KeyboardType.Text
-                },
-                autoCorrectEnabled = false,
-                imeAction = if (last) ImeAction.Done else ImeAction.Next,
-            ),
-            keyboardActions = KeyboardActions(onNext = { onNext() }, onDone = { onDone() }),
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { focused = it.isFocused },
-            decorationBox = { inner ->
-                Box {
-                    if (value.isEmpty()) {
-                        Mono(field.help.ifBlank { field.label.lowercase() }, CliampType.trackTitleSmall, p.inkFaint, maxLines = 1)
-                    }
-                    inner()
-                }
-            },
+            modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+            placeholder = field.help.ifBlank { field.label.lowercase() },
+            textStyle = CliampType.trackTitleSmall,
+            secret = field.secret,
+            keyboardType = if (field.keyboard == FieldKeyboard.Url) KeyboardType.Uri else KeyboardType.Text,
+            imeAction = if (last) ImeAction.Done else ImeAction.Next,
+            autoFocus = autoFocus,
+            onAction = { if (last) onDone() else onNext() },
         )
         Box(
             Modifier

@@ -160,17 +160,6 @@ fun CliampRoot(
                         player = player,
                         onOpenScope = { overlay = Overlay.Scope },
                     )
-                    Tab.Servers -> ProvidersScreen(
-                        accounts = providerAccounts,
-                        onAdd = {
-                            ProviderCatalog.all.firstOrNull()?.let {
-                                overlay = Overlay.Wizard(it.key, null)
-                            }
-                        },
-                        onOpen = { a -> overlay = Overlay.Browse(a.id) },
-                        onEdit = { a -> overlay = Overlay.Wizard(a.providerKey, a) },
-                        onRemove = { a -> scope.launch { providers.remove(a.id) } },
-                    )
                     Tab.Stations -> StationsScreen(
                         repository = repository,
                         prefs = prefs,
@@ -194,6 +183,13 @@ fun CliampRoot(
                         onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
                         onAddToQueue = { player.addToQueue(it) },
                         onOpenPlayer = { tab = Tab.Play },
+                        providers = providerAccounts,
+                        onOpenProvider = { a -> overlay = Overlay.Browse(a.id) },
+                        onAddProvider = {
+                            ProviderCatalog.all.firstOrNull()?.let {
+                                overlay = Overlay.Wizard(it.key, null)
+                            }
+                        },
                     )
                     Tab.Cmd -> CommandScreen(
                         repository = repository,

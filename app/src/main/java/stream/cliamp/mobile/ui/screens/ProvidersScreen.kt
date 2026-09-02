@@ -107,7 +107,7 @@ fun ProvidersScreen(
                                     .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Icon(CliampIcons.Globe, null, Modifier.size(14.dp), tint = p.amber)
+                                Icon(CliampIcons.Server, null, Modifier.size(14.dp), tint = p.amber)
                             }
                         },
                         trailing = {

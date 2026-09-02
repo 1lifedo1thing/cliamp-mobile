@@ -49,11 +49,10 @@ import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.playback.PlaybackBus
+import androidx.compose.ui.text.input.ImeAction
 import stream.cliamp.mobile.ui.components.Chip
+import stream.cliamp.mobile.ui.components.CliampTextField
 import stream.cliamp.mobile.ui.components.CliampIcons
-import stream.cliamp.mobile.ui.components.CmdCursor
-import stream.cliamp.mobile.ui.components.CmdKeyboard
-import stream.cliamp.mobile.ui.components.CmdKeyboardMode
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.ListRow
@@ -104,7 +103,6 @@ fun CommandScreen(
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(Scope.All) }
-    var shift by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
 
     val directory by repository.directory.collectAsState()
@@ -192,16 +190,20 @@ fun CommandScreen(
             ) {
                 Mono(":", CliampType.trackTitleCompact, p.accent)
                 Spacer(Modifier.width(6.dp))
-                Mono(
-                    query.removePrefix(":"),
-                    CliampType.trackTitleCompact,
-                    p.ink,
-                    maxLines = 1,
+                CliampTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = "type to search",
+                    // Go rather than Done: the action runs the command instead
+                    // of only dismissing the keyboard.
+                    imeAction = ImeAction.Go,
+                    onAction = { run(query) },
+                    autoFocus = true,
                 )
-CmdCursor()
-                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.width(10.dp))
                 Mono(
-                    if (query.isBlank()) "type to search" else "$total hits",
+                    if (query.isBlank()) "" else "$total hits",
                     CliampType.rowSecondary,
                     p.inkTertiary,
                 )
@@ -298,14 +300,5 @@ CmdCursor()
             item { Spacer(Modifier.height(12.dp)) }
         }
 
-        CmdKeyboard(
-            shift = shift,
-            mode = CmdKeyboardMode.Cmd,
-            onKey = { c -> query += if (shift) c.uppercase() else c; shift = false },
-            onShift = { shift = !shift },
-            onBackspace = { query = query.dropLast(1) },
-            onColon = { query = if (query.startsWith(":")) query else ":$query" },
-            onReturn = { run(query) },
-        )
     }
 }

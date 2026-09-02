@@ -92,7 +92,17 @@ object CliampIcons {
     val PlayRow = solid(14f, 14f, "M1 1l12 6-12 6z")
     val PlayTab = solid(18f, 18f, "M2 1l14 8-14 8z")
     val PlayWide = solid(12f, 13f, "M0 0l12 6.5L0 13z")
-    val MusicNote = solid(16f, 16f, "M6 2.5L14 1v9.5", "M6 2.5L14 1", "M6 14a2.4 2.4 0 11-2.4-2.4c.9 0 1.6.4 2 1z", "M14 11a2.4 2.4 0 11-2.4-2.4c.9 0 1.6.4 2 1z")
+    /**
+     * A quaver with straight edges: a slanted head, a stem and a flag, all
+     * parallelograms. The previous one built its note heads from arcs and
+     * filled them as open paths, which at 14dp collapsed into a smudge.
+     */
+    val MusicNote = solid(
+        16f, 16f,
+        "M1.8 10.6L7.2 9.0L7.2 12.8L1.8 14.4z",   // head
+        rect(5.8f, 1.8f, 1.7f, 10.2f),             // stem
+        "M7.5 1.8L14.2 3.6L14.2 6.5L7.5 4.7z",     // flag
+    )
 
     val Prev = solid(22f, 18f, "M12 9L22 1v16z", "M2 9L12 1v16z", rect(0f, 1f, 2.4f, 16f))
     val Next = solid(22f, 18f, "M10 9L0 17V1z", "M20 9L10 17V1z", rect(19.6f, 1f, 2.4f, 16f))
@@ -110,19 +120,37 @@ object CliampIcons {
      * as "radio / stations" at tab size and sits cleanly beside the playlists
      * vinyl disc and the queue line-list.
      */
+    /**
+     * A tuning dial: a scale with tick marks and a needle parked between two
+     * stations.
+     *
+     * Two earlier attempts failed for the same underlying reason. Concentric
+     * arcs radiating from a dot is the conventional broadcast glyph, but it
+     * breaks the doc's straight-paths-only rule and smudges at 17dp. A tower
+     * with two legs and a cross brace obeys the rule and then reads as the
+     * letter A, because that is what a triangle with a horizontal bar is. A
+     * dial has no such collision, and tuning is what stations are for.
+     */
     val StationsTab = ImageVector.Builder(
         defaultWidth = 18.dp, defaultHeight = 18.dp, viewportWidth = 18f, viewportHeight = 18f,
     ).apply {
-        val cx = 9f
-        val cy = 7.6f
-        // transmitter dot
-        val dot = addPathNodes("M$cx 6a1.6 1.6 0 1 1 -0.001 0")
-        addPath(dot, fill = SolidColor(Color.White))
-        // three concentric radiating arcs
-        addPath(addPathNodes("M${cx - 2.4f} $cy a 2.4 2.4 0 0 1 4.8 0"), stroke = SolidColor(Color.White), strokeLineWidth = 1.5f)
-        addPath(addPathNodes("M${cx - 4.3f} $cy a 4.3 4.3 0 0 1 8.6 0"), stroke = SolidColor(Color.White), strokeLineWidth = 1.5f)
-        addPath(addPathNodes("M${cx - 6.3f} $cy a 6.3 6.3 0 0 1 12.6 0"), stroke = SolidColor(Color.White), strokeLineWidth = 1.5f)
+        listOf(
+            "M1.4 14.0h15.2",     // scale
+            "M4.8 14.0V11.0",     // ticks
+            "M9.0 14.0V12.1",
+            "M13.2 14.0V11.0",
+        ).forEach {
+            addPath(
+                addPathNodes(it),
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = 1.7f,
+                strokeLineCap = StrokeCap.Butt,
+                strokeLineJoin = StrokeJoin.Miter,
+            )
+        }
+        addPath(addPathNodes(rect(6.5f, 2.6f, 1.8f, 11.4f)), fill = SolidColor(Color.White))
     }.build()
+
     /**
      * A book-stack: two upright stroked books with a slanted volume on top.
      * Reads as "library" at tab size and stays distinct from the queue's
@@ -152,8 +180,48 @@ object CliampIcons {
     )
     val Speaker = stroked(20f, 20f, 1.7f, "M2 7l5-4v14l-5-4z", "M11 6.5a4 4 0 010 7")
     val SpeakerSolid = solid(20f, 20f, "M2 7l5-4v14l-5-4z")
-    val Clock = stroked(20f, 20f, 1.7f, "M10 1.8a8.2 8.2 0 100 16.4 8.2 8.2 0 100-16.4z", "M10 5.5v5l3.5 2")
-    val Globe = stroked(20f, 20f, 1.6f, "M10 1.8a8.2 8.2 0 100 16.4 8.2 8.2 0 100-16.4z", "M1.8 10h16.4", "M10 1.8c4 4.4 4 11.9 0 16.4c-4-4.5-4-12 0-16.4z")
+    /**
+     * An hourglass: two triangles meeting at a waist. Replaces a circle with
+     * hands, which broke the no-curves rule and read as a generic clock; two
+     * triangles say "time passing" with nothing but straight edges.
+     */
+    val Clock = ImageVector.Builder(
+        defaultWidth = 20.dp, defaultHeight = 20.dp, viewportWidth = 20f, viewportHeight = 20f,
+    ).apply {
+        listOf(
+            "M4.2 2.8L15.8 2.8L10 9.3z",
+            "M10 10.7L15.8 17.2L4.2 17.2z",
+        ).forEach { addPath(addPathNodes(it), fill = SolidColor(Color.White)) }
+    }.build()
+    /**
+     * Two stacked rack units with a status light and a vent line each.
+     *
+     * This replaces a globe built from a circle and two ellipse arcs, which
+     * rendered as a spiky asterisk at 14dp and broke the no-curves rule
+     * anyway. A rack is rectangles only, and it says "a machine you own"
+     * rather than "the internet", which is the actual distinction: these are
+     * self-hosted servers, not web services.
+     */
+    val Server = ImageVector.Builder(
+        defaultWidth = 18.dp, defaultHeight = 18.dp, viewportWidth = 18f, viewportHeight = 18f,
+    ).apply {
+        listOf(
+            rrect(1.2f, 2.4f, 15.6f, 5.2f, 1.2f),
+            rrect(1.2f, 10.0f, 15.6f, 5.2f, 1.2f),
+            "M11.8 5.0h3.2",
+            "M11.8 12.6h3.2",
+        ).forEach {
+            addPath(
+                addPathNodes(it),
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = 1.7f,
+                strokeLineCap = StrokeCap.Butt,
+                strokeLineJoin = StrokeJoin.Miter,
+            )
+        }
+        listOf(rect(3.6f, 4.2f, 1.7f, 1.7f), rect(3.6f, 11.8f, 1.7f, 1.7f))
+            .forEach { addPath(addPathNodes(it), fill = SolidColor(Color.White)) }
+    }.build()
 
     val SignalBars = solid(
         17f, 12f,

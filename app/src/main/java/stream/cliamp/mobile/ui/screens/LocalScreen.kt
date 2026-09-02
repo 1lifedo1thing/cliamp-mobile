@@ -53,9 +53,11 @@ import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.durationLabel
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
-import stream.cliamp.mobile.ui.components.CmdCursor
-import stream.cliamp.mobile.ui.components.CmdKeyboard
-import stream.cliamp.mobile.ui.components.CmdKeyboardMode
+import androidx.compose.ui.text.input.ImeAction
+import stream.cliamp.mobile.data.provider.ProviderAccount
+import stream.cliamp.mobile.ui.components.CliampTextField
+import stream.cliamp.mobile.ui.components.ListRow
+import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.IconLabelButton
@@ -99,13 +101,15 @@ fun LocalScreen(
     onToggleFavorite: (Station) -> Unit,
     onAddToQueue: (Station) -> Unit,
     onOpenPlayer: () -> Unit,
+    providers: List<ProviderAccount> = emptyList(),
+    onOpenProvider: (ProviderAccount) -> Unit = {},
+    onAddProvider: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     var query by remember { mutableStateOf("") }
-    var searchShift by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     var openSlug by remember { mutableStateOf<String?>(null) }
     var openSmart by remember { mutableStateOf<SmartKind?>(null) }
@@ -210,17 +214,16 @@ fun LocalScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Mono("▸ ", CliampType.chip, p.inkTertiary)
-                Row(
-                    Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (query.isBlank()) {
-                        Mono("search songs, artists, albums", CliampType.rowPrimary, p.inkFaint)
-                    } else {
-                        Mono(query, CliampType.rowPrimary, p.ink, maxLines = 1)
-                    }
-                    if (searchOpen) CmdCursor()
-                }
+                CliampTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = "search songs, artists, albums",
+                    textStyle = CliampType.rowPrimary,
+                    imeAction = ImeAction.Search,
+                    onAction = { searchOpen = false },
+                    autoFocus = searchOpen,
+                )
                 if (query.isNotBlank()) {
                     Icon(
                         CliampIcons.Xmark, "clear search",
@@ -285,6 +288,9 @@ fun LocalScreen(
                     onPin = { slug, pinned -> scope.launch { playlists.setPinned(slug, pinned) } },
                     onOpen = { openSlug = it.station.slug },
                     onOpenSmart = { openSmart = it.kind },
+                    providers = providers,
+                    onOpenProvider = onOpenProvider,
+                    onAddProvider = onAddProvider,
                 )
             }
         }
@@ -298,17 +304,6 @@ fun LocalScreen(
                         indication = null,
                         interactionSource = remember { MutableInteractionSource() },
                     ) { searchOpen = false }
-            )
-            CmdKeyboard(
-                modifier = Modifier.align(Alignment.BottomCenter),
-                shift = searchShift,
-                mode = CmdKeyboardMode.Text,
-                onKey = { c ->
-                    query = (query + (if (searchShift) c.uppercase() else c)).take(48)
-                },
-                onShift = { searchShift = !searchShift },
-                onBackspace = { query = query.dropLast(1) },
-                onReturn = { searchShift = false; searchOpen = false },
             )
         }
     }
@@ -375,6 +370,9 @@ private fun PlaylistList(
     onPin: (String, Boolean) -> Unit,
     onOpen: (PlaylistStore.Playlist) -> Unit,
     onOpenSmart: (SmartPlaylist) -> Unit,
+    providers: List<ProviderAccount>,
+    onOpenProvider: (ProviderAccount) -> Unit,
+    onAddProvider: () -> Unit,
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
@@ -400,6 +398,51 @@ private fun PlaylistList(
             }
             items(smart, key = { it.key }) { sp ->
                 SmartPlaylistRow(sp = sp, onOpen = { onOpenSmart(sp) }, context = context)
+            }
+
+            // Providers are library sources, so they belong beside the local
+            // ones rather than in a tab of their own.
+            item {
+                SectionLabel("providers — ${providers.size}") {
+                    Mono(
+                        text = "+ add",
+                        style = CliampType.meta,
+                        color = p.accent,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable(onClick = onAddProvider)
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
+            }
+            if (providers.isEmpty()) {
+                item {
+                    ListRow(onClick = onAddProvider, verticalPadding = 11.dp, leading = {
+                        Icon(CliampIcons.Server, null, Modifier.size(14.dp), tint = p.inkTertiary)
+                    }) {
+                        Mono("add a music server", CliampType.rowPrimary, p.inkSecondary, maxLines = 1)
+                        Mono("navidrome, subsonic", CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                    }
+                }
+            } else {
+                items(providers, key = { "prov:${it.id}" }) { acc ->
+                    ListRow(
+                        onClick = { onOpenProvider(acc) },
+                        verticalPadding = 11.dp,
+                        leading = {
+                            Box(
+                                Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
+                                    .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(CliampIcons.Server, null, Modifier.size(14.dp), tint = p.amber)
+                            }
+                        },
+                    ) {
+                        Mono(acc.label.ifBlank { "provider" }, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+                        Mono(acc.url, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                    }
+                }
             }
             items(pinnedPlaylists, key = { it.station.slug }) { pl ->
                 if (pl.station.slug == renamingSlug) {
@@ -628,7 +671,6 @@ private fun InlineNameField(
 ) {
     val p = LocalPalette.current
     var text by remember { mutableStateOf(initial) }
-    var shift by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth().padding(Gutter)
@@ -637,11 +679,15 @@ private fun InlineNameField(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                if (text.isEmpty()) Mono(placeholder, CliampType.rowPrimary, p.inkFaint)
-                else Mono(text, CliampType.rowPrimary, p.ink, maxLines = 1)
-                CmdCursor()
-            }
+            CliampTextField(
+                value = text,
+                onValueChange = { text = it.take(48) },
+                modifier = Modifier.weight(1f),
+                placeholder = placeholder,
+                textStyle = CliampType.rowPrimary,
+                onAction = { onDone(text) },
+                autoFocus = true,
+            )
             Mono("SAVE", CliampType.tabLabel, p.accent,
                 Modifier.clip(RoundedCornerShape(4.dp)).background(p.accent.copy(alpha = 0.14f))
                     .clickable { onDone(text) }.padding(horizontal = 9.dp, vertical = 7.dp))
@@ -649,14 +695,6 @@ private fun InlineNameField(
                 Modifier.clip(RoundedCornerShape(4.dp)).border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))
                     .clickable(onClick = onCancel).padding(horizontal = 9.dp, vertical = 7.dp))
         }
-        CmdKeyboard(
-            shift = shift,
-            mode = CmdKeyboardMode.Text,
-            onKey = { c -> text = (text + (if (shift) c.uppercase() else c)).take(48) },
-            onShift = { shift = !shift },
-            onBackspace = { text = text.dropLast(1) },
-            onReturn = { onDone(text) },
-        )
     }
 }
 

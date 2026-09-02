@@ -28,15 +28,15 @@ class SubsonicClient(
 ) {
     private val base = normalise(rawUrl)
 
-    suspend fun ping(): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun ping(): Result<ProviderIdentity> = withContext(Dispatchers.IO) {
         runCatching {
             val body = Http.text(endpoint("ping.view"))
             val res = Http.json.decodeFromString<SubsonicEnvelope>(body).response
             if (!res.isOk) error(res.error?.message ?: "server refused the credentials")
-            listOfNotNull(
-                res.type?.takeIf { it.isNotBlank() },
-                res.serverVersion?.takeIf { it.isNotBlank() },
-            ).joinToString(" ").ifBlank { "subsonic ${res.version.orEmpty()}".trim() }
+            ProviderIdentity(
+                name = res.type?.takeIf { it.isNotBlank() } ?: "subsonic",
+                detail = res.serverVersion?.takeIf { it.isNotBlank() }.orEmpty(),
+            )
         }
     }
 

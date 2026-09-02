@@ -8,6 +8,14 @@ package stream.cliamp.mobile.data.provider
  * provider is what makes sixteen of them tractable: the wizard renders whatever
  * the spec lists, and adding a provider is a data change.
  */
+/**
+ * What a successful probe learned. [name] is what the account is called from
+ * then on, so it stays "navidrome" rather than drifting every time the server
+ * is upgraded; [detail] is the version, shown once as probe feedback to
+ * confirm you reached the box you meant.
+ */
+data class ProviderIdentity(val name: String, val detail: String = "")
+
 data class FieldSpec(
     val key: String,
     val label: String,
@@ -47,7 +55,7 @@ data class ProviderSpec(
      * Probes the live server. Nothing is saved until this succeeds, so a typo
      * fails here rather than silently at first playback.
      */
-    val validate: suspend (Map<String, String>) -> Result<String>,
+    val validate: suspend (Map<String, String>) -> Result<ProviderIdentity>,
     /** Cross-field rules, run before [validate]. Returns an error or null. */
     val extraValidate: ((Map<String, String>) -> String?)? = null,
 ) {
