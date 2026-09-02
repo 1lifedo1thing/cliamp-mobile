@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.provider.ProviderStore
 import stream.cliamp.mobile.data.provider.jellyfin
+import stream.cliamp.mobile.data.provider.plex
 import stream.cliamp.mobile.data.provider.subsonic
 import stream.cliamp.mobile.playback.ResolvedStream
 import stream.cliamp.mobile.playback.StreamResolver
@@ -46,10 +47,10 @@ class CliampApp : Application() {
         // here at play time rather than stored.
         StreamResolver.providerResolver = resolve@ { accountId, trackId ->
             val account = providers.read().firstOrNull { it.id == accountId } ?: return@resolve null
-            if (account.providerKey == "jellyfin" || account.providerKey == "emby") {
-                account.jellyfin().stream(trackId)
-            } else {
-                ResolvedStream(account.subsonic().streamUrl(trackId))
+            when (account.providerKey) {
+                "jellyfin", "emby" -> account.jellyfin().stream(trackId)
+                "plex" -> account.plex().stream(trackId)
+                else -> ResolvedStream(account.subsonic().streamUrl(trackId))
             }
         }
         repository.bootstrap()

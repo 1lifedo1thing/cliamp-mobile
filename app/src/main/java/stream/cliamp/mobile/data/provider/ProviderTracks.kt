@@ -14,3 +14,8 @@ fun ProviderAccount.jellyfin(): JellyfinClient = JellyfinClient(
     values["password"].orEmpty(),
     providerKey,
 )
+
+fun ProviderAccount.plex(): PlexClient = PlexClient(
+    values["url"].orEmpty(),
+    values["token"].orEmpty(),
+)

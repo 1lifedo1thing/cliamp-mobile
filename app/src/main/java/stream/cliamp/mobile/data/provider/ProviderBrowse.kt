@@ -60,6 +60,7 @@ interface ProviderBrowseClient {
 
 fun ProviderAccount.browseClient(): ProviderBrowseClient = when (providerKey) {
     "jellyfin", "emby" -> JellyfinBrowseClient(this, jellyfin())
+    "plex" -> PlexBrowseClient(plex())
     else -> SubsonicBrowseClient(this, subsonic())
 }
 
@@ -118,6 +119,19 @@ private class JellyfinBrowseClient(
     override suspend fun starred(): Result<List<ProviderTrack>> =
         Result.success(emptyList())
 
+    override fun trackCover(id: String): String = client.coverUrl(id)
+}
+
+private class PlexBrowseClient(
+    private val client: PlexClient,
+) : ProviderBrowseClient {
+    override suspend fun albums(style: String): Result<List<ProviderAlbum>> = client.albums(style)
+    override suspend fun artists(): Result<List<ProviderArtist>> = client.artists()
+    override suspend fun artistAlbums(artistId: String): Result<List<ProviderAlbum>> =
+        client.artistAlbums(artistId)
+    override suspend fun albumTracks(albumId: String): Result<List<ProviderTrack>> =
+        client.albumTracks(albumId)
+    override suspend fun starred(): Result<List<ProviderTrack>> = Result.success(emptyList())
     override fun trackCover(id: String): String = client.coverUrl(id)
 }
 

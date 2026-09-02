@@ -144,7 +144,28 @@ object ProviderCatalog {
         },
     )
 
-    val all: List<ProviderSpec> = listOf(navidrome, jellyfin, emby)
+    val plex = ProviderSpec(
+        key = "plex",
+        name = "Plex",
+        intro = listOf(
+            "media server; needs a plex token from the app settings.",
+            "libraries are read over the plex api.",
+        ),
+        fields = listOf(
+            FieldSpec(
+                key = "url",
+                label = "Server URL",
+                help = "e.g. media.example.com:32400 — https is assumed",
+                keyboard = FieldKeyboard.Url,
+            ),
+            FieldSpec(key = "token", label = "X-Plex-Token", secret = true),
+        ),
+        validate = { v ->
+            PlexClient(v["url"].orEmpty(), v["token"].orEmpty()).ping()
+        },
+    )
+
+    val all: List<ProviderSpec> = listOf(navidrome, jellyfin, emby, plex)
 
     fun byKey(key: String): ProviderSpec? = all.firstOrNull { it.key == key }
 
@@ -152,5 +173,5 @@ object ProviderCatalog {
      * Named here rather than left implicit so the picker can say what is coming
      * without pretending it works yet.
      */
-    val planned = listOf("Plex", "Audiobookshelf", "Lyrion")
+    val planned = listOf("Audiobookshelf", "Lyrion")
 }

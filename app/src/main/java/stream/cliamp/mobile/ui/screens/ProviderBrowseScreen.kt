@@ -78,7 +78,9 @@ fun ProviderBrowseScreen(
     val client = remember(account.id) { account.browseClient() }
     // Roots with no semantics on the server are dropped from the chip row.
     val roots = remember(account.providerKey) {
-        if (account.providerKey == "jellyfin" || account.providerKey == "emby") {
+        if (account.providerKey == "jellyfin" || account.providerKey == "emby" ||
+            account.providerKey == "plex"
+        ) {
             listOf(Root.Newest, Root.AZ, Root.Artists)
         } else {
             Root.entries
