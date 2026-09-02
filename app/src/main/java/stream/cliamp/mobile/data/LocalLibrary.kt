@@ -1,36 +1,34 @@
 package stream.cliamp.mobile.data
 
-import android.content.ContentUris
-import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.net.Uri
-import android.provider.MediaStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.io.File
 
 /**
- * A song picked out of the device library. The [station] form is what the rest
- * of the app plays: a local file is just a Station whose `url` is a content
+ * A song picked out of the local Music folder. The [station] form is what the
+ * rest of the app plays: a local file is just a Station whose `url` is a file
  * URI, so the whole playback pipeline behaves exactly as it does for a stream.
  */
 data class LocalSong(
-    val id: Long,
+    val path: String,
     val title: String,
     val artist: String,
     val album: String,
-    val albumId: Long,
     /** duration in milliseconds. */
     val durationMs: Long,
-    val sizeBytes: Long,
     val uri: Uri,
+    val cover: String,
 ) {
     val station: Station
         get() = Station(
-            id = "local:$id",
+            id = "local:$path",
             name = title,
             url = uri.toString(),
             source = StationSource.Local,
-            cover = albumArtUri(albumId).toString(),
+            cover = cover,
             artist = artist,
             album = album,
             durationMs = durationMs,
@@ -39,9 +37,6 @@ data class LocalSong(
     /** Longest sort field is the safe proxy for "starts with title". */
     val sortKey: String get() = title.lowercase()
 }
-
-private fun albumArtUri(albumId: Long): Uri =
-    ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), albumId)
 
 /** "4:32" style duration for local-song rows and headers. */
 fun durationLabel(ms: Long): String {
@@ -52,11 +47,11 @@ fun durationLabel(ms: Long): String {
 }
 
 /**
- * Reads the phone's audio library from MediaStore, like Samsung Music and the
- * rest do. Nothing here is cached to disk — the OS owns that store, so we just
- * query it fresh on demand and keep a plain StateFlow for the UI to observe.
+ * Reads audio files straight off the Music folder on disk, recursing into
+ * subfolders, rather than querying MediaStore. Nothing here is cached to disk —
+ * we just walk the tree on demand and keep a plain StateFlow for the UI.
  */
-class LocalLibrary(private val context: Context) {
+class LocalLibrary {
 
     private val _songs = MutableStateFlow<List<Station>>(emptyList())
     val songs: StateFlow<List<Station>> = _songs.asStateFlow()
@@ -66,6 +61,8 @@ class LocalLibrary(private val context: Context) {
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+
+    private val audioExts = setOf("mp3", "m4a", "mp4", "aac", "ogg", "oga", "opus", "flac", "wav", "wma", "aiff", "aif", "mid", "midi")
 
     fun refresh() {
         _loading.value = true
@@ -80,45 +77,76 @@ class LocalLibrary(private val context: Context) {
     }
 
     private fun querySongs(): List<Station> {
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.SIZE,
-        )
-        val sort = "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
-        val list = mutableListOf<Station>()
-        val cursor = context.contentResolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            "${MediaStore.Audio.Media.IS_MUSIC} != 0",
-            null,
-            sort,
-        ) ?: return list
-        cursor.use { c ->
-            val id = c.getColumnIndex(MediaStore.Audio.Media._ID)
-            val t = c.getColumnIndex(MediaStore.Audio.Media.TITLE)
-            val a = c.getColumnIndex(MediaStore.Audio.Media.ARTIST)
-            val al = c.getColumnIndex(MediaStore.Audio.Media.ALBUM)
-            val alId = c.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
-            val d = c.getColumnIndex(MediaStore.Audio.Media.DURATION)
-            val s = c.getColumnIndex(MediaStore.Audio.Media.SIZE)
-            while (c.moveToNext()) {
-                list += LocalSong(
-                    id = c.getLong(id),
-                    title = c.getString(t) ?: "unknown",
-                    artist = c.getString(a) ?: "unknown artist",
-                    album = c.getString(al) ?: "",
-                    albumId = c.getLong(alId),
-                    durationMs = c.getLong(d),
-                    sizeBytes = c.getLong(s),
-                    uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, c.getLong(id)),
-                ).station
+        val root = File(
+            android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MUSIC).absolutePath
+        ).takeIf { it.isDirectory }
+            ?: File(android.os.Environment.getExternalStorageDirectory(), "Music").takeIf { it.isDirectory }
+            ?: return emptyList()
+        val walker = FileWalker(listOf("cover.jpg", "cover.png", "folder.jpg", "folder.png", "albumart.jpg", "albumart.png", "front.jpg", "front.png"))
+        walker.visit(root)
+        val list = walker.songs.map { it.station }.sortedBy { it.name.lowercase() }
+        return list
+    }
+
+    private inner class FileWalker(coverNames: List<String>) {
+        private val covers = coverNames.toSet()
+        val songs = mutableListOf<LocalSong>()
+
+        fun visit(dir: File) {
+            val files = dir.listFiles() ?: return
+            files.sortedBy { it.name.lowercase() }.forEach { f ->
+                if (f.isDirectory) visit(f)
+                else if (f.isFile && isAudio(f.name)) index(f)
             }
         }
-        return list
+
+        private fun index(f: File) {
+            val meta = readMeta(f)
+            val cover = nearestCover(f.parentFile ?: return).orEmpty()
+            songs += LocalSong(
+                path = f.absolutePath,
+                title = meta.title ?: f.nameWithoutExtension,
+                artist = meta.artist ?: "unknown artist",
+                album = meta.album ?: "",
+                durationMs = meta.durationMs,
+                uri = Uri.fromFile(f),
+                cover = cover,
+            )
+        }
+
+        private fun nearestCover(dir: File): String? {
+            val named = covers.firstNotNullOfOrNull { name ->
+                File(dir, name).takeIf { it.isFile }
+            }
+            if (named != null) return Uri.fromFile(named).toString()
+            // fall back to any image in the same folder (embedded art lives here)
+            val image = dir.listFiles()?.firstOrNull {
+                it.isFile && it.extension.lowercase() in setOf("jpg", "jpeg", "png")
+            }
+            return image?.let { Uri.fromFile(it).toString() }
+        }
+    }
+
+    private fun isAudio(name: String): Boolean =
+        name.substringAfterLast('.', "").lowercase() in audioExts
+
+    private data class Meta(val title: String?, val artist: String?, val album: String?, val durationMs: Long)
+
+    private fun readMeta(f: File): Meta {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(f.absolutePath)
+            val dur = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            Meta(
+                title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE),
+                artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST),
+                album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM),
+                durationMs = dur,
+            )
+        } catch (_: Exception) {
+            Meta(null, null, null, 0L)
+        } finally {
+            runCatching { retriever.release() }
+        }
     }
 }

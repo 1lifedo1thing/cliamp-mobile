@@ -672,6 +672,7 @@ private fun PlaylistRow(
     context: android.content.Context,
 ) {
     val p = LocalPalette.current
+    val byId = remember(songs) { songs.associate { it.id to it.name } }
     val cover = pl.station.cover
     var art by remember(pl.station.slug) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(pl.station.slug, cover) {
@@ -702,7 +703,7 @@ private fun PlaylistRow(
     ) {
         Mono(pl.station.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
         Mono(
-            pl.songIds.joinToString(" · ") { titleOf(it, songs) }.ifBlank { "empty playlist" },
+            playlistPreview(pl.songIds, byId).ifBlank { "empty playlist" },
             CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
         )
     }
@@ -746,7 +747,7 @@ private fun SmartPlaylistRow(
     ) {
         Mono(sp.label, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
         Mono(
-            sp.stations.joinToString(" · ") { it.name }.ifBlank {
+            smartPreview(sp.stations).ifBlank {
                 if (sp.stations.isEmpty()) "nothing here yet" else ""
             },
             CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
@@ -849,8 +850,31 @@ private fun InlineNameField(
     }
 }
 
-private fun titleOf(id: String, songs: List<Station>): String =
-    songs.firstOrNull { it.id == id }?.name ?: ""
+/**
+ * Preview line under a smart-playlist row. Joining every member name would
+ * build a ~hundreds-of-KB string on every recomposition (e.g. "local songs"
+ * with a big library), which is what made the Library tab take seconds to
+ * respond to touch. Cap it to a few names plus a "+N" suffix.
+ */
+private fun smartPreview(stations: List<Station>): String {
+    if (stations.isEmpty()) return ""
+    val head = 4
+    val names = stations.take(head).joinToString(" · ") { it.name }
+    if (stations.size <= head) return names
+    return "$names · +${stations.size - head} more"
+}
+
+/**
+ * Preview line under a user playlist row. Uses an id→name map (O(1) per id)
+ * instead of a linear scan, and caps the number of names shown.
+ */
+private fun playlistPreview(songIds: List<String>, byId: Map<String, String>): String {
+    if (songIds.isEmpty()) return ""
+    val head = 4
+    val names = songIds.take(head).joinToString(" · ") { byId[it] ?: "…" }
+    if (songIds.size <= head) return names
+    return "$names · +${songIds.size - head} more"
+}
 
 @Composable
 private fun PlaylistDetailShown(

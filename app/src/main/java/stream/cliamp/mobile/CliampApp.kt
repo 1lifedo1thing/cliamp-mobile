@@ -36,7 +36,7 @@ class CliampApp : Application() {
     val prefs: Prefs by lazy { Prefs(this) }
     val providers: ProviderStore by lazy { ProviderStore(this) }
     val repository: Repository by lazy { Repository(prefs, appScope) }
-    val localLibrary: LocalLibrary by lazy { LocalLibrary(this) }
+    val localLibrary: LocalLibrary by lazy { LocalLibrary() }
     val playlists: PlaylistStore by lazy { PlaylistStore(this) }
     val player: PlayerConnection by lazy { PlayerConnection(this, CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)) }
 
