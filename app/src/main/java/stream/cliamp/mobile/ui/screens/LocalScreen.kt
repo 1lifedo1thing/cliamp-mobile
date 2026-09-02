@@ -27,6 +27,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -37,6 +42,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -45,8 +51,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.LocalArt
+import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.LocalLibrary
 import stream.cliamp.mobile.data.PlaylistStore
 import stream.cliamp.mobile.data.Station
@@ -257,7 +265,6 @@ fun LocalScreen(
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
                 !haveAudio -> PermissionPrompt(onGrant = { permissionLauncher.launch(audioPerm) })
-                loading && songs.isEmpty() -> CenterNote("reading the library…", p.inkFaint)
                 libError != null && songs.isEmpty() -> CenterNote(libError!!, p.destructiveInk)
                 showProviders -> ProvidersView(
                     providers = providers,
@@ -271,6 +278,7 @@ fun LocalScreen(
                     onPlay = justPlay,
                     onToggleFavorite = onToggleFavorite,
                     favorites = favorites.map { it.url }.toSet(),
+                    loading = loading,
                 )
                 showing != null -> PlaylistDetailShown(
                     playlist = showing,
@@ -321,6 +329,7 @@ fun LocalScreen(
                     onPin = { slug, pinned -> scope.launch { playlists.setPinned(slug, pinned) } },
                     onOpen = { openSlug = it.station.slug },
                     onOpenSmart = { openSmart = it.kind },
+                    loading = loading,
                 )
             }
         }
@@ -437,6 +446,7 @@ private fun PlaylistList(
     onPin: (String, Boolean) -> Unit,
     onOpen: (PlaylistStore.Playlist) -> Unit,
     onOpenSmart: (SmartPlaylist) -> Unit,
+    loading: Boolean = false,
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
@@ -461,7 +471,7 @@ private fun PlaylistList(
                 }
             }
             items(smart, key = { it.key }) { sp ->
-                SmartPlaylistRow(sp = sp, onOpen = { onOpenSmart(sp) }, context = context)
+                SmartPlaylistRow(sp = sp, onOpen = { onOpenSmart(sp) }, context = context, loading = loading)
             }
 
             // Search results: apart from matching playlists, surface each
@@ -474,19 +484,7 @@ private fun PlaylistList(
                             onClick = { onPlay(s, searchResults) },
                             verticalPadding = 9.dp,
                             leading = {
-                                Box(
-                                    Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
-                                        .then(if (current?.url == s.url) Modifier.background(p.accent)
-                                              else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        if (current?.url == s.url && playing) CliampIcons.Pause else CliampIcons.PlayRow,
-                                        "play",
-                                        Modifier.size(if (current?.url == s.url && playing) 9.dp else 11.dp),
-                                        tint = if (current?.url == s.url) p.onAccent else p.inkTertiary,
-                                    )
-                                }
+                                SongCover(s = s, current = current, playing = playing)
                             },
                             trailing = {
                                 Icon(
@@ -715,43 +713,68 @@ private fun SmartPlaylistRow(
     sp: SmartPlaylist,
     onOpen: () -> Unit,
     context: android.content.Context,
+    loading: Boolean = false,
 ) {
     val p = LocalPalette.current
+    val scanning = loading && sp.kind == SmartKind.LocalSongs && sp.stations.isEmpty()
+    val pulse = rememberInfiniteTransition(label = "scan")
+    val shimmer by pulse.animateFloat(
+        initialValue = 1f, targetValue = 0.35f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "shimmer",
+    )
     ListRow(
         onClick = onOpen,
         verticalPadding = 9.dp,
         leading = {
             Box(
-                Modifier.size(44.dp).clip(RoundedCornerShape(5.dp))
-                    .border(1.dp, p.accent.copy(alpha = 0.5f), RoundedCornerShape(5.dp)),
+                Modifier.size(44.dp)
+                    .then(
+                        if (scanning)
+                            Modifier.clip(RoundedCornerShape(5.dp)).background(p.inkFaint.copy(alpha = 0.35f * shimmer))
+                        else
+                            Modifier.border(1.dp, p.accent.copy(alpha = 0.5f), RoundedCornerShape(5.dp))
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    when (sp.kind) {
-                        SmartKind.LocalSongs -> CliampIcons.MusicNote
-                        SmartKind.Favorites -> CliampIcons.Star
-                        SmartKind.RecentlyPlayed -> CliampIcons.Clock
-                    },
-                    sp.label,
-                    Modifier.size(16.dp),
-                    tint = p.accent,
-                )
+                if (!scanning) {
+                    Icon(
+                        when (sp.kind) {
+                            SmartKind.LocalSongs -> CliampIcons.MusicNote
+                            SmartKind.Favorites -> CliampIcons.Star
+                            SmartKind.RecentlyPlayed -> CliampIcons.Clock
+                        },
+                        sp.label,
+                        Modifier.size(16.dp),
+                        tint = p.accent,
+                    )
+                }
             }
         },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Mono("${sp.stations.size} items", CliampType.meta, p.inkFaint)
+                if (scanning) {
+                    Box(Modifier.width(52.dp).height(12.dp).clip(RoundedCornerShape(6.dp))
+                        .background(p.inkFaint.copy(alpha = 0.35f * shimmer)))
+                } else {
+                    Mono("${sp.stations.size} items", CliampType.meta, p.inkFaint)
+                }
                 Icon(CliampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary)
             }
         },
     ) {
         Mono(sp.label, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
-        Mono(
-            smartPreview(sp.stations).ifBlank {
-                if (sp.stations.isEmpty()) "nothing here yet" else ""
-            },
-            CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
-        )
+        if (scanning) {
+            Box(Modifier.width(150.dp).height(12.dp).clip(RoundedCornerShape(6.dp))
+                .background(p.inkFaint.copy(alpha = 0.35f * shimmer)))
+        } else {
+            Mono(
+                smartPreview(sp.stations).ifBlank {
+                    if (sp.stations.isEmpty()) "nothing here yet" else ""
+                },
+                CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
+            )
+        }
     }
 }
 
@@ -948,19 +971,7 @@ private fun PlaylistDetailShown(
                     onClick = { onPlay(s, members) },
                     verticalPadding = 9.dp,
                     leading = {
-                        Box(
-                            Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
-                                .then(if (current?.url == s.url) Modifier.background(p.accent)
-                                      else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                if (current?.url == s.url && playing) CliampIcons.Pause else CliampIcons.PlayRow,
-                                null,
-                                Modifier.size(if (current?.url == s.url && playing) 9.dp else 11.dp),
-                                tint = if (current?.url == s.url) p.onAccent else p.inkTertiary,
-                            )
-                        }
+                        SongCover(s = s, current = current, playing = playing)
                     },
                     trailing = {
                         Mono("DROP", CliampType.tabLabel, p.destructiveInk,
@@ -992,6 +1003,7 @@ private fun SmartPlaylistDetail(
     onPlay: (Station, List<Station>) -> Unit,
     onToggleFavorite: (Station) -> Unit,
     favorites: Set<String>,
+    loading: Boolean = false,
 ) {
     val p = LocalPalette.current
     val members = pl.stations
@@ -1001,7 +1013,8 @@ private fun SmartPlaylistDetail(
                 Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
                     Mono(
                         when (pl.kind) {
-                            SmartKind.LocalSongs -> "no songs on the phone yet"
+                            SmartKind.LocalSongs ->
+                                if (loading) "scanning for songs…" else "no songs on the phone yet"
                             SmartKind.Favorites -> "no favourites yet"
                             SmartKind.RecentlyPlayed -> "nothing played recently"
                         },
@@ -1011,24 +1024,12 @@ private fun SmartPlaylistDetail(
             }
         } else {
             item { SectionLabel("${pl.label} — ${members.size}") }
-            items(members, key = { it.url }) { s ->
+            items(members, key = { it.url }, contentType = { "local-song" }) { s ->
                 ListRow(
                     onClick = { onPlay(s, members) },
                     verticalPadding = 9.dp,
                     leading = {
-                        Box(
-                            Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
-                                .then(if (current?.url == s.url) Modifier.background(p.accent)
-                                      else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                if (current?.url == s.url && playing) CliampIcons.Pause else CliampIcons.PlayRow,
-                                null,
-                                Modifier.size(if (current?.url == s.url && playing) 9.dp else 11.dp),
-                                tint = if (current?.url == s.url) p.onAccent else p.inkTertiary,
-                            )
-                        }
+                        SongCover(s = s, current = current, playing = playing)
                     },
                     trailing = {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1053,5 +1054,61 @@ private fun SmartPlaylistDetail(
             }
         }
         item { Spacer(Modifier.height(20.dp)) }
+    }
+}
+
+/**
+ * A song-row's leading thumbnail: real cover art when the file has it, with a
+ * small play/pause badge overlaid when it is the current track.
+ */
+@Composable
+private fun SongCover(s: Station, current: Station?, playing: Boolean) {
+    val p = LocalPalette.current
+    val context = LocalContext.current
+    var art by remember(s.id) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(s.id) {
+        // Wait a beat so a fast scroll (rows flashing through the viewport)
+        // doesn't fire an embedded-art decode for every one of them. If the
+        // row scrolls off in that window this coroutine is cancelled and the
+        // expensive read never happens — the on-view laziness that keeps a
+        // big library light.
+        delay(90)
+        art = (LocalArt.bitmapForSmall(s.cover, context.contentResolver)
+            ?: StationArtSource.bitmapForSmall(s)) // else embedded album art
+            ?.asImageBitmap()
+    }
+    val active = current?.url == s.url
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .then(
+                if (art != null) Modifier.background(p.panel)
+                else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(6.dp))
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (art != null) {
+            Image(art!!, s.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        } else {
+            Icon(CliampIcons.MusicNote, null, Modifier.size(15.dp), tint = p.inkTertiary)
+        }
+        if (active) {
+            Box(
+                Modifier
+                    .align(Alignment.Center)
+                    .size(18.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(p.accent.copy(alpha = 0.92f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (playing) CliampIcons.Pause else CliampIcons.PlayRow,
+                    null,
+                    Modifier.size(9.dp),
+                    tint = p.onAccent,
+                )
+            }
+        }
     }
 }
