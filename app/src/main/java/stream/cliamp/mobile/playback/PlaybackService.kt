@@ -104,6 +104,12 @@ class PlaybackService : MediaSessionService() {
             .setLoadControl(load)
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .setHandleAudioBecomingNoisy(true)
+            // Media3 1.11 per-stream media progression (issue #3122): renderers
+            // for the subsequent playlist item are enabled/primed as the current
+            // item finishes, instead of only at the transition. On the Samsung
+            // A56 this is what collapses the per-track deep-buffer AudioTrack
+            // re-prime that cost ~1.2-1.8s between local songs.
+            .enablePerStreamMediaProgression(true)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
