@@ -36,6 +36,15 @@ data class Station(
             if (country.isNotBlank()) add(country.lowercase())
         }.joinToString(" · ")
 
+    /**
+     * A finite thing with an end, as opposed to a live stream. Decides whether
+     * the queue is handed to the player as a real playlist it can advance
+     * through, and it is source-based rather than duration-based because the
+     * decision has to be made before anything has been probed.
+     */
+    val isTrack: Boolean
+        get() = source == StationSource.Local || source == StationSource.Provider
+
     val tagList: List<String>
         get() = tags.split(',', ' ')
             .map { it.trim().lowercase() }

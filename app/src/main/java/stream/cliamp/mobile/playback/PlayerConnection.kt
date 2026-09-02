@@ -70,6 +70,18 @@ class PlayerConnection(
 
     private fun sync() {
         val c = controller ?: return
+
+        // When Media3 advances a playlist it does so internally, so the index
+        // has to be read back or the screen keeps showing the previous track.
+        val q = _queue.value
+        if (c.mediaItemCount > 1 && q.isNotEmpty()) {
+            val playerIndex = c.currentMediaItemIndex
+            if (playerIndex in q.indices && playerIndex != _queueIndex.value) {
+                _queueIndex.value = playerIndex
+                PlaybackBus.publishStation(q[playerIndex])
+            }
+        }
+
         val qi = _queueIndex.value
         _state.value = PlayerState(
             playing = c.isPlaying,
@@ -107,10 +119,12 @@ class PlayerConnection(
 
         scope.launch {
             val c = controller ?: return@launch
-            // A list of local files is a real playlist: Media3 should play one
-            // after another. Radio lists are only for prev/next stepping, so we
-            // never auto-advance a mixed/stream source.
-            val playlist = queue.takeIf { it.all { s -> s.source == StationSource.Local } && it.size > 1 }
+            // Any queue of finite tracks is a real playlist, so Media3 plays
+            // one after another regardless of where they came from: local files
+            // and provider albums alike. Radio queues stay single-item, because
+            // a live stream has no end to advance from and pre-resolving sixty
+            // station URLs would be waste.
+            val playlist = queue.takeIf { list -> list.all { it.isTrack } && list.size > 1 }
             if (playlist != null) {
                 val items = playlist.map { s ->
                     PlaybackService.mediaItem(context, s, StreamResolver.resolve(s.url))
