@@ -22,10 +22,17 @@ import java.io.ByteArrayOutputStream
  * chip's background and accent colours from the artwork, so with no artwork the
  * notification is grey system chrome, and with this it picks up the plate's.
  * Which is why the plate is drawn in oxide and not in the palette the user
- * happens to have chosen - the media chip is the app seen from outside, so it
- * matches the launcher icon and the notification tint rather than the theme.
- * Setting a colour on the notification is not enough on its own: One UI reads
- * the artwork and ignores it.
+ * happens to have chosen - a station with no art of its own is the app seen
+ * from outside, so it matches the launcher icon rather than the theme. Setting
+ * a colour on the notification is not enough on its own: One UI reads the
+ * artwork and ignores it.
+ *
+ * Anything that has real cover art overrides all of that and fills the square
+ * edge to edge, so the chip takes the cover's own colours. Two shapes of art
+ * arrive here and they cannot be treated alike: a podcast, album or local
+ * track carries a square cover that should be cropped to fill, while a radio
+ * station's branding is an og:image, typically a 1200x630 wordmark that a
+ * centre crop would guillotine, so that stays letterboxed on the plate.
  */
 object StationArtwork {
 
@@ -40,12 +47,24 @@ object StationArtwork {
     }
 
     /**
-     * Slow path: the station's own branding letterboxed onto the plate. The
-     * logo is contained rather than cropped - most og:images are wide, and a
-     * centre crop guillotines the wordmark.
+     * Slow path: real art, once it has arrived over the network. A square cover
+     * fills the square; a station's wide branding is letterboxed onto the plate.
      */
     fun withArt(context: Context, station: Station, art: Bitmap): ByteArray =
         render(context, station, art)
+
+    /**
+     * Whether [station]'s art is a square cover rather than a wide wordmark.
+     *
+     * This is the same set of sources as [Station.isTrack], and deliberately
+     * not that property: they coincide today because everything finite happens
+     * to ship square artwork, but one is about how the queue advances and this
+     * is about how a bitmap is cropped.
+     */
+    private fun Station.hasSquareCover(): Boolean =
+        source == StationSource.Local ||
+            source == StationSource.Provider ||
+            source == StationSource.Podcast
 
     private inline fun <K, V> LinkedHashMap<K, V>.getOrPut(key: K, produce: () -> V): V =
         get(key) ?: produce().also { put(key, it) }
@@ -75,20 +94,37 @@ object StationArtwork {
         c.restore()
 
         if (art != null) {
-            val inset = 34f
-            val box = SIZE - inset * 2
-            val k = minOf(box / art.width, box / art.height)
-            val w = art.width * k
-            val h = art.height * k
-            val dst = android.graphics.RectF(
-                (SIZE - w) / 2f, (SIZE - h) / 2f,
-                (SIZE + w) / 2f, (SIZE + h) / 2f,
-            )
-            c.drawBitmap(art, null, dst, Paint(Paint.FILTER_BITMAP_FLAG))
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 2f
-            paint.color = Color.parseColor(FRAME)
-            c.drawRect(1f, 1f, SIZE - 1f, SIZE - 1f, paint)
+            if (station.hasSquareCover()) {
+                // Edge to edge, centre-cropped: nothing of the plate survives,
+                // which is the point - the chip should read as the cover.
+                val k = maxOf(SIZE / art.width.toFloat(), SIZE / art.height.toFloat())
+                val w = art.width * k
+                val h = art.height * k
+                c.drawBitmap(
+                    art,
+                    null,
+                    android.graphics.RectF(
+                        (SIZE - w) / 2f, (SIZE - h) / 2f,
+                        (SIZE + w) / 2f, (SIZE + h) / 2f,
+                    ),
+                    Paint(Paint.FILTER_BITMAP_FLAG),
+                )
+            } else {
+                val inset = 34f
+                val box = SIZE - inset * 2
+                val k = minOf(box / art.width, box / art.height)
+                val w = art.width * k
+                val h = art.height * k
+                val dst = android.graphics.RectF(
+                    (SIZE - w) / 2f, (SIZE - h) / 2f,
+                    (SIZE + w) / 2f, (SIZE + h) / 2f,
+                )
+                c.drawBitmap(art, null, dst, Paint(Paint.FILTER_BITMAP_FLAG))
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 2f
+                paint.color = Color.parseColor(FRAME)
+                c.drawRect(1f, 1f, SIZE - 1f, SIZE - 1f, paint)
+            }
             return ByteArrayOutputStream().use { out ->
                 bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
                 bmp.recycle()

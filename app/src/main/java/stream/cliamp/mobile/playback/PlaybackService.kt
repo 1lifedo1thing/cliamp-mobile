@@ -235,11 +235,20 @@ class PlaybackService : MediaSessionService() {
      * tap and the audio. The item starts with the locally drawn plate and this
      * swaps in the real thing whenever it turns up, reusing the same
      * replaceMediaItem trick the ICY title uses.
+     *
+     * A known cover URL is preferred over discovery. Podcast episodes and
+     * provider tracks arrive with real artwork already in [Station.cover], and
+     * bitmapFor would never find it: that path scrapes the homepage for an
+     * og:image and then falls back to the favicon, which is the right order for
+     * radio and simply misses a field it does not read.
      */
     private fun loadArtwork(station: Station) {
         artworkJob?.cancel()
         artworkJob = scope.launch {
-            val art = StationArtSource.bitmapFor(station) ?: return@launch
+            val art = station.cover.takeIf { it.startsWith("http") }
+                ?.let { StationArtSource.bitmapForUrl(it) }
+                ?: StationArtSource.bitmapFor(station)
+                ?: return@launch
             if (PlaybackBus.station.value?.url != station.url) return@launch
             val item = player.currentMediaItem ?: return@launch
             val bytes = StationArtwork.withArt(this@PlaybackService, station, art)
