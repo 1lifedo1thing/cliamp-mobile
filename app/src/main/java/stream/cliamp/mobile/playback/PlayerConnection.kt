@@ -577,14 +577,62 @@ class PlayerConnection(
         }
     }
 
-    /** Fires the pending target now (no timer). */
+    /**
+     * Fires the pending target now (no timer). When the target is already one
+     * of the items loaded in Media3's current window we switch to it in place
+     * with seekTo, which picks an already-prepared item - no setMediaItems, no
+     * re-prepare, no decode gap - so prev / next are effectively instant. Only
+     * when the target lies outside the window (or nothing is loaded) do we fall
+     * back to [play], which rebuilds the queue.
+     */
     private fun applyNavigation() {
         val target = _navPending ?: return
         _navPending = null
         val src = _source.ifEmpty { _fallbackSource }
         if (src.isEmpty()) return
         val abs = target.coerceIn(0, src.lastIndex)
-        play(src[abs], src, preserveOrder = true)
+        val station = src[abs]
+
+        // Publish and persist the target exactly as play() would, so the UI and
+        // the widget agree the instant the song is tapped - even before Media3
+        // has switched over.
+        PlaybackBus.publishStation(station)
+        PlaybackBus.publishSource(src)
+        PlaybackBus.publishError(null)
+        PlaybackBus.publishFormat(StreamFormat())
+        val prefs = (context.applicationContext as CliampApp).prefs
+        scope.launch {
+            prefs.setLastStation(station)
+            prefs.pushHistory(station)
+            CliampWidgetReceiver.refresh(context.applicationContext)
+        }
+
+        val q = _queue.value
+        val c = controller
+        val inWindow = c != null && q.isNotEmpty() && abs >= windowBase && abs < windowBase + q.size
+        if (inWindow) {
+            val windowIndex = (abs - windowBase).coerceIn(0, q.lastIndex)
+            _queueIndex.value = windowIndex
+            _navJob?.cancel()
+            val job = scope.launch(Dispatchers.Main) {
+                val player = controller ?: return@launch
+                swapping = true
+                try {
+                    ensureActive()
+                    val resume = resumeAt(station)
+                    ensureActive()
+                    player.seekTo(windowIndex.coerceIn(0, player.mediaItemCount - 1), resume)
+                    player.play()
+                } finally {
+                    swapping = false
+                }
+                ensureActive()
+                sync()
+            }
+            _navJob = job
+        } else {
+            play(station, src, preserveOrder = true)
+        }
     }
 
     /**
