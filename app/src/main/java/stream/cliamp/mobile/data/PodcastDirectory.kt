@@ -80,11 +80,13 @@ object PodcastDirectory {
      * them with [lookup], a page at a time, since a chart carries no feeds.
      */
     suspend fun chartIds(country: String = "us", limit: Int = 100): List<String> =
-        runCatching {
-            Http.json.decodeFromString<ChartsResponse>(
-                Http.text("$CHARTS/${country.lowercase()}/podcasts/top/$limit/podcasts.json")
-            ).feed.results.map { it.id }.filter { it.isNotBlank() }
-        }.getOrDefault(emptyList())
+        // Deliberately not caught here. Swallowing it returned an empty list,
+        // which the repository could not tell from a chart that genuinely had
+        // nothing in it, so a failed fetch rendered as "end of top shows" - an
+        // empty directory with no hint that anything had gone wrong.
+        Http.json.decodeFromString<ChartsResponse>(
+            Http.text("$CHARTS/${country.lowercase()}/podcasts/top/$limit/podcasts.json")
+        ).feed.results.map { it.id }.filter { it.isNotBlank() }
 
     /** Resolve Apple ids to full shows, feed URL included, in one request. */
     suspend fun lookup(ids: List<String>): List<PodcastShow> {
