@@ -118,12 +118,17 @@ class PlayerConnection(
     private var swapping = false
 
     /**
-     * Serialises rapid transport taps. Each play/step that touches Media3 is
-     * launched on this job and cancels its predecessor, so hammering next/prev
-     * only ever applies the LAST tap - the earlier ones never get a chance to
-     * re-queue all the songs you skipped past.
+     * Coalesces rapid transport taps. A step computes an absolute target in
+     * [_source] and stores it in [_navPending]; [_pollNavigation] restarts a
+     * short debounce timer on every tap, so a burst of next/prev collapses into
+     * ONE navigation that lands exactly on the final tapped song - the songs in
+     * between are never (re)played. Playback isn't restarted per intermediate
+     * step either, which is what kept resetting the play state.
      */
     private var _navJob: Job? = null
+    private var _navPending: Int? = null
+
+    private val NAV_DEBOUNCE_MS = 180L
 
     /** Queues larger than this are played lazily from a window, not in full. */
     private val WINDOW = 60
@@ -315,7 +320,7 @@ class PlayerConnection(
         // to the looper first, so that already-published new title and plate
         // draw a frame before the blocking setMediaItems/prepare work runs.
         _navJob?.cancel()
-        _navJob = scope.launch(Dispatchers.Main) {
+        val job = scope.launch(Dispatchers.Main) {
             val c = controller ?: return@launch
             // Any queue of finite tracks is a real playlist, so Media3 plays one
             // after another regardless of where they came from: local files and
@@ -345,6 +350,7 @@ class PlayerConnection(
             ensureActive()
             sync()
         }
+        _navJob = job
     }
 
     /**
@@ -527,18 +533,22 @@ class PlayerConnection(
     fun next() = step(+1)
     fun prev() = step(-1)
 
+    /**
+     * Moves prev/next by [delta]. Each tap targets exactly one song forward or
+     * back from the currently committed track. Rapid taps coalesce on a single
+     * pending absolute target so parallel Media3 re-queues can't race each other
+     * and skip past the song you actually tapped to.
+     */
     private fun step(delta: Int) {
-        // Navigate within the full source list (not the bounded [_queue]
-        // window), then re-slice a fresh queue around the chosen track, so prev
-        // / next keep walking the whole library and never stray into another
-        // list that may have been played before. On a fresh launch nothing has
-        // played yet, so fall back to the recent-history list the root supplied;
-        // that lets next/prev work with the song the mini player is showing.
         val src = _source.ifEmpty { _fallbackSource }
         if (src.isEmpty()) return
-        val here = windowBase + _queueIndex.value
-        val abs = if (_source.isEmpty()) {
-            // Nothing loaded: anchor on the shown (last-played) station, if any.
+        // Base prev/next on the latest pending target (if any) rather than the
+        // committed index, so rapid taps stack onto one another instead of all
+        // collapsing onto the same song. Either way the value is an absolute
+        // index into [_source].
+        val pending = _navPending
+        val here = pending ?: (windowBase + _queueIndex.value)
+        val abs = if (_source.isEmpty() && pending == null) {
             val shown = PlaybackBus.station.value?.let { s ->
                 src.indexOfFirst { it.url == s.url }
             } ?: -1
@@ -546,10 +556,31 @@ class PlayerConnection(
         } else {
             (here + delta).coerceIn(0, src.lastIndex)
         }
-        if (abs == here && _source.isNotEmpty()) return
-        // preserveOrder: step rides the already-shuffled list instead of
-        // re-randomising (and restarting the audio) on every prev/next.
-        play(src[abs], src, preserveOrder = true)
+        if (abs == here && _source.isNotEmpty() && pending == null) return
+        _navPending = abs
+        pollNavigation()
+    }
+
+    /**
+     * Debounced coalescing for prev/next. Each tap restarts a short timer; when
+     * it fires (i.e. the burst has settled) we navigate ONCE to the last tapped
+     * target, so no intermediate song is ever queued or played and playback is
+     * not restarted per tap.
+     */
+    private fun pollNavigation() {
+        _navJob?.cancel()
+        _navJob = scope.launch(Dispatchers.Main) {
+            delay(NAV_DEBOUNCE_MS)
+            val target = _navPending ?: return@launch
+            _navPending = null
+            val src = _source.ifEmpty { _fallbackSource }
+            if (src.isEmpty()) return@launch
+            val abs = target.coerceIn(0, src.lastIndex)
+            // The debounce timer is done; clear the job reference so play()'s
+            // own cancel doesn't hit it, then navigate to the final song.
+            if (_navJob === coroutineContext[Job]) _navJob = null
+            play(src[abs], src, preserveOrder = true)
+        }
     }
 
     /**
