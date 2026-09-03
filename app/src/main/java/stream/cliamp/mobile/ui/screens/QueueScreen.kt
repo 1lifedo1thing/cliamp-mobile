@@ -91,7 +91,7 @@ fun QueueScreen(
             val upNext = queue.filterIndexed { i, s -> activeIndex < 0 || i != activeIndex }
             if (upNext.isNotEmpty()) {
                 item { SectionLabel("up next — ${upNext.size}") }
-                itemsIndexed(upNext, key = { _, s -> s.url }) { _, s ->
+                itemsIndexed(upNext.take(200), key = { _, s -> s.url }) { _, s ->
                     val idx = queue.indexOfFirst { it.url == s.url }
                     QueueRow(
                         s = s,
@@ -169,7 +169,7 @@ private fun QueueRow(
                 if (isNow) {
                     Icon(CliampIcons.Pause, null, Modifier.size(9.dp), tint = p.onAccent)
                 } else {
-                    Mono("%02d".format((idx + 1).coerceAtMost(99)), CliampType.meta, p.inkFaint)
+                    Icon(CliampIcons.PlayRow, null, Modifier.size(11.dp), tint = p.inkTertiary)
                 }
             }
         },
