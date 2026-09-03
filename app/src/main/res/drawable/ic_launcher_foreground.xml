@@ -2,13 +2,23 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <!-- 1.22x, not the full 1.5x safe zone: at 1.5 the widest bar's corners sit
-         exactly on the circular mask and the mark reads as crammed. -->
-    <group android:translateX="24.720" android:translateY="24.720">
-        <group android:scaleX="1.22" android:scaleY="1.22">
-            <path android:fillColor="#061308" android:pathData="M6,8h36v7h-36z" />
-            <path android:fillColor="#061308" android:pathData="M6,20.5h22v7h-22z" />
-            <path android:fillColor="#061308" android:pathData="M6,33h30v7h-30z" />
+    <!-- Icon 103h, mark "h": six bands, peak left of centre, drawn on a 48
+         grid at 5/2 pitch. Bands are square-ended and the pitch is fixed - only
+         the heights carry the envelope.
+
+         1.4x, not the full 1.5x safe zone. The tall band's tip is the furthest
+         point from centre at 20.6 of 48, so 1.5 puts it at r=30.9 against the
+         66dp mask's r=33 - inside, but close enough to read as touching. 1.4
+         reaches 28.9 and leaves the tip visible clearance on a circular mask.
+         (108 - 48 * 1.4) / 2 = 20.4 centres it. -->
+    <group android:translateX="20.4" android:translateY="20.4">
+        <group android:scaleX="1.4" android:scaleY="1.4">
+            <path android:fillColor="#F8E4D4" android:pathData="M5,20h5v8h-5z" />
+            <path android:fillColor="#F8E4D4" android:pathData="M12,12h5v24h-5z" />
+            <path android:fillColor="#F8E4D4" android:pathData="M19,4h5v40h-5z" />
+            <path android:fillColor="#F8E4D4" android:pathData="M26,14h5v20h-5z" />
+            <path android:fillColor="#F8E4D4" android:pathData="M33,18h5v12h-5z" />
+            <path android:fillColor="#F8E4D4" android:pathData="M40,22h3v4h-3z" />
         </group>
     </group>
 </vector>

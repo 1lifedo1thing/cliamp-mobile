@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp"
-    android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="#FFFFFF" android:pathData="M3.0,4.0h18.0v3.5h-18.0z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M3.0,10.25h11.0v3.5h-11.0z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M3.0,16.5h15.0v3.5h-15.0z" />
+    android:viewportWidth="48" android:viewportHeight="48">
+    <!-- Icon 103h drops bands as it shrinks rather than thinning them: the
+         canvas specifies six at 120px and up, five at 60-87, four at 40, three
+         at 29 and two at 20. A status bar icon is 24dp, so this is the
+         three-band step at 10/4 pitch, not the six-band mark scaled down. -->
+    <path android:fillColor="#FFFFFF" android:pathData="M5,22h10v12h-10z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M19,12h10v28h-10z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M33,18h10v18h-10z" />
 </vector>

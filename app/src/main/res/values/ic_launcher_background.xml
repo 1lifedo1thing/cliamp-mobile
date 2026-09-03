@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#5EE08A</color>
+    <!-- Icon 103h's adaptive tile: oklch(0.40 0.13 30), which is the same
+         #7F2117 the oxide theme is built on. -->
+    <color name="ic_launcher_background">#7F2117</color>
 </resources>
