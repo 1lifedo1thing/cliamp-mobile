@@ -49,6 +49,7 @@ import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.MechKey
 import stream.cliamp.mobile.ui.components.MeterSize
+import stream.cliamp.mobile.ui.components.MarqueeLabel
 import stream.cliamp.mobile.ui.components.Scrubber
 import stream.cliamp.mobile.ui.components.StreamingRule
 import stream.cliamp.mobile.ui.components.StripedArt
@@ -129,6 +130,16 @@ fun NowPlayingScreen(
                 .padding(horizontal = Gutter),
             verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterVertically),
         ) {
+            // The art plate and the text block below it share a flexed block
+            // that absorbs however tall a long station name or stream title
+            // grows, so the meter and the transport beneath stay pinned and
+            // never shrink or shift when the names change length.
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterVertically),
+            ) {
             StationArt(
                 station = shownStation,
                 modifier = Modifier
@@ -185,12 +196,11 @@ fun NowPlayingScreen(
                         tint = if (isFav) p.accent else p.inkTertiary,
                     ) { shownStation?.let { s -> scope.launch { prefs.toggleFavorite(s) } } }
                 }
-                Mono(
+                MarqueeLabel(
                     shownStation?.name ?: "pick a station",
                     CliampType.trackTitle,
                     p.ink,
                     modifier = Modifier.consumeAllGestures(),
-                    maxLines = 2,
                 )
                 Mono(
                     streamTitle.ifBlank { error ?: shownStation?.tagList?.take(3)?.joinToString(" · ").orEmpty() },
@@ -222,6 +232,7 @@ fun NowPlayingScreen(
                     modifier = Modifier.consumeAllGestures(),
                     maxLines = 1,
                 )
+            }
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {

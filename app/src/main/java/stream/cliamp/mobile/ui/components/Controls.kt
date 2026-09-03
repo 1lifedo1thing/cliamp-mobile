@@ -1,8 +1,14 @@
 package stream.cliamp.mobile.ui.components
 
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +32,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -37,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -45,10 +53,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalHapticsEnabled
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -210,6 +221,28 @@ fun Chip(
             .padding(horizontal = 11.dp, vertical = 7.dp),
     ) {
         Mono(label.uppercase(), CliampType.chip, if (selected) onFill else p.inkTertiary, maxLines = 1)
+    }
+}
+
+/**
+ * The shared back control: a rounded chip with a left arrow, matching the
+ * Now Playing collapse chip so every screen's back affordance looks the same.
+ */
+@Composable
+fun BackChip(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "back",
+) {
+    val p = LocalPalette.current
+    Box(
+        modifier
+            .clip(RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(CliampIcons.Left, label, Modifier.size(width = 16.dp, height = 16.dp), tint = p.ink)
     }
 }
 
@@ -423,5 +456,57 @@ fun StreamingRule(
         Box(Modifier.weight(1f).height(4.dp).background(rule))
         Mono(label.uppercase(), CliampType.chip, if (dim) p.inkFaint else color)
         Box(Modifier.weight(1f).height(4.dp).background(rule))
+    }
+}
+
+/**
+ * A single-line label that never wraps: when the text is wider than the space
+ * it has, it scrolls in place from the start through to the end (and loops).
+ * Short names simply sit still. Keeps a long station name on one row instead of
+ * wrapping down and shifting the layout.
+ */
+@Composable
+fun MarqueeLabel(
+    text: String,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    var boxWidth by remember { mutableFloatStateOf(0f) }
+    var textWidth by remember { mutableFloatStateOf(0f) }
+    // Overflow means the text is wider than the space it sits in.
+    val overflow = textWidth > boxWidth && boxWidth > 0f
+
+    val transition = rememberInfiniteTransition(label = "marquee")
+    val travel = (textWidth + 24f).coerceAtLeast(1f)
+    val offsetX by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = -travel,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = (travel * 10).toInt().coerceAtLeast(1200), easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "marqueeScroll",
+    )
+    // Only run the animation when the text actually overflows; otherwise pin to 0.
+    val x = if (overflow) offsetX else 0f
+
+    Box(
+        modifier
+            .fillMaxWidth()
+            .onSizeChanged { boxWidth = it.width.toFloat() }
+            .clipToBounds(),
+    ) {
+        Text(
+            text = text,
+            style = style,
+            color = color,
+            maxLines = 1,
+            onTextLayout = { r: TextLayoutResult ->
+                textWidth = r.size.width.toFloat()
+            },
+            modifier = Modifier.offset(x = with(density) { x.toDp() }),
+        )
     }
 }
