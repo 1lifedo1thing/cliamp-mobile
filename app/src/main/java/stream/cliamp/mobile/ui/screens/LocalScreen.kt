@@ -40,6 +40,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -67,7 +68,6 @@ import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampTextField
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
-import stream.cliamp.mobile.ui.components.IconLabelButton
 import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.OverflowButton
 import stream.cliamp.mobile.ui.components.OverflowItem
@@ -147,9 +147,14 @@ fun LocalScreen(
         Manifest.permission.READ_MEDIA_AUDIO
     else Manifest.permission.READ_EXTERNAL_STORAGE
     var haveAudio by remember { mutableStateOf(checkAudio(context, audioPerm)) }
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { ok -> haveAudio = ok; if (ok) localLibrary.refresh() }
+
+    // The media permission is requested once at app launch. Recheck it whenever
+    // this screen resumes, so granting it in system Settings (without another
+    // in-app dialog) is picked up here.
+    LifecycleResumeEffect(Unit) {
+        haveAudio = checkAudio(context, audioPerm)
+        onPauseOrDispose { }
+    }
 
     val coverLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -242,7 +247,7 @@ fun LocalScreen(
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
-                !haveAudio -> PermissionPrompt(onGrant = { permissionLauncher.launch(audioPerm) })
+                !haveAudio -> PermissionNote()
                 libError != null && songs.isEmpty() -> CenterNote(libError!!, p.destructiveInk)
                 showProviders -> ProvidersView(
                     providers = providers,
@@ -329,15 +334,13 @@ private fun CenterNote(text: String, color: androidx.compose.ui.graphics.Color) 
 }
 
 @Composable
-private fun PermissionPrompt(onGrant: () -> Unit) {
+private fun PermissionNote() {
     val p = LocalPalette.current
     Column(Modifier.fillMaxWidth().padding(Gutter)) {
         Spacer(Modifier.height(12.dp))
         Mono("this app needs to read your audio files to show them here.", CliampType.rowPrimary, p.ink)
         Spacer(Modifier.height(4.dp))
-        Mono("nothing leaves the phone. no import, no upload, no sync.", CliampType.rowSecondary, p.inkTertiary)
-        Spacer(Modifier.height(14.dp))
-        IconLabelButton(CliampIcons.PlayRow, "grant access", onClick = onGrant)
+        Mono("grant media access in the app's settings to see your local songs.", CliampType.rowSecondary, p.inkTertiary)
         Spacer(Modifier.height(12.dp))
         HairlineDivider()
     }
