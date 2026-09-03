@@ -1,0 +1,160 @@
+package stream.cliamp.mobile.data.db
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Transaction
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface StationDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(stations: List<StationEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(station: StationEntity)
+}
+
+@Dao
+interface FavoriteDao {
+    @Query("""
+        SELECT s.* FROM stations s
+        JOIN favorites f ON f.url = s.url
+        ORDER BY f.position
+    """)
+    fun all(): Flow<List<StationEntity>>
+
+    /** An indexed lookup, where the JSON list meant a linear scan per row. */
+    @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE url = :url)")
+    suspend fun contains(url: String): Boolean
+
+    @Query("SELECT COALESCE(MIN(position), 0) - 1 FROM favorites")
+    suspend fun nextTopPosition(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun add(row: FavoriteEntity)
+
+    @Query("DELETE FROM favorites WHERE url = :url")
+    suspend fun remove(url: String)
+}
+
+@Dao
+interface HistoryDao {
+    @Query("""
+        SELECT s.* FROM stations s
+        JOIN history h ON h.url = s.url
+        ORDER BY h.playedAt DESC
+        LIMIT :limit
+    """)
+    fun recent(limit: Int = 60): Flow<List<StationEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun touch(row: HistoryEntity)
+
+    /** Trimming is a query, not a list rebuilt and rewritten in full. */
+    @Query("DELETE FROM history WHERE url NOT IN (SELECT url FROM history ORDER BY playedAt DESC LIMIT :keep)")
+    suspend fun trim(keep: Int = 60)
+
+    @Query("DELETE FROM history")
+    suspend fun clear()
+}
+
+@Dao
+interface CustomStationDao {
+    @Query("SELECT s.* FROM stations s JOIN custom_stations c ON c.url = s.url ORDER BY c.position")
+    fun all(): Flow<List<StationEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun add(row: CustomStationEntity)
+
+    @Query("DELETE FROM custom_stations WHERE url = :url")
+    suspend fun remove(url: String)
+
+    @Query("SELECT COALESCE(MIN(position), 0) - 1 FROM custom_stations")
+    suspend fun nextTopPosition(): Int
+}
+
+@Dao
+interface PlaylistDao {
+    @Query("SELECT * FROM playlists ORDER BY position, name")
+    fun playlists(): Flow<List<PlaylistEntity>>
+
+    @Query("SELECT * FROM playlist_members ORDER BY slug, position")
+    fun members(): Flow<List<PlaylistMemberEntity>>
+
+    @Query("SELECT * FROM playlists WHERE slug = :slug")
+    suspend fun find(slug: String): PlaylistEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(playlist: PlaylistEntity)
+
+    @Query("DELETE FROM playlists WHERE slug = :slug")
+    suspend fun delete(slug: String)
+
+    @Query("UPDATE playlists SET name = :name WHERE slug = :slug")
+    suspend fun rename(slug: String, name: String)
+
+    @Query("UPDATE playlists SET cover = :cover WHERE slug = :slug")
+    suspend fun setCover(slug: String, cover: String)
+
+    @Query("UPDATE playlists SET pinned = :pinned WHERE slug = :slug")
+    suspend fun setPinned(slug: String, pinned: Boolean)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM playlist_members WHERE slug = :slug AND songId = :songId)")
+    suspend fun hasSong(slug: String, songId: String): Boolean
+
+    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_members WHERE slug = :slug")
+    suspend fun nextMemberPosition(slug: String): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun addMember(row: PlaylistMemberEntity)
+
+    @Query("DELETE FROM playlist_members WHERE slug = :slug AND songId = :songId")
+    suspend fun removeMember(slug: String, songId: String)
+
+    @Query("DELETE FROM playlist_members WHERE slug = :slug")
+    suspend fun clearMembers(slug: String)
+
+    @Transaction
+    suspend fun replaceMembers(slug: String, songIds: List<String>) {
+        clearMembers(slug)
+        songIds.forEachIndexed { i, id -> addMember(PlaylistMemberEntity(slug, id, i)) }
+    }
+}
+
+@Dao
+interface LocalSongDao {
+    @Query("SELECT * FROM local_songs ORDER BY sortKey")
+    fun all(): Flow<List<LocalSongEntity>>
+
+    @Query("SELECT * FROM local_songs ORDER BY sortKey")
+    suspend fun read(): List<LocalSongEntity>
+
+    @Transaction
+    suspend fun replaceAll(rows: List<LocalSongEntity>) {
+        clear()
+        rows.chunked(400).forEach { upsert(it) }
+    }
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(rows: List<LocalSongEntity>)
+
+    @Query("DELETE FROM local_songs")
+    suspend fun clear()
+}
+
+@Dao
+interface ProviderDao {
+    @Query("SELECT * FROM providers ORDER BY label")
+    fun all(): Flow<List<ProviderEntity>>
+
+    @Query("SELECT * FROM providers ORDER BY label")
+    suspend fun read(): List<ProviderEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(row: ProviderEntity)
+
+    @Query("DELETE FROM providers WHERE id = :id")
+    suspend fun remove(id: String)
+}

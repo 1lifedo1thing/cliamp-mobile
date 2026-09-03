@@ -12,12 +12,27 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import stream.cliamp.mobile.data.db.CliampDatabase
+import stream.cliamp.mobile.data.db.CustomStationEntity
+import stream.cliamp.mobile.data.db.FavoriteEntity
+import stream.cliamp.mobile.data.db.HistoryEntity
+import stream.cliamp.mobile.data.db.toEntity
 import stream.cliamp.mobile.net.Http
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore("cliamp")
+private val Context.settingsStore: DataStore<Preferences> by preferencesDataStore("cliamp")
 
-/** Everything the settings screen writes, plus favourites and history blobs. */
+/**
+ * Settings only.
+ *
+ * The scalars stay here because that is what a preferences store is good at:
+ * a dozen values, read as flows, updated atomically. The collections that used
+ * to live alongside them as JSON blobs are in SQLite now, because DataStore
+ * has no partial write: adding one favourite rewrote the whole file, and a
+ * track change did that four times over.
+ */
 class Prefs(private val context: Context) {
+
+    private val db by lazy { CliampDatabase.get(context) }
 
     private object K {
         val palette = stringPreferencesKey("palette")           // dark | light | system
@@ -38,33 +53,36 @@ class Prefs(private val context: Context) {
         val wTrack = stringPreferencesKey("w_track")
     }
 
-    val palette: Flow<String> = context.dataStore.data.map { it[K.palette] ?: "dark" }
-    val haptics: Flow<Boolean> = context.dataStore.data.map { it[K.haptics] ?: true }
-    val visualizer: Flow<String> = context.dataStore.data.map { it[K.visualizer] ?: "spectrum" }
-    val cellular: Flow<Boolean> = context.dataStore.data.map { it[K.cellular] ?: true }
-    val bufferSeconds: Flow<Int> = context.dataStore.data.map { it[K.bufferSeconds] ?: 30 }
-    val eqEnabled: Flow<Boolean> = context.dataStore.data.map { it[K.eqEnabled] ?: false }
-    val eqPreset: Flow<String> = context.dataStore.data.map { it[K.eqPreset] ?: "flat" }
-    val autoResume: Flow<Boolean> = context.dataStore.data.map { it[K.autoResume] ?: false }
-    val volume: Flow<Float> = context.dataStore.data.map { it[K.volume] ?: 1f }
+    val palette: Flow<String> = context.settingsStore.data.map { it[K.palette] ?: "dark" }
+    val haptics: Flow<Boolean> = context.settingsStore.data.map { it[K.haptics] ?: true }
+    val visualizer: Flow<String> = context.settingsStore.data.map { it[K.visualizer] ?: "spectrum" }
+    val cellular: Flow<Boolean> = context.settingsStore.data.map { it[K.cellular] ?: true }
+    val bufferSeconds: Flow<Int> = context.settingsStore.data.map { it[K.bufferSeconds] ?: 30 }
+    val eqEnabled: Flow<Boolean> = context.settingsStore.data.map { it[K.eqEnabled] ?: false }
+    val eqPreset: Flow<String> = context.settingsStore.data.map { it[K.eqPreset] ?: "flat" }
+    val autoResume: Flow<Boolean> = context.settingsStore.data.map { it[K.autoResume] ?: false }
+    val volume: Flow<Float> = context.settingsStore.data.map { it[K.volume] ?: 1f }
 
-    val eqBands: Flow<List<Float>> = context.dataStore.data.map { p ->
+    val eqBands: Flow<List<Float>> = context.settingsStore.data.map { p ->
         p[K.eqBands]?.let { raw -> runCatching { Http.json.decodeFromString<List<Float>>(raw) }.getOrNull() }
             ?: List(7) { 0f }
     }
 
-    val favorites: Flow<List<Station>> = context.dataStore.data.map { decodeStations(it[K.favorites]) }
+    val favorites: Flow<List<Station>> =
+        db.favorites().all().map { rows -> rows.map { it.toStation() } }
 
     /**
      * The widget can be rendered long after the app process died, so anything
      * it draws has to survive on disk - the in-memory PlaybackBus is no use
      * there.
      */
-    val widgetPlaying: Flow<Boolean> = context.dataStore.data.map { it[K.wPlaying] ?: false }
-    val widgetTrack: Flow<String> = context.dataStore.data.map { it[K.wTrack] ?: "" }
-    val history: Flow<List<Station>> = context.dataStore.data.map { decodeStations(it[K.history]) }
-    val custom: Flow<List<Station>> = context.dataStore.data.map { decodeStations(it[K.custom]) }
-    val lastStation: Flow<Station?> = context.dataStore.data.map { p ->
+    val widgetPlaying: Flow<Boolean> = context.settingsStore.data.map { it[K.wPlaying] ?: false }
+    val widgetTrack: Flow<String> = context.settingsStore.data.map { it[K.wTrack] ?: "" }
+    val history: Flow<List<Station>> =
+        db.history().recent().map { rows -> rows.map { it.toStation() } }
+    val custom: Flow<List<Station>> =
+        db.customStations().all().map { rows -> rows.map { it.toStation() } }
+    val lastStation: Flow<Station?> = context.settingsStore.data.map { p ->
         p[K.lastStation]?.let { raw -> runCatching { Http.json.decodeFromString<Station>(raw) }.getOrNull() }
     }
 
@@ -85,7 +103,7 @@ class Prefs(private val context: Context) {
     suspend fun setWidgetTrack(v: String) = put(K.wTrack, v)
 
     suspend fun readLastStation(): Station? =
-        context.dataStore.data.first()[K.lastStation]
+        context.settingsStore.data.first()[K.lastStation]
             ?.let { runCatching { Http.json.decodeFromString<Station>(it) }.getOrNull() }
 
     suspend fun setEqBands(v: List<Float>) =
@@ -95,49 +113,34 @@ class Prefs(private val context: Context) {
         put(K.lastStation, Http.json.encodeToString(s))
 
     suspend fun toggleFavorite(s: Station): Boolean {
-        var added = false
-        context.dataStore.edit { p ->
-            val list = decodeStations(p[K.favorites]).toMutableList()
-            val i = list.indexOfFirst { it.url == s.url }
-            if (i >= 0) list.removeAt(i) else { list.add(0, s); added = true }
-            p[K.favorites] = Http.json.encodeToString(list)
+        if (db.favorites().contains(s.url)) {
+            db.favorites().remove(s.url)
+            return false
         }
-        return added
+        db.stations().upsert(s.toEntity())
+        db.favorites().add(FavoriteEntity(s.url, db.favorites().nextTopPosition()))
+        return true
     }
 
-    suspend fun removeFavorite(s: Station) {
-        context.dataStore.edit { p ->
-            val list = decodeStations(p[K.favorites]).filterNot { it.url == s.url }
-            p[K.favorites] = Http.json.encodeToString(list)
-        }
-    }
+    suspend fun removeFavorite(s: Station) = db.favorites().remove(s.url)
 
     suspend fun pushHistory(s: Station) {
-        context.dataStore.edit { p ->
-            val list = decodeStations(p[K.history]).filterNot { it.url == s.url }.toMutableList()
-            list.add(0, s)
-            while (list.size > 60) list.removeAt(list.size - 1)
-            p[K.history] = Http.json.encodeToString(list)
-        }
+        db.stations().upsert(s.toEntity())
+        db.history().touch(HistoryEntity(s.url, System.currentTimeMillis()))
+        // trimming is a DELETE with a subquery, not a list rebuilt in full
+        db.history().trim()
     }
 
-    suspend fun clearHistory() = put(K.history, "[]")
+    suspend fun clearHistory() = db.history().clear()
 
     suspend fun addCustom(s: Station) {
-        context.dataStore.edit { p ->
-            val list = decodeStations(p[K.custom]).filterNot { it.url == s.url }.toMutableList()
-            list.add(0, s)
-            p[K.custom] = Http.json.encodeToString(list)
-        }
+        db.stations().upsert(s.toEntity())
+        db.customStations().add(CustomStationEntity(s.url, db.customStations().nextTopPosition()))
     }
 
-    suspend fun removeCustom(s: Station) {
-        context.dataStore.edit { p ->
-            p[K.custom] = Http.json.encodeToString(decodeStations(p[K.custom]).filterNot { it.url == s.url })
-        }
-    }
+    suspend fun removeCustom(s: Station) = db.customStations().remove(s.url)
 
     private suspend fun <T> put(key: Preferences.Key<T>, value: T) {
-        context.dataStore.edit { it[key] = value }
+        context.settingsStore.edit { it[key] = value }
     }
 }

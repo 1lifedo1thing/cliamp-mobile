@@ -44,6 +44,7 @@ class CliampApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Http.init(this)
+
         StationArtSource.init(this)
 
         // Provider stream URLs are signed per request, so they are resolved

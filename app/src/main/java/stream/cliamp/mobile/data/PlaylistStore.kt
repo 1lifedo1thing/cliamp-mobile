@@ -1,15 +1,12 @@
 package stream.cliamp.mobile.data
 
 import android.content.Context
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
-import stream.cliamp.mobile.net.Http
-
-private val Context.playlistDataStore by preferencesDataStore("playlists")
+import stream.cliamp.mobile.data.db.CliampDatabase
+import stream.cliamp.mobile.data.db.PlaylistEntity
+import stream.cliamp.mobile.data.db.PlaylistMemberEntity
 
 /**
  * Persists user playlists. A playlist is a small [Station] (source Local): its
@@ -26,117 +23,75 @@ class PlaylistStore(private val context: Context) {
         val songIds: List<String>,
     )
 
-    private val KMembers = stringPreferencesKey("members")
-    private val KPinned = stringPreferencesKey("pinned")
-    private val KPlaylists = stringPreferencesKey("playlists")
+    private val db by lazy { CliampDatabase.get(context) }
+    private val dao by lazy { db.playlists() }
 
-    val playlists: Flow<List<Playlist>> = context.playlistDataStore.data.map { p ->
-        val stations = p[KPlaylists]?.let {
-            runCatching { Http.json.decodeFromString<List<Station>>(it) }.getOrNull()
-        } ?: emptyList()
-        val members = decodeMembers(p[KMembers])
-        stations.map { s -> Playlist(s, members[s.slug].orEmpty()) }
-    }
+    /**
+     * Rows and their members, joined in memory from two flows.
+     *
+     * This replaced three JSON blobs kept in step by hand: a playlist list, a
+     * slug-to-members map and a pinned set. Deleting a playlist now takes its
+     * members with it by foreign key, which the blobs had to remember to do.
+     */
+    val playlists: Flow<List<Playlist>> =
+        combine(dao.playlists(), dao.members()) { lists, members ->
+            val bySlug = members.groupBy { it.slug }
+            lists.map { pl ->
+                Playlist(
+                    station = pl.toStation(),
+                    songIds = bySlug[pl.slug].orEmpty().sortedBy { it.position }.map { it.songId },
+                )
+            }
+        }
+
+    val pinnedSlugs: Flow<Set<String>> =
+        dao.playlists().map { rows -> rows.filter { it.pinned }.map { it.slug }.toSet() }
 
     suspend fun create(name: String, cover: String = "") {
-        val slug = "pl:${System.nanoTime()}"
-        val station = Station(
-            id = slug,
-            name = name.trim().ifBlank { "new playlist" },
-            url = "cliamp-playlist://$slug",
-            source = StationSource.Local,
-            slug = slug,
-            cover = cover,
-        )
-        editStations { it + station }
+        val clean = name.trim().ifEmpty { return }
+        val slug = slugify(clean)
+        if (dao.find(slug) != null) return
+        dao.upsert(PlaylistEntity(slug = slug, name = clean, cover = cover))
     }
 
     suspend fun rename(slug: String, name: String) {
-        val clean = name.trim()
-        if (clean.isBlank()) return
-        editStations { list -> list.map { if (it.slug == slug) it.copy(name = clean) else it } }
+        val clean = name.trim().ifEmpty { return }
+        dao.rename(slug, clean)
     }
 
-    suspend fun delete(slug: String) {
-        editStations { list -> list.filterNot { it.slug == slug } }
-        context.playlistDataStore.edit { p ->
-            val members = decodeMembers(p[KMembers]).toMutableMap()
-            members.remove(slug)
-            p[KMembers] = Http.json.encodeToString(members)
-            val pinned = p[KPinned]?.let {
-                runCatching { Http.json.decodeFromString<Set<String>>(it) }.getOrNull()
-            } ?: emptySet()
-            p[KPinned] = Http.json.encodeToString(pinned - slug)
-        }
-    }
+    suspend fun delete(slug: String) = dao.delete(slug)
 
-    /** The set of pinned playlist slugs (shown at the top of the PLAYLISTS tab). */
-    val pinnedSlugs: Flow<Set<String>> = context.playlistDataStore.data.map { p ->
-        p[KPinned]?.let {
-            runCatching { Http.json.decodeFromString<Set<String>>(it) }.getOrNull()
-        } ?: emptySet()
-    }
+    suspend fun setPinned(slug: String, pinned: Boolean) = dao.setPinned(slug, pinned)
 
-    /** Pin or unpin a playlist. */
-    suspend fun setPinned(slug: String, pinned: Boolean) {
-        context.playlistDataStore.edit { p ->
-            val cur = p[KPinned]?.let {
-                runCatching { Http.json.decodeFromString<Set<String>>(it) }.getOrNull()
-            } ?: emptySet()
-            val next = if (pinned) cur + slug else cur - slug
-            p[KPinned] = Http.json.encodeToString(next)
-        }
-    }
+    suspend fun setCover(slug: String, cover: String) = dao.setCover(slug, cover)
 
-    suspend fun setCover(slug: String, cover: String) {
-        editStations { list -> list.map { if (it.slug == slug) it.copy(cover = cover) else it } }
-    }
-
-    /** Adds a song; returns false if it was already present. */
     suspend fun addSong(slug: String, songId: String): Boolean {
-        var added = false
-        context.playlistDataStore.edit { p ->
-            val members = decodeMembers(p[KMembers]).toMutableMap()
-            val cur = members[slug].orEmpty()
-            if (songId !in cur) { members[slug] = cur + songId; added = true }
-            p[KMembers] = Http.json.encodeToString(members)
-        }
-        return added
+        if (dao.hasSong(slug, songId)) return false
+        dao.addMember(PlaylistMemberEntity(slug, songId, dao.nextMemberPosition(slug)))
+        return true
     }
 
-    suspend fun removeSong(slug: String, songId: String) {
-        context.playlistDataStore.edit { p ->
-            val members = decodeMembers(p[KMembers]).toMutableMap()
-            members[slug] = members[slug].orEmpty().filterNot { it == songId }
-            p[KMembers] = Http.json.encodeToString(members)
-        }
-    }
+    suspend fun removeSong(slug: String, songId: String) = dao.removeMember(slug, songId)
 
-    /** Reorder in one shot; pass the full wanted order. */
-    suspend fun setOrder(slug: String, songIds: List<String>) {
-        context.playlistDataStore.edit { p ->
-            val members = decodeMembers(p[KMembers]).toMutableMap()
-            members[slug] = songIds
-            p[KMembers] = Http.json.encodeToString(members)
-        }
-    }
+    suspend fun setOrder(slug: String, songIds: List<String>) = dao.replaceMembers(slug, songIds)
 
     /** Resolved, playable songs for a playlist against the current library. */
     fun songsOf(playlist: Playlist, library: List<Station>): List<Station> {
         val byId = library.associateBy { it.id }
         return playlist.songIds.mapNotNull(byId::get)
     }
-
-    private fun decodeMembers(raw: String?): Map<String, List<String>> =
-        raw?.let { runCatching { Http.json.decodeFromString<Map<String, List<String>>>(it) }.getOrNull() }
-            ?: emptyMap()
-
-    private suspend fun editStations(update: (List<Station>) -> List<Station>) {
-        context.playlistDataStore.edit { p ->
-            val cur = p[KPlaylists]?.let {
-                runCatching { Http.json.decodeFromString<List<Station>>(it) }.getOrNull()
-            } ?: emptyList()
-            p[KPlaylists] = Http.json.encodeToString(update(cur))
-        }
-    }
 }
+
+private fun PlaylistEntity.toStation() = Station(
+    id = "playlist:$slug",
+    name = name,
+    url = "cliamp-playlist://$slug",
+    source = StationSource.Custom,
+    slug = slug,
+    cover = cover,
+)
+
+private fun slugify(name: String): String =
+    name.lowercase().map { if (it.isLetterOrDigit()) it else '-' }
+        .joinToString("").trim('-').replace(Regex("-+"), "-")
+        .ifEmpty { "playlist-" + System.currentTimeMillis() }

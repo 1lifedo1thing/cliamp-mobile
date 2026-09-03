@@ -6,6 +6,9 @@ import android.provider.MediaStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import stream.cliamp.mobile.data.db.CliampDatabase
+import stream.cliamp.mobile.data.db.LocalSongEntity
+import kotlinx.coroutines.runBlocking
 import java.io.File
 
 /**
@@ -61,7 +64,7 @@ fun durationLabel(ms: Long): String {
 class LocalLibrary(context: Context) {
 
     private val resolver = context.contentResolver
-    private val cacheFile = File(context.cacheDir, "local_library.tsv")
+    private val dao = CliampDatabase.get(context).localSongs()
 
     private val _songs = MutableStateFlow<List<Station>>(emptyList())
     val songs: StateFlow<List<Station>> = _songs.asStateFlow()
@@ -162,51 +165,49 @@ class LocalLibrary(context: Context) {
 
     // ── disk cache ──────────────────────────────────────────────────────────
 
-    private fun readCache(): List<Station>? {
-        if (!cacheFile.isFile) return null
-        return runCatching {
-            val out = ArrayList<Station>(256)
-            cacheFile.bufferedReader().useLines { lines ->
-                for (line in lines) {
-                    val parts = line.split('\u0001')
-                    if (parts.size < 6) continue
-                    // MediaStore's DATA column percent-encodes paths (spaces ->
-                    // %20), which is what the cache stores; decode before it is
-                    // used as a real filesystem path so nothing is dropped.
-                    val path = Uri.decode(parts[0])
-                    if (!File(path).isFile) continue // dropped since last time
-                    out += LocalSong(
-                        path = path,
-                        title = parts[1],
-                        artist = parts[2],
-                        album = parts[3],
-                        durationMs = parts[4].toLongOrNull() ?: 0L,
-                        uri = Uri.fromFile(File(path)),
-                        cover = parts[5],
+    /**
+     * The warm-launch cache. This was a hand-rolled TSV in cacheDir, which is
+     * what a preferences store being the wrong shape looks like; it is a table
+     * now, so the fuzzy search can query it instead of scanning a parsed list.
+     */
+    private fun readCache(): List<Station>? = runBlocking {
+        runCatching {
+            dao.read()
+                .filter { File(it.path).isFile } // dropped since last scan
+                .map { row ->
+                    LocalSong(
+                        path = row.path,
+                        title = row.title,
+                        artist = row.artist,
+                        album = row.album,
+                        durationMs = row.durationMs,
+                        uri = Uri.fromFile(File(row.path)),
+                        cover = row.cover,
                     ).station
                 }
-            }
-            out
+                .takeIf { it.isNotEmpty() }
         }.getOrNull()
     }
 
     private fun writeCache(songs: List<Station>) {
-        runCatching {
-            cacheFile.bufferedWriter().use { w ->
-                for (s in songs) {
-                    val path = s.url.removePrefix("file://")
-                    w.write(
-                        listOf(
-                            path,
-                            s.name,
-                            s.artist,
-                            s.album,
-                            s.durationMs.toString(),
-                            s.cover,
-                        ).joinToString("\u0001")
-                    )
-                    w.write("\n")
-                }
+        runBlocking {
+            runCatching {
+                dao.replaceAll(
+                    songs.map { s ->
+                        val path = s.url.removePrefix("file://").let(Uri::decode)
+                        LocalSongEntity(
+                            songId = s.id,
+                            path = path,
+                            title = s.name,
+                            artist = s.artist,
+                            album = s.album,
+                            durationMs = s.durationMs,
+                            uri = s.url,
+                            cover = s.cover,
+                            sortKey = s.name.lowercase(),
+                        )
+                    }
+                )
             }
         }
     }
