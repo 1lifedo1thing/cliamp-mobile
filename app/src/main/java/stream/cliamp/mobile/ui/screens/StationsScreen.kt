@@ -1,5 +1,6 @@
 package stream.cliamp.mobile.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,11 +33,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import stream.cliamp.mobile.data.DirectoryQuery
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.data.Station
+import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
@@ -242,25 +247,7 @@ private fun StationRow(
     ListRow(
         onClick = onPlay,
         verticalPadding = 11.dp,
-        leading = {
-            Box(
-                Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .then(
-                        if (active) Modifier.background(p.accent)
-                        else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    if (playing) CliampIcons.Pause else CliampIcons.PlayRow,
-                    null,
-                    Modifier.size(if (playing) 9.dp else 11.dp),
-                    tint = if (active) p.onAccent else p.inkTertiary,
-                )
-            }
-        },
+        leading = { StationThumb(station, active, playing) },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (station.votes > 0) {
@@ -291,6 +278,67 @@ private fun StationRow(
             p.inkTertiary,
             maxLines = 1,
         )
+    }
+}
+
+/**
+ * A station row's leading thumbnail. Loads real cover art through the same
+ * source podcast rows use (scraped og:image / favicon, small decode, LRU
+ * cache) so any station with a cover shows it, and overlays the play / pause
+ * badge when it is the current track. Falls back to just the badge when there
+ * is no art to show.
+ */
+@Composable
+private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
+    val p = LocalPalette.current
+    var art by remember(station.id) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(station.id) {
+        if (station.source == StationSource.Cliamp) return@LaunchedEffect
+        art = StationArtSource.bitmapForSmall(station)?.asImageBitmap()
+    }
+    val bmp = art
+    Box(
+        Modifier
+            .size(34.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .then(
+                if (bmp != null) Modifier.background(p.panel)
+                else Modifier.border(1.dp, if (active) p.accent else p.chipBorder, RoundedCornerShape(4.dp))
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (bmp != null) {
+            Image(
+                bitmap = bmp,
+                contentDescription = station.name,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        }
+        if (active) {
+            Box(
+                Modifier
+                    .align(Alignment.Center)
+                    .size(18.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(p.accent.copy(alpha = 0.92f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (playing) CliampIcons.Pause else CliampIcons.PlayRow,
+                    null,
+                    Modifier.size(9.dp),
+                    tint = p.onAccent,
+                )
+            }
+        } else {
+            Icon(
+                if (playing) CliampIcons.Pause else CliampIcons.PlayRow,
+                null,
+                Modifier.size(if (playing) 9.dp else 11.dp),
+                tint = p.inkTertiary,
+            )
+        }
     }
 }
 
