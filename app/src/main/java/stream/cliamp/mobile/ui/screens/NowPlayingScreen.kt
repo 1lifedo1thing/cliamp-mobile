@@ -139,15 +139,15 @@ fun NowPlayingScreen(
                     // Shuffle, scope and favourite were full-width keys, which
                     // gave three secondary actions the same visual weight as
                     // the transport. They sit up here as small icons instead,
-                    // leaving the keys to prev/play/next alone.
-                    SmallAction(CliampIcons.Shuffle, "shuffle") {
-                        val pool = repository.directory.value.stations
-                            .ifEmpty { repository.cliamp.value }
-                        pool.randomOrNull()?.let { s ->
-                            player.play(s, pool)
-                            repository.reportPlay(s)
-                        }
-                    }
+                    // leaving the keys to prev/play/next alone. Shuffle just
+                    // toggles shuffled playback of the current list; it lights up
+                    // accent-coloured while on.
+                    val shuffled by player.shuffle.collectAsState()
+                    SmallAction(
+                        CliampIcons.Shuffle,
+                        if (shuffled) "stop shuffling" else "shuffle",
+                        tint = if (shuffled) p.accent else p.inkSecondary,
+                    ) { player.toggleShuffle() }
                     SmallAction(CliampIcons.MeterSmall, "scope and equaliser", onClick = onOpenScope)
                     SmallAction(
                         if (isFav) CliampIcons.StarFilled else CliampIcons.Star,

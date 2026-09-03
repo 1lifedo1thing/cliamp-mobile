@@ -50,6 +50,23 @@ class PlayerConnection(
     private var _source: List<Station> = emptyList()
 
     /**
+     * The linear list a play originated from, before any shuffle reordering.
+     * Shuffle reorders a copy of it into [_source]; turning shuffle off restores
+     * [_source] to this so prev / next walk the natural playlist order again.
+     */
+    private var _baseSource: List<Station> = emptyList()
+
+    /** Whether shuffled playback is switched on. */
+    private val _shuffle = MutableStateFlow(false)
+    val shuffle: StateFlow<Boolean> = _shuffle.asStateFlow()
+
+    /**
+     * The (re)shuffled copy of [_baseSource] currently being played so toggling
+     * shuffle off can restore the original order; null when shuffle is off.
+     */
+    private var _shuffledSource: List<Station>? = null
+
+    /**
      * Logical index (into [_source]) of the first item held in [_queue]. When
      * a queue is huge the tapped track plus a small tail are queued instead of
      * the whole thing, so play starts instantly; this offset says where that
@@ -170,24 +187,31 @@ class PlayerConnection(
 
     fun play(station: Station, from: List<Station> = emptyList()) {
         var q = _queue.value
-        val srcIdx = from.indexOfFirst { it.url == station.url }
         if (from.isNotEmpty()) {
+            _baseSource = from
             // Cap the queued list to a bounded window around the tapped track so
             // a huge source (the whole local library) doesn't flood the queue.
-            _source = from
-            windowBase = if (from.size > WINDOW) srcIdx else 0
-            q = sliceAt(from, srcIdx)
+            // The active order is linear, or shuffled if shuffle is on; the
+            // tapped track keeps playing first, so it heads the shuffled list.
+            val order = if (_shuffle.value && from.all { it.isTrack }) shuffledKeepFirst(from, station) else from
+            _source = order
+            val srcIdxO = order.indexOfFirst { it.url == station.url }.coerceAtLeast(0)
+            windowBase = if (order.size > WINDOW) srcIdxO else 0
+            q = sliceAt(order, srcIdxO)
             _queue.value = q
-            _queueIndex.value = (srcIdx - windowBase).coerceIn(0, q.lastIndex.coerceAtLeast(0))
+            _queueIndex.value = (srcIdxO - windowBase).coerceIn(0, q.lastIndex.coerceAtLeast(0))
         } else if (q.none { it.url == station.url }) {
+            _baseSource = listOf(station)
             _source = listOf(station)
             _queue.value = listOf(station)
             q = listOf(station)
             _queueIndex.value = 0
             windowBase = 0
         } else {
-            _source = q
-            _queueIndex.value = q.indexOfFirst { it.url == station.url }
+            _baseSource = q
+            val order = if (_shuffle.value && q.all { it.isTrack }) shuffledKeepFirst(q, station) else q
+            _source = order
+            _queueIndex.value = order.indexOfFirst { it.url == station.url }
             windowBase = 0
         }
         val queue = q
@@ -262,6 +286,61 @@ class PlayerConnection(
     }
 
     /**
+     * Returns a shuffled copy of [base] with [first] kept at the front, so the
+     * currently- or tapped-playing track is not interrupted while the rest of
+     * the playlist plays in random order. Only meaningful for finite track
+     * playlists; live-source order is left alone by its callers.
+     */
+    private fun shuffledKeepFirst(base: List<Station>, first: Station): List<Station> {
+        val rest = base.filter { it.url != first.url }
+        return listOf(first) + rest.shuffled()
+    }
+
+    /**
+     * Toggles shuffled playback of the current list. When switched on, the list
+     * the user is playing (local songs, favourites, a provider album - whatever
+     * [_source] holds) is re-ordered so the tracked order of the list is
+     * shuffled, always keeping the current track first. Toggling off restores
+     * the original linear order from [_baseSource]. On a live stream or a lone
+     * track there is nothing finite to reorder, so only the flag flips.
+     */
+    fun toggleShuffle() {
+        val newOn = !_shuffle.value
+        _shuffle.value = newOn
+        val c = controller ?: return
+        if (newOn) {
+            // Nothing to reorder: a live stream (not all tracks) or single item.
+            if (_source.size < 2 || !_source.all { it.isTrack }) { sync(); return }
+            val current = _source.getOrNull(_queueIndex.value.takeIf { it >= 0 }?.let { windowBase + it } ?: 0)
+                ?: _baseSource.firstOrNull()
+                ?: _queue.value.firstOrNull()
+                ?: _source.first()
+            val reordered = shuffledKeepFirst(_baseSource.ifEmpty { _source }, current)
+                .ifEmpty { _source }
+            _shuffledSource = reordered
+            _source = reordered
+            // Re-window the queue from the shuffled order, current still playing.
+            val target = reordered.indexOfFirst { it.url == current.url }.coerceAtLeast(0)
+            scope.launch(Dispatchers.Main) {
+                slideWindow(c, target)
+                sync()
+            }
+        } else {
+            val linear = _baseSource.ifEmpty { _shuffledSource ?: _source }
+            _shuffledSource = null
+            val current = _source.getOrNull(
+                (_queueIndex.value.takeIf { it >= 0 }?.let { windowBase + it } ?: 0),
+            ) ?: linear.firstOrNull()
+            _source = linear.ifEmpty { listOf(current).filterNotNull() }
+            val target = _source.indexOfFirst { it.url == current?.url }.coerceAtLeast(0)
+            scope.launch(Dispatchers.Main) {
+                if (_source.isNotEmpty()) slideWindow(c, target)
+                sync()
+            }
+        }
+    }
+
+    /**
      * Resolves [station]'s stream URL and builds its Media3 item on a
      * background thread. Building an item renders the station's 512px artwork
      * (a first-time PNG encode, plus a synchronised cache read on every hit) -
@@ -323,6 +402,7 @@ class PlayerConnection(
         val q = _queue.value
         if (q.isEmpty()) return
         val idx = _queueIndex.value.coerceIn(0, q.lastIndex)
+        _baseSource = q
         _source = q
         windowBase = 0
         _queueIndex.value = idx
@@ -399,6 +479,8 @@ class PlayerConnection(
         if (_queue.value.isEmpty()) return
         _queue.value = emptyList()
         _queueIndex.value = -1
+        _baseSource = emptyList()
+        _shuffledSource = null
         _source = emptyList()
         sync()
     }
