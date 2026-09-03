@@ -33,7 +33,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
@@ -63,18 +64,29 @@ import stream.cliamp.mobile.ui.theme.Mono
 // art or the inert strip around it can never fall through to advance or
 // restart playback.
 //
-// Consumption happens in the FINAL pointer pass - after clickable and the other
-// child gesture handlers have had their Main pass. So the transport and back
-// buttons still receive and act on their taps, and only presses that no child
-// claimed are eaten here, which is exactly what stops them falling through to
-// the screen behind. Doing this at the default Main pass raced the buttons:
-// whichever coroutine consumed first could eat a transport tap, so sometimes
-// a play / pause press needed a second tap to register.
+// Whole gestures are claimed, never individual events. A press nothing else
+// wanted becomes ours and everything up to the release is eaten; a press a
+// child already took is left alone from start to finish. That distinction is
+// the whole point: consuming this node's MOVE events unconditionally cancels
+// a child's pending tap the instant a finger drifts, because clickable drops
+// a press as soon as it sees a consumed change. Fingers always drift, so
+// play / pause did nothing at all while still taps worked.
+//
+// The Main pass is the one to do this on. A parent sees Main after its own
+// children, so the transport keys and the back button claim their presses
+// first and are never robbed. The screen stacked under this overlay also
+// reads Main, and this one is above it, so a press that no child here wanted
+// dies at this node instead of reaching the list underneath. The Final pass
+// cannot do that job: every node in the tree gets Main before any node gets
+// Final, so by then the screen behind has already taken the press.
 private fun Modifier.consumeAllGestures(): Modifier = this.pointerInput(Unit) {
-    awaitPointerEventScope {
-        while (true) {
-            awaitPointerEvent(PointerEventPass.Final).changes.forEach { it.consume() }
-        }
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = true)
+        down.consume()
+        do {
+            val event = awaitPointerEvent()
+            event.changes.forEach { it.consume() }
+        } while (event.changes.any { it.pressed })
     }
 }
 
