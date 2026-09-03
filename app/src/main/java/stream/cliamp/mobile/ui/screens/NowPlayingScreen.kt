@@ -3,6 +3,7 @@ package stream.cliamp.mobile.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
@@ -33,6 +34,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.launch
@@ -146,16 +148,19 @@ fun NowPlayingScreen(
                             error != null -> p.destructiveInk
                             else -> p.accent
                         },
+                        modifier = Modifier.pointerInput(Unit) { detectTapGestures { } },
                     )
 
-                    Spacer(Modifier.weight(1f))
+                    Spacer(
+                        Modifier
+                            .weight(1f)
+                            .height(18.dp)
+                            .pointerInput(Unit) { detectTapGestures { } },
+                    )
 
-                    // Shuffle, scope and favourite were full-width keys, which
-                    // gave three secondary actions the same visual weight as
-                    // the transport. They sit up here as small icons instead,
-                    // leaving the keys to prev/play/next alone. Shuffle just
-                    // toggles shuffled playback of the current list; it lights up
-                    // accent-coloured while on.
+                    // Shuffle, scope and favourite are small icon targets on the
+                    // right; the ON AIR label and the flexible strip left of
+                    // them are inert so a stray tap in the middle does nothing.
                     val shuffled by player.shuffle.collectAsState()
                     SmallAction(
                         CliampIcons.Shuffle,
@@ -215,8 +220,7 @@ fun NowPlayingScreen(
                     frame = frame,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(MeterSize.NowPlaying.height)
-                        .clickable(onClick = onOpenScope),
+                        .height(MeterSize.NowPlaying.height),
                     brick = MeterSize.NowPlaying.brick,
                     gap = MeterSize.NowPlaying.gap,
                 )
@@ -235,7 +239,6 @@ fun NowPlayingScreen(
                         verticalAlignment = Alignment.Bottom,
                     ) {
                         Mono(clock(state.positionMs), CliampType.rowSecondary, p.inkSecondary)
-                        Mono("drag anywhere", CliampType.meta, p.inkFaint, maxLines = 1)
                         Mono(
                             "-" + clock((state.durationMs - state.positionMs).coerceAtLeast(0)),
                             CliampType.rowSecondary,
@@ -353,7 +356,7 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
         else -> "[ live stream ]"
     }
     StripedArt(
-        modifier = modifier,
+        modifier = modifier.pointerInput(Unit) { detectTapGestures { } },
         caption = if (art == null) caption else null,
     ) {
         art?.let { bmp ->
