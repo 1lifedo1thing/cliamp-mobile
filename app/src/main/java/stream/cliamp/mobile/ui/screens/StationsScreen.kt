@@ -43,9 +43,7 @@ import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.ListRow
-import stream.cliamp.mobile.ui.components.OverflowButton
-import stream.cliamp.mobile.ui.components.OverflowItem
-import stream.cliamp.mobile.ui.components.OverflowMenu
+
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.theme.CliampType
@@ -273,14 +271,6 @@ private fun StationRow(
                     "favourite",
                     Modifier.size(15.dp).clickable(onClick = onToggleFavorite),
                     tint = if (favorite) p.accent else p.inkFaint,
-                )
-                OverflowMenu(
-                    trigger = { open -> OverflowButton(open) },
-                    items = listOf(
-                        OverflowItem("play next", onPlayNext),
-                        OverflowItem("add to queue", onAddToQueue),
-                        OverflowItem("replace queue", onReplaceQueue),
-                    ),
                 )
             }
         },

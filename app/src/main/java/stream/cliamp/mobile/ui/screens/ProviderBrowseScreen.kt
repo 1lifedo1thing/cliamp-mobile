@@ -254,13 +254,6 @@ fun ProviderBrowseScreen(
                         trailing = {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Mono(clockOf(t.duration), CliampType.meta, p.inkFaint)
-                                OverflowMenu(
-                                    trigger = { open -> OverflowButton(open) },
-                                    items = listOf(
-                                        OverflowItem(label = "play next", action = { onPlayNext(t.toStation(account, client.trackCover(t.id))) }),
-                                        OverflowItem(label = "add to queue", action = { onAddToQueue(t.toStation(account, client.trackCover(t.id))) }),
-                                    ),
-                                )
                             }
                         },
                     ) {

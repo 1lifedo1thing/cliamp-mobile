@@ -944,19 +944,12 @@ private fun SmartPlaylistDetail(
                         SongCover(s = s, current = current, playing = playing)
                     },
                     trailing = {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Icon(
-                                if (s.url in favorites) CliampIcons.StarFilled else CliampIcons.Star,
-                                "favourite",
-                                Modifier.size(15.dp).clickable { onToggleFavorite(s) },
-                                tint = if (s.url in favorites) p.accent else p.inkFaint,
-                            )
-                            SongRowMenu(
-                                onPlayNext = { onPlayNext(s) },
-                                onAddEnd = { onAddToQueue(s) },
-                                onReplace = { onReplaceQueue(s, members) },
-                            )
-                        }
+                        Icon(
+                            if (s.url in favorites) CliampIcons.StarFilled else CliampIcons.Star,
+                            "favourite",
+                            Modifier.size(15.dp).clickable { onToggleFavorite(s) },
+                            tint = if (s.url in favorites) p.accent else p.inkFaint,
+                        )
                     },
                 ) {
                     Mono(s.name, CliampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
