@@ -33,6 +33,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
@@ -61,10 +62,18 @@ import stream.cliamp.mobile.ui.theme.Mono
 // Swallows taps, drags and swipes entirely so a gesture landing on the cover
 // art or the inert strip around it can never fall through to advance or
 // restart playback.
+//
+// Consumption happens in the FINAL pointer pass - after clickable and the other
+// child gesture handlers have had their Main pass. So the transport and back
+// buttons still receive and act on their taps, and only presses that no child
+// claimed are eaten here, which is exactly what stops them falling through to
+// the screen behind. Doing this at the default Main pass raced the buttons:
+// whichever coroutine consumed first could eat a transport tap, so sometimes
+// a play / pause press needed a second tap to register.
 private fun Modifier.consumeAllGestures(): Modifier = this.pointerInput(Unit) {
     awaitPointerEventScope {
         while (true) {
-            awaitPointerEvent().changes.forEach { it.consume() }
+            awaitPointerEvent(PointerEventPass.Final).changes.forEach { it.consume() }
         }
     }
 }
