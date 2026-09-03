@@ -56,6 +56,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -418,9 +419,18 @@ fun Scrubber(
             // detector that followed never saw an unconsumed down and drag-seek
             // silently never fired. Combined here: a press that clears touch
             // slop horizontally becomes a drag, anything else is a tap.
+            //
+            // The down is claimed at the INITIAL pass (leaf -> root) so it beats
+            // the player's whole-surface consumeAllGestures, which runs at Main
+            // (root -> leaf) and would otherwise swallow the down -> MOVE stream
+            // before drag() ever saw it, degrading a drag into a tap. Claiming
+            // the gesture here is what keeps drag-to-seek alive while the same
+            // blocker still eats presses that land on the inert art/text and
+            // stops them falling through to the library behind the overlay.
             .pointerInput(Unit) {
                 awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val down = awaitFirstDown(pass = PointerEventPass.Initial, requireUnconsumed = false)
+                    down.consume()
                     val startFraction = (down.position.x / size.width).coerceIn(0f, 1f)
                     dragFraction = startFraction
                     val drag = awaitTouchSlopOrCancellation(down.id) { change, _ ->

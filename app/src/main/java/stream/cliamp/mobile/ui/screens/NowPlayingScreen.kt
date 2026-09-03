@@ -144,7 +144,8 @@ fun NowPlayingScreen(
         BoxWithConstraints(
             Modifier
                 .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .consumeAllGestures(),
         ) {
             val reserved = 356.dp
             val artSide = minOf(maxWidth - Gutter * 2, (maxHeight - reserved)).coerceIn(96.dp, 284.dp)
