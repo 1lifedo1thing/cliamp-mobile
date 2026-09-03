@@ -41,6 +41,7 @@ import stream.cliamp.mobile.CliampApp
 import stream.cliamp.mobile.R
 import stream.cliamp.mobile.data.CliampRadio
 import stream.cliamp.mobile.data.Station
+import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.ui.theme.CliampPalette
 import stream.cliamp.mobile.ui.theme.paletteFor
 
@@ -79,6 +80,7 @@ class CliampWidget : GlanceAppWidget() {
             val station by prefs.lastStation.collectAsState(initial = null)
             val playing by prefs.widgetPlaying.collectAsState(initial = false)
             val track by prefs.widgetTrack.collectAsState(initial = "")
+            val spectrum by prefs.widgetSpectrum.collectAsState(initial = emptyList())
             val favourites by prefs.favorites.collectAsState(initial = emptyList())
             val paletteName by prefs.palette.collectAsState(initial = "system")
 
@@ -93,7 +95,7 @@ class CliampWidget : GlanceAppWidget() {
             val palette = paletteFor(paletteName, systemDark)
             val tune = favourites.ifEmpty { CliampRadio.builtin }
 
-            WidgetBody(station, track, playing, tune, palette)
+WidgetBody(station, track, playing, spectrum, tune, palette)
         }
     }
 
@@ -109,6 +111,7 @@ private fun WidgetBody(
     station: Station?,
     track: String,
     playing: Boolean,
+    spectrum: List<Float>,
     tune: List<Station>,
     p: CliampPalette,
 ) {
@@ -136,7 +139,12 @@ private fun WidgetBody(
                 )
                 if (wide) {
                     Text(
-                        track.ifBlank { station?.meta?.ifBlank { "live stream" } ?: "pick a station" },
+                        track.ifBlank {
+                            when (station?.source) {
+                                StationSource.Local, StationSource.Provider -> station.meta
+                                else -> station?.meta?.ifBlank { "live stream" }
+                            }.orEmpty().ifBlank { "pick a station" }
+                        },
                         style = mono(11, FontWeight.Normal, p.inkTertiary),
                         maxLines = 1,
                     )
@@ -161,7 +169,14 @@ private fun WidgetBody(
 
         if (wide) {
             Spacer(GlanceModifier.height(10.dp))
-            StreamingRule(if (playing) "streaming" else "stopped", p, dim = !playing)
+            if (playing && spectrum.isNotEmpty()) {
+                // The widget's visualizer: the service downsampled the live
+                // spectrum into a handful of bars and wrote it here, so this
+                // renders as a (static between refreshes) spectrum meter.
+                SpectrumBars(spectrum, p)
+            } else {
+                StreamingRule(if (playing) "streaming" else "stopped", p, dim = !playing)
+            }
         }
 
         if (tall) {
@@ -185,6 +200,35 @@ private fun StreamingRule(label: String, p: stream.cliamp.mobile.ui.theme.Cliamp
         Text(label.uppercase(), style = mono(10, FontWeight.Normal, if (dim) p.inkFaint else p.accent))
         Spacer(GlanceModifier.width(8.dp))
         Box(GlanceModifier.defaultWeight().height(3.dp).background(ColorProvider(rule))) {}
+    }
+}
+
+/**
+ * The widget's static spectrum visualizer: a row of bars whose heights mirror
+ * the downsampled snapshot the service persisted. Bars are drawn bottom-up,
+ * tallest (i.e. the lowest accent looks like a meter sitting on the baseline).
+ */
+@androidx.compose.runtime.Composable
+private fun SpectrumBars(bars: List<Float>, p: stream.cliamp.mobile.ui.theme.CliampPalette) {
+    val active = p.accent
+    Column(GlanceModifier.fillMaxWidth()) {
+        Spacer(GlanceModifier.height(2.dp))
+        Row(GlanceModifier.fillMaxWidth().height(20.dp)) {
+            // Normalise so the bar that carries the most level sits at full height.
+            val max = (bars.maxOrNull() ?: 0f).coerceAtLeast(0.12f)
+            bars.forEachIndexed { i, v ->
+                val h = (6f + (v / max) * 12f).dp
+                Box(
+                    GlanceModifier
+                        .defaultWeight()
+                        .height(h)
+                        .background(ColorProvider(if (i % 2 == 0) active else p.track)),
+                ) {}
+                if (i < bars.lastIndex) {
+                    Box(GlanceModifier.width(4.dp).height(20.dp).background(ColorProvider(p.ground))) {}
+                }
+            }
+        }
     }
 }
 

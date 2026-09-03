@@ -51,6 +51,7 @@ class Prefs(private val context: Context) {
         val autoResume = booleanPreferencesKey("auto_resume")
         val wPlaying = booleanPreferencesKey("w_playing")
         val wTrack = stringPreferencesKey("w_track")
+        val wSpectrum = stringPreferencesKey("w_spectrum")
     }
 
     val palette: Flow<String> = context.settingsStore.data.map { it[K.palette] ?: "system" }
@@ -78,6 +79,18 @@ class Prefs(private val context: Context) {
      */
     val widgetPlaying: Flow<Boolean> = context.settingsStore.data.map { it[K.wPlaying] ?: false }
     val widgetTrack: Flow<String> = context.settingsStore.data.map { it[K.wTrack] ?: "" }
+
+    /**
+     * A frozen 6-bar spectrum snapshot for the widget, as a comma-separated
+     * list of 0..1 values (empty when nothing is playing). Widgets cannot
+     * animate or read the live spectrum bus, so the service writes a downsampled
+     * snapshot here on a throttle and the widget renders it as static bars.
+     */
+    val widgetSpectrum: Flow<List<Float>> = context.settingsStore.data.map { p ->
+        p[K.wSpectrum]?.let { raw ->
+            runCatching { raw.split(',').mapNotNull { it.trim().toFloatOrNull() } }.getOrNull()
+        } ?: emptyList()
+    }
     val history: Flow<List<Station>> =
         db.history().recent().map { rows -> rows.map { it.toStation() } }
     val custom: Flow<List<Station>> =
@@ -101,6 +114,7 @@ class Prefs(private val context: Context) {
 
     suspend fun setWidgetPlaying(v: Boolean) = put(K.wPlaying, v)
     suspend fun setWidgetTrack(v: String) = put(K.wTrack, v)
+    suspend fun setWidgetSpectrum(v: List<Float>) = put(K.wSpectrum, v.joinToString(","))
 
     suspend fun readLastStation(): Station? =
         context.settingsStore.data.first()[K.lastStation]

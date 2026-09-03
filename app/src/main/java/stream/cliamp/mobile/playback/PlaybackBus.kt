@@ -25,6 +25,15 @@ object PlaybackBus {
     private val _station = MutableStateFlow<Station?>(null)
     val station: StateFlow<Station?> = _station.asStateFlow()
 
+    /**
+     * The full play order the current station comes from (local songs, the
+     * favourites list, a provider album, a radio directory…). The lockscreen
+     * prev/next buttons walk this so they advance through whatever list is
+     * actually playing, not a fixed radio list.
+     */
+    private val _source = MutableStateFlow<List<Station>>(emptyList())
+    val source: StateFlow<List<Station>> = _source.asStateFlow()
+
     private val _format = MutableStateFlow(StreamFormat())
     val format: StateFlow<StreamFormat> = _format.asStateFlow()
 
@@ -45,6 +54,7 @@ object PlaybackBus {
     fun publishSpectrumLive(v: Boolean) { _spectrumLive.value = v }
     fun publishStreamTitle(v: String) { _streamTitle.value = v }
     fun publishStation(v: Station?) { _station.value = v; if (v != null) _streamTitle.value = "" }
+    fun publishSource(v: List<Station>) { _source.value = v }
     fun publishFormat(v: StreamFormat) { _format.value = v }
     fun publishError(v: String?) { _error.value = v }
     fun publishReconnect(attempt: Int) { _reconnectAttempt.value = attempt }

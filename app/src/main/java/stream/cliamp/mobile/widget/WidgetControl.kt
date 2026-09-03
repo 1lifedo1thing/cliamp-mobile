@@ -77,7 +77,11 @@ object WidgetControl {
 
     suspend fun step(context: Context, delta: Int) {
         val app = context.applicationContext as CliampApp
-        val list = app.prefs.favorites.first().ifEmpty { CliampRadio.builtin }
+        // Walk the list currently playing (local songs, favourites, a provider
+        // album, a directory); fall back to favourites, then cliamp's channels.
+        val list = PlaybackBus.source.value.ifEmpty {
+            app.prefs.favorites.first().ifEmpty { CliampRadio.builtin }
+        }
         if (list.isEmpty()) return
         val here = PlaybackBus.station.value?.url ?: app.prefs.readLastStation()?.url
         val i = list.indexOfFirst { it.url == here }
