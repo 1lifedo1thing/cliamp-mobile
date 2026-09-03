@@ -3,7 +3,6 @@ package stream.cliamp.mobile.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
@@ -57,6 +56,17 @@ import stream.cliamp.mobile.ui.components.rememberMeter
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
+
+// Swallows taps, drags and swipes entirely so a gesture landing on the cover
+// art or the inert strip around it can never fall through to advance or
+// restart playback.
+private fun Modifier.consumeAllGestures(): Modifier = this.pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) {
+            awaitPointerEvent().changes.forEach { it.consume() }
+        }
+    }
+}
 
 @UnstableApi
 @Composable
@@ -126,6 +136,10 @@ fun NowPlayingScreen(
                     .size(artSide),
             )
 
+            // The station name, stream title and meta line below the plate are
+            // gesture-inert: taps and swipes on them (or anywhere around the
+            // centre of the expanded player) can never advance or restart the
+            // song. Only the small action icons in the strip above stay live.
             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Row(
                     Modifier.fillMaxWidth(),
@@ -148,19 +162,16 @@ fun NowPlayingScreen(
                             error != null -> p.destructiveInk
                             else -> p.accent
                         },
-                        modifier = Modifier.pointerInput(Unit) { detectTapGestures { } },
+                        modifier = Modifier.consumeAllGestures(),
                     )
 
                     Spacer(
                         Modifier
                             .weight(1f)
                             .height(18.dp)
-                            .pointerInput(Unit) { detectTapGestures { } },
+                            .consumeAllGestures(),
                     )
 
-                    // Shuffle, scope and favourite are small icon targets on the
-                    // right; the ON AIR label and the flexible strip left of
-                    // them are inert so a stray tap in the middle does nothing.
                     val shuffled by player.shuffle.collectAsState()
                     SmallAction(
                         CliampIcons.Shuffle,
@@ -178,12 +189,14 @@ fun NowPlayingScreen(
                     shownStation?.name ?: "pick a station",
                     CliampType.trackTitle,
                     p.ink,
+                    modifier = Modifier.consumeAllGestures(),
                     maxLines = 2,
                 )
                 Mono(
                     streamTitle.ifBlank { error ?: shownStation?.tagList?.take(3)?.joinToString(" · ").orEmpty() },
                     CliampType.rowPrimary,
                     if (error != null && streamTitle.isBlank()) p.destructiveInk else p.inkSecondary,
+                    modifier = Modifier.consumeAllGestures(),
                     maxLines = 2,
                 )
                 Mono(
@@ -206,6 +219,7 @@ fun NowPlayingScreen(
                     }.joinToString(" · ").ifBlank { "12 cliamp channels · 50k+ directory" },
                     CliampType.body,
                     p.inkTertiary,
+                    modifier = Modifier.consumeAllGestures(),
                     maxLines = 1,
                 )
             }
@@ -220,7 +234,8 @@ fun NowPlayingScreen(
                     frame = frame,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(MeterSize.NowPlaying.height),
+                        .height(MeterSize.NowPlaying.height)
+                        .consumeAllGestures(),
                     brick = MeterSize.NowPlaying.brick,
                     gap = MeterSize.NowPlaying.gap,
                 )
@@ -234,7 +249,7 @@ fun NowPlayingScreen(
                         onSeek = { player.seekTo(it) },
                     )
                     Row(
-                        Modifier.fillMaxWidth(),
+                        Modifier.fillMaxWidth().consumeAllGestures(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.Bottom,
                     ) {
@@ -255,6 +270,7 @@ fun NowPlayingScreen(
                             shownStation != null -> "paused"
                             else -> "stopped"
                         },
+                        modifier = Modifier.consumeAllGestures(),
                         color = when {
                             reconnect > 0 -> p.amber
                             error != null -> p.destructiveInk
@@ -263,7 +279,7 @@ fun NowPlayingScreen(
                         dim = !state.playing && reconnect == 0,
                     )
                     Row(
-                        Modifier.fillMaxWidth(),
+                        Modifier.fillMaxWidth().consumeAllGestures(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.Bottom,
                     ) {
@@ -356,7 +372,7 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
         else -> "[ live stream ]"
     }
     StripedArt(
-        modifier = modifier.pointerInput(Unit) { detectTapGestures { } },
+        modifier = modifier.consumeAllGestures(),
         caption = if (art == null) caption else null,
     ) {
         art?.let { bmp ->
