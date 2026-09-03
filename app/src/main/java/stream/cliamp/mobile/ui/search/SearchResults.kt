@@ -29,14 +29,18 @@ sealed interface SearchHit {
         override val playable get() = station
         override val key get() = "station:${station.url}"
         override val origin get() = if (fromProviders) "provider" else "radio"
-        override val haystack get() = station.name
+        // Tags are the genre vocabulary of radio, so a station tagged "jazz"
+        // surfaces when the query is "jazz" even though its name never says so.
+        override val haystack get() =
+            (listOf(station.name) + station.tagList).joinToString(" ")
     }
 
     data class Favorite(val station: Station) : SearchHit {
         override val playable get() = station
         override val key get() = "fav:${station.url}"
         override val origin get() = "fav"
-        override val haystack get() = station.name
+        override val haystack get() =
+            (listOf(station.name) + station.tagList).joinToString(" ")
     }
 
     data class Tag(val name: String, val count: Int) : SearchHit {
