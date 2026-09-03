@@ -41,8 +41,8 @@ import stream.cliamp.mobile.CliampApp
 import stream.cliamp.mobile.R
 import stream.cliamp.mobile.data.CliampRadio
 import stream.cliamp.mobile.data.Station
-import stream.cliamp.mobile.ui.theme.DarkPalette
-import stream.cliamp.mobile.ui.theme.LightPalette
+import stream.cliamp.mobile.ui.theme.CliampPalette
+import stream.cliamp.mobile.ui.theme.paletteFor
 
 /**
  * Radio's one real advantage over a music library on a home screen: you
@@ -80,17 +80,20 @@ class CliampWidget : GlanceAppWidget() {
             val playing by prefs.widgetPlaying.collectAsState(initial = false)
             val track by prefs.widgetTrack.collectAsState(initial = "")
             val favourites by prefs.favorites.collectAsState(initial = emptyList())
-            val paletteName by prefs.palette.collectAsState(initial = "dark")
+            val paletteName by prefs.palette.collectAsState(initial = "system")
 
-            val dark = when (paletteName) {
-                "light" -> false
-                "system" -> (context.resources.configuration.uiMode and
-                    Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-                else -> true
-            }
+            val systemDark = (context.resources.configuration.uiMode and
+                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+            // Resolved through paletteFor rather than mapped to dark-or-light
+            // here, so the widget actually wears the chosen theme. The old
+            // version only knew "light" and "system" and fell through to the
+            // dark green pair for everything else, which now means every
+            // default install - and which was already wrong for the light
+            // Omarchy themes.
+            val palette = paletteFor(paletteName, systemDark)
             val tune = favourites.ifEmpty { CliampRadio.builtin }
 
-            WidgetBody(station, track, playing, tune, dark)
+            WidgetBody(station, track, playing, tune, palette)
         }
     }
 
@@ -107,9 +110,8 @@ private fun WidgetBody(
     track: String,
     playing: Boolean,
     tune: List<Station>,
-    dark: Boolean,
+    p: CliampPalette,
 ) {
-    val p = if (dark) DarkPalette else LightPalette
     val size = LocalSize.current
     val wide = size.width >= 220.dp
     val tall = size.height >= 120.dp

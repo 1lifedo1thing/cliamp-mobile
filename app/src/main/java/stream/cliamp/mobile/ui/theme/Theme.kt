@@ -26,16 +26,26 @@ import androidx.compose.ui.text.TextStyle
 val LocalHapticsEnabled = staticCompositionLocalOf { true }
 
 /**
- * Resolves the stored theme preference. "dark", "light" and "system" are the
- * app's own two palettes; anything else is an Omarchy theme key, and an unknown
- * key falls back rather than crashing, so a theme removed from the machine does
- * not brick the app.
+ * Resolves the stored theme preference.
+ *
+ * "system" is oxide, light or dark to match the device, and it is the default -
+ * oxide is the app's identity now, and the launcher icon is built from the same
+ * two colours. The original phosphor-green pair is still here as "dark" and
+ * "light" for anyone who wants it, just no longer what you get by default.
+ *
+ * Anything not listed is an Omarchy theme key, and an unknown key falls back
+ * rather than crashing, so a theme removed from the machine does not brick the
+ * app.
  */
 fun paletteFor(preference: String, systemDark: Boolean): CliampPalette = when (preference) {
+    "system" -> if (systemDark) OxidePalette else OxideLightPalette
+    "oxide" -> OxidePalette
+    "oxide-light" -> OxideLightPalette
     "dark" -> DarkPalette
     "light" -> LightPalette
-    "system" -> if (systemDark) DarkPalette else LightPalette
-    else -> OmarchyPalettes[preference] ?: if (systemDark) DarkPalette else LightPalette
+    "amber" -> AmberPalette
+    else -> OmarchyPalettes[preference]
+        ?: if (systemDark) OxidePalette else OxideLightPalette
 }
 
 @Composable

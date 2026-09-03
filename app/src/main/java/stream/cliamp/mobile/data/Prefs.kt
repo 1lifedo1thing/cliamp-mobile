@@ -35,7 +35,7 @@ class Prefs(private val context: Context) {
     private val db by lazy { CliampDatabase.get(context) }
 
     private object K {
-        val palette = stringPreferencesKey("palette")           // dark | light | system
+        val palette = stringPreferencesKey("palette")           // system | oxide | dark | ...
         val haptics = booleanPreferencesKey("haptics")
         val visualizer = stringPreferencesKey("visualizer")     // spectrum | scope | off
         val cellular = booleanPreferencesKey("cellular")
@@ -53,7 +53,7 @@ class Prefs(private val context: Context) {
         val wTrack = stringPreferencesKey("w_track")
     }
 
-    val palette: Flow<String> = context.settingsStore.data.map { it[K.palette] ?: "dark" }
+    val palette: Flow<String> = context.settingsStore.data.map { it[K.palette] ?: "system" }
     val haptics: Flow<Boolean> = context.settingsStore.data.map { it[K.haptics] ?: true }
     val visualizer: Flow<String> = context.settingsStore.data.map { it[K.visualizer] ?: "spectrum" }
     val cellular: Flow<Boolean> = context.settingsStore.data.map { it[K.cellular] ?: true }

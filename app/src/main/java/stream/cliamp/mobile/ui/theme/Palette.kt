@@ -126,4 +126,170 @@ val LightPalette = CliampPalette(
     artBorder = Color(0xFFC5CCC6),
 )
 
+/**
+ * Amber. Same construction as [DarkPalette] - every value is the dark
+ * palette's own lightness and chroma, rotated to the accent's hue - so the
+ * neutrals read faintly warm the way the dark palette's read faintly green.
+ *
+ * The requested #F9AA60 is, in oklch, the dark palette's semantic amber at the
+ * same lightness and chroma and 16 degrees of hue apart. So the "remote / live
+ * elsewhere" slot cannot lean on hue here and leans on the gold being duller
+ * instead. retro-82 already ships with the two at an identical hue, so this is
+ * a smaller collision than one already in the theme list.
+ */
+val AmberPalette = CliampPalette(
+    dark = true,
+    // grounds
+    canvas = Color(0xFF2D2824),
+    ground = Color(0xFF100B07),
+    groundScope = Color(0xFF0A0704),
+    groundLock = Color(0xFF080502),
+    panel = Color(0xFF17120D),
+    panelRaised = Color(0xFF19120C),
+    // lines
+    hairline = Color(0xFF211A15),
+    hairlineRegion = Color(0xFF29221D),
+    frameBorder = Color(0xFF443B34),
+    // ink
+    ink = Color(0xFFF7F0EB),
+    inkBright = Color(0xFFFAF4EF),
+    inkSecondary = Color(0xFFAAA39E),
+    inkTertiary = Color(0xFF857E79),
+    inkFaint = Color(0xFF746D68),
+    // accent
+    accent = Color(0xFFF9AA60),
+    accentBright = Color(0xFFFFC687),
+    accentBevel = Color(0xFFB77534),
+    onAccent = Color(0xFF210F01),
+    accentWash = Color(0xFF2B1D10),
+    // semantic
+    amber = Color(0xFFEBB353),
+    destructive = Color(0xFFBD423A),
+    destructiveInk = Color(0xFFF27166),
+    // controls
+    keyFace = Color(0xFF1F1812),
+    keyBorder = Color(0xFF3A312A),
+    keyBevel = Color(0xFF0C0704),
+    chipBorder = Color(0xFF302720),
+    track = Color(0xFF2E2722),
+    unlit = Color(0xFF2C231B),
+    peak = Color(0xFFFAF4EF),
+    // placeholder art stripes
+    artA = Color(0xFF251C15),
+    artB = Color(0xFF1B1611),
+    artBorder = Color(0xFF352C25),
+)
+
+/**
+ * Oxide. Rusted iron: the grounds carry twice the dark palette's chroma at the
+ * red hue, so panels read as warm metal rather than neutral grey, and the ink
+ * is the requested #F8E4D4 cream at 15.9:1 on the ground.
+ *
+ * The requested #7F2117 sits at oklch lightness 0.40, too dark to be the accent
+ * itself: accent is a text colour here (selected rows, ACTIVE labels), and 0.40
+ * against this ground is 2.4:1. It is the accent bevel instead, which is where
+ * a deep edge tone belongs, and the accent is that same red lifted to 0.62 for
+ * 5.0:1. Destructive stays the shared red every other theme uses, so it sits in
+ * the accent's own family - as it already does in last-horizon.
+ */
+val OxidePalette = CliampPalette(
+    dark = true,
+    // grounds
+    canvas = Color(0xFF302725),
+    ground = Color(0xFF120A08),
+    groundScope = Color(0xFF0C0605),
+    groundLock = Color(0xFF0A0403),
+    panel = Color(0xFF1A100E),
+    panelRaised = Color(0xFF1C100E),
+    // lines
+    hairline = Color(0xFF241816),
+    hairlineRegion = Color(0xFF2C201E),
+    frameBorder = Color(0xFF493936),
+    // ink
+    ink = Color(0xFFF8E4D4),
+    inkBright = Color(0xFFF8E4D4),
+    inkSecondary = Color(0xFFABA39E),
+    inkTertiary = Color(0xFF867E79),
+    inkFaint = Color(0xFF746D68),
+    // accent
+    accent = Color(0xFFD15D4D),
+    accentBright = Color(0xFFE47C6C),
+    accentBevel = Color(0xFF7F2117),
+    onAccent = Color(0xFF240C09),
+    accentWash = Color(0xFF2E1B17),
+    // semantic
+    amber = Color(0xFFEBB353),
+    destructive = Color(0xFFBD423A),
+    destructiveInk = Color(0xFFF27166),
+    // controls
+    keyFace = Color(0xFF231614),
+    keyBorder = Color(0xFF3F2F2C),
+    keyBevel = Color(0xFF0E0605),
+    chipBorder = Color(0xFF352522),
+    track = Color(0xFF312523),
+    unlit = Color(0xFF2E211F),
+    peak = Color(0xFFF8E4D4),
+    // placeholder art stripes
+    artA = Color(0xFF291A17),
+    artB = Color(0xFF1E1412),
+    artBorder = Color(0xFF3A2A27),
+)
+
+/**
+ * Oxide, reversed. The icon canvas calls this ground "bone": the cream that is
+ * ink in [OxidePalette] becomes the page here, and the oxide red that was only
+ * a bevel there becomes the accent - #7F2117 sits at oklch lightness 0.40,
+ * which is too dark to be an accent on a dark ground and right on a light one.
+ *
+ * Built off [LightPalette]'s lightness and chroma the way [OxidePalette] is
+ * built off DarkPalette's, with two departures, both to land the requested
+ * #F8E4D4 exactly on the ground: the light end of the ramp drops by 0.045 so
+ * grounds, hairlines and key faces keep their original order instead of
+ * inverting around a darker ground, and structural chroma is scaled to the
+ * cream's own rather than doubled, which is what makes this bone rather than
+ * the warm grey a smaller multiplier gives.
+ */
+val OxideLightPalette = CliampPalette(
+    dark = false,
+    // grounds
+    canvas = Color(0xFFDFCBBB),
+    ground = Color(0xFFF8E4D4),
+    groundScope = Color(0xFFF1DDCD),
+    groundLock = Color(0xFFE9D5C5),
+    panel = Color(0xFFF2D9C4),
+    panelRaised = Color(0xFFF4D7BF),
+    // lines
+    hairline = Color(0xFFE3C4AB),
+    hairlineRegion = Color(0xFFDABAA1),
+    frameBorder = Color(0xFFCDA889),
+    // ink
+    ink = Color(0xFF251D1C),
+    inkBright = Color(0xFF191110),
+    inkSecondary = Color(0xFF5F5654),
+    inkTertiary = Color(0xFF877D7C),
+    inkFaint = Color(0xFF968C8B),
+    // accent
+    accent = Color(0xFF7F2117),
+    accentBright = Color(0xFF5C1009),
+    accentBevel = Color(0xFF4B0703),
+    onAccent = Color(0xFFECE7E6),
+    accentWash = Color(0xFFF5CAC3),
+    // semantic
+    amber = Color(0xFFA46F00),
+    destructive = Color(0xFFBA2B28),
+    destructiveInk = Color(0xFFA32320),
+    // controls
+    keyFace = Color(0xFFF8E4D4),
+    keyBorder = Color(0xFFD9B495),
+    keyBevel = Color(0xFFE3C4AB),
+    chipBorder = Color(0xFFD9B495),
+    track = Color(0xFFE3C4AB),
+    unlit = Color(0xFFD8C6C3),
+    peak = Color(0xFF251D1C),
+    // placeholder art stripes
+    artA = Color(0xFFF0D1B8),
+    artB = Color(0xFFF9DCC4),
+    artBorder = Color(0xFFD9B495),
+)
+
 val LocalPalette = staticCompositionLocalOf { DarkPalette }
