@@ -354,12 +354,16 @@ class PlayerConnection(
             PlaybackService.mediaItem(context, station, StreamResolver.resolve(station.url))
         }
 
-    fun toggle() {
+    fun toggle(fallback: Station? = null) {
         val c = controller ?: return
         if (c.isPlaying) c.pause()
         else {
             if (c.mediaItemCount == 0) {
-                PlaybackBus.station.value?.let { play(it) }
+                // Nothing loaded this session. Prefer the live bus station, but
+                // accept a caller-supplied fallback (e.g. the last-played station
+                // shown from history) so the transport can start playback even
+                // before anything has been tuned.
+                (PlaybackBus.station.value ?: fallback)?.let { play(it) }
             } else {
                 // a stalled live stream has to be re-primed, not resumed
                 c.prepare()

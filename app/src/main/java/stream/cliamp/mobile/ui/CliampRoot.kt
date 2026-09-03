@@ -251,7 +251,7 @@ fun CliampRoot(
                     reconnecting = reconnect,
                     queueCount = queue.size,
                     onOpenQueue = { overlay = Overlay.Queue },
-                    onToggle = { player.toggle() },
+                    onToggle = { player.toggle(station ?: recent.firstOrNull()) },
                     onOpen = { overlay = Overlay.Player },
                 )
             }

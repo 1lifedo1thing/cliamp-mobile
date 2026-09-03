@@ -75,10 +75,17 @@ fun NowPlayingScreen(
     val error by PlaybackBus.error.collectAsState()
     val reconnect by PlaybackBus.reconnectAttempt.collectAsState()
     val favorites by prefs.favorites.collectAsState(initial = emptyList())
+    val recent by prefs.history.collectAsState(initial = emptyList())
     val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
 
+    // Before anything has been played this session the live bus carries no
+    // station, so fall back to the last-played station from history - the same
+    // fallback the mini bar uses - rather than showing an empty "no track".
+    val lastPlayed = recent.firstOrNull()
+    val shownStation = station ?: lastPlayed
+
     val spectrumSource = PlaybackBus.spectrum.collectAsState()
-    val isFav = station != null && favorites.any { it.url == station!!.url }
+    val isFav = shownStation != null && favorites.any { it.url == shownStation.url }
 
     Column(Modifier.fillMaxSize().background(p.ground).statusBarsPadding()) {
         Mono(
@@ -104,7 +111,7 @@ fun NowPlayingScreen(
             verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterVertically),
         ) {
             StationArt(
-                station = station,
+                station = shownStation,
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
                     .size(artSide),
@@ -123,7 +130,7 @@ fun NowPlayingScreen(
                             error != null -> "STREAM ERROR"
                             state.buffering -> "BUFFERING"
                             state.playing -> "ON AIR"
-                            station != null -> "PAUSED"
+                            shownStation != null -> "PAUSED"
                             else -> "NOTHING TUNED"
                         },
                         CliampType.nowPlayingLabel,
@@ -153,23 +160,23 @@ fun NowPlayingScreen(
                         if (isFav) CliampIcons.StarFilled else CliampIcons.Star,
                         if (isFav) "remove favourite" else "favourite",
                         tint = if (isFav) p.accent else p.inkTertiary,
-                    ) { station?.let { s -> scope.launch { prefs.toggleFavorite(s) } } }
+                    ) { shownStation?.let { s -> scope.launch { prefs.toggleFavorite(s) } } }
                 }
                 Mono(
-                    station?.name ?: "pick a station",
+                    shownStation?.name ?: "pick a station",
                     CliampType.trackTitle,
                     p.ink,
                     maxLines = 2,
                 )
                 Mono(
-                    streamTitle.ifBlank { error ?: station?.tagList?.take(3)?.joinToString(" · ").orEmpty() },
+                    streamTitle.ifBlank { error ?: shownStation?.tagList?.take(3)?.joinToString(" · ").orEmpty() },
                     CliampType.rowPrimary,
                     if (error != null && streamTitle.isBlank()) p.destructiveInk else p.inkSecondary,
                     maxLines = 2,
                 )
                 Mono(
                     buildList {
-                        station?.let { s ->
+                        shownStation?.let { s ->
                             add(
                                 when (s.source) {
                                     StationSource.Cliamp -> "cliamp radio"
@@ -234,7 +241,7 @@ fun NowPlayingScreen(
                             error != null -> "no signal"
                             state.buffering -> "buffering"
                             state.playing -> "streaming"
-                            station != null -> "paused"
+                            shownStation != null -> "paused"
                             else -> "stopped"
                         },
                         color = when {
@@ -270,7 +277,7 @@ fun NowPlayingScreen(
                     ) { Icon(CliampIcons.Prev, "previous station", Modifier.size(width = 21.dp, height = 17.dp)) }
 
                     MechKey(
-                        onClick = { player.toggle() },
+                        onClick = { player.toggle(station ?: shownStation) },
                         modifier = Modifier.weight(1.7f),
                         filled = true,
                     ) {
