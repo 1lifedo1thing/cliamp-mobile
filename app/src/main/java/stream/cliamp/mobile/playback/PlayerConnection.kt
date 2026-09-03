@@ -197,36 +197,58 @@ class PlayerConnection(
             // item back to the head of the list. Only read back the index when
             // Media3 actually holds the whole queue.
             val oneToOne = c.mediaItemCount == q.size
-            val logical = if (oneToOne) {
-                // Resolve by the playing item's id so the model stays the source
-                // of truth even when a shuffle toggle left Media3 in a different
-                // order than the (new) shuffled queue.
+            // Resolve which queued station is actually audible. When Media3 holds
+            // the whole window, match the playing item's id against the model so
+            // the queue stays the source of truth even if a shuffle toggle left
+            // Media3's window in a different order. If the id can't be found we
+            // decline to guess (raw-index fallback publishes a song that is not
+            // what is audible) and keep the current panel item instead.
+            val resolvedIndex: Int? = if (oneToOne) {
                 val curId = c.getMediaItemAt(playerIndex).mediaId
-                q.indexOfFirst { it.id == curId }.takeIf { it >= 0 } ?: playerIndex
-            } else _queueIndex.value
+                val hit = q.indexOfFirst { it.id == curId }
+                hit.takeIf { it >= 0 }
+            } else {
+                val curId = c.getMediaItemAt(playerIndex).mediaId
+                _queueIndex.value.takeIf { q.getOrNull(it)?.id == curId }
+            }
             // Only publish when the resolved panel item has actually changed.
-            if (logical != _queueIndex.value && q.getOrNull(logical)?.id != q.getOrNull(_queueIndex.value)?.id) {
-                _queueIndex.value = logical
-                PlaybackBus.publishStation(q[logical])
+            if (resolvedIndex != null && resolvedIndex != _queueIndex.value &&
+                q.getOrNull(resolvedIndex)?.id != q.getOrNull(_queueIndex.value)?.id
+            ) {
+                _queueIndex.value = resolvedIndex
+                PlaybackBus.publishStation(q[resolvedIndex])
             }
 
             // A huge queue is played as a window; when that window is nearly
             // spent, roll it forward in [_source] so the library never silently
             // stops at the boundary. Only fires for genuinely long sources, and
             // only once per boundary crossing (guarded), so it can never loop.
-            if (oneToOne && _source.size > WINDOW && playerIndex >= c.mediaItemCount - 2) {
-                val abs = windowBase + playerIndex
-                val next = (abs + 1).coerceIn(0, _source.lastIndex)
-                if (next > windowBase && next <= _source.lastIndex &&
+            if (oneToOne && _source.size > WINDOW && _queueIndex.value >= 0 &&
+                _queueIndex.value >= c.mediaItemCount - 2
+            ) {
+                // Base the roll target on the live model position so a stale
+                // next can't rewind the queue to a window the audio has left.
+                val modelAbs = windowBase + _queueIndex.value
+                val candidate = (modelAbs + 1).coerceIn(0, _source.lastIndex)
+                if (candidate > windowBase && candidate <= _source.lastIndex &&
                     (_extending == null || _extending!!.isCompleted)
                 ) {
                     _extending?.cancel()
                     _extending = scope.launch {
                         delay(1500)
                         val c2 = controller ?: return@launch
-                        if (c2.currentMediaItemIndex >= c2.mediaItemCount - 2 && next <= _source.lastIndex) {
-                            slideWindow(c2, next)
-                            sync()
+                        // Recompute the target from live state so a roll can never
+                        // rewind the queue to a window the audio has gone past;
+                        // only roll while playback is actually spent near the end
+                        // of the current window.
+                        val pi = c2.currentMediaItemIndex
+                        if (pi >= c2.mediaItemCount - 2 && _queueIndex.value >= 0) {
+                            val abs = windowBase + _queueIndex.value
+                            val next = (abs + 1).coerceIn(0, _source.lastIndex)
+                            if (next > windowBase && next <= _source.lastIndex) {
+                                slideWindow(c2, next)
+                                sync()
+                            }
                         }
                     }
                 }
@@ -372,9 +394,21 @@ class PlayerConnection(
         _queue.value = slice
         val index = (abs - windowBase).coerceIn(0, slice.lastIndex)
         _queueIndex.value = index
-        val items = slice.map { buildItem(it) }
-        val startAt = slice.getOrNull(index)?.let { resumeAt(it) } ?: 0L
-        c.setMediaItems(items, index.coerceIn(0, items.lastIndex), startAt)
+        // Raised around the swap so the half-second poller's sync() can't run
+        // between [_queue] being repointed at the new window and Media3 actually
+        // switching. Un-guarded, that interleaving resolves the still-playing
+        // Media3 item against the fresh [_queue], falls back to the raw index and
+        // publishes a station that is not what is audible - "shows one song while
+        // playing another". Once Media3 is set, [_queue] and its index are coherent
+        // so the consumer side of sync() is safe to resume.
+        swapping = true
+        try {
+            val items = slice.map { buildItem(it) }
+            val startAt = slice.getOrNull(index)?.let { resumeAt(it) } ?: 0L
+            c.setMediaItems(items, index.coerceIn(0, items.lastIndex), startAt)
+        } finally {
+            swapping = false
+        }
     }
 
     /**
