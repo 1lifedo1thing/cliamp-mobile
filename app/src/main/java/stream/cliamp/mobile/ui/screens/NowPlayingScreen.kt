@@ -88,14 +88,21 @@ fun NowPlayingScreen(
     val isFav = shownStation != null && favorites.any { it.url == shownStation.url }
 
     Column(Modifier.fillMaxSize().background(p.ground).statusBarsPadding()) {
-        Mono(
-            "‹ back",
-            CliampType.tabLabel,
-            p.inkTertiary,
-            Modifier
-                .clickable(onClick = onBack)
-                .padding(start = Gutter, top = 6.dp, end = 16.dp, bottom = 2.dp),
-        )
+        Row(
+            Modifier.fillMaxWidth().padding(start = Gutter, top = 6.dp, end = 16.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                    .clickable(onClick = onBack),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(CliampIcons.Down, "back", Modifier.size(width = 16.dp, height = 10.dp), tint = p.ink)
+            }
+        }
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
         // it is the first thing to give way. Compose has no shrink factor, so
         // we measure the column and hand the plate whatever is left over -
