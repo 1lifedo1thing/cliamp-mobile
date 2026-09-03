@@ -101,6 +101,11 @@ class LocalLibrary(context: Context) {
 
     private fun querySongs(): List<Station> {
         val out = ArrayList<LocalSong>(256)
+        // Cover art is looked up per song, but every track in a folder shares
+        // that folder's cover and calling listFiles() once per song is what
+        // makes a first scan crawl. Memoise the result per directory so a big
+        // library is one stat per song plus one directory listing per folder.
+        val coverByDir = HashMap<String, String?>()
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
@@ -131,7 +136,8 @@ class LocalLibrary(context: Context) {
                 val artist = c.getString(cArtist) ?: "unknown artist"
                 val album = c.getString(cAlbum) ?: ""
                 val title = c.getString(cTitle)?.takeIf { it.isNotBlank() } ?: file.nameWithoutExtension
-                val cover = nearestCover(file.parentFile).orEmpty()
+                val dir = file.parentFile?.path.orEmpty()
+                val cover = coverByDir.getOrPut(dir) { nearestCover(file.parentFile) }.orEmpty()
                 out += LocalSong(
                     path = data,
                     title = title,
