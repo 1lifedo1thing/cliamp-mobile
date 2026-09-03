@@ -52,7 +52,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.LocalArt
 import stream.cliamp.mobile.data.StationArtSource
@@ -977,14 +976,8 @@ private fun SongCover(s: Station, current: Station?, playing: Boolean) {
     val context = LocalContext.current
     var art by remember(s.id) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(s.id) {
-        // Wait a beat so a fast scroll (rows flashing through the viewport)
-        // doesn't fire an embedded-art decode for every one of them. If the
-        // row scrolls off in that window this coroutine is cancelled and the
-        // expensive read never happens — the on-view laziness that keeps a
-        // big library light.
-        delay(90)
         art = (LocalArt.bitmapForSmall(s.cover, context.contentResolver)
-            ?: StationArtSource.bitmapForSmall(s)) // else embedded album art
+            ?: StationArtSource.bitmapForSmall(s))
             ?.asImageBitmap()
     }
     val active = current?.url == s.url
