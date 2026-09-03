@@ -215,8 +215,9 @@ fun LocalScreen(
             }
             if (showing == null && openSmartPlaylist == null) {
                 // Sub-tabs: the library list, and a dedicated providers pane.
+                // A little top padding keeps them from sticking to the title.
                 Row(
-                    Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, bottom = 8.dp),
+                    Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
                     Chip("playlists", selected = !showProviders, onClick = { onShowProviders(false) })
