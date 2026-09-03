@@ -189,6 +189,14 @@ fun CliampRoot(
                         libSubTab = LibSubTab.Providers
                         overlay = Overlay.Browse(account.id)
                     },
+                    // Lands on the Podcasts tab behind the episode list, so
+                    // backing out of the show leaves you somewhere coherent
+                    // rather than on the search results you came from.
+                    onOpenShow = { show: PodcastShow ->
+                        podcasts.openShow(show)
+                        tab = Tab.Pods
+                        overlay = Overlay.Show
+                    },
                 )
             }
 

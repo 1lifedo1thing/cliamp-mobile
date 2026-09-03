@@ -50,6 +50,7 @@ import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.DirectoryQuery
 import stream.cliamp.mobile.data.LocalLibrary
 import stream.cliamp.mobile.data.PodcastQuery
+import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.PodcastRepository
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Repository
@@ -75,7 +76,8 @@ import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
 
 private enum class Scope(val label: String) {
-    All("all"), Media("local"), Radio("radio"), Tags("tags"), Providers("providers"), Cmds("cmds"),
+    All("all"), Media("local"), Radio("radio"), Pods("podcasts"),
+    Tags("tags"), Providers("providers"), Cmds("cmds"),
 }
 
 /**
@@ -96,6 +98,7 @@ fun CommandScreen(
     onOpenScope: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenProvider: (ProviderAccount) -> Unit,
+    onOpenShow: (PodcastShow) -> Unit,
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -131,14 +134,30 @@ fun CommandScreen(
         podcasts.load(PodcastQuery.Search(term), reset = true)
     }
 
-    val results = remember(term, filter, songs, favorites, recent, radio, tags, providerAccounts) {
-        GlobalSearch.run(term, songs, favorites, recent, radio, tags, providerAccounts)
+    val podcastDirectory by podcasts.directory.collectAsState()
+    val subscriptions by podcasts.subscriptions.collectAsState(initial = emptyList())
+
+    // Subscriptions are resident, the directory half is whatever the debounced
+    // query above just fetched, so a show can be found whether or not it is
+    // already followed.
+    val shows = remember(subscriptions, podcastDirectory.shows) {
+        subscriptions + podcastDirectory.shows
+    }
+    val subscribedFeeds = remember(subscriptions) { subscriptions.mapTo(HashSet()) { it.feedUrl } }
+
+    val results = remember(
+        term, filter, songs, favorites, recent, radio, tags, providerAccounts, shows, subscribedFeeds,
+    ) {
+        GlobalSearch.run(
+            term, songs, favorites, recent, radio, tags, providerAccounts, shows, subscribedFeeds,
+        )
     }.hits
 
     val shown = when (filter) {
         Scope.All -> results
         Scope.Media -> results.filter { it is SearchHit.Song || it is SearchHit.Favorite }
         Scope.Radio -> results.filter { it is SearchHit.StationHit }
+        Scope.Pods -> results.filter { it is SearchHit.Show }
         Scope.Tags -> results.filter { it is SearchHit.Tag }
         Scope.Providers -> results.filter { it is SearchHit.Provider }
         Scope.Cmds -> results.filter { it is SearchHit.Command }
@@ -178,6 +197,7 @@ fun CommandScreen(
     fun open(hit: SearchHit, queue: List<SearchHit>) {
         when (hit) {
             is SearchHit.Provider -> onOpenProvider(hit.account)
+            is SearchHit.Show -> onOpenShow(hit.show)
             is SearchHit.Tag -> repository.loadDirectory(DirectoryQuery.Tag(hit.name), reset = true)
             else -> hit.playable?.let { s ->
                 onPlay(s, queue.mapNotNull { it.playable })
@@ -243,6 +263,7 @@ private fun sectionOf(hit: SearchHit): String {
     val head = when (hit) {
         is SearchHit.Song, is SearchHit.Favorite -> "local"
         is SearchHit.StationHit -> "radio"
+        is SearchHit.Show -> "podcasts"
         is SearchHit.Tag -> "tags"
         is SearchHit.Provider -> "providers"
         is SearchHit.Command -> "commands"
@@ -316,6 +337,7 @@ private fun HitRow(
             is SearchHit.Song -> hit.station.name
             is SearchHit.Favorite -> hit.station.name
             is SearchHit.StationHit -> hit.station.name
+            is SearchHit.Show -> hit.show.title
             is SearchHit.Tag -> "#${hit.name}"
             is SearchHit.Provider -> hit.account.label
             is SearchHit.Command -> hit.syntax + if (hit.takesArg) " …" else ""
@@ -324,6 +346,7 @@ private fun HitRow(
             is SearchHit.Song -> hit.station.artist
             is SearchHit.Favorite -> hit.station.meta.ifBlank { hit.station.name }
             is SearchHit.StationHit -> hit.station.meta
+            is SearchHit.Show -> hit.show.meta
             is SearchHit.Tag -> "${hit.count} stations"
             is SearchHit.Provider -> hit.specLabel
             is SearchHit.Command -> hit.hint
@@ -354,6 +377,7 @@ private fun highlight(haystack: String, term: String, accent: androidx.compose.u
 private fun iconOf(hit: SearchHit): ImageVector = when (hit) {
     is SearchHit.Song, is SearchHit.Favorite -> CliampIcons.MusicNote
     is SearchHit.StationHit -> CliampIcons.StationsTab
+    is SearchHit.Show -> CliampIcons.PodRow
     is SearchHit.Tag -> CliampIcons.ListShort
     is SearchHit.Provider -> CliampIcons.Search
     is SearchHit.Command -> CliampIcons.CmdSmall

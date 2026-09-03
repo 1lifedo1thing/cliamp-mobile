@@ -1,13 +1,14 @@
 package stream.cliamp.mobile.ui.search
 
 import stream.cliamp.mobile.data.NameCount
+import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.provider.ProviderAccount
 
 /**
  * Fans the query out across every catalogue the app knows about - local songs,
- * favourites, the radio directory, providers - and returns the best fuzzy hits
- * best-first. One query finds things by any name everywhere.
+ * favourites, the radio directory, podcasts, providers - and returns the best
+ * fuzzy hits best-first. One query finds things by any name everywhere.
  */
 object GlobalSearch {
 
@@ -19,11 +20,18 @@ object GlobalSearch {
         radio: List<Station>,          // cliamp + directory stations combined
         tags: List<NameCount>,
         providers: List<ProviderAccount>,
+        shows: List<PodcastShow> = emptyList(),
+        subscribedFeeds: Set<String> = emptySet(),
     ): SearchResults {
         val term = query.trim()
         if (term.isBlank()) {
             val idle = ArrayList<SearchHit>()
             tags.take(12).forEach { idle += SearchHit.Tag(it.name, it.stationcount) }
+            // Subscribed shows before the radio wall: with an empty bar they
+            // are the shortest list here and the one you meant.
+            shows.filter { it.feedUrl in subscribedFeeds }.take(8).forEach {
+                idle += SearchHit.Show(it, subscribed = true)
+            }
             radio.take(20).forEach { idle += SearchHit.StationHit(it) }
             return SearchResults(idle, idle.size)
         }
@@ -62,6 +70,13 @@ object GlobalSearch {
         tags.forEach { t ->
             val sc = Fuzzy.score(term, t.name)
             if (sc != Int.MAX_VALUE) scored += sc to SearchHit.Tag(t.name, t.stationcount)
+        }
+        // Deduped by feed, because a subscribed show is usually also sitting in
+        // the directory results the same query just fetched.
+        val seenFeeds = HashSet<String>()
+        shows.sortedByDescending { it.feedUrl in subscribedFeeds }.forEach { show ->
+            if (!seenFeeds.add(show.feedUrl)) return@forEach
+            consider(SearchHit.Show(show, subscribed = show.feedUrl in subscribedFeeds))
         }
         providers.forEach { p ->
             val sc = Fuzzy.score(term, p.label)

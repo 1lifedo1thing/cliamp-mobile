@@ -1,5 +1,6 @@
 package stream.cliamp.mobile.ui.search
 
+import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.provider.ProviderAccount
 
@@ -50,6 +51,17 @@ sealed interface SearchHit {
         override val key get() = "cmd:$syntax"
         override val origin get() = "cmd"
         override val haystack get() = "$syntax $hint".trim()
+    }
+
+    /**
+     * A show you can open and browse the episodes of. Not playable itself - a
+     * show is a feed, and which episode you wanted is the whole question.
+     */
+    data class Show(val show: PodcastShow, val subscribed: Boolean) : SearchHit {
+        override val playable get() = null
+        override val key get() = "show:${show.feedUrl}"
+        override val origin get() = if (subscribed) "subscribed" else "podcast"
+        override val haystack get() = "${show.title} ${show.author}".trim()
     }
 
     /** An account you can open and browse inside. */
