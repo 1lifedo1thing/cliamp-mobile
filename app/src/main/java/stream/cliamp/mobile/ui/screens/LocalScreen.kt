@@ -109,6 +109,8 @@ fun LocalScreen(
     onPlay: (Station, List<Station>) -> Unit,
     onToggleFavorite: (Station) -> Unit,
     onAddToQueue: (Station) -> Unit,
+    onPlayNext: (Station) -> Unit,
+    onReplaceQueue: (Station, List<Station>) -> Unit = { s, _ -> onPlay(s, emptyList()) },
     onOpenPlayer: () -> Unit,
     providers: List<ProviderAccount> = emptyList(),
     showProviders: Boolean = false,
@@ -254,6 +256,9 @@ fun LocalScreen(
                     onToggleFavorite = onToggleFavorite,
                     favorites = favorites.map { it.url }.toSet(),
                     loading = loading,
+                    onPlayNext = onPlayNext,
+                    onAddToQueue = onAddToQueue,
+                    onReplaceQueue = onReplaceQueue,
                 )
                 showing != null -> PlaylistDetailShown(
                     playlist = showing,
@@ -660,6 +665,43 @@ private fun SmartPlaylistRow(
     }
 }
 
+/** The ⋮ overflow menu on a song row: play next, add to the queue, or replace the queue. */
+@Composable
+private fun SongRowMenu(
+    onPlayNext: () -> Unit,
+    onAddEnd: () -> Unit,
+    onReplace: () -> Unit,
+) {
+    val p = LocalPalette.current
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Box(
+            Modifier.size(22.dp).clip(RoundedCornerShape(4.dp)).clickable { open = true },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(CliampIcons.More, "menu", Modifier.size(15.dp), tint = p.inkTertiary)
+        }
+        if (open) {
+            Popup(
+                onDismissRequest = { open = false },
+                alignment = Alignment.TopEnd,
+                offset = IntOffset(0, 8),
+            ) {
+                Column(
+                    Modifier.width(170.dp).clip(RoundedCornerShape(6.dp))
+                        .background(p.ground).border(1.dp, p.hairlineRegion, RoundedCornerShape(6.dp)),
+                ) {
+                    MenuItem("play next", p.ink, onPlayNext) { open = false }
+                    HairlineDivider(region = true)
+                    MenuItem("add to queue", p.ink, onAddEnd) { open = false }
+                    HairlineDivider(region = true)
+                    MenuItem("replace queue", p.ink, onReplace) { open = false }
+                }
+            }
+        }
+    }
+}
+
 /** The ⋮ overflow menu on a playlist row: pin/unpin, edit the name, or remove the playlist. */
 @Composable
 private fun PlaylistMenu(
@@ -886,6 +928,9 @@ private fun SmartPlaylistDetail(
     onToggleFavorite: (Station) -> Unit,
     favorites: Set<String>,
     loading: Boolean = false,
+    onPlayNext: (Station) -> Unit = {},
+    onAddToQueue: (Station) -> Unit = {},
+    onReplaceQueue: (Station, List<Station>) -> Unit = { s, _ -> onPlay(s, emptyList()) },
 ) {
     val p = LocalPalette.current
     val members = pl.stations
@@ -920,6 +965,11 @@ private fun SmartPlaylistDetail(
                                 "favourite",
                                 Modifier.size(15.dp).clickable { onToggleFavorite(s) },
                                 tint = if (s.url in favorites) p.accent else p.inkFaint,
+                            )
+                            SongRowMenu(
+                                onPlayNext = { onPlayNext(s) },
+                                onAddEnd = { onAddToQueue(s) },
+                                onReplace = { onReplaceQueue(s, members) },
                             )
                         }
                     },

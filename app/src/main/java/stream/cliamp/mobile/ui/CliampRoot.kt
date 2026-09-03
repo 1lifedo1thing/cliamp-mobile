@@ -134,6 +134,8 @@ fun CliampRoot(
                     onPlay = onPlay,
                     onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
                     onAddToQueue = { player.addToQueue(it) },
+                    onPlayNext = { player.playNext(it) },
+                    onReplaceQueue = { s, from -> player.replaceQueue(s, from) },
                     onOpenPlayer = { overlay = Overlay.Player },
                     providers = providerAccounts,
                     showProviders = libSubTab == LibSubTab.Providers,

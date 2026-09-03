@@ -311,6 +311,29 @@ class PlayerConnection(
         play(src[abs], src)
     }
 
+    /**
+     * Push the current [_queue] to the player so edits (add / remove / reorder)
+     * actually change what plays next, not just what the panel shows. After a
+     * manual edit the arranged [_queue] IS the navigable source, so [_source] is
+     * collapsed to it too: prev / next keep walking the list the user built.
+     */
+    private fun applyQueueToPlayer() {
+        val q = _queue.value
+        if (q.isEmpty()) return
+        val idx = _queueIndex.value.coerceIn(0, q.lastIndex)
+        _source = q
+        windowBase = 0
+        _queueIndex.value = idx
+        scope.launch(Dispatchers.Main) {
+            val c = controller ?: return@launch
+            if (q.size > 1 && q.all { it.isTrack }) {
+                val items = q.map { buildItem(it) }
+                c.setMediaItems(items, idx.coerceIn(0, items.lastIndex), 0L)
+            }
+            sync()
+        }
+    }
+
     /** Insert [station] into the queue without replacing it. */
     fun addToQueue(station: Station, at: Int = Int.MAX_VALUE) {
         val q = _queue.value.toMutableList()
@@ -320,7 +343,22 @@ class PlayerConnection(
         q.add(pos, station)
         _queue.value = q
         if (insertBefore) _queueIndex.value = qi + 1
-        sync()
+        applyQueueToPlayer()
+    }
+
+    /** Insert [station] right after the currently-playing item (play next). */
+    fun playNext(station: Station) {
+        val q = _queue.value.toMutableList()
+        val qi = _queueIndex.value
+        val insertAt = if (qi in q.indices) qi + 1 else q.size
+        q.add(insertAt, station)
+        _queue.value = q
+        applyQueueToPlayer()
+    }
+
+    /** Play [station] with [from] as a brand-new queue, replacing whatever was queued. */
+    fun replaceQueue(station: Station, from: List<Station>) {
+        play(station, from)
     }
 
     /** Drop the station at [index], keeping the playing item stable. */
@@ -336,7 +374,7 @@ class PlayerConnection(
             index == qi -> qi
             else -> qi
         }
-        sync()
+        applyQueueToPlayer()
     }
 
     /** Move the station at [from] to [to], keeping the playing item stable. */
@@ -352,13 +390,14 @@ class PlayerConnection(
         _queue.value = moved
         // the playing station follows its item through the move
         _queueIndex.value = moved.indexOfFirst { it.url == item.url }.let { if (qi == from) it else qi }
-        sync()
+        applyQueueToPlayer()
     }
 
     fun clearQueue() {
         if (_queue.value.isEmpty()) return
         _queue.value = emptyList()
         _queueIndex.value = -1
+        _source = emptyList()
         sync()
     }
 
