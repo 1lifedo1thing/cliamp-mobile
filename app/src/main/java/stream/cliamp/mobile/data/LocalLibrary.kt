@@ -80,13 +80,18 @@ class LocalLibrary(context: Context) {
         // cache, so the list paints instantly and never flashes a scan message;
         // on a cold install the cache is empty and the UI shows "scanning…"
         // until the MediaStore query below fills it.
-        val cached = readCache()
-        if (_songs.value.isEmpty() && !cached.isNullOrEmpty()) {
-            _songs.value = cached
+        if (_songs.value.isEmpty()) {
+            _loading.value = true
         }
-        _loading.value = _songs.value.isEmpty()
         _error.value = null
         Thread {
+            // Cache read and MediaStore scan both live on this background thread
+            // so a warm launch's per-song File.isFile check never janks the UI.
+            val cached = readCache()
+            if (_songs.value.isEmpty() && !cached.isNullOrEmpty()) {
+                _songs.value = cached
+            }
+            _loading.value = _songs.value.isEmpty()
             val found = runCatching { querySongs() }.getOrElse { e ->
                 if (_songs.value.isEmpty()) _error.value = e.message ?: "could not read the library"
                 _songs.value
@@ -116,7 +121,10 @@ class LocalLibrary(context: Context) {
         )
         resolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            projection, null, null, MediaStore.Audio.Media.TITLE + " COLLATE NOCASE",
+            projection,
+            MediaStore.Audio.Media.IS_MUSIC + " != 0",
+            null,
+            MediaStore.Audio.Media.TITLE + " COLLATE NOCASE",
         )?.use { c ->
             val cId = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val cTitle = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
