@@ -40,10 +40,20 @@ class PlayerConnection(
     private val _queueIndex = MutableStateFlow(-1)
 
     /**
-     * Logical index (into [_queue]) of the first item pushed to Media3. When a
-     * queue is huge - hundreds of local songs - the tapped track plus a small
-     * tail is pushed instead of the whole thing, so play starts instantly. The
-     * offset maps Media3's window back onto the logical queue in [sync].
+     * The full list a play originated from. When that list is huge - hundreds
+     * of local songs - [_queue] only holds a bounded window starting at the
+     * tapped track, so touching a song queues a short "up next" run instead of
+     * dumping the whole library in. [_source] keeps the whole list so prev /
+     * next and the auto-roll-forward can keep walking it. For a short list
+     * [_source] and [_queue] are the same list.
+     */
+    private var _source: List<Station> = emptyList()
+
+    /**
+     * Logical index (into [_source]) of the first item held in [_queue]. When
+     * a queue is huge the tapped track plus a small tail are queued instead of
+     * the whole thing, so play starts instantly; this offset says where that
+     * window begins inside the source list. For a short queue it is 0.
      */
     private var windowBase = 0
 
@@ -102,27 +112,32 @@ class PlayerConnection(
 
         // When Media3 advances a playlist it does so internally, so the index
         // has to be read back or the screen keeps showing the previous track.
+        // Media3 always holds exactly [_queue] (a bounded window for a huge
+        // source, or the whole list for a short one), so its window index maps
+        // straight onto [_queue]; no source offset needed.
         val q = _queue.value
         if (!swapping && c.mediaItemCount > 0 && q.isNotEmpty()) {
             val playerIndex = c.currentMediaItemIndex
-            val logical = windowBase + playerIndex
-            if (logical in q.indices && logical != _queueIndex.value) {
+            val logical = playerIndex.coerceIn(0, q.lastIndex)
+            if (logical != _queueIndex.value) {
                 _queueIndex.value = logical
                 PlaybackBus.publishStation(q[logical])
             }
 
             // A huge queue is played as a window; when that window is nearly
-            // spent, roll it forward so the album never silently stops at the
-            // boundary. Guarded so the poller and onEvents can't double-push.
-            if (q.size > WINDOW && playerIndex >= c.mediaItemCount - 2) {
-                val next = (windowBase + playerIndex + 1).coerceIn(0, q.lastIndex)
-                if (next > windowBase && next <= q.lastIndex) {
+            // spent, roll it forward in [_source] so the library never silently
+            // stops at the boundary. Guarded so the poller and onEvents can't
+            // double-push.
+            if (_source.size > WINDOW && playerIndex >= c.mediaItemCount - 2) {
+                val abs = windowBase + playerIndex
+                val next = (abs + 1).coerceIn(0, _source.lastIndex)
+                if (next > windowBase && next <= _source.lastIndex) {
                     _extending?.cancel()
                     _extending = scope.launch {
                         delay(1500)
                         val c2 = controller ?: return@launch
-                        if (c2.currentMediaItemIndex >= c2.mediaItemCount - 2 && next < q.size) {
-                            pushWindow(c2, q, next)
+                        if (c2.currentMediaItemIndex >= c2.mediaItemCount - 2 && next <= _source.lastIndex) {
+                            slideWindow(c2, next)
                             sync()
                         }
                     }
@@ -131,6 +146,7 @@ class PlayerConnection(
         }
 
         val qi = _queueIndex.value
+        val abs = windowBase + qi
         _state.value = PlayerState(
             playing = c.isPlaying,
             buffering = c.playbackState == Player.STATE_BUFFERING,
@@ -141,38 +157,39 @@ class PlayerConnection(
             durationMs = c.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L,
             seekable = c.isCurrentMediaItemSeekable,
             live = c.isCurrentMediaItemLive,
-            hasPrev = qi > 0,
-            hasNext = qi >= 0 && qi < _queue.value.lastIndex,
+            hasPrev = abs > 0,
+            hasNext = _source.size > 1 && abs < _source.lastIndex,
         )
     }
 
     fun play(station: Station, from: List<Station> = emptyList()) {
         var q = _queue.value
+        val srcIdx = from.indexOfFirst { it.url == station.url }
         if (from.isNotEmpty()) {
-            _queue.value = from
-            q = from
-            _queueIndex.value = from.indexOfFirst { it.url == station.url }
+            // Cap the queued list to a bounded window around the tapped track so
+            // a huge source (the whole local library) doesn't flood the queue.
+            _source = from
+            windowBase = if (from.size > WINDOW) srcIdx else 0
+            q = sliceAt(from, srcIdx)
+            _queue.value = q
+            _queueIndex.value = (srcIdx - windowBase).coerceIn(0, q.lastIndex.coerceAtLeast(0))
         } else if (q.none { it.url == station.url }) {
+            _source = listOf(station)
             _queue.value = listOf(station)
             q = listOf(station)
             _queueIndex.value = 0
+            windowBase = 0
         } else {
+            _source = q
             _queueIndex.value = q.indexOfFirst { it.url == station.url }
+            windowBase = 0
         }
         val queue = q
+        val start = windowBase + _queueIndex.value.coerceAtLeast(0)
 
         PlaybackBus.publishStation(station)
         PlaybackBus.publishError(null)
         PlaybackBus.publishFormat(StreamFormat())
-
-        // Snapshot the tapped index on the calling thread. The 500ms sync()
-        // poller maps Media3's window back onto [_queue], and until the rebuilt
-        // queue is in place Media3 still reports the PREVIOUS position - which
-        // against the new [_queue] can look like the first item. That collision
-        // alone makes tapping a middle song play the top result. Holding the
-        // intended index here (and raising [swapping] while Media3 is being
-        // rewritten) keeps the poller out of that bookkeeping.
-        val start = _queueIndex.value.coerceIn(0, queue.lastIndex.coerceAtLeast(0))
 
         // The tapped station is published and rendered first, on the calling
         // thread, so the music screen and mini bar update the instant a song is
@@ -191,14 +208,16 @@ class PlayerConnection(
             swapping = true
             try {
                 if (playlist != null) {
-                    pushWindow(c, playlist, start)
+                    slideWindow(c, start)
                 } else {
                     // A single track (or live stream) is pushed as one media item,
-                    // so Media3's index 0 has to map back to the tapped station in
-                    // [_queue], not to the head of the list that produced it. This
-                    // keeps sync() publishing the tapped song instead of the top
-                    // search match whenever a search result is played alone.
-                    windowBase = start
+                    // so Media3's index 0 maps to [_queue], not to the head of the
+                    // list that produced it. This keeps sync() publishing the
+                    // tapped song instead of the top search match whenever a
+                    // search result is played alone.
+                    windowBase = _queueIndex.value
+                    _queue.value = listOf(station)
+                    _queueIndex.value = 0
                     c.setMediaItem(buildItem(station))
                 }
                 c.prepare()
@@ -211,25 +230,33 @@ class PlayerConnection(
     }
 
     /**
-     * Pushes [queue] into Media3. For small queues the whole list goes in; for
-     * a huge one (hundreds of songs) only [WINDOW] covers starting at [start],
-     * so playback begins immediately instead of waiting for Media3 to set up
-     * every track. [sync] maps the window back onto [start] when it advances.
+     * Advances the currently-windowed Media3 playlist to [start] in [_source],
+     * sliding [_queue] to the matching bounded window. For short sources (whole
+     * list fits) it pushes everything from [start] onward (or the whole list if
+     * [start] is the tapped index and the list is short).
      */
-    private suspend fun pushWindow(c: Player, queue: List<Station>, start: Int) {
-        windowBase = if (queue.size > WINDOW) start else 0
-        val window = if (queue.size > WINDOW) {
-            queue.subList(start, minOf(start + WINDOW, queue.size))
-        } else {
-            queue
-        }
-        val items = window.map { buildItem(it) }
-        // A windowed queue starts its Media3 playlist at the tapped item (0 past
-        // the window's own head); a short queue is pushed whole, so the starting
-        // window index is [start] itself. Never derived from the live queueIndex,
-        // which a sync() tick may have repurposed while we built the items.
-        val index = if (queue.size > WINDOW) 0 else start
+    private suspend fun slideWindow(c: Player, start: Int) {
+        val src = _source
+        if (src.isEmpty()) return
+        val abs = start.coerceIn(0, src.lastIndex)
+        val slice = sliceAt(src, abs)
+        windowBase = if (src.size > WINDOW) abs else 0
+        _queue.value = slice
+        val index = (abs - windowBase).coerceIn(0, slice.lastIndex)
+        _queueIndex.value = index
+        val items = slice.map { buildItem(it) }
         c.setMediaItems(items, index.coerceIn(0, items.lastIndex), 0L)
+    }
+
+    /**
+     * Returns a bounded window into [source] beginning at [srcIndex], capped at
+     * [WINDOW] tracks when the source is huge; short sources are returned whole.
+     */
+    private fun sliceAt(source: List<Station>, srcIndex: Int): List<Station> {
+        if (source.size <= WINDOW) return source
+        val start = srcIndex.coerceIn(0, source.lastIndex)
+        val end = minOf(start + WINDOW, source.size)
+        return source.subList(start, end)
     }
 
     /**
@@ -272,11 +299,39 @@ class PlayerConnection(
     fun prev() = step(-1)
 
     private fun step(delta: Int) {
+        // Navigate within the full source list (not the bounded [_queue]
+        // window), then re-slice a fresh queue around the chosen track, so prev
+        // / next keep walking the whole library and never stray into another
+        // list that may have been played before.
+        val src = _source
+        if (src.isEmpty()) return
+        val here = windowBase + _queueIndex.value
+        val abs = (here + delta).coerceIn(0, src.lastIndex)
+        if (abs == here) return
+        play(src[abs], src)
+    }
+
+    /**
+     * Push the current [_queue] to the player so edits (add / remove / reorder)
+     * actually change what plays next, not just what the panel shows. After a
+     * manual edit the arranged [_queue] IS the navigable source, so [_source] is
+     * collapsed to it too: prev / next keep walking the list the user built.
+     */
+    private fun applyQueueToPlayer() {
         val q = _queue.value
         if (q.isEmpty()) return
-        val i = (_queueIndex.value + delta).coerceIn(0, q.lastIndex)
-        if (i == _queueIndex.value) return
-        play(q[i], q)
+        val idx = _queueIndex.value.coerceIn(0, q.lastIndex)
+        _source = q
+        windowBase = 0
+        _queueIndex.value = idx
+        scope.launch(Dispatchers.Main) {
+            val c = controller ?: return@launch
+            if (q.size > 1 && q.all { it.isTrack }) {
+                val items = q.map { buildItem(it) }
+                c.setMediaItems(items, idx.coerceIn(0, items.lastIndex), 0L)
+            }
+            sync()
+        }
     }
 
     /** Insert [station] into the queue without replacing it. */
@@ -288,7 +343,22 @@ class PlayerConnection(
         q.add(pos, station)
         _queue.value = q
         if (insertBefore) _queueIndex.value = qi + 1
-        sync()
+        applyQueueToPlayer()
+    }
+
+    /** Insert [station] right after the currently-playing item (play next). */
+    fun playNext(station: Station) {
+        val q = _queue.value.toMutableList()
+        val qi = _queueIndex.value
+        val insertAt = if (qi in q.indices) qi + 1 else q.size
+        q.add(insertAt, station)
+        _queue.value = q
+        applyQueueToPlayer()
+    }
+
+    /** Play [station] with [from] as a brand-new queue, replacing whatever was queued. */
+    fun replaceQueue(station: Station, from: List<Station>) {
+        play(station, from)
     }
 
     /** Drop the station at [index], keeping the playing item stable. */
@@ -304,7 +374,7 @@ class PlayerConnection(
             index == qi -> qi
             else -> qi
         }
-        sync()
+        applyQueueToPlayer()
     }
 
     /** Move the station at [from] to [to], keeping the playing item stable. */
@@ -320,13 +390,14 @@ class PlayerConnection(
         _queue.value = moved
         // the playing station follows its item through the move
         _queueIndex.value = moved.indexOfFirst { it.url == item.url }.let { if (qi == from) it else qi }
-        sync()
+        applyQueueToPlayer()
     }
 
     fun clearQueue() {
         if (_queue.value.isEmpty()) return
         _queue.value = emptyList()
         _queueIndex.value = -1
+        _source = emptyList()
         sync()
     }
 

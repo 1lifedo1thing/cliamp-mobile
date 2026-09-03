@@ -39,6 +39,9 @@ import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
+import stream.cliamp.mobile.ui.components.OverflowButton
+import stream.cliamp.mobile.ui.components.OverflowItem
+import stream.cliamp.mobile.ui.components.OverflowMenu
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -73,6 +76,8 @@ fun ProviderBrowseScreen(
     onEdit: () -> Unit,
     onPlay: (Station, List<Station>) -> Unit,
     onOpenPlayer: () -> Unit,
+    onAddToQueue: (Station) -> Unit = {},
+    onPlayNext: (Station) -> Unit = {},
 ) {
     val p = LocalPalette.current
     val client = remember(account.id) { account.browseClient() }
@@ -246,7 +251,18 @@ fun ProviderBrowseScreen(
                                 Icon(CliampIcons.PlayRow, null, Modifier.size(11.dp), tint = p.inkTertiary)
                             }
                         },
-                        trailing = { Mono(clockOf(t.duration), CliampType.meta, p.inkFaint) },
+                        trailing = {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Mono(clockOf(t.duration), CliampType.meta, p.inkFaint)
+                                OverflowMenu(
+                                    trigger = { open -> OverflowButton(open) },
+                                    items = listOf(
+                                        OverflowItem(label = "play next", action = { onPlayNext(t.toStation(account, client.trackCover(t.id))) }),
+                                        OverflowItem(label = "add to queue", action = { onAddToQueue(t.toStation(account, client.trackCover(t.id))) }),
+                                    ),
+                                )
+                            }
+                        },
                     ) {
                         Mono(t.title, CliampType.rowPrimary, p.ink, maxLines = 1)
                         Mono(

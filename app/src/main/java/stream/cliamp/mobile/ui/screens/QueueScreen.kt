@@ -26,17 +26,23 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import stream.cliamp.mobile.data.Station
+import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
+import stream.cliamp.mobile.ui.theme.CliampPalette
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
 
-/** The always-available queue panel: just up-next, with reorder / remove. */
+/**
+ * The always-available queue panel: a pinned "now playing" card on top, then
+ * the rest as up-next with reorder / remove. Works like a music player's queue
+ * — a live radio stream is one LIVE item, a local song shows its duration.
+ */
 @UnstableApi
 @Composable
 fun QueueScreen(
@@ -48,6 +54,10 @@ fun QueueScreen(
 ) {
     val p = LocalPalette.current
     val queue by player.queue.collectAsState(initial = emptyList())
+
+    // Find where the currently-playing item sits so it can be pinned on top and
+    // excluded from the up-next run without disturbing the underlying order.
+    val activeIndex = queue.indexOfFirst { it.url == current?.url }
 
     Column(Modifier.fillMaxSize().background(p.ground)) {
         ScreenHeader {
@@ -72,71 +82,160 @@ fun QueueScreen(
                 }
             }
 
-            item {
-                if (queue.isNotEmpty()) {
-                    SectionLabel("in the list — ${queue.size}")
-                }
+            if (current != null && activeIndex >= 0) {
+                item { SectionLabel("now playing") }
+                item { NowPlayingCard(current, playing, p) }
+                item { Spacer(Modifier.height(22.dp)) }
             }
 
-            itemsIndexed(queue, key = { _, s -> s.url }) { idx, s ->
-                val active = current?.url == s.url
-                ListRow(
-                    onClick = { onPlay(s, queue) },
-                    verticalPadding = 11.dp,
-                    leading = {
-                        Box(
-                            Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
-                                .then(
-                                    if (active) Modifier.background(p.accent)
-                                    else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (active && playing) {
-                                Icon(CliampIcons.Pause, null, Modifier.size(9.dp), tint = p.onAccent)
-                            } else {
-                                Mono(
-                                    "%02d".format((idx + 1).coerceAtMost(99)),
-                                    CliampType.meta,
-                                    if (active) p.onAccent else p.inkFaint,
-                                )
-                            }
-                        }
-                    },
-                    trailing = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            SquareGlyph("^") {
-                                if (idx > 0) player.reorderQueue(from = idx, to = idx - 1)
-                            }
-                            SquareGlyph("v") {
-                                if (idx < queue.lastIndex) player.reorderQueue(from = idx, to = idx + 1)
-                            }
-                            SquareGlyph("×") {
-                                player.removeFromQueue(idx)
-                            }
-                        }
-                    },
-                ) {
-                    Mono(
-                        s.name,
-                        if (active) CliampType.rowPrimaryMedium else CliampType.rowPrimary,
-                        if (active) p.accent else p.ink,
-                        maxLines = 1,
-                    )
-                    Mono(
-                        if (active && playing) "playing" else s.meta.ifBlank { "live stream" },
-                        CliampType.rowSecondary,
-                        if (active && playing) p.accent else p.inkTertiary,
-                        maxLines = 1,
+            val upNext = queue.filterIndexed { i, s -> activeIndex < 0 || i != activeIndex }
+            if (upNext.isNotEmpty()) {
+                item { SectionLabel("up next — ${upNext.size}") }
+                itemsIndexed(upNext, key = { _, s -> s.url }) { _, s ->
+                    val idx = queue.indexOfFirst { it.url == s.url }
+                    QueueRow(
+                        s = s,
+                        isNow = current?.url == s.url,
+                        idx = idx,
+                        queueSize = queue.size,
+                        onPlay = { onPlay(s, queue) },
+                        onMoveUp = { player.reorderQueue(from = idx, to = idx - 1) },
+                        onMoveDown = { player.reorderQueue(from = idx, to = idx + 1) },
+                        onRemove = { player.removeFromQueue(idx) },
                     )
                 }
+                item { Spacer(Modifier.height(20.dp)) }
             }
-            item { Spacer(Modifier.height(20.dp)) }
         }
     }
+}
+
+@Composable
+private fun NowPlayingCard(s: Station, playing: Boolean, p: CliampPalette) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Gutter)
+            .clip(RoundedCornerShape(8.dp))
+            .background(p.panelRaised)
+            .border(1.dp, p.keyBorder, RoundedCornerShape(8.dp))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                Modifier.size(7.dp).clip(RoundedCornerShape(4.dp)).background(if (playing) p.accent else p.inkFaint),
+            )
+            Mono(if (playing) "playing" else "paused", CliampType.chip, if (playing) p.accent else p.inkTertiary)
+            Spacer(Modifier.weight(1f))
+            SourceBadge(s, p)
+        }
+        Spacer(Modifier.height(9.dp))
+        Mono(if (s.name.isBlank()) "unknown" else s.name, CliampType.trackTitleCompact, p.ink, maxLines = 1)
+        val parts = mutableListOf<String>()
+        if (s.source == StationSource.Local && s.artist.isNotBlank()) parts.add(s.artist)
+        else if (s.meta.isNotBlank()) parts.add(s.meta)
+        if (s.isTrack && s.durationMs > 0) parts.add(formatDuration(s.durationMs))
+        if (parts.isEmpty()) parts.add(if (s.isTrack) "–:––" else "live stream")
+        Mono(parts.joinToString(" · "), CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+    }
+}
+
+@Composable
+private fun QueueRow(
+    s: Station,
+    isNow: Boolean,
+    idx: Int,
+    queueSize: Int,
+    onPlay: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    val p = LocalPalette.current
+    val title = if (s.name.isBlank()) "unknown" else s.name
+    val subtitle = sourceSubtitle(s)
+    ListRow(
+        onClick = onPlay,
+        verticalPadding = 11.dp,
+        leading = {
+            Box(
+                Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
+                    .then(
+                        if (isNow) Modifier.background(p.accent)
+                        else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (isNow) {
+                    Icon(CliampIcons.Pause, null, Modifier.size(9.dp), tint = p.onAccent)
+                } else {
+                    Mono("%02d".format((idx + 1).coerceAtMost(99)), CliampType.meta, p.inkFaint)
+                }
+            }
+        },
+        trailing = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                SourceBadge(s, p)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    SquareGlyph("^") { if (idx > 0) onMoveUp() }
+                    SquareGlyph("v") { if (idx < queueSize - 1) onMoveDown() }
+                    SquareGlyph("×") { onRemove() }
+                }
+            }
+        },
+    ) {
+        Mono(
+            title,
+            if (isNow) CliampType.rowPrimaryMedium else CliampType.rowPrimary,
+            if (isNow) p.accent else p.ink,
+            maxLines = 1,
+        )
+        Mono(subtitle, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+    }
+}
+
+/** A tight source/type label: LOCAL, LIVE, RADIO, etc. */
+@Composable
+private fun SourceBadge(s: Station, p: CliampPalette) {
+    val label = when {
+        !s.isTrack -> {
+            when (s.source) {
+                StationSource.Cliamp -> "cliamp"
+                StationSource.Directory -> "radio"
+                else -> "live"
+            }
+        }
+        s.source == StationSource.Local -> "local"
+        else -> "track"
+    }
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(3.dp))
+            .border(1.dp, p.chipBorder, RoundedCornerShape(3.dp))
+            .padding(horizontal = 5.dp, vertical = 1.dp),
+    ) {
+        Mono(label.uppercase(), CliampType.tabLabel, p.inkTertiary)
+    }
+}
+
+private fun sourceSubtitle(s: Station): String {
+    val parts = mutableListOf<String>()
+    if (s.source == StationSource.Local && s.artist.isNotBlank()) parts.add(s.artist)
+    else if (s.meta.isNotBlank()) parts.add(s.meta)
+    if (s.isTrack && s.durationMs > 0) parts.add(formatDuration(s.durationMs))
+    if (parts.isEmpty()) parts.add(if (s.isTrack) "–:––" else "live stream")
+    return parts.joinToString(" · ")
+}
+
+private fun formatDuration(ms: Long): String {
+    if (ms <= 0) return "–:––"
+    val totalSec = ms / 1000
+    val m = totalSec / 60
+    val sec = totalSec % 60
+    return "%d:%02d".format(m, sec)
 }
 
 @Composable

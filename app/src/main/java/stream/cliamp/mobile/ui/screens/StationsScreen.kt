@@ -43,6 +43,9 @@ import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.ListRow
+import stream.cliamp.mobile.ui.components.OverflowButton
+import stream.cliamp.mobile.ui.components.OverflowItem
+import stream.cliamp.mobile.ui.components.OverflowMenu
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.theme.CliampType
@@ -62,6 +65,8 @@ fun StationsScreen(
     favorites: List<Station>,
     onPlay: (Station, List<Station>) -> Unit,
     onToggleFavorite: (Station) -> Unit,
+    onAddToQueue: (Station) -> Unit = {},
+    onPlayNext: (Station) -> Unit = {},
 ) {
     val p = LocalPalette.current
     var source by remember { mutableStateOf(Source.All) }
@@ -229,6 +234,9 @@ private fun StationRow(
     favorite: Boolean,
     onPlay: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onAddToQueue: () -> Unit = {},
+    onPlayNext: () -> Unit = {},
+    onReplaceQueue: () -> Unit = onPlay,
 ) {
     val p = LocalPalette.current
     ListRow(
@@ -263,6 +271,14 @@ private fun StationRow(
                     "favourite",
                     Modifier.size(15.dp).clickable(onClick = onToggleFavorite),
                     tint = if (favorite) p.accent else p.inkFaint,
+                )
+                OverflowMenu(
+                    trigger = { open -> OverflowButton(open) },
+                    items = listOf(
+                        OverflowItem("play next", onPlayNext),
+                        OverflowItem("add to queue", onAddToQueue),
+                        OverflowItem("replace queue", onReplaceQueue),
+                    ),
                 )
             }
         },
