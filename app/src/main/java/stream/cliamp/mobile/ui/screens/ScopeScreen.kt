@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -30,9 +29,9 @@ import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.playback.EqPresets
 import stream.cliamp.mobile.playback.PlaybackBus
+import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.BrickMeter
 import stream.cliamp.mobile.ui.components.Chip
-import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampToggle
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
@@ -86,14 +85,7 @@ fun ScopeScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                Modifier.clickable(onClick = onBack),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(CliampIcons.Prev, "back", Modifier.size(width = 15.dp, height = 12.dp), tint = p.inkSecondary)
-                Mono("back", CliampType.rowSecondary, p.inkSecondary)
-            }
+            BackChip(onClick = onBack)
             Mono(
                 when {
                     visualizer == "off" -> "VISUALIZER OFF"
