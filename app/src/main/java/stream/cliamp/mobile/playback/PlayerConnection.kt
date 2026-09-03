@@ -16,10 +16,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import stream.cliamp.mobile.CliampApp
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationSource
+import stream.cliamp.mobile.widget.CliampWidgetReceiver
 
 /**
  * The UI's handle on playback. Transport goes through a MediaController rather
@@ -49,12 +52,36 @@ class PlayerConnection(
      */
     private var _source: List<Station> = emptyList()
 
-    /**
-     * The linear list a play originated from, before any shuffle reordering.
+    /** The linear list a play originated from, before any shuffle reordering.
      * Shuffle reorders a copy of it into [_source]; turning shuffle off restores
      * [_source] to this so prev / next walk the natural playlist order again.
      */
     private var _baseSource: List<Station> = emptyList()
+
+    /**
+     * List used for prev / next before anything has played this session (e.g. at
+     * launch, when the mini player shows the last-played song from history).
+     * The root supplies recent history so stepping works from that shown song.
+     */
+    private var _fallbackSource: List<Station> = emptyList()
+
+    /** Set by the root with recent history so prev/next work from a fresh launch. */
+    fun setFallbackSource(list: List<Station>) { _fallbackSource = list }
+
+    // If the app is opened straight into the notification (or nothing has UI-composed
+    // yet), there is no root to seed the fallback list, so prime it from history and
+    // favourites ourselves. The root's seed wins when it arrives.
+    init {
+        val app = context.applicationContext as CliampApp
+        scope.launch {
+            val prefs = app.prefs
+            val history = prefs.history.first()
+            val favs = prefs.favorites.first()
+            if (_fallbackSource.isEmpty()) {
+                _fallbackSource = history.ifEmpty { favs }
+            }
+        }
+    }
 
     /** Whether shuffled playback is switched on. */
     private val _shuffle = MutableStateFlow(false)
@@ -157,7 +184,13 @@ class PlayerConnection(
             // item back to the head of the list. Only read back the index when
             // Media3 actually holds the whole queue.
             val oneToOne = c.mediaItemCount == q.size
-            val logical = if (oneToOne) playerIndex.coerceIn(0, q.lastIndex) else _queueIndex.value
+            val logical = if (oneToOne) {
+                // Resolve by the playing item's id so the model stays the source
+                // of truth even when a shuffle toggle left Media3 in a different
+                // order than the (new) shuffled queue.
+                val curId = c.getMediaItemAt(c.currentMediaItemIndex.coerceIn(0, q.lastIndex)).mediaId
+                q.indexOfFirst { it.id == curId }.takeIf { it >= 0 } ?: (c.currentMediaItemIndex.coerceIn(0, q.lastIndex))
+            } else _queueIndex.value
             if (logical != _queueIndex.value) {
                 _queueIndex.value = logical
                 PlaybackBus.publishStation(q[logical])
@@ -217,15 +250,18 @@ class PlayerConnection(
         }
     }
 
-    fun play(station: Station, from: List<Station> = emptyList()) {
+    fun play(station: Station, from: List<Station> = emptyList(), preserveOrder: Boolean = false) {
         var q = _queue.value
         if (from.isNotEmpty()) {
-            _baseSource = from
+            if (!preserveOrder) _baseSource = from
             // Cap the queued list to a bounded window around the tapped track so
             // a huge source (the whole local library) doesn't flood the queue.
             // The active order is linear, or shuffled if shuffle is on; the
             // tapped track keeps playing first, so it heads the shuffled list.
-            val order = if (_shuffle.value && from.all { it.isTrack }) shuffledKeepFirst(from, station) else from
+            // Navigation (step) passes preserveOrder so it rides the already
+            // shuffled list instead of re-randomising - and restarting - on
+            // every prev/next.
+            val order = if (!preserveOrder && _shuffle.value && from.size > 1) shuffledKeepFirst(from, station) else from
             _source = order
             val srcIdxO = order.indexOfFirst { it.url == station.url }.coerceAtLeast(0)
             windowBase = if (order.size > WINDOW) srcIdxO else 0
@@ -241,7 +277,7 @@ class PlayerConnection(
             windowBase = 0
         } else {
             _baseSource = q
-            val order = if (_shuffle.value && q.all { it.isTrack }) shuffledKeepFirst(q, station) else q
+            val order = if (_shuffle.value && q.size > 1) shuffledKeepFirst(q, station) else q
             _source = order
             _queueIndex.value = order.indexOfFirst { it.url == station.url }
             windowBase = 0
@@ -250,8 +286,20 @@ class PlayerConnection(
         val start = windowBase + _queueIndex.value.coerceAtLeast(0)
 
         PlaybackBus.publishStation(station)
+        PlaybackBus.publishSource(_source)
         PlaybackBus.publishError(null)
         PlaybackBus.publishFormat(StreamFormat())
+
+        // Persist what is playing so the widget, the quick tile and a fresh
+        // launch all agree on the current station. This is the single play
+        // choke point, so it covers app taps, the notification, the widget and
+        // auto-advance - not just plays fired through the root's onPlay hook.
+        val prefs = (context.applicationContext as CliampApp).prefs
+        scope.launch {
+            prefs.setLastStation(station)
+            prefs.pushHistory(station)
+            CliampWidgetReceiver.refresh(context.applicationContext)
+        }
 
         // The tapped station is published and rendered first, on the calling
         // thread, so the music screen and mini bar update the instant a song is
@@ -321,9 +369,8 @@ class PlayerConnection(
 
     /**
      * Returns a shuffled copy of [base] with [first] kept at the front, so the
-     * currently- or tapped-playing track is not interrupted while the rest of
-     * the playlist plays in random order. Only meaningful for finite track
-     * playlists; live-source order is left alone by its callers.
+     * currently- or tapped-playing item is not interrupted while the rest of
+     * the list plays in random order. Works for tracks and stations alike.
      */
     private fun shuffledKeepFirst(base: List<Station>, first: Station): List<Station> {
         val rest = base.filter { it.url != first.url }
@@ -332,33 +379,40 @@ class PlayerConnection(
 
     /**
      * Toggles shuffled playback of the current list. When switched on, the list
-     * the user is playing (local songs, favourites, a provider album - whatever
-     * [_source] holds) is re-ordered so the tracked order of the list is
-     * shuffled, always keeping the current track first. Toggling off restores
-     * the original linear order from [_baseSource]. On a live stream or a lone
-     * track there is nothing finite to reorder, so only the flag flips.
+     * the user is playing (local songs, favourites, a provider album, a station
+     * wall - whatever [_source] holds) is re-ordered so the order of the list is
+     * shuffled, always keeping the current item first. Toggling off restores
+     * the original linear order from [_baseSource]. On a lone item there is
+     * nothing to reorder, so only the flag flips.
      */
     fun toggleShuffle() {
+        // Pure model toggle: this only flips the flag and reorders the
+        // navigation model for display and prev/next. The Media3 controller is
+        // never touched (no setMediaItems, no moveMediaItem), so the currently
+        // playing audio is completely uninterrupted - toggling shuffle must never
+        // stop, resume or restart the song. The new order is applied to the
+        // player the next time it steps or (re)plays.
         val newOn = !_shuffle.value
         _shuffle.value = newOn
-        val c = controller ?: return
         if (newOn) {
-            // Nothing to reorder: a live stream (not all tracks) or single item.
-            if (_source.size < 2 || !_source.all { it.isTrack }) { sync(); return }
+            if (_source.size < 2) return
+            val base = _baseSource.ifEmpty { _source }
             val current = _source.getOrNull(_queueIndex.value.takeIf { it >= 0 }?.let { windowBase + it } ?: 0)
                 ?: _baseSource.firstOrNull()
                 ?: _queue.value.firstOrNull()
                 ?: _source.first()
-            val reordered = shuffledKeepFirst(_baseSource.ifEmpty { _source }, current)
-                .ifEmpty { _source }
+            val abs = base.indexOfFirst { it.url == current.url }.coerceAtLeast(0)
+            val rest = base.filterIndexed { i, s -> i != abs }.shuffled()
+            val reordered = ArrayList<Station>(base.size)
+            var ri = 0
+            for (i in base.indices) {
+                if (i == abs) reordered.add(current) else reordered.add(rest[ri++])
+            }
             _shuffledSource = reordered
             _source = reordered
-            // Re-window the queue from the shuffled order, current still playing.
-            val target = reordered.indexOfFirst { it.url == current.url }.coerceAtLeast(0)
-            scope.launch(Dispatchers.Main) {
-                slideWindow(c, target)
-                sync()
-            }
+            windowBase = if (reordered.size > WINDOW) abs else 0
+            _queue.value = sliceAt(reordered, abs)
+            _queueIndex.value = (abs - windowBase).coerceIn(0, _queue.value.lastIndex.coerceAtLeast(0))
         } else {
             val linear = _baseSource.ifEmpty { _shuffledSource ?: _source }
             _shuffledSource = null
@@ -366,12 +420,13 @@ class PlayerConnection(
                 (_queueIndex.value.takeIf { it >= 0 }?.let { windowBase + it } ?: 0),
             ) ?: linear.firstOrNull()
             _source = linear.ifEmpty { listOf(current).filterNotNull() }
-            val target = _source.indexOfFirst { it.url == current?.url }.coerceAtLeast(0)
-            scope.launch(Dispatchers.Main) {
-                if (_source.isNotEmpty()) slideWindow(c, target)
-                sync()
-            }
+            val abs = current?.let { linear.indexOfFirst { s -> s.url == it.url }.coerceAtLeast(0) } ?: 0
+            windowBase = if (_source.size > WINDOW) abs else 0
+            _queue.value = sliceAt(_source, abs)
+            _queueIndex.value = (abs - windowBase).coerceIn(0, _queue.value.lastIndex.coerceAtLeast(0))
         }
+        // Refresh the panel only; Media3 order is untouched.
+        sync()
     }
 
     /**
@@ -430,13 +485,25 @@ class PlayerConnection(
         // Navigate within the full source list (not the bounded [_queue]
         // window), then re-slice a fresh queue around the chosen track, so prev
         // / next keep walking the whole library and never stray into another
-        // list that may have been played before.
-        val src = _source
+        // list that may have been played before. On a fresh launch nothing has
+        // played yet, so fall back to the recent-history list the root supplied;
+        // that lets next/prev work with the song the mini player is showing.
+        val src = _source.ifEmpty { _fallbackSource }
         if (src.isEmpty()) return
         val here = windowBase + _queueIndex.value
-        val abs = (here + delta).coerceIn(0, src.lastIndex)
-        if (abs == here) return
-        play(src[abs], src)
+        val abs = if (_source.isEmpty()) {
+            // Nothing loaded: anchor on the shown (last-played) station, if any.
+            val shown = PlaybackBus.station.value?.let { s ->
+                src.indexOfFirst { it.url == s.url }
+            } ?: -1
+            (if (shown >= 0) shown + delta else 0).coerceIn(0, src.lastIndex)
+        } else {
+            (here + delta).coerceIn(0, src.lastIndex)
+        }
+        if (abs == here && _source.isNotEmpty()) return
+        // preserveOrder: step rides the already-shuffled list instead of
+        // re-randomising (and restarting the audio) on every prev/next.
+        play(src[abs], src, preserveOrder = true)
     }
 
     /**
@@ -542,7 +609,13 @@ class PlayerConnection(
         if (!c.isCurrentMediaItemSeekable) return
         val d = c.duration
         if (d == C.TIME_UNSET || d <= 0) return
-        c.seekTo((d * fraction.coerceIn(0f, 1f)).toLong())
+        // Seeking to the very end of a playlist item makes Media3 immediately
+        // auto-advance to the next track, which a user reading a seek on the far
+        // edge of the bar experiences as "just changed the song". Clamp the
+        // target just short of the tail so the seek stays on the current item.
+        val target = d * fraction.coerceIn(0f, 1f)
+        if (target >= d - 250) return
+        c.seekTo(target.toLong())
         sync()
     }
 
