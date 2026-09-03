@@ -407,20 +407,23 @@ class PlayerConnection(
      * nothing to reorder, so only the flag flips.
      */
     fun toggleShuffle() {
-        // Pure-flip plus an in-place Media3 reorder. The model and the player
-        // are reordered together so sync() never sees a mismatch (a mismatch is
-        // what made a tap near the transport resolve to a different song).
+        // Pure-flip plus a Media3 queue rebuild. Both the model and the player
+        // are rebuilt together from the new order so sync() never sees a
+        // mismatch (a mismatch is what made a cardboard shuffle either only
+        // reach the loaded window - "a few random songs" - or show one song
+        // while playing another).
         val newOn = !_shuffle.value
-        _shuffle.value = newOn
         val c = controller
+        if (c == null || _source.isEmpty()) { _shuffle.value = newOn; sync(); return }
+        val base = _baseSource.ifEmpty { _source }
+        val current = _source.getOrNull(_queueIndex.value.takeIf { it >= 0 }?.let { windowBase + it } ?: 0)
+            ?: _baseSource.firstOrNull()
+            ?: _queue.value.firstOrNull()
+            ?: _source.first()
+        _shuffle.value = newOn
         if (newOn) {
             if (_source.size < 2) { sync(); return }
-            val base = _baseSource.ifEmpty { _source }
-            val current = _source.getOrNull(_queueIndex.value.takeIf { it >= 0 }?.let { windowBase + it } ?: 0)
-                ?: _baseSource.firstOrNull()
-                ?: _queue.value.firstOrNull()
-                ?: _source.first()
-            val abs = base.indexOfFirst { it.url == current.url }.coerceAtLeast(0)
+            val abs = base.indexOfFirst { it.url == current.url }.let { if (it < 0) 0 else it }
             val rest = base.filterIndexed { i, s -> i != abs }.shuffled()
             val reordered = ArrayList<Station>(base.size)
             var ri = 0
@@ -428,33 +431,38 @@ class PlayerConnection(
                 if (i == abs) reordered.add(current) else reordered.add(rest[ri++])
             }
             _shuffledSource = reordered
+            _baseSource = base
             _source = reordered
-            // Keep the model and the Media3 so the poller's sync() never sees a
-            // mismatch (that mismatch is what made a tap near the transport
-            // resolve to a different song). moveMediaItem relocates items
-            // without stopping or resetting the currently-playing one.
-            if (c != null && c.mediaItemCount == reordered.size) {
-                reorderPlayerItems(c, reordered.map { it.id })
-            }
-            windowBase = if (reordered.size > WINDOW) abs else 0
-            _queue.value = sliceAt(reordered, abs)
-            _queueIndex.value = (abs - windowBase).coerceIn(0, _queue.value.lastIndex.coerceAtLeast(0))
         } else {
-            val linear = _baseSource.ifEmpty { _shuffledSource ?: _source }
             _shuffledSource = null
-            val current = _source.getOrNull(
-                (_queueIndex.value.takeIf { it >= 0 }?.let { windowBase + it } ?: 0),
-            ) ?: linear.firstOrNull()
-            _source = linear.ifEmpty { listOf(current).filterNotNull() }
-            val abs = current?.let { linear.indexOfFirst { s -> s.url == it.url }.coerceAtLeast(0) } ?: 0
-            if (c != null && c.mediaItemCount == linear.size && c.mediaItemCount == _source.size) {
-                reorderPlayerItems(c, linear.map { it.id })
-            }
-            windowBase = if (_source.size > WINDOW) abs else 0
-            _queue.value = sliceAt(_source, abs)
-            _queueIndex.value = (abs - windowBase).coerceIn(0, _queue.value.lastIndex.coerceAtLeast(0))
+            _baseSource = base
+            _source = base
         }
-        sync()
+
+        // Rebuild Media3 to match the model so the loaded queue, the panel and
+        // the audio always agree, for short lists and huge windowed ones alike.
+        _navJob?.cancel()
+        _navJob = scope.launch(Dispatchers.Main) {
+            val p = controller ?: return@launch
+            swapping = true
+            try {
+                ensureActive()
+                val src = _source
+                val absJ = src.indexOfFirst { it.url == current.url }.let { if (it < 0) 0 else it }
+                windowBase = if (src.size > WINDOW) absJ else 0
+                val slice = sliceAt(src, absJ)
+                _queue.value = slice
+                val idx = (absJ - windowBase).coerceIn(0, slice.lastIndex.coerceAtLeast(0))
+                _queueIndex.value = idx
+                val items = slice.map { buildItem(it) }
+                val pos = p.currentPosition.coerceAtLeast(0)
+                p.setMediaItems(items, idx.coerceIn(0, items.lastIndex), pos)
+            } finally {
+                swapping = false
+            }
+            ensureActive()
+            sync()
+        }
     }
 
     /**
