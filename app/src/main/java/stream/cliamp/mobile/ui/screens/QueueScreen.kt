@@ -132,7 +132,10 @@ private fun NowPlayingCard(s: Station, playing: Boolean, p: CliampPalette) {
         Spacer(Modifier.height(9.dp))
         Mono(if (s.name.isBlank()) "unknown" else s.name, CliampType.trackTitleCompact, p.ink, maxLines = 1)
         val parts = mutableListOf<String>()
-        if (s.source == StationSource.Local && s.artist.isNotBlank()) parts.add(s.artist)
+        // An episode's show belongs on this line as much as a song's artist
+        if ((s.source == StationSource.Local || s.source == StationSource.Podcast) &&
+            s.artist.isNotBlank()
+        ) parts.add(s.artist)
         else if (s.meta.isNotBlank()) parts.add(s.meta)
         if (s.isTrack && s.durationMs > 0) parts.add(formatDuration(s.durationMs))
         if (parts.isEmpty()) parts.add(if (s.isTrack) "–:––" else "live stream")
@@ -209,6 +212,7 @@ private fun SourceBadge(s: Station, p: CliampPalette) {
             }
         }
         s.source == StationSource.Local -> "local"
+        s.source == StationSource.Podcast -> "pod"
         else -> "track"
     }
     Box(
@@ -223,7 +227,10 @@ private fun SourceBadge(s: Station, p: CliampPalette) {
 
 private fun sourceSubtitle(s: Station): String {
     val parts = mutableListOf<String>()
-    if (s.source == StationSource.Local && s.artist.isNotBlank()) parts.add(s.artist)
+    // An episode's show belongs on this line as much as a song's artist
+    if ((s.source == StationSource.Local || s.source == StationSource.Podcast) &&
+        s.artist.isNotBlank()
+    ) parts.add(s.artist)
     else if (s.meta.isNotBlank()) parts.add(s.meta)
     if (s.isTrack && s.durationMs > 0) parts.add(formatDuration(s.durationMs))
     if (parts.isEmpty()) parts.add(if (s.isTrack) "–:––" else "live stream")

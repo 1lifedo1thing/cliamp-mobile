@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
         permissions.launch(wanted.toTypedArray())
 
         setContent {
-            val preference by app.prefs.palette.collectAsState(initial = "dark")
+            val preference by app.prefs.palette.collectAsState(initial = "system")
             val systemDark = resources.configuration.uiMode and
                 android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
                 android.content.res.Configuration.UI_MODE_NIGHT_YES
@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
                     localLibrary = app.localLibrary,
                     playlists = app.playlists,
                     providers = app.providers,
+                    podcasts = app.podcasts,
                     dark = dark,
                 )
             }

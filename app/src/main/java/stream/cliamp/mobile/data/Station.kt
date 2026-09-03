@@ -3,7 +3,7 @@ package stream.cliamp.mobile.data
 import kotlinx.serialization.Serializable
 
 /** Where a station came from. Drives both grouping and the accent it gets. */
-enum class StationSource { Cliamp, Directory, Custom, Local, Provider }
+enum class StationSource { Cliamp, Directory, Custom, Local, Provider, Podcast }
 
 @Serializable
 data class Station(
@@ -43,7 +43,9 @@ data class Station(
      * decision has to be made before anything has been probed.
      */
     val isTrack: Boolean
-        get() = source == StationSource.Local || source == StationSource.Provider
+        get() = source == StationSource.Local ||
+            source == StationSource.Provider ||
+            source == StationSource.Podcast
 
     val tagList: List<String>
         get() = tags.split(',', ' ')

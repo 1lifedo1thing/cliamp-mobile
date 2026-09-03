@@ -158,3 +158,55 @@ interface ProviderDao {
     @Query("DELETE FROM providers WHERE id = :id")
     suspend fun remove(id: String)
 }
+
+@Dao
+interface PodcastDao {
+    @Query("SELECT * FROM podcast_subscriptions ORDER BY position, title")
+    fun subscriptions(): Flow<List<PodcastSubscriptionEntity>>
+
+    @Query("SELECT * FROM podcast_subscriptions ORDER BY position, title")
+    suspend fun readSubscriptions(): List<PodcastSubscriptionEntity>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM podcast_subscriptions WHERE feedUrl = :feedUrl)")
+    suspend fun isSubscribed(feedUrl: String): Boolean
+
+    /** New subscriptions land on top, the way a new favourite does. */
+    @Query("SELECT COALESCE(MIN(position), 0) - 1 FROM podcast_subscriptions")
+    suspend fun nextTopPosition(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun subscribe(row: PodcastSubscriptionEntity)
+
+    @Query("DELETE FROM podcast_subscriptions WHERE feedUrl = :feedUrl")
+    suspend fun unsubscribe(feedUrl: String)
+
+    @Query("SELECT * FROM episode_progress WHERE url = :url")
+    suspend fun progress(url: String): EpisodeProgressEntity?
+
+    /** Every position we hold, for badging an episode list in one read. */
+    @Query("SELECT * FROM episode_progress")
+    fun allProgress(): Flow<List<EpisodeProgressEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveProgress(row: EpisodeProgressEntity)
+
+    @Query("DELETE FROM episode_progress WHERE url = :url")
+    suspend fun clearProgress(url: String)
+
+    @Query("UPDATE episode_progress SET completed = 1, updatedAt = :now WHERE url = :url")
+    suspend fun markCompleted(url: String, now: Long = System.currentTimeMillis())
+
+    /**
+     * Started and not finished, newest first. The join is against the stations
+     * table that history already writes, so an episode appears here without
+     * being stored a second time.
+     */
+    @Query("""
+        SELECT s.* FROM stations s
+        JOIN episode_progress p ON p.url = s.url
+        WHERE p.completed = 0 AND p.positionMs > 30000
+        ORDER BY p.updatedAt DESC
+        LIMIT :limit
+    """)
+    fun continueListening(limit: Int = 30): Flow<List<StationEntity>>
+}

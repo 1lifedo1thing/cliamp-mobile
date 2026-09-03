@@ -113,7 +113,7 @@ fun IdentityBar(left: String, right: String, modifier: Modifier = Modifier) {
 enum class Tab(val label: String) {
     // Play is gone: the full player opens from the mini-player bar. Servers is
     // gone too, folded into Library beside the other sources.
-    Lib("Library"), Stations("STATIONS"), Cmd("Search")
+    Lib("Library"), Stations("STATIONS"), Pods("PODCASTS"), Cmd("Search")
 }
 
 /**
@@ -183,6 +183,7 @@ private fun TabItem(
             when (tab) {
                 Tab.Lib -> Icon(CliampIcons.LibTab, null, Modifier.size(17.dp), tint = tint)
                 Tab.Stations -> Icon(CliampIcons.StationsTab, null, Modifier.size(17.dp), tint = tint)
+                Tab.Pods -> Icon(CliampIcons.PodsTab, null, Modifier.size(17.dp), tint = tint)
                 Tab.Cmd -> Icon(CliampIcons.SearchTab, null, Modifier.size(17.dp), tint = tint)
             }
         }

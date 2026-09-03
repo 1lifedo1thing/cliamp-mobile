@@ -63,7 +63,6 @@ fun NowPlayingScreen(
     prefs: Prefs,
     player: PlayerConnection,
     onOpenScope: () -> Unit,
-    onBack: () -> Unit,
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -81,14 +80,6 @@ fun NowPlayingScreen(
     val isFav = station != null && favorites.any { it.url == station!!.url }
 
     Column(Modifier.fillMaxSize().background(p.ground).statusBarsPadding()) {
-        Mono(
-            "‹ back",
-            CliampType.tabLabel,
-            p.inkTertiary,
-            Modifier
-                .clickable(onClick = onBack)
-                .padding(start = Gutter, top = 6.dp, end = 16.dp, bottom = 2.dp),
-        )
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
         // it is the first thing to give way. Compose has no shrink factor, so
         // we measure the column and hand the plate whatever is left over -
@@ -176,6 +167,7 @@ fun NowPlayingScreen(
                                     StationSource.Directory -> "directory"
                                     StationSource.Local -> "on device"
                                     StationSource.Provider -> "provider"
+                                    StationSource.Podcast -> "podcast"
                                     StationSource.Custom -> "custom"
                                 }
                             )
@@ -330,25 +322,28 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
         station.source == StationSource.Provider ->
             if (station.album.isNotBlank()) "[ ${station.album.lowercase()} · ${station.artist.lowercase()} ]"
             else "[ provider ]"
+        station.source == StationSource.Podcast ->
+            if (station.artist.isNotBlank()) "[ ${station.artist.lowercase()} · podcast ]"
+            else "[ podcast ]"
         station.source == StationSource.Cliamp -> "[ ${station.slug} · cliamp radio ]"
         station.countryCode.isNotBlank() -> "[ ${station.countryCode.lowercase()} · live stream ]"
         else -> "[ live stream ]"
     }
-    val badge = station?.codec?.uppercase()?.takeIf { it.isNotBlank() }
-        ?: station?.let { if (it.bitrate > 0) "${it.bitrate}K" else null }
-
     StripedArt(
         modifier = modifier,
         caption = if (art == null) caption else null,
-        badge = badge,
     ) {
         art?.let { bmp ->
             // Real album art is square and fills the plate edge to edge. Radio
             // art does not: og:images are typically 1200x630 wordmarks, and
             // cropping one to a square cuts it in half, so those stay inset
             // and contained.
+            // Podcast artwork is square by Apple's own requirement, so it
+            // belongs with the album art that fills the plate, not with the
+            // 1200x630 radio wordmarks that have to stay inset.
             val albumArt = station?.source == StationSource.Local ||
-                station?.source == StationSource.Provider
+                station?.source == StationSource.Provider ||
+                station?.source == StationSource.Podcast
             Image(
                 bitmap = bmp,
                 contentDescription = station?.name,

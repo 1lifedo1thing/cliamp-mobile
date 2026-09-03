@@ -24,6 +24,8 @@ import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.LocalLibrary
 import stream.cliamp.mobile.data.PlaylistStore
+import stream.cliamp.mobile.data.PodcastRepository
+import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.playback.PlaybackBus
@@ -35,6 +37,8 @@ import stream.cliamp.mobile.ui.screens.CommandScreen
 import stream.cliamp.mobile.ui.screens.LocalScreen
 import stream.cliamp.mobile.ui.screens.MiniPlayer
 import stream.cliamp.mobile.ui.screens.NowPlayingScreen
+import stream.cliamp.mobile.ui.screens.PodcastShowScreen
+import stream.cliamp.mobile.ui.screens.PodcastsScreen
 import stream.cliamp.mobile.ui.screens.QueueScreen
 import stream.cliamp.mobile.ui.screens.ScopeScreen
 import stream.cliamp.mobile.data.provider.ProviderAccount
@@ -60,6 +64,13 @@ private sealed interface Overlay {
 
     /** Browsing one provider's library. */
     data class Browse(val accountId: String) : Overlay
+
+    /**
+     * One podcast's episode list. Carries no id: the repository holds the open
+     * show, the way it holds the directory page, so the overlay is a mode
+     * rather than a payload.
+     */
+    data object Show : Overlay
 }
 
 /** Tabs within the Library screen. */
@@ -74,6 +85,7 @@ fun CliampRoot(
     localLibrary: LocalLibrary,
     playlists: PlaylistStore,
     providers: ProviderStore,
+    podcasts: PodcastRepository,
     dark: Boolean,
 ) {
     val p = LocalPalette.current
@@ -152,8 +164,21 @@ fun CliampRoot(
                     },
                     backEnabled = overlay == Overlay.None,
                 )
+                Tab.Pods -> PodcastsScreen(
+                    podcasts = podcasts,
+                    current = station,
+                    playing = playerState.playing,
+                    onPlay = onPlay,
+                    onOpenShow = { show: PodcastShow ->
+                        podcasts.openShow(show)
+                        overlay = Overlay.Show
+                    },
+                    onAddToQueue = { player.addToQueue(it) },
+                    onPlayNext = { player.playNext(it) },
+                )
                 Tab.Cmd -> CommandScreen(
                     repository = repository,
+                    podcasts = podcasts,
                     prefs = prefs,
                     localLibrary = localLibrary,
                     providers = providers,
@@ -173,7 +198,6 @@ fun CliampRoot(
                     prefs = prefs,
                     player = player,
                     onOpenScope = { overlay = Overlay.Scope },
-                    onBack = { overlay = Overlay.None },
                 )
                 Overlay.Queue -> QueueScreen(
                     player = player,
@@ -222,6 +246,15 @@ fun CliampRoot(
                         )
                     }
                 }
+                Overlay.Show -> PodcastShowScreen(
+                    podcasts = podcasts,
+                    current = station,
+                    playing = playerState.playing,
+                    onBack = { overlay = Overlay.None },
+                    onPlay = onPlay,
+                    onAddToQueue = { player.addToQueue(it) },
+                    onPlayNext = { player.playNext(it) },
+                )
                 Overlay.Settings -> SettingsScreen(
                     prefs = prefs,
                     repository = repository,

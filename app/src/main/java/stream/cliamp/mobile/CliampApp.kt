@@ -21,6 +21,7 @@ import stream.cliamp.mobile.net.Http
 import stream.cliamp.mobile.data.LocalLibrary
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.PlaylistStore
+import stream.cliamp.mobile.data.PodcastRepository
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.widget.CliampWidgetReceiver
@@ -37,6 +38,7 @@ class CliampApp : Application() {
     val prefs: Prefs by lazy { Prefs(this) }
     val providers: ProviderStore by lazy { ProviderStore(this) }
     val repository: Repository by lazy { Repository(prefs, appScope) }
+    val podcasts: PodcastRepository by lazy { PodcastRepository(this, appScope) }
     val localLibrary: LocalLibrary by lazy { LocalLibrary(this) }
     val playlists: PlaylistStore by lazy { PlaylistStore(this) }
     val player: PlayerConnection by lazy { PlayerConnection(this, CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)) }
@@ -58,7 +60,17 @@ class CliampApp : Application() {
                 else -> ResolvedStream(account.subsonic().streamUrl(trackId))
             }
         }
+        // Episode positions are the one thing the player cannot work out for
+        // itself, and the one thing a podcast is useless without. Wired here
+        // for the same reason the provider resolver is: playback should not be
+        // holding a database.
+        player.resumeLookup = { station -> podcasts.resumePosition(station) }
+        player.progressSink = { station, position, duration ->
+            podcasts.saveProgress(station, position, duration)
+        }
+
         repository.bootstrap()
+        podcasts.bootstrap()
 
         // The last station is restored but never auto-played unless asked:
         // a radio app that starts making noise on launch is a bad neighbour.

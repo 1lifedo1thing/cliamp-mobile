@@ -153,6 +153,27 @@ object CliampIcons {
     val Search = stroked(16f, 16f, 1.8f, circle(11.7f, 6.6f, 5.1f), "M10.4 10.4L15 15")
     /** The magnifier used as the app-wide finder's tab glyph. */
     val SearchTab = stroked(18f, 18f, 1.6f, circle(8f, 8f, 4.4f), "M11.2 11.4L15.8 16")
+
+    /**
+     * A microphone: capsule, cradle, stand. Stroked like [LibTab] because the
+     * tab bar reads as a row of outlines and a solid mic would sit heavier than
+     * the three it stands beside.
+     */
+    val PodsTab = stroked(
+        18f, 18f, 1.6f,
+        rrect(6.2f, 1f, 5.6f, 9.4f, 2.8f),
+        "M3.4 8.4a5.6 5.6 0 0 0 11.2 0",
+        "M9 14.1v2.4",
+        "M5.8 16.5h6.4",
+    )
+
+    /** The same mic at row size, for a show that has no artwork yet. */
+    val PodRow = stroked(
+        14f, 14f, 1.5f,
+        rrect(4.6f, 0.8f, 4.8f, 7.6f, 2.4f),
+        "M2.4 6.6a4.6 4.6 0 0 0 9.2 0",
+        "M7 11.2v1.9",
+    )
     val Plus = solid(14f, 14f, rect(6f, 0f, 2f, 14f), rect(0f, 6f, 14f, 2f))
     val Minus = solid(12f, 12f, rect(0f, 5f, 12f, 2f))
     val Check = stroked(13f, 13f, 2.2f, "M1.5 7l3.2 3.2L11.5 3")

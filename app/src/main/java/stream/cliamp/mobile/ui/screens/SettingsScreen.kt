@@ -45,11 +45,14 @@ import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.MechSlider
 import stream.cliamp.mobile.ui.components.SectionLabel
+import stream.cliamp.mobile.ui.theme.AmberPalette
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.DarkPalette
 import stream.cliamp.mobile.ui.theme.LightPalette
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.OmarchyPalettes
+import stream.cliamp.mobile.ui.theme.OxideLightPalette
+import stream.cliamp.mobile.ui.theme.OxidePalette
 import stream.cliamp.mobile.ui.theme.OmarchyThemeKeys
 import stream.cliamp.mobile.ui.theme.Mono
 import kotlin.math.roundToInt
@@ -144,11 +147,16 @@ fun SettingsScreen(
         )
         HairlineDivider()
 
-        SectionLabel("themes — ${OmarchyThemeKeys.size + 3}")
+        SectionLabel("themes — ${OmarchyThemeKeys.size + 6}")
         listOf(
+            // system first: it is the default, and its swatch is whichever
+            // half of oxide the device is currently asking for.
+            "system" to if (p.dark) OxidePalette else OxideLightPalette,
+            "oxide" to OxidePalette,
+            "oxide-light" to OxideLightPalette,
+            "amber" to AmberPalette,
             "dark" to DarkPalette,
             "light" to LightPalette,
-            "system" to if (p.dark) DarkPalette else LightPalette,
         ).forEach { (key, theme) ->
             ThemeRow(
                 key = key,

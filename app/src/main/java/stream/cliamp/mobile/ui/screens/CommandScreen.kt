@@ -49,6 +49,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.DirectoryQuery
 import stream.cliamp.mobile.data.LocalLibrary
+import stream.cliamp.mobile.data.PodcastQuery
+import stream.cliamp.mobile.data.PodcastRepository
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.data.Station
@@ -86,6 +88,7 @@ private enum class Scope(val label: String) {
 @Composable
 fun CommandScreen(
     repository: Repository,
+    podcasts: PodcastRepository,
     prefs: Prefs,
     localLibrary: LocalLibrary,
     providers: ProviderStore,
@@ -120,6 +123,12 @@ fun CommandScreen(
         if (isCommand || term.length < 2) return@LaunchedEffect
         delay(320)
         repository.loadDirectory(DirectoryQuery.Search(term), reset = true)
+        // The podcast directory takes the same query, so a show can be found
+        // by name. Unlike the Stations tab, the Podcasts tab keeps the search
+        // rather than resetting it: Apple's search returns whole shows in one
+        // request with nothing to page, so the searched list IS the directory
+        // for as long as the query stands, and its header names the query.
+        podcasts.load(PodcastQuery.Search(term), reset = true)
     }
 
     val results = remember(term, filter, songs, favorites, recent, radio, tags, providerAccounts) {

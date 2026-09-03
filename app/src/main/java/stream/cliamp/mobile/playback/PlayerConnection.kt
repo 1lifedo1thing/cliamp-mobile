@@ -75,6 +75,9 @@ class PlayerConnection(
     /** Queues larger than this are played lazily from a window, not in full. */
     private val WINDOW = 60
 
+    /** How often a playing episode's position reaches the database. */
+    private val PROGRESS_INTERVAL = 5_000L
+
     /** The list prev/next walks. Set whenever the user plays from a list. */
     val queue: StateFlow<List<Station>> = _queue.asStateFlow()
 
@@ -85,6 +88,19 @@ class PlayerConnection(
 
     /** Called once the controller is live, if the user asked for auto-resume. */
     var onReady: (() -> Unit)? = null
+
+    /**
+     * Where a podcast episode should start, in millis. Set from Application,
+     * the way StreamResolver's provider hook is: playback needs the answer but
+     * has no business holding a database handle to get it. Returns 0 for
+     * everything else, which is every station radio ever plays.
+     */
+    var resumeLookup: (suspend (Station) -> Long)? = null
+
+    /** Receives (station, position, duration) for episodes as they play. */
+    var progressSink: (suspend (Station, Long, Long) -> Unit)? = null
+
+    private var lastProgressWrite = 0L
 
     fun connect() {
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
@@ -160,6 +176,22 @@ class PlayerConnection(
             hasPrev = abs > 0,
             hasNext = _source.size > 1 && abs < _source.lastIndex,
         )
+
+        // Episode positions are written from here because this is the only
+        // place that already holds both the station and the player's clock.
+        // Throttled to [PROGRESS_INTERVAL]: sync runs twice a second, and an
+        // episode does not need committing to disk twenty times a minute.
+        val playingNow = PlaybackBus.station.value
+        if (playingNow != null && playingNow.source == StationSource.Podcast && c.isPlaying) {
+            val now = System.currentTimeMillis()
+            val position = c.currentPosition
+            if (position > 0 && now - lastProgressWrite >= PROGRESS_INTERVAL) {
+                lastProgressWrite = now
+                val duration = c.duration.takeIf { it != C.TIME_UNSET && it > 0 }
+                    ?: playingNow.durationMs
+                progressSink?.let { sink -> scope.launch { sink(playingNow, position, duration) } }
+            }
+        }
     }
 
     fun play(station: Station, from: List<Station> = emptyList()) {
@@ -218,7 +250,7 @@ class PlayerConnection(
                     windowBase = _queueIndex.value
                     _queue.value = listOf(station)
                     _queueIndex.value = 0
-                    c.setMediaItem(buildItem(station))
+                    c.setMediaItem(buildItem(station), resumeAt(station))
                 }
                 c.prepare()
                 c.play()
@@ -245,7 +277,8 @@ class PlayerConnection(
         val index = (abs - windowBase).coerceIn(0, slice.lastIndex)
         _queueIndex.value = index
         val items = slice.map { buildItem(it) }
-        c.setMediaItems(items, index.coerceIn(0, items.lastIndex), 0L)
+        val startAt = slice.getOrNull(index)?.let { resumeAt(it) } ?: 0L
+        c.setMediaItems(items, index.coerceIn(0, items.lastIndex), startAt)
     }
 
     /**
@@ -268,6 +301,15 @@ class PlayerConnection(
      * station is already published and composed synchronously when this runs,
      * so the tap leg only ever brings back the finished items.
      */
+    /**
+     * A part-listened episode opens where it was left. Radio and local files
+     * have no saved position, so this is 0 for everything but podcasts and the
+     * lookup is skipped entirely for them.
+     */
+    private suspend fun resumeAt(station: Station): Long =
+        if (station.source != StationSource.Podcast) 0L
+        else resumeLookup?.invoke(station) ?: 0L
+
     private suspend fun buildItem(station: Station): MediaItem =
         withContext(Dispatchers.Default) {
             PlaybackService.mediaItem(context, station, StreamResolver.resolve(station.url))

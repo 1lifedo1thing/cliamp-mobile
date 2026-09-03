@@ -73,7 +73,9 @@ fun StationsScreen(
 
     // The LIB tab's favourites row shows radio stations only — local songs
     // live in their own smart playlists on the PLAYLISTS tab.
-    val radioFavorites = favorites.filterNot { it.source == StationSource.Local }
+    val radioFavorites = favorites.filterNot {
+        it.source == StationSource.Local || it.source == StationSource.Podcast
+    }
 
     val cliamp by repository.cliamp.collectAsState()
     val directory by repository.directory.collectAsState()

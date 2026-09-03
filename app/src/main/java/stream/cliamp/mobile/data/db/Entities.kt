@@ -118,3 +118,61 @@ data class ProviderEntity(
     val label: String,
     val valuesJson: String,
 )
+
+/**
+ * A subscribed show.
+ *
+ * Keyed by feed URL rather than by Apple's collection id, because a feed added
+ * by hand has no Apple id and the same show can be reached through both. The
+ * show's fields are duplicated here rather than looked up, so the subscription
+ * list renders with no network at all - the radio favourites do the same thing
+ * through [StationEntity].
+ */
+@Entity(tableName = "podcast_subscriptions")
+data class PodcastSubscriptionEntity(
+    @PrimaryKey val feedUrl: String,
+    val showId: String,
+    val title: String,
+    val author: String = "",
+    val artwork: String = "",
+    val genre: String = "",
+    val episodeCount: Int = 0,
+    val description: String = "",
+    val position: Int = 0,
+    val subscribedAt: Long = 0,
+) {
+    fun toShow() = stream.cliamp.mobile.data.PodcastShow(
+        id = showId, title = title, feedUrl = feedUrl, author = author,
+        artwork = artwork, genre = genre, episodeCount = episodeCount,
+        description = description,
+    )
+}
+
+fun stream.cliamp.mobile.data.PodcastShow.toEntity(position: Int = 0) = PodcastSubscriptionEntity(
+    feedUrl = feedUrl, showId = id, title = title, author = author, artwork = artwork,
+    genre = genre, episodeCount = episodeCount, description = description,
+    position = position, subscribedAt = System.currentTimeMillis(),
+)
+
+/**
+ * How far into an episode the listener got.
+ *
+ * Keyed by the episode's audio URL, which is also [StationEntity]'s key, so
+ * "continue listening" is a join against the stations already written by
+ * history rather than a second copy of every episode's metadata.
+ *
+ * This table is what makes podcasts different from radio in the player: a live
+ * stream has no position worth keeping, and an episode is useless without one.
+ */
+@Entity(tableName = "episode_progress", indices = [Index("updatedAt")])
+data class EpisodeProgressEntity(
+    @PrimaryKey val url: String,
+    val positionMs: Long,
+    val durationMs: Long,
+    val completed: Boolean,
+    val updatedAt: Long,
+) {
+    fun toProgress() = stream.cliamp.mobile.data.EpisodeProgress(
+        url = url, positionMs = positionMs, durationMs = durationMs, completed = completed,
+    )
+}
