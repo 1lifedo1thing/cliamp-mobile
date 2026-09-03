@@ -103,7 +103,7 @@ fun IdentityBar(left: String, right: String, modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(CliampIcons.Mark, null, Modifier.size(width = 16.dp, height = 14.dp), tint = p.accent)
+            Icon(CliampIcons.Mark, null, Modifier.size(15.dp), tint = p.accent)
             Mono(left, CliampType.rowSecondary, p.accent)
         }
         Mono(right, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)

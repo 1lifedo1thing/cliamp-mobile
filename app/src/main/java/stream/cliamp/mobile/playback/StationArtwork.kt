@@ -20,7 +20,12 @@ import java.io.ByteArrayOutputStream
  *
  * This matters more than it looks: Android's media player derives the whole
  * chip's background and accent colours from the artwork, so with no artwork the
- * notification is grey system chrome, and with this it picks up the phosphor.
+ * notification is grey system chrome, and with this it picks up the plate's.
+ * Which is why the plate is drawn in oxide and not in the palette the user
+ * happens to have chosen - the media chip is the app seen from outside, so it
+ * matches the launcher icon and the notification tint rather than the theme.
+ * Setting a colour on the notification is not enough on its own: One UI reads
+ * the artwork and ignores it.
  */
 object StationArtwork {
 
@@ -51,7 +56,7 @@ object StationArtwork {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
         // ground
-        paint.color = Color.parseColor("#0A0D0A")
+        paint.color = Color.parseColor(GROUND)
         c.drawRect(0f, 0f, SIZE.toFloat(), SIZE.toFloat(), paint)
 
         // 135-degree stripes, same geometry as the in-app plate
@@ -62,7 +67,7 @@ object StationArtwork {
         var x = SIZE / 2f - diag
         var i = 0
         while (x < SIZE / 2f + diag) {
-            paint.color = if (i % 2 == 0) Color.parseColor("#1A201B") else Color.parseColor("#141815")
+            paint.color = Color.parseColor(if (i % 2 == 0) STRIPE_A else STRIPE_B)
             c.drawRect(x, SIZE / 2f - diag, x + stripe, SIZE / 2f + diag, paint)
             x += stripe
             i++
@@ -82,7 +87,7 @@ object StationArtwork {
             c.drawBitmap(art, null, dst, Paint(Paint.FILTER_BITMAP_FLAG))
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = 2f
-            paint.color = Color.parseColor("#2A302B")
+            paint.color = Color.parseColor(FRAME)
             c.drawRect(1f, 1f, SIZE - 1f, SIZE - 1f, paint)
             return ByteArrayOutputStream().use { out ->
                 bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
@@ -91,25 +96,21 @@ object StationArtwork {
             }
         }
 
-        // the cliamp mark, eight descending bars, in phosphor
-        paint.color = Color.parseColor("#73E889")
-        val bars = listOf(
-            0f to 122.88f, 51.2f to 71.68f, 102.4f to 20.48f, 153.6f to 92.16f,
-            204.8f to 0f, 256f to 81.92f, 307.2f to 40.96f, 358.4f to 112.64f,
-        )
-        val heights = listOf(71.68f, 174.08f, 276.48f, 133.12f, 317.44f, 153.6f, 235.52f, 92.16f)
+        // Icon 103h's six bands, envelope "h", the same geometry the launcher
+        // icon and CliampIcons.Mark are drawn from.
+        paint.color = Color.parseColor(MARK)
         // The media player crops this square to a wide chip and keeps the
         // middle band, so the mark is sized to survive that crop whole rather
         // than to fill the square.
-        val scale = 200f / 378.88f
-        val offX = (SIZE - 378.88f * scale) / 2f
-        val offY = (SIZE - 317.44f * scale) / 2f - 10f
-        bars.forEachIndexed { idx, (bx, by) ->
+        val scale = MARK_WIDTH / MARK_BOX_W
+        val offX = (SIZE - MARK_BOX_W * scale) / 2f - MARK_BOX_X * scale
+        val offY = (SIZE - MARK_BOX_H * scale) / 2f - MARK_BOX_Y * scale
+        BANDS.forEach { b ->
             c.drawRect(
-                offX + bx * scale,
-                offY + by * scale,
-                offX + (bx + 20.48f) * scale,
-                offY + (by + heights[idx]) * scale,
+                offX + b.x * scale,
+                offY + b.y * scale,
+                offX + (b.x + b.w) * scale,
+                offY + (b.y + b.h) * scale,
                 paint,
             )
         }
@@ -119,7 +120,7 @@ object StationArtwork {
             .getOrNull() ?: Typeface.MONOSPACE
         paint.typeface = mono
         paint.textSize = 26f
-        paint.color = Color.parseColor("#7B827C")
+        paint.color = Color.parseColor(CAPTION)
         val caption = when {
             station.source == StationSource.Cliamp -> "[ ${station.slug} · cliamp radio ]"
             station.countryCode.isNotBlank() -> "[ ${station.countryCode.lowercase()} · live stream ]"
@@ -130,7 +131,7 @@ object StationArtwork {
         // hairline frame
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = 2f
-        paint.color = Color.parseColor("#2A302B")
+        paint.color = Color.parseColor(FRAME)
         c.drawRect(1f, 1f, SIZE - 1f, SIZE - 1f, paint)
 
         return ByteArrayOutputStream().use { out ->
@@ -139,6 +140,36 @@ object StationArtwork {
             out.toByteArray()
         }
     }
+
+    /** One band of the mark, on Icon 103h's 48 grid. */
+    private class Band(val x: Float, val y: Float, val w: Float, val h: Float)
+
+    private val BANDS = listOf(
+        Band(5f, 20f, 5f, 8f),
+        Band(12f, 12f, 5f, 24f),
+        Band(19f, 4f, 5f, 40f),
+        Band(26f, 14f, 5f, 20f),
+        Band(33f, 18f, 5f, 12f),
+        Band(40f, 22f, 3f, 4f),
+    )
+
+    // The mark's own bounding box inside the 48 grid: it is inset, so centring
+    // the grid would not centre the mark.
+    private const val MARK_BOX_X = 5f
+    private const val MARK_BOX_Y = 4f
+    private const val MARK_BOX_W = 38f
+    private const val MARK_BOX_H = 40f
+
+    /** Drawn width in the 512 plate, kept from the mark this replaces. */
+    private const val MARK_WIDTH = 200f
+
+    // OxidePalette, fixed. See the note on the object.
+    private const val GROUND = "#120A08"
+    private const val STRIPE_A = "#291A17"
+    private const val STRIPE_B = "#1E1412"
+    private const val MARK = "#D15D4D"
+    private const val CAPTION = "#867E79"
+    private const val FRAME = "#3A2A27"
 
     @Suppress("unused")
     private val unusedPath = Path()

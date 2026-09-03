@@ -382,7 +382,7 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
                 null,
                 Modifier
                     .align(Alignment.Center)
-                    .size(width = 132.dp, height = 110.dp),
+                    .size(118.dp),
                 tint = p.accent.copy(alpha = 0.16f),
             )
         }

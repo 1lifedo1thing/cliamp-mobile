@@ -22,7 +22,9 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.metadata.icy.IcyHeaders
 import androidx.media3.extractor.metadata.icy.IcyInfo
 import androidx.media3.session.CommandButton
+import androidx.core.app.NotificationCompat
 import androidx.media3.session.DefaultMediaNotificationProvider
+import androidx.media3.session.MediaNotification
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
@@ -149,7 +151,7 @@ class PlaybackService : MediaSessionService() {
         }
 
         setMediaNotificationProvider(
-            DefaultMediaNotificationProvider.Builder(this).build().apply {
+            OxideNotificationProvider(this).apply {
                 setSmallIcon(R.drawable.ic_notification)
             }
         )
@@ -439,5 +441,39 @@ class PlaybackService : MediaSessionService() {
                         .build()
                 )
                 .build()
+    }
+}
+
+/**
+ * The media notification in cliamp's own red.
+ *
+ * [DefaultMediaNotificationProvider.createNotification] is final, so the colour
+ * cannot be set by wrapping it - but [addNotificationActions] is protected and
+ * is handed the NotificationCompat.Builder on the way through, which is the one
+ * place the notification is still open for editing.
+ *
+ * The tint is the oxide accent rather than the #7F2117 the launcher tile uses.
+ * That red sits at oklch lightness 0.40 and would tint an icon at about 3.3:1
+ * against a dark notification shade; the accent is the same red lifted to the
+ * lightness the app already uses for text and icons, and clears 5:1 on either
+ * shade. Fixed rather than following the chosen theme, because this is the
+ * app's identity outside the app - same argument as the launcher icon.
+ */
+private class OxideNotificationProvider(context: Context) :
+    DefaultMediaNotificationProvider(context) {
+
+    override fun addNotificationActions(
+        mediaSession: MediaSession,
+        mediaButtons: ImmutableList<CommandButton>,
+        builder: NotificationCompat.Builder,
+        actionFactory: MediaNotification.ActionFactory,
+    ): IntArray {
+        builder.setColor(ACCENT).setColorized(true)
+        return super.addNotificationActions(mediaSession, mediaButtons, builder, actionFactory)
+    }
+
+    private companion object {
+        /** OxidePalette.accent. */
+        const val ACCENT = 0xFFD15D4D.toInt()
     }
 }

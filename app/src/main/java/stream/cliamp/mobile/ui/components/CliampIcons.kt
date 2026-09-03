@@ -55,15 +55,22 @@ private fun circle(cx: Float, cy: Float, r: Float): String =
 object CliampIcons {
 
     /**
-     * The cliamp mark: three descending bars, from Cliamp Icon 02. Tinted with
-     * the accent in app chrome; [MarkColour] carries the green tile for places
-     * where the brand mark stands on its own.
+     * The cliamp mark: Icon 103h's six band spectrum, envelope "h", peak left
+     * of centre. The same geometry the launcher icon is drawn from, so app
+     * chrome and home screen carry one mark. Square, unlike the three-bar mark
+     * it replaces - give it a square size or it distorts.
+     *
+     * Tinted with the accent in app chrome; [MarkColour] carries the oxide tile
+     * for places where the mark stands on its own.
      */
     val Mark = solid(
         48f, 48f,
-        rect(6f, 8f, 36f, 7f),
-        rect(6f, 20.5f, 22f, 7f),
-        rect(6f, 33f, 30f, 7f),
+        rect(5f, 20f, 5f, 8f),
+        rect(12f, 12f, 5f, 24f),
+        rect(19f, 4f, 5f, 40f),
+        rect(26f, 14f, 5f, 20f),
+        rect(33f, 18f, 5f, 12f),
+        rect(40f, 22f, 3f, 4f),
     )
 
     /** The mark on its tile, in the icon's own colours. */
@@ -73,13 +80,16 @@ object CliampIcons {
     ).apply {
         addPath(
             addPathNodes(rrect(0f, 0f, 48f, 48f, 7.2f)),
-            fill = SolidColor(Color(0xFF5EE08A)),
+            fill = SolidColor(Color(0xFF7F2117)),
         )
         listOf(
-            rect(6f, 8f, 36f, 7f),
-            rect(6f, 20.5f, 22f, 7f),
-            rect(6f, 33f, 30f, 7f),
-        ).forEach { addPath(addPathNodes(it), fill = SolidColor(Color(0xFF061308))) }
+            rect(5f, 20f, 5f, 8f),
+            rect(12f, 12f, 5f, 24f),
+            rect(19f, 4f, 5f, 40f),
+            rect(26f, 14f, 5f, 20f),
+            rect(33f, 18f, 5f, 12f),
+            rect(40f, 22f, 3f, 4f),
+        ).forEach { addPath(addPathNodes(it), fill = SolidColor(Color(0xFFF8E4D4))) }
     }.build()
 
     val PlayTiny = solid(9f, 10f, "M0 0l9 5-9 5z")
