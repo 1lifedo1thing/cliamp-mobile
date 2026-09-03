@@ -198,6 +198,7 @@ fun CliampRoot(
                     prefs = prefs,
                     player = player,
                     onOpenScope = { overlay = Overlay.Scope },
+                    onBack = { overlay = Overlay.None },
                 )
                 Overlay.Queue -> QueueScreen(
                     player = player,
@@ -284,7 +285,7 @@ fun CliampRoot(
                     reconnecting = reconnect,
                     queueCount = queue.size,
                     onOpenQueue = { overlay = Overlay.Queue },
-                    onToggle = { player.toggle() },
+                    onToggle = { player.toggle(station ?: recent.firstOrNull()) },
                     onOpen = { overlay = Overlay.Player },
                 )
             }

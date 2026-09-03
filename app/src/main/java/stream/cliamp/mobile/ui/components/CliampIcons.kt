@@ -180,6 +180,11 @@ object CliampIcons {
     val Xmark = stroked(12f, 12f, 1.8f, "M2 2l8 8M10 2l-8 8")
     val CaretDown = solid(10f, 10f, "M0 2h10L5 8z")
     val CaretRight = solid(10f, 10f, "M2 0v10l6-5z")
+    /**
+     * A downward chevron used to collapse / dismiss the expanded player; reads
+     * as the inverse of "expanded" (pull down to close).
+     */
+    val Down = stroked(16f, 10f, 1.8f, "M1 1l7 8 7-8")
     val Download = stroked(16f, 16f, 1.6f, "M8 1v9", "M4.5 6.5L8 10l3.5-3.5", "M1.5 13.5h13")
     /** Vertical ellipsis: row overflow menu. */
     val More = solid(16f, 16f, circle(8f, 3f, 2.2f), circle(8f, 8f, 2.2f), circle(8f, 13f, 2.2f))

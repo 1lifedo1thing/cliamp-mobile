@@ -80,13 +80,18 @@ class LocalLibrary(context: Context) {
         // cache, so the list paints instantly and never flashes a scan message;
         // on a cold install the cache is empty and the UI shows "scanning…"
         // until the MediaStore query below fills it.
-        val cached = readCache()
-        if (_songs.value.isEmpty() && !cached.isNullOrEmpty()) {
-            _songs.value = cached
+        if (_songs.value.isEmpty()) {
+            _loading.value = true
         }
-        _loading.value = _songs.value.isEmpty()
         _error.value = null
         Thread {
+            // Cache read and MediaStore scan both live on this background thread
+            // so a warm launch's per-song File.isFile check never janks the UI.
+            val cached = readCache()
+            if (_songs.value.isEmpty() && !cached.isNullOrEmpty()) {
+                _songs.value = cached
+            }
+            _loading.value = _songs.value.isEmpty()
             val found = runCatching { querySongs() }.getOrElse { e ->
                 if (_songs.value.isEmpty()) _error.value = e.message ?: "could not read the library"
                 _songs.value
@@ -101,6 +106,11 @@ class LocalLibrary(context: Context) {
 
     private fun querySongs(): List<Station> {
         val out = ArrayList<LocalSong>(256)
+        // Cover art is looked up per song, but every track in a folder shares
+        // that folder's cover and calling listFiles() once per song is what
+        // makes a first scan crawl. Memoise the result per directory so a big
+        // library is one stat per song plus one directory listing per folder.
+        val coverByDir = HashMap<String, String?>()
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
@@ -111,7 +121,10 @@ class LocalLibrary(context: Context) {
         )
         resolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            projection, null, null, MediaStore.Audio.Media.TITLE + " COLLATE NOCASE",
+            projection,
+            MediaStore.Audio.Media.IS_MUSIC + " != 0",
+            null,
+            MediaStore.Audio.Media.TITLE + " COLLATE NOCASE",
         )?.use { c ->
             val cId = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val cTitle = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
@@ -131,7 +144,8 @@ class LocalLibrary(context: Context) {
                 val artist = c.getString(cArtist) ?: "unknown artist"
                 val album = c.getString(cAlbum) ?: ""
                 val title = c.getString(cTitle)?.takeIf { it.isNotBlank() } ?: file.nameWithoutExtension
-                val cover = nearestCover(file.parentFile).orEmpty()
+                val dir = file.parentFile?.path.orEmpty()
+                val cover = coverByDir.getOrPut(dir) { nearestCover(file.parentFile) }.orEmpty()
                 out += LocalSong(
                     path = data,
                     title = title,

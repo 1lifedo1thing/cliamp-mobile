@@ -34,7 +34,12 @@ class MainActivity : ComponentActivity() {
             // the Visualizer taps the output mix, which the platform treats as
             // a recording capability whether or not a mic is involved
             add(Manifest.permission.RECORD_AUDIO)
-            if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+            if (Build.VERSION.SDK_INT >= 33) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+                add(Manifest.permission.READ_MEDIA_AUDIO)
+            } else {
+                add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
         }
         permissions.launch(wanted.toTypedArray())
 

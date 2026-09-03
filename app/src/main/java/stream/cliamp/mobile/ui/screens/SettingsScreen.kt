@@ -89,14 +89,7 @@ fun SettingsScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(
-                Modifier.clickable(onClick = onBack),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(CliampIcons.Prev, "back", Modifier.size(width = 15.dp, height = 12.dp), tint = p.inkSecondary)
-                Mono("back", CliampType.rowSecondary, p.inkSecondary)
-            }
+            Chip("‹ back", selected = false, onClick = onBack)
         }
         Box(Modifier.padding(horizontal = Gutter, vertical = 4.dp)) {
             Mono("Settings", CliampType.screenTitle, p.ink)
