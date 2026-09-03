@@ -67,10 +67,11 @@ import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampTextField
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
-import stream.cliamp.mobile.ui.components.ListRow
-import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.components.IconLabelButton
 import stream.cliamp.mobile.ui.components.ListRow
+import stream.cliamp.mobile.ui.components.OverflowButton
+import stream.cliamp.mobile.ui.components.OverflowItem
+import stream.cliamp.mobile.ui.components.OverflowMenu
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.components.StripedArt
@@ -672,34 +673,14 @@ private fun SongRowMenu(
     onAddEnd: () -> Unit,
     onReplace: () -> Unit,
 ) {
-    val p = LocalPalette.current
-    var open by remember { mutableStateOf(false) }
-    Box {
-        Box(
-            Modifier.size(22.dp).clip(RoundedCornerShape(4.dp)).clickable { open = true },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(CliampIcons.More, "menu", Modifier.size(15.dp), tint = p.inkTertiary)
-        }
-        if (open) {
-            Popup(
-                onDismissRequest = { open = false },
-                alignment = Alignment.TopEnd,
-                offset = IntOffset(0, 8),
-            ) {
-                Column(
-                    Modifier.width(170.dp).clip(RoundedCornerShape(6.dp))
-                        .background(p.ground).border(1.dp, p.hairlineRegion, RoundedCornerShape(6.dp)),
-                ) {
-                    MenuItem("play next", p.ink, onPlayNext) { open = false }
-                    HairlineDivider(region = true)
-                    MenuItem("add to queue", p.ink, onAddEnd) { open = false }
-                    HairlineDivider(region = true)
-                    MenuItem("replace queue", p.ink, onReplace) { open = false }
-                }
-            }
-        }
-    }
+    OverflowMenu(
+        trigger = { open -> OverflowButton(open) },
+        items = listOf(
+            OverflowItem("play next", onPlayNext),
+            OverflowItem("add to queue", onAddEnd),
+            OverflowItem("replace queue", onReplace),
+        ),
+    )
 }
 
 /** The ⋮ overflow menu on a playlist row: pin/unpin, edit the name, or remove the playlist. */

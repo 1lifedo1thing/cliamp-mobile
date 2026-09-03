@@ -123,6 +123,8 @@ fun CliampRoot(
                     favorites = favorites,
                     onPlay = onPlay,
                     onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
+                    onAddToQueue = { player.addToQueue(it) },
+                    onPlayNext = { player.playNext(it) },
                 )
                 Tab.Lib -> LocalScreen(
                     localLibrary = localLibrary,
@@ -199,6 +201,8 @@ fun CliampRoot(
                             onEdit = { overlay = Overlay.Wizard(account.providerKey, account) },
                             onPlay = onPlay,
                             onOpenPlayer = { overlay = Overlay.Player },
+                            onAddToQueue = { player.addToQueue(it) },
+                            onPlayNext = { player.playNext(it) },
                         )
                     }
                 }
