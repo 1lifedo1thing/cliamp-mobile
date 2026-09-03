@@ -106,6 +106,10 @@ fun CliampRoot(
     val providerAccounts by providers.accounts.collectAsState(initial = emptyList())
     val queue by player.queue.collectAsState(initial = emptyList())
 
+    // Seed prev/next with recent history so they work from the song the mini
+    // bar shows at launch, before anything has actually played this session.
+    player.setFallbackSource(recent)
+
     val onPlay: (Station, List<Station>) -> Unit = { s, from ->
         player.play(s, from)
         repository.reportPlay(s)

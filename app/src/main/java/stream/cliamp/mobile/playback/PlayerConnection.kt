@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -116,6 +117,14 @@ class PlayerConnection(
     @Volatile
     private var swapping = false
 
+    /**
+     * Serialises rapid transport taps. Each play/step that touches Media3 is
+     * launched on this job and cancels its predecessor, so hammering next/prev
+     * only ever applies the LAST tap - the earlier ones never get a chance to
+     * re-queue all the songs you skipped past.
+     */
+    private var _navJob: Job? = null
+
     /** Queues larger than this are played lazily from a window, not in full. */
     private val WINDOW = 60
 
@@ -170,14 +179,9 @@ class PlayerConnection(
     private fun sync() {
         val c = controller ?: return
 
-        // When Media3 advances a playlist it does so internally, so the index
-        // has to be read back or the screen keeps showing the previous track.
-        // Media3 always holds exactly [_queue] (a bounded window for a huge
-        // source, or the whole list for a short one), so its window index maps
-        // straight onto [_queue]; no source offset needed.
         val q = _queue.value
         if (!swapping && c.mediaItemCount > 0 && q.isNotEmpty()) {
-            val playerIndex = c.currentMediaItemIndex
+            val playerIndex = c.currentMediaItemIndex.coerceIn(0, c.mediaItemCount - 1)
             // Radio (or a lone track) is pushed as a single Media3 item while the
             // panel still shows a full window around it, so Media3's index can't
             // be mapped straight onto [_queue] - that would repoint the active
@@ -188,22 +192,25 @@ class PlayerConnection(
                 // Resolve by the playing item's id so the model stays the source
                 // of truth even when a shuffle toggle left Media3 in a different
                 // order than the (new) shuffled queue.
-                val curId = c.getMediaItemAt(c.currentMediaItemIndex.coerceIn(0, q.lastIndex)).mediaId
-                q.indexOfFirst { it.id == curId }.takeIf { it >= 0 } ?: (c.currentMediaItemIndex.coerceIn(0, q.lastIndex))
+                val curId = c.getMediaItemAt(playerIndex).mediaId
+                q.indexOfFirst { it.id == curId }.takeIf { it >= 0 } ?: playerIndex
             } else _queueIndex.value
-            if (logical != _queueIndex.value) {
+            // Only publish when the resolved panel item has actually changed.
+            if (logical != _queueIndex.value && q.getOrNull(logical)?.id != q.getOrNull(_queueIndex.value)?.id) {
                 _queueIndex.value = logical
                 PlaybackBus.publishStation(q[logical])
             }
 
             // A huge queue is played as a window; when that window is nearly
             // spent, roll it forward in [_source] so the library never silently
-            // stops at the boundary. Guarded so the poller and onEvents can't
-            // double-push (and skipped when Media3 holds a single radio item).
+            // stops at the boundary. Only fires for genuinely long sources, and
+            // only once per boundary crossing (guarded), so it can never loop.
             if (oneToOne && _source.size > WINDOW && playerIndex >= c.mediaItemCount - 2) {
                 val abs = windowBase + playerIndex
                 val next = (abs + 1).coerceIn(0, _source.lastIndex)
-                if (next > windowBase && next <= _source.lastIndex) {
+                if (next > windowBase && next <= _source.lastIndex &&
+                    (_extending == null || _extending!!.isCompleted)
+                ) {
                     _extending?.cancel()
                     _extending = scope.launch {
                         delay(1500)
@@ -307,7 +314,8 @@ class PlayerConnection(
         // but launching on the plain Main dispatcher (not `immediate`) yields
         // to the looper first, so that already-published new title and plate
         // draw a frame before the blocking setMediaItems/prepare work runs.
-        scope.launch(Dispatchers.Main) {
+        _navJob?.cancel()
+        _navJob = scope.launch(Dispatchers.Main) {
             val c = controller ?: return@launch
             // Any queue of finite tracks is a real playlist, so Media3 plays one
             // after another regardless of where they came from: local files and
@@ -317,6 +325,7 @@ class PlayerConnection(
             val allTracks = queue.all { it.isTrack } && queue.size > 1
             swapping = true
             try {
+                ensureActive()
                 if (allTracks) {
                     slideWindow(c, start)
                 } else {
@@ -327,11 +336,13 @@ class PlayerConnection(
                     // still opens where it was left.
                     c.setMediaItems(listOf(buildItem(station)), 0, resumeAt(station))
                 }
+                ensureActive()
                 c.prepare()
                 c.play()
             } finally {
                 swapping = false
             }
+            ensureActive()
             sync()
         }
     }
@@ -386,16 +397,14 @@ class PlayerConnection(
      * nothing to reorder, so only the flag flips.
      */
     fun toggleShuffle() {
-        // Pure model toggle: this only flips the flag and reorders the
-        // navigation model for display and prev/next. The Media3 controller is
-        // never touched (no setMediaItems, no moveMediaItem), so the currently
-        // playing audio is completely uninterrupted - toggling shuffle must never
-        // stop, resume or restart the song. The new order is applied to the
-        // player the next time it steps or (re)plays.
+        // Pure-flip plus an in-place Media3 reorder. The model and the player
+        // are reordered together so sync() never sees a mismatch (a mismatch is
+        // what made a tap near the transport resolve to a different song).
         val newOn = !_shuffle.value
         _shuffle.value = newOn
+        val c = controller
         if (newOn) {
-            if (_source.size < 2) return
+            if (_source.size < 2) { sync(); return }
             val base = _baseSource.ifEmpty { _source }
             val current = _source.getOrNull(_queueIndex.value.takeIf { it >= 0 }?.let { windowBase + it } ?: 0)
                 ?: _baseSource.firstOrNull()
@@ -410,6 +419,13 @@ class PlayerConnection(
             }
             _shuffledSource = reordered
             _source = reordered
+            // Keep the model and the Media3 so the poller's sync() never sees a
+            // mismatch (that mismatch is what made a tap near the transport
+            // resolve to a different song). moveMediaItem relocates items
+            // without stopping or resetting the currently-playing one.
+            if (c != null && c.mediaItemCount == reordered.size) {
+                reorderPlayerItems(c, reordered.map { it.id })
+            }
             windowBase = if (reordered.size > WINDOW) abs else 0
             _queue.value = sliceAt(reordered, abs)
             _queueIndex.value = (abs - windowBase).coerceIn(0, _queue.value.lastIndex.coerceAtLeast(0))
@@ -421,12 +437,42 @@ class PlayerConnection(
             ) ?: linear.firstOrNull()
             _source = linear.ifEmpty { listOf(current).filterNotNull() }
             val abs = current?.let { linear.indexOfFirst { s -> s.url == it.url }.coerceAtLeast(0) } ?: 0
+            if (c != null && c.mediaItemCount == linear.size && c.mediaItemCount == _source.size) {
+                reorderPlayerItems(c, linear.map { it.id })
+            }
             windowBase = if (_source.size > WINDOW) abs else 0
             _queue.value = sliceAt(_source, abs)
             _queueIndex.value = (abs - windowBase).coerceIn(0, _queue.value.lastIndex.coerceAtLeast(0))
         }
-        // Refresh the panel only; Media3 order is untouched.
         sync()
+    }
+
+    /**
+     * Rearranges the items already on [c] to match [order] (a list of Media3
+     * mediaIds) without stopping or resetting playback. Items are relocated with
+     * moveMediaItem; the currently-playing item is never relocated, so nothing
+     * reloads and no setMediaItems / prepare is involved. This keeps Media3 and
+     * the shuffled [_queue] aligned, so the poller's sync() cannot resolve a
+     * different song after a shuffle toggle.
+     */
+    private fun reorderPlayerItems(c: Player, order: List<String>) {
+        if (order.size != c.mediaItemCount) return
+        val cur = c.currentMediaItemIndex.coerceIn(0, c.mediaItemCount - 1)
+        val curId = c.getMediaItemAt(cur).mediaId
+        val ids = ArrayList<String>(c.mediaItemCount)
+        for (i in 0 until c.mediaItemCount) ids.add(c.getMediaItemAt(i).mediaId)
+        var i = 0
+        while (i < order.size) {
+            if (ids[i] == order[i]) { i++; continue }
+            val want = order[i]
+            if (want == curId) { i++; continue } // never relocate the playing item
+            var j = i + 1
+            while (j < c.mediaItemCount && ids[j] != want) j++
+            if (j >= c.mediaItemCount) { i++; continue }
+            c.moveMediaItem(j, i)
+            ids.add(i, ids.removeAt(j))
+            i++
+        }
     }
 
     /**
