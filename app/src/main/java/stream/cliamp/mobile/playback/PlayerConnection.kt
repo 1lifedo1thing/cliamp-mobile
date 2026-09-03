@@ -10,6 +10,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -118,15 +119,18 @@ class PlayerConnection(
     private var swapping = false
 
     /**
-     * Coalesces rapid transport taps. A step computes an absolute target in
-     * [_source] and stores it in [_navPending]; [_pollNavigation] restarts a
-     * short debounce timer on every tap, so a burst of next/prev collapses into
-     * ONE navigation that lands exactly on the final tapped song - the songs in
-     * between are never (re)played. Playback isn't restarted per intermediate
-     * step either, which is what kept resetting the play state.
+     * Coalesces rapid transport taps without lagging a plain tap. Each step
+     * keeps an absolute target in [_source] in [_navPending]. A burst of next /
+     * prev fires the FIRST tap immediately (isolated taps thus respond at once)
+     * and then restarts a short debounce timer on each follow-up, so the burst
+     * settles on the LAST tapped song - the songs in between are never (re)played
+     * and playback isn't restarted per tap. [_navTimerJob] only waits and hands
+     * off to play(); the media job itself lives on [_navJob] and is unaffected.
      */
     private var _navJob: Job? = null
+    private var _navTimerJob: Job? = null
     private var _navPending: Int? = null
+    private var _lastNavTapMs = 0L
 
     private val NAV_DEBOUNCE_MS = 180L
 
@@ -557,29 +561,47 @@ class PlayerConnection(
             (here + delta).coerceIn(0, src.lastIndex)
         }
         if (abs == here && _source.isNotEmpty() && pending == null) return
+
+        val now = android.os.SystemClock.uptimeMillis()
+        val leadingEdge = now - _lastNavTapMs > NAV_DEBOUNCE_MS
+        _lastNavTapMs = now
         _navPending = abs
-        pollNavigation()
+        if (leadingEdge) {
+            // Isolated tap: navigate at once so next / prev feel instant.
+            _navTimerJob?.cancel()
+            _navTimerJob = null
+            applyNavigation()
+        } else {
+            // Rapid burst: wait out the taps, then land on the final one.
+            startNavTimer()
+        }
+    }
+
+    /** Fires the pending target now (no timer). */
+    private fun applyNavigation() {
+        val target = _navPending ?: return
+        _navPending = null
+        val src = _source.ifEmpty { _fallbackSource }
+        if (src.isEmpty()) return
+        val abs = target.coerceIn(0, src.lastIndex)
+        play(src[abs], src, preserveOrder = true)
     }
 
     /**
-     * Debounced coalescing for prev/next. Each tap restarts a short timer; when
-     * it fires (i.e. the burst has settled) we navigate ONCE to the last tapped
-     * target, so no intermediate song is ever queued or played and playback is
-     * not restarted per tap.
+     * Restarts the coalescing timer. When it fires (taps have settled) we
+     * navigate ONCE to the last tapped target. The timer only waits and hands
+     * off to play(); it never cancels an in-flight media job.
      */
-    private fun pollNavigation() {
-        _navJob?.cancel()
-        _navJob = scope.launch(Dispatchers.Main) {
-            delay(NAV_DEBOUNCE_MS)
-            val target = _navPending ?: return@launch
-            _navPending = null
-            val src = _source.ifEmpty { _fallbackSource }
-            if (src.isEmpty()) return@launch
-            val abs = target.coerceIn(0, src.lastIndex)
-            // The debounce timer is done; clear the job reference so play()'s
-            // own cancel doesn't hit it, then navigate to the final song.
-            if (_navJob === coroutineContext[Job]) _navJob = null
-            play(src[abs], src, preserveOrder = true)
+    private fun startNavTimer() {
+        _navTimerJob?.cancel()
+        _navTimerJob = scope.launch(Dispatchers.Main) {
+            try {
+                delay(NAV_DEBOUNCE_MS)
+            } catch (_: CancellationException) {
+                return@launch
+            }
+            if (_navTimerJob === coroutineContext[Job]) _navTimerJob = null
+            applyNavigation()
         }
     }
 
