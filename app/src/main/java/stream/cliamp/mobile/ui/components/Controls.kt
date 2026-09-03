@@ -12,8 +12,12 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -409,16 +413,29 @@ fun Scrubber(
         modifier
             .fillMaxWidth()
             .height(24.dp)
+            // Tap and drag share ONE gesture handler. As separate pointerInput
+            // blocks detectTapGestures consumed the down first, so the drag
+            // detector that followed never saw an unconsumed down and drag-seek
+            // silently never fired. Combined here: a press that clears touch
+            // slop horizontally becomes a drag, anything else is a tap.
             .pointerInput(Unit) {
-                detectTapGestures { onSeek((it.x / size.width).coerceIn(0f, 1f)) }
-            }
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures(
-                    onDragStart = { dragging = true; dragFraction = (it.x / size.width).coerceIn(0f, 1f) },
-                    onDragEnd = { dragging = false; onSeek(dragFraction) },
-                    onDragCancel = { dragging = false },
-                ) { change, _ ->
-                    dragFraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val startFraction = (down.position.x / size.width).coerceIn(0f, 1f)
+                    dragFraction = startFraction
+                    val drag = awaitTouchSlopOrCancellation(down.id) { change, _ ->
+                        change.consume()
+                        dragFraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                    }
+                    if (drag != null) {
+                        dragging = true
+                        drag(drag.id) { change ->
+                            change.consume()
+                            dragFraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                        }
+                    }
+                    dragging = false
+                    onSeek(if (drag != null) dragFraction else startFraction)
                 }
             }
     ) {
