@@ -118,7 +118,13 @@ class PlayerConnection(
         val q = _queue.value
         if (!swapping && c.mediaItemCount > 0 && q.isNotEmpty()) {
             val playerIndex = c.currentMediaItemIndex
-            val logical = playerIndex.coerceIn(0, q.lastIndex)
+            // Radio (or a lone track) is pushed as a single Media3 item while the
+            // panel still shows a full window around it, so Media3's index can't
+            // be mapped straight onto [_queue] - that would repoint the active
+            // item back to the head of the list. Only read back the index when
+            // Media3 actually holds the whole queue.
+            val oneToOne = c.mediaItemCount == q.size
+            val logical = if (oneToOne) playerIndex.coerceIn(0, q.lastIndex) else _queueIndex.value
             if (logical != _queueIndex.value) {
                 _queueIndex.value = logical
                 PlaybackBus.publishStation(q[logical])
@@ -127,8 +133,8 @@ class PlayerConnection(
             // A huge queue is played as a window; when that window is nearly
             // spent, roll it forward in [_source] so the library never silently
             // stops at the boundary. Guarded so the poller and onEvents can't
-            // double-push.
-            if (_source.size > WINDOW && playerIndex >= c.mediaItemCount - 2) {
+            // double-push (and skipped when Media3 holds a single radio item).
+            if (oneToOne && _source.size > WINDOW && playerIndex >= c.mediaItemCount - 2) {
                 val abs = windowBase + playerIndex
                 val next = (abs + 1).coerceIn(0, _source.lastIndex)
                 if (next > windowBase && next <= _source.lastIndex) {
@@ -199,26 +205,22 @@ class PlayerConnection(
         // draw a frame before the blocking setMediaItems/prepare work runs.
         scope.launch(Dispatchers.Main) {
             val c = controller ?: return@launch
-            // Any queue of finite tracks is a real playlist, so Media3 plays
-            // one after another regardless of where they came from: local files
-            // and provider albums alike. Radio queues stay single-item, because
-            // a live stream has no end to advance from and pre-resolving sixty
-            // station URLs would be waste.
-            val playlist = queue.takeIf { list -> list.all { it.isTrack } && list.size > 1 }
+            // Any queue of finite tracks is a real playlist, so Media3 plays one
+            // after another regardless of where they came from: local files and
+            // provider albums alike. A live radio stream has no end to advance
+            // from, so it is pushed as ONE Media3 item even though the queue
+            // panel still shows the rest of its list as up-next to switch to.
+            val allTracks = queue.all { it.isTrack } && queue.size > 1
             swapping = true
             try {
-                if (playlist != null) {
+                if (allTracks) {
                     slideWindow(c, start)
                 } else {
-                    // A single track (or live stream) is pushed as one media item,
-                    // so Media3's index 0 maps to [_queue], not to the head of the
-                    // list that produced it. This keeps sync() publishing the
-                    // tapped song instead of the top search match whenever a
-                    // search result is played alone.
-                    windowBase = _queueIndex.value
-                    _queue.value = listOf(station)
-                    _queueIndex.value = 0
-                    c.setMediaItem(buildItem(station))
+                    // Single live stream or lone track: Media3 holds just the
+                    // tapped playable. The queue window was already computed
+                    // above (lines 168-188) so the panel shows the neighbours,
+                    // but the player advances nothing automatically.
+                    c.setMediaItems(listOf(buildItem(station)), 0, 0L)
                 }
                 c.prepare()
                 c.play()
