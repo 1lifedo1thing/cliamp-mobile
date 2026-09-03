@@ -43,7 +43,6 @@ import kotlinx.coroutines.launch
 import stream.cliamp.mobile.CliampApp
 import stream.cliamp.mobile.MainActivity
 import stream.cliamp.mobile.R
-import stream.cliamp.mobile.data.CliampRadio
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.net.Http
@@ -144,10 +143,11 @@ class PlaybackService : MediaSessionService() {
         // notification is one lonely play button. These put station stepping and
         // favouriting on the lockscreen where they belong.
         scope.launch {
-            prefs0.favorites.collect { favs ->
+            val conn = (application as CliampApp).player
+            combine(prefs0.favorites, conn.shuffle) { favs, shf ->
                 val url = PlaybackBus.station.value?.url
-                session?.setMediaButtonPreferences(buttons(favs.any { it.url == url }))
-            }
+                session?.setMediaButtonPreferences(buttons(favs.any { it.url == url }, shf))
+            }.collect { }
         }
 
         setMediaNotificationProvider(
@@ -165,7 +165,7 @@ class PlaybackService : MediaSessionService() {
                 fx.attach(
                     player.audioSessionId,
                     spectrumWanted,
-                    onSpectrum = PlaybackBus::publishSpectrum,
+                    onSpectrum = ::handleSpectrum,
                     onLiveChanged = PlaybackBus::publishSpectrumLive,
                 )
                 PlaybackBus.publishEqBandLabels(fx.bandLabels)
@@ -177,9 +177,12 @@ class PlaybackService : MediaSessionService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session
 
-    private fun buttons(isFavourite: Boolean): ImmutableList<CommandButton> = ImmutableList.of(
+    private fun buttons(
+        isFavourite: Boolean,
+        isShuffling: Boolean,
+    ): ImmutableList<CommandButton> = ImmutableList.of(
         CommandButton.Builder(CommandButton.ICON_PREVIOUS)
-            .setDisplayName("Previous station")
+            .setDisplayName("Previous")
             .setIconResId(R.drawable.ic_w_prev)
             .setSessionCommand(SessionCommand(CMD_PREV_STATION, Bundle.EMPTY))
             .build(),
@@ -190,8 +193,13 @@ class PlaybackService : MediaSessionService() {
             .setIconResId(if (isFavourite) R.drawable.ic_w_star_filled else R.drawable.ic_w_star)
             .setSessionCommand(SessionCommand(CMD_FAVOURITE, Bundle.EMPTY))
             .build(),
+        CommandButton.Builder(CommandButton.ICON_SHUFFLE_ON)
+            .setDisplayName("Shuffle")
+            .setIconResId(R.drawable.ic_w_shuffle)
+            .setSessionCommand(SessionCommand(CMD_SHUFFLE, Bundle.EMPTY))
+            .build(),
         CommandButton.Builder(CommandButton.ICON_NEXT)
-            .setDisplayName("Next station")
+            .setDisplayName("Next")
             .setIconResId(R.drawable.ic_w_next)
             .setSessionCommand(SessionCommand(CMD_NEXT_STATION, Bundle.EMPTY))
             .build(),
@@ -206,10 +214,11 @@ class PlaybackService : MediaSessionService() {
                 .add(SessionCommand(CMD_PREV_STATION, Bundle.EMPTY))
                 .add(SessionCommand(CMD_NEXT_STATION, Bundle.EMPTY))
                 .add(SessionCommand(CMD_FAVOURITE, Bundle.EMPTY))
+                .add(SessionCommand(CMD_SHUFFLE, Bundle.EMPTY))
                 .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(commands)
-                .setMediaButtonPreferences(buttons(false))
+                .setMediaButtonPreferences(buttons(false, false))
                 .build()
         }
 
@@ -219,9 +228,13 @@ class PlaybackService : MediaSessionService() {
             customCommand: SessionCommand,
             args: Bundle,
         ): ListenableFuture<SessionResult> {
+            val conn = (application as CliampApp).player
             when (customCommand.customAction) {
-                CMD_PREV_STATION -> scope.launch { stepStation(-1) }
-                CMD_NEXT_STATION -> scope.launch { stepStation(+1) }
+                CMD_PREV_STATION -> scope.launch { conn.prev() }
+                CMD_NEXT_STATION -> scope.launch { conn.next() }
+                // Shuffle must only flip the flag / reorder, never jump to a
+                // random station - that is exactly what the old button did.
+                CMD_SHUFFLE -> scope.launch { conn.toggleShuffle() }
                 CMD_FAVOURITE -> scope.launch {
                     PlaybackBus.station.value?.let { prefs0.toggleFavorite(it) }
                 }
@@ -265,24 +278,11 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    /** Same walk the widget does: favourites if any, otherwise cliamp's channels. */
-    private suspend fun stepStation(delta: Int) {
-        val list = prefs0.favorites.first().ifEmpty { CliampRadio.builtin }
-        if (list.isEmpty()) return
-        val here = PlaybackBus.station.value?.url
-        val i = list.indexOfFirst { it.url == here }
-        val next = if (i < 0) list.first() else list[(i + delta + list.size) % list.size]
-
-        PlaybackBus.publishStation(next)
-        PlaybackBus.publishError(null)
-        prefs0.setLastStation(next)
-        prefs0.pushHistory(next)
-        val resolved = StreamResolver.resolve(next.url)
-        player.setMediaItem(mediaItem(this@PlaybackService, next, resolved))
-        player.prepare()
-        player.play()
-    }
-
+    /**
+     * Same walk the widget does: the list currently playing (local songs, the
+     * source that was tapped - favourites, a provider album, a directory) -
+     * falling back to favourites, then cliamp's channels, if nothing is loaded.
+     */
     /**
      * Anything the widget or tile draws has to be written down, not held in
      * RAM. Icecast sends a metadata block roughly once a second, so this is
@@ -290,6 +290,10 @@ class PlaybackService : MediaSessionService() {
      * widget several times a second for state that had not changed.
      */
     private var lastWidgetState: Triple<Boolean, String, String>? = null
+
+    /** Last time a spectrum snapshot was written, to throttle the widget path. */
+    private var lastSpectrumWrite = 0L
+    private val spectrumToWidget = 500L
 
     private fun publishWidgetState() {
         val next = Triple(
@@ -302,15 +306,61 @@ class PlaybackService : MediaSessionService() {
         scope.launch {
             val favs = prefs0.favorites.first()
             session?.setMediaButtonPreferences(
-                buttons(favs.any { it.url == PlaybackBus.station.value?.url })
+                buttons(
+                    favs.any { it.url == PlaybackBus.station.value?.url },
+                    (application as CliampApp).player.shuffle.value,
+                )
             )
             prefs0.setWidgetPlaying(next.first)
             prefs0.setWidgetTrack(next.second)
+            if (next.first) writeWidgetSpectrum()
             // Collecting the flows inside the composition only updates the
             // widget while its Glance session is alive, and sessions are
             // short-lived. The nudge is what covers a dormant widget.
             CliampWidgetReceiver.refresh(this@PlaybackService)
         }
+    }
+
+    /**
+     * Shared spectrum sink used by every fx.attach (onCreate and the playing
+     * re-attach). Besides driving the in-app meter, it persists a downsample
+     * for the widget independently of the state dedup guard: metadata can sit
+     * still for an entire song, but the meter still has to move.
+     */
+    private fun handleSpectrum(it: FloatArray) {
+        PlaybackBus.publishSpectrum(it)
+        if (player.isPlaying &&
+            System.currentTimeMillis() - lastSpectrumWrite >= spectrumToWidget
+        ) scope.launch { writeWidgetSpectrum() }
+    }
+
+    /**
+     * Downsample the live 64-bin spectrum to a handful of bars and persist them
+     * for the widget, throttled so the 30-60Hz spectrum does not hammer the
+     * DataStore. A lone bucket would read as a flat meter, so the snapshot is
+     * pushed by the first few peaks rather than a uniform average.
+     */
+    private suspend fun writeWidgetSpectrum() {
+        val now = System.currentTimeMillis()
+        if (now - lastSpectrumWrite < spectrumToWidget) return
+        lastSpectrumWrite = now
+        val bins = PlaybackBus.spectrum.value
+        if (bins.isEmpty()) return
+        val bars = 6
+        val snapshot = FloatArray(bars)
+        val per = (bins.size.toFloat() / bars).let { if (it < 1f) 1f else it }
+        for (b in 0 until bars) {
+            val start = (b * per).toInt().coerceIn(0, bins.lastIndex)
+            val end = (((b + 1) * per).toInt() + 1).coerceIn(start, bins.size)
+            val slice = bins.sliceArray(start until end)
+            var peak = 0f
+            for (v in slice) if (v > peak) peak = v
+            snapshot[b] = peak.coerceIn(0f, 1f)
+        }
+        prefs0.setWidgetSpectrum(snapshot.toList())
+        // Nudge the widget so a dormant composition repaints the moving bars;
+        // this is throttled to ~2Hz by the guard above.
+        CliampWidgetReceiver.refresh(this@PlaybackService)
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -389,7 +439,7 @@ class PlaybackService : MediaSessionService() {
             fx.attach(
                 player.audioSessionId,
                 spectrumWanted,
-                onSpectrum = PlaybackBus::publishSpectrum,
+                onSpectrum = ::handleSpectrum,
                 onLiveChanged = PlaybackBus::publishSpectrumLive,
             )
         }
@@ -428,6 +478,7 @@ class PlaybackService : MediaSessionService() {
         const val SPECTRUM_BANDS = 64
         const val CMD_PREV_STATION = "stream.cliamp.mobile.PREV_STATION"
         const val CMD_NEXT_STATION = "stream.cliamp.mobile.NEXT_STATION"
+        const val CMD_SHUFFLE = "stream.cliamp.mobile.SHUFFLE"
         const val CMD_FAVOURITE = "stream.cliamp.mobile.FAVOURITE"
 
         /** Metadata the notification and lockscreen read. */
