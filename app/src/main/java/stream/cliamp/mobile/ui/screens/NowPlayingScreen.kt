@@ -121,6 +121,15 @@ fun NowPlayingScreen(
     val spectrumSource = PlaybackBus.spectrum.collectAsState()
     val isFav = shownStation != null && favorites.any { it.url == shownStation.url }
 
+    Box(Modifier.fillMaxSize()) {
+        // Whole-overlay blocker, drawn FIRST (bottom-most) so every interactive
+        // control above it - the back key, transport, scrubber - hit-tests and
+        // claims its own press before this ever sees it. Anything a control did
+        // not take (the cover art, the inert text, the gaps between blocks) is
+        // eaten here, so it can never fall through to the library list that
+        // stays composed behind this overlay. Being a sibling (not an ancestor)
+        // of the scrubber means it never swallows drag-to-seek.
+        Box(Modifier.fillMaxSize().consumeAllGestures())
     Column(Modifier.fillMaxSize().background(p.ground).statusBarsPadding()) {
         Row(
             Modifier.fillMaxWidth().padding(start = Gutter, top = 6.dp, end = 16.dp, bottom = 2.dp),
@@ -144,8 +153,7 @@ fun NowPlayingScreen(
         BoxWithConstraints(
             Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .consumeAllGestures(),
+                .fillMaxWidth(),
         ) {
             val reserved = 356.dp
             val artSide = minOf(maxWidth - Gutter * 2, (maxHeight - reserved)).coerceIn(96.dp, 284.dp)
@@ -363,6 +371,7 @@ fun NowPlayingScreen(
         }
         }
         Spacer(Modifier.height(10.dp))
+    }
     }
 }
 
