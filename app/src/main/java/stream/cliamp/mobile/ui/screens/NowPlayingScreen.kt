@@ -120,7 +120,12 @@ fun NowPlayingScreen(
         // it is the first thing to give way. Compose has no shrink factor, so
         // we measure the column and hand the plate whatever is left over -
         // otherwise the FAV row silently walks off the bottom of the frame.
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+        BoxWithConstraints(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .consumeAllGestures(),
+        ) {
             val reserved = 356.dp
             val artSide = minOf(maxWidth - Gutter * 2, (maxHeight - reserved)).coerceIn(96.dp, 284.dp)
 
