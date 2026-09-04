@@ -170,9 +170,9 @@ object StationArtwork {
         }
 
         // caption, matching the player's "[ slug - cliamp radio ]"
-        val mono = runCatching { ResourcesCompat.getFont(context, R.font.jetbrains_mono_regular) }
-            .getOrNull() ?: Typeface.MONOSPACE
-        paint.typeface = mono
+        val font = runCatching { ResourcesCompat.getFont(context, R.font.poppins_regular) }
+            .getOrNull() ?: Typeface.DEFAULT
+        paint.typeface = font
         paint.textSize = 26f
         paint.color = Color.parseColor(CAPTION)
         val caption = when {
