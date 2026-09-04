@@ -99,6 +99,7 @@ fun CommandScreen(
     onOpenSettings: () -> Unit,
     onOpenProvider: (ProviderAccount) -> Unit,
     onOpenShow: (PodcastShow) -> Unit,
+    onOpenTag: (String) -> Unit,
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -176,7 +177,7 @@ fun CommandScreen(
                     .firstOrNull { it.playable != null }
                 hit?.playable?.let { onPlay(it, listOf(it)) }
             }
-            ":tag" -> repository.loadDirectory(DirectoryQuery.Tag(arg), reset = true)
+            ":tag" -> onOpenTag(arg)
             ":country" -> repository.loadDirectory(DirectoryQuery.Country(arg.uppercase(), arg.uppercase()), reset = true)
             ":random" -> {
                 val pool = directory.stations.ifEmpty { cliamp }
@@ -198,7 +199,7 @@ fun CommandScreen(
         when (hit) {
             is SearchHit.Provider -> onOpenProvider(hit.account)
             is SearchHit.Show -> onOpenShow(hit.show)
-            is SearchHit.Tag -> repository.loadDirectory(DirectoryQuery.Tag(hit.name), reset = true)
+            is SearchHit.Tag -> onOpenTag(hit.name)
             else -> hit.playable?.let { s ->
                 onPlay(s, queue.mapNotNull { it.playable })
             }

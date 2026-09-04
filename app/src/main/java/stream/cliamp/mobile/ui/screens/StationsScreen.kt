@@ -70,6 +70,8 @@ fun StationsScreen(
     onToggleFavorite: (Station) -> Unit,
     onAddToQueue: (Station) -> Unit = {},
     onPlayNext: (Station) -> Unit = {},
+    focusDirectory: Boolean = false,
+    onDirectoryFocusConsumed: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     var source by remember { mutableStateOf(Source.All) }
@@ -105,6 +107,24 @@ fun StationsScreen(
         if (directory.query is DirectoryQuery.Search) {
             repository.loadDirectory(DirectoryQuery.TopVoted, reset = true)
         }
+    }
+
+    // A tag tapped in search lands here already filtered, but the list opens
+    // at the top - above the favourites and cliamp sections. Slide down to the
+    // directory section so the result is actually on screen, then report back
+    // so the request is consumed and a later plain tab switch does not re-jump.
+    LaunchedEffect(focusDirectory) {
+        if (!focusDirectory) return@LaunchedEffect
+        val directoryShown = source == Source.All || source == Source.Directory
+        if (!directoryShown) return@LaunchedEffect
+        var idx = 0
+        if (source == Source.All || source == Source.Favs) {
+            if (radioFavorites.isNotEmpty()) idx += 1 + radioFavorites.size
+            else if (source == Source.Favs) idx += 1
+        }
+        if (source == Source.All || source == Source.Cliamp) idx += 1 + cliamp.size
+        listState.animateScrollToItem(idx)
+        onDirectoryFocusConsumed()
     }
 
     Column(Modifier.fillMaxSize().background(p.ground)) {

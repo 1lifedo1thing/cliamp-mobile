@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.launch
+import stream.cliamp.mobile.data.DirectoryQuery
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.LocalLibrary
 import stream.cliamp.mobile.data.PlaylistStore
@@ -92,6 +93,9 @@ fun CliampRoot(
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf(Tab.Lib) }
     var overlay by remember { mutableStateOf<Overlay>(Overlay.None) }
+    // A one-shot "scroll the Stations tab down to the directory section"
+    // request, raised by tapping a tag in search. Cleared once consumed.
+    var focusDirectory by remember { mutableStateOf(false) }
     // Which Library sub-tab is showing. Lifted here so that closing an overlay
     // that was opened from the providers pane (add wizard or a provider's browse)
     // lands back on providers rather than the library list.
@@ -141,6 +145,8 @@ fun CliampRoot(
                     onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
                     onAddToQueue = { player.addToQueue(it) },
                     onPlayNext = { player.playNext(it) },
+                    focusDirectory = focusDirectory,
+                    onDirectoryFocusConsumed = { focusDirectory = false },
                 )
                 Tab.Lib -> LocalScreen(
                     localLibrary = localLibrary,
@@ -200,6 +206,14 @@ fun CliampRoot(
                         podcasts.openShow(show)
                         tab = Tab.Pods
                         overlay = Overlay.Show
+                    },
+                    // A tag is a directory filter: land on the Stations tab so
+                    // the tapping user actually sees the tagged stations rather
+                    // than silently priming a list they are not looking at.
+                    onOpenTag = { name ->
+                        repository.loadDirectory(DirectoryQuery.Tag(name), reset = true)
+                        focusDirectory = true
+                        tab = Tab.Stations
                     },
                 )
             }
