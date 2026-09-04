@@ -20,7 +20,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PodcastSubscriptionEntity::class,
         EpisodeProgressEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class CliampDatabase : RoomDatabase() {
@@ -65,6 +65,20 @@ abstract class CliampDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Local songs grow a "recently added" column, so the picker's
+         * recently-added sort works from the warm-launch cache too. Additive
+         * ALTER on an existing table; old rows default to 0 (unknown), which
+         * sorts last.
+         */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `local_songs` ADD COLUMN `dateAdded` INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
         fun get(context: Context): CliampDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
@@ -74,7 +88,7 @@ abstract class CliampDatabase : RoomDatabase() {
                 // playlist_members cascades from playlists, which only works
                 // with foreign keys actually switched on
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
                 .also { instance = it }
         }

@@ -27,6 +27,8 @@ data class Station(
     val artist: String = "",
     val album: String = "",
     val durationMs: Long = 0L,
+    /** When the file first entered the local media store, seconds since epoch. */
+    val dateAdded: Long = 0L,
 ) {
     /** `mp3 · 128k · Germany`, skipping whatever the directory did not know. */
     val meta: String

@@ -107,6 +107,7 @@ data class LocalSongEntity(
     val durationMs: Long,
     val uri: String,
     val cover: String,
+    val dateAdded: Long = 0,
     val sortKey: String,
 )
 

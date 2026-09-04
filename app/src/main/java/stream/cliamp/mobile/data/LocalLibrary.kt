@@ -23,6 +23,8 @@ data class LocalSong(
     val album: String,
     /** duration in milliseconds. */
     val durationMs: Long,
+    /** When the file first entered the media store, seconds since epoch. */
+    val dateAdded: Long,
     val uri: Uri,
     val cover: String,
 ) {
@@ -36,6 +38,7 @@ data class LocalSong(
             artist = artist,
             album = album,
             durationMs = durationMs,
+            dateAdded = dateAdded,
         )
 
     /** Longest sort field is the safe proxy for "starts with title". */
@@ -117,6 +120,7 @@ class LocalLibrary(context: Context) {
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.DATE_ADDED,
             MediaStore.Audio.Media.DATA,
         )
         resolver.query(
@@ -131,6 +135,7 @@ class LocalLibrary(context: Context) {
             val cArtist = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
             val cAlbum = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
             val cDur = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            val cAdded = runCatching { c.getColumnIndex(MediaStore.Audio.Media.DATE_ADDED) }.getOrDefault(-1)
             // DATA is deprecated but still populated on current devices, and it
             // is what lets us play via a readable file path and pull on-disk
             // cover art. When it is absent a track is simply skipped.
@@ -152,6 +157,7 @@ class LocalLibrary(context: Context) {
                     artist = artist,
                     album = album,
                     durationMs = c.getLong(cDur),
+                    dateAdded = if (cAdded >= 0) c.getLong(cAdded) else 0L,
                     uri = Uri.fromFile(file),
                     cover = cover,
                 )
@@ -195,6 +201,7 @@ class LocalLibrary(context: Context) {
                         artist = row.artist,
                         album = row.album,
                         durationMs = row.durationMs,
+                        dateAdded = row.dateAdded,
                         uri = Uri.fromFile(File(row.path)),
                         cover = row.cover,
                     ).station
@@ -218,6 +225,7 @@ class LocalLibrary(context: Context) {
                             durationMs = s.durationMs,
                             uri = s.url,
                             cover = s.cover,
+                            dateAdded = s.dateAdded,
                             sortKey = s.name.lowercase(),
                         )
                     }

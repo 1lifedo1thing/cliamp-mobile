@@ -23,6 +23,27 @@ import stream.cliamp.mobile.net.Http
 private val Context.settingsStore: DataStore<Preferences> by preferencesDataStore("cliamp")
 
 /**
+ * How a playlist's songs are ordered. Remembered per playlist so reopening a
+ * list keeps the order the user set while adding songs; the "local songs"
+ * smart playlist is stored under its own key ("local-songs").
+ */
+enum class PlaylistSort(val label: String) {
+    Title("title"), Artist("artist"), Album("album"), RecentlyAdded("recently added")
+}
+
+/** Playlist members sorted by the chosen order; title is the stable tiebreak. */
+fun <T : Station> sortedStations(songs: List<T>, sort: PlaylistSort): List<T> {
+    val title = compareBy<T> { it.name.lowercase() }
+    return when (sort) {
+        PlaylistSort.Title -> songs.sortedWith(title)
+        PlaylistSort.Artist -> songs.sortedWith(compareBy<T> { it.artist.lowercase() }.then(title))
+        PlaylistSort.Album -> songs.sortedWith(compareBy<T> { it.album.lowercase() }.then(title))
+        PlaylistSort.RecentlyAdded ->
+            songs.sortedWith(compareByDescending<T> { it.dateAdded }.then(title))
+    }
+}
+
+/**
  * Settings only.
  *
  * The scalars stay here because that is what a preferences store is good at:
@@ -58,6 +79,7 @@ class Prefs(private val context: Context) {
         val wSource = stringPreferencesKey("w_source")
         val wPosition = longPreferencesKey("w_position")
         val wDuration = longPreferencesKey("w_duration")
+        val playlistSorts = stringPreferencesKey("playlist_sorts")  // slug -> PlaylistSort.ordinal
     }
 
     val palette: Flow<String> = context.settingsStore.data.map { it[K.palette] ?: "system" }
@@ -146,6 +168,20 @@ class Prefs(private val context: Context) {
         db.history().recent().map { rows -> rows.map { it.toStation() } }
     val custom: Flow<List<Station>> =
         db.customStations().all().map { rows -> rows.map { it.toStation() } }
+
+    /** Per-playlist remembered sort, keyed by playlist slug. */
+    val playlistSorts: Flow<Map<String, Int>> = context.settingsStore.data.map { p ->
+        p[K.playlistSorts]?.let { raw ->
+            runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
+        } ?: emptyMap()
+    }
+
+    /** The sort choice for one list, defaulting to the current title order. */
+    fun playlistSort(slug: String): Flow<PlaylistSort> =
+        playlistSorts.map { map ->
+            map[slug]?.let { PlaylistSort.entries.getOrNull(it) } ?: PlaylistSort.Title
+        }
+
     val lastStation: Flow<Station?> = context.settingsStore.data.map { p ->
         p[K.lastStation]?.let { raw -> runCatching { Http.json.decodeFromString<Station>(raw) }.getOrNull() }
     }
@@ -162,6 +198,16 @@ class Prefs(private val context: Context) {
     suspend fun setEqPreset(v: String) = put(K.eqPreset, v)
     suspend fun setAutoResume(v: Boolean) = put(K.autoResume, v)
     suspend fun setVolume(v: Float) = put(K.volume, v)
+
+    /** Remember a playlist's sort; edits merge so other playlists are untouched. */
+    suspend fun setPlaylistSort(slug: String, sort: PlaylistSort) {
+        context.settingsStore.edit { p ->
+            val current = p[K.playlistSorts]?.let { raw ->
+                runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
+            } ?: emptyMap()
+            p[K.playlistSorts] = Http.json.encodeToString(current + (slug to sort.ordinal))
+        }
+    }
 
     suspend fun setWidgetPlaying(v: Boolean) = put(K.wPlaying, v)
     suspend fun setWidgetTrack(v: String) = put(K.wTrack, v)

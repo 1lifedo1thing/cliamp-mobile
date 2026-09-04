@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import kotlinx.coroutines.launch
+import stream.cliamp.mobile.CliampApp
 import stream.cliamp.mobile.data.LocalArt
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.LocalLibrary
@@ -66,7 +67,9 @@ import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.DirectoryState
 import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.data.toStation
+import stream.cliamp.mobile.data.PlaylistSort
 import stream.cliamp.mobile.data.durationLabel
+import stream.cliamp.mobile.data.sortedStations
 import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.data.provider.ProviderCatalog
 import stream.cliamp.mobile.data.provider.ProviderSpec
@@ -833,6 +836,10 @@ private fun PlaylistDetailShown(
     doneAdding: () -> Unit,
 ) {
     val p = LocalPalette.current
+    val context = LocalContext.current
+    val prefs = (context.applicationContext as CliampApp).prefs
+    val scope = rememberCoroutineScope()
+    val sort by prefs.playlistSort(playlist.station.slug).collectAsState(initial = PlaylistSort.Title)
 
     // Members can be any source now, so they resolve against the live local
     // library plus the persisted snapshot stations (radio/podcast members).
@@ -855,6 +862,7 @@ private fun PlaylistDetailShown(
         return
     }
 
+    val visible = remember(members, sort) { sortedStations(members, sort) }
     LazyColumn(Modifier.fillMaxSize()) {
         if (members.isEmpty()) {
             item {
@@ -863,10 +871,23 @@ private fun PlaylistDetailShown(
                 }
             }
         } else {
+            item {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                        .padding(start = Gutter, end = Gutter, top = 4.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    PlaylistSort.entries.forEach { t ->
+                        Chip(t.label, sort == t, onClick = {
+                            scope.launch { prefs.setPlaylistSort(playlist.station.slug, t) }
+                        })
+                    }
+                }
+            }
             item { SectionLabel("songs — ${members.size}") }
-            items(members, key = { it.id }) { s ->
+            items(visible, key = { it.id }) { s ->
                 ListRow(
-                    onClick = { onPlay(s, members) },
+                    onClick = { onPlay(s, visible) },
                     verticalPadding = 9.dp,
                     leading = {
                         SongCover(s = s, current = current, playing = playing)
@@ -1113,7 +1134,17 @@ private fun SmartPlaylistDetail(
     onReplaceQueue: (Station, List<Station>) -> Unit = { s, _ -> onPlay(s, emptyList()) },
 ) {
     val p = LocalPalette.current
+    val context = LocalContext.current
+    val prefs = (context.applicationContext as CliampApp).prefs
+    val scope = rememberCoroutineScope()
+    // Only the local-songs smart list sorts; favourites and recent have their
+    // own fixed orders (recent is already time-sorted).
+    val local = pl.kind == SmartKind.LocalSongs
+    val sort by prefs.playlistSort("local-songs").collectAsState(initial = PlaylistSort.Title)
     val members = pl.stations
+    val visible = remember(members, local, sort) {
+        if (local) sortedStations(members, sort) else members
+    }
     LazyColumn(Modifier.fillMaxSize()) {
         if (members.isEmpty()) {
             item {
@@ -1130,10 +1161,25 @@ private fun SmartPlaylistDetail(
                 }
             }
         } else {
+            if (local) {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                            .padding(start = Gutter, end = Gutter, top = 4.dp, bottom = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        PlaylistSort.entries.forEach { t ->
+                            Chip(t.label, sort == t, onClick = {
+                                scope.launch { prefs.setPlaylistSort("local-songs", t) }
+                            })
+                        }
+                    }
+                }
+            }
             item { SectionLabel("${pl.label} — ${members.size}") }
-            items(members, key = { it.url }, contentType = { "local-song" }) { s ->
+            items(visible, key = { it.url }, contentType = { "local-song" }) { s ->
                 ListRow(
-                    onClick = { onPlay(s, members) },
+                    onClick = { onPlay(s, visible) },
                     verticalPadding = 9.dp,
                     leading = {
                         SongCover(s = s, current = current, playing = playing)
