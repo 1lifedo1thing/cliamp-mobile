@@ -57,7 +57,15 @@ import stream.cliamp.mobile.data.LocalArt
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.LocalLibrary
 import stream.cliamp.mobile.data.PlaylistStore
+import stream.cliamp.mobile.data.PodcastRepository
+import stream.cliamp.mobile.data.PodcastEpisode
+import stream.cliamp.mobile.data.PodcastShow
+import stream.cliamp.mobile.data.Repository
+import stream.cliamp.mobile.data.ShowState
 import stream.cliamp.mobile.data.Station
+import stream.cliamp.mobile.data.DirectoryState
+import stream.cliamp.mobile.data.StationSource
+import stream.cliamp.mobile.data.toStation
 import stream.cliamp.mobile.data.durationLabel
 import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.data.provider.ProviderCatalog
@@ -102,6 +110,8 @@ private class SmartPlaylist(val kind: SmartKind, val stations: List<Station>) {
 fun LocalScreen(
     localLibrary: LocalLibrary,
     playlists: PlaylistStore,
+    repository: Repository,
+    podcasts: PodcastRepository,
     current: Station?,
     playing: Boolean,
     favorites: List<Station>,
@@ -141,6 +151,18 @@ fun LocalScreen(
     val pinnedSlugs by playlists.pinnedSlugs.collectAsState(initial = emptySet())
     val pinnedPlaylists = allPlaylists.filter { it.station.slug in pinnedSlugs }
     val unpinnedPlaylists = allPlaylists.filterNot { it.station.slug in pinnedSlugs }
+
+    val cliamp by repository.cliamp.collectAsState(initial = emptyList())
+    val directory by repository.directory.collectAsState(initial = DirectoryState())
+    val subscriptions by podcasts.subscriptions.collectAsState(initial = emptyList())
+    // Everything the "stations" add-tab offers at once: cliamp's channels, the
+    // loaded directory page and radio favourites, keyed by station id.
+    val radioStations = remember(cliamp, directory.stations, favorites) {
+        val favRadio = favorites.filterNot {
+            it.source == StationSource.Local || it.source == StationSource.Podcast
+        }
+        (cliamp + directory.stations + favRadio).distinctBy { it.id }
+    }
 
     val audioPerm = if (Build.VERSION.SDK_INT >= 33)
         Manifest.permission.READ_MEDIA_AUDIO
@@ -231,7 +253,7 @@ fun LocalScreen(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
                     Chip("‹ back", selected = false, onClick = { openSlug = null })
-                    Chip("add songs", selected = false, onClick = { addingTo = showing.station.slug })
+                    Chip("add", selected = false, onClick = { addingTo = showing.station.slug })
                     Chip("set cover", selected = false, onClick = { coverLauncher.launch("image/*") })
                 }
             } else if (openSmartPlaylist != null) {
@@ -269,13 +291,20 @@ fun LocalScreen(
                 showing != null -> PlaylistDetailShown(
                     playlist = showing,
                     songIds = showing.songIds,
-                    songs = songs,
-                    allSongs = filtered,
+                    playlists = playlists,
+                    localSongs = filtered,
+                    radioStations = radioStations,
+                    podcasts = podcasts,
+                    subscribedShows = subscriptions,
                     current = current,
                     playing = playing,
                     onPlay = justPlay,
-                    onRemove = { id -> scope.launch { playlists.removeSong(showing.station.slug, id) } },
-                    onAdd = { id -> scope.launch { playlists.addSong(showing.station.slug, id) } },
+                    onToggle = { s, add ->
+                        scope.launch {
+                            if (add) playlists.addStation(showing.station.slug, s)
+                            else playlists.removeSong(showing.station.slug, s.id)
+                        }
+                    },
                     adding = addingTo != null,
                     doneAdding = { addingTo = null },
                 )
@@ -720,7 +749,7 @@ private fun PlaylistMenu(
                 ) {
                     MenuItem(if (pinned) "unpin" else "pin", p.ink, onPin) { open = false }
                     HairlineDivider(region = true)
-                    MenuItem("add songs", p.ink, onAddSongs) { open = false }
+                    MenuItem("add", p.ink, onAddSongs) { open = false }
                     HairlineDivider(region = true)
                     MenuItem("edit name", p.ink, onEdit) { open = false }
                     HairlineDivider(region = true)
@@ -811,59 +840,38 @@ private fun playlistPreview(songIds: List<String>, byId: Map<String, String>): S
 private fun PlaylistDetailShown(
     playlist: PlaylistStore.Playlist,
     songIds: List<String>,
-    songs: List<Station>,
-    allSongs: List<Station>,
+    playlists: PlaylistStore,
+    localSongs: List<Station>,
+    radioStations: List<Station>,
+    podcasts: PodcastRepository,
+    subscribedShows: List<PodcastShow>,
     current: Station?,
     playing: Boolean,
     onPlay: (Station, List<Station>) -> Unit,
-    onRemove: (String) -> Unit,
-    onAdd: (String) -> Unit,
+    onToggle: (Station, Boolean) -> Unit,
     adding: Boolean,
     doneAdding: () -> Unit,
 ) {
     val p = LocalPalette.current
-    val members = playlist.songIds.mapNotNull { id -> songs.firstOrNull { it.id == id } }
 
-    if (adding && allSongs.isNotEmpty()) {
-        // add mode: show all songs with a check affordance. The header carries
-        // the done control (and a live count) so it is always visible instead
-        // of being buried at the bottom of the scroll.
-        LazyColumn(Modifier.fillMaxSize()) {
-            item {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Mono(playlist.station.name, CliampType.chip, p.accent, maxLines = 1)
-                    Spacer(Modifier.weight(1f))
-                    Mono("${songIds.size} selected", CliampType.meta, p.inkTertiary)
-                    Chip("done", selected = false, onClick = doneAdding)
-                }
-            }
-            items(allSongs, key = { it.id }) { s ->
-                val inPl = s.id in songIds
-                ListRow(
-                    onClick = { if (inPl) onRemove(s.id) else onAdd(s.id) },
-                    verticalPadding = 9.dp,
-                    leading = {
-                        Box(
-                            Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
-                                .then(if (inPl) Modifier.background(p.accent)
-                                      else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (inPl) Icon(CliampIcons.Check, null, Modifier.size(11.dp), tint = p.onAccent)
-                        }
-                    },
-                    trailing = { Icon(CliampIcons.Minus, "remove", Modifier.size(13.dp), if (inPl) p.accent else p.inkFaint) },
-                ) {
-                    Mono(s.name, CliampType.rowPrimary, p.ink, maxLines = 1)
-                    Mono(if (s.artist.isNotBlank()) s.artist else s.meta, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
-                }
-            }
-            item { Spacer(Modifier.height(16.dp)) }
-        }
+    // Members can be any source now, so they resolve against the live local
+    // library plus the persisted snapshot stations (radio/podcast members).
+    var members by remember(songIds) { mutableStateOf<List<Station>>(emptyList()) }
+    LaunchedEffect(songIds, localSongs) {
+        members = playlists.resolveMembers(songIds, localSongs)
+    }
+
+    if (adding) {
+        AddSongsPicker(
+            selected = songIds.toSet(),
+            playlistName = playlist.station.name,
+            localSongs = localSongs,
+            radioStations = radioStations,
+            podcasts = podcasts,
+            subscribedShows = subscribedShows,
+            onToggle = onToggle,
+            doneAdding = doneAdding,
+        )
         return
     }
 
@@ -871,7 +879,7 @@ private fun PlaylistDetailShown(
         if (members.isEmpty()) {
             item {
                 Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
-                    Mono("empty — tap add songs", CliampType.rowSecondary, p.inkFaint)
+                    Mono("empty — tap add", CliampType.rowSecondary, p.inkFaint)
                 }
             }
         } else {
@@ -885,7 +893,7 @@ private fun PlaylistDetailShown(
                     },
                     trailing = {
                         Mono("DROP", CliampType.tabLabel, p.destructiveInk,
-                            Modifier.clip(RoundedCornerShape(4.dp)).clickable { onRemove(s.id) }
+                            Modifier.clip(RoundedCornerShape(4.dp)).clickable { onToggle(s, false) }
                                 .padding(horizontal = 8.dp, vertical = 6.dp))
                     },
                 ) {
@@ -894,13 +902,225 @@ private fun PlaylistDetailShown(
                         buildList {
                             if (s.artist.isNotBlank()) add(s.artist)
                             if (s.album.isNotBlank()) add(s.album)
-                        }.joinToString(" · ").ifBlank { durationLabel(s.durationMs) },
+                        }.joinToString(" · ").ifBlank {
+                            when {
+                                s.source == StationSource.Local -> durationLabel(s.durationMs)
+                                s.source == StationSource.Podcast -> "podcast"
+                                else -> s.meta
+                            }
+                        },
                         CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
                     )
                 }
             }
         }
         item { Spacer(Modifier.height(20.dp)) }
+    }
+}
+
+private enum class AddTab(val label: String) { Local("local"), Stations("stations"), Podcasts("podcasts") }
+
+/**
+ * The "add songs" picker: local songs, radio stations and podcast episodes in
+ * their own sub-tabs, with one shared selection carried across all of them.
+ * The header keeps the done control and a live count always in view.
+ */
+@Composable
+private fun AddSongsPicker(
+    selected: Set<String>,
+    playlistName: String,
+    localSongs: List<Station>,
+    radioStations: List<Station>,
+    podcasts: PodcastRepository,
+    subscribedShows: List<PodcastShow>,
+    onToggle: (Station, Boolean) -> Unit,
+    doneAdding: () -> Unit,
+) {
+    val p = LocalPalette.current
+    var tab by remember { mutableStateOf(AddTab.Local) }
+    var openShow by remember { mutableStateOf<PodcastShow?>(null) }
+    var picked by remember { mutableStateOf(selected) }
+    val showState by podcasts.show.collectAsState(initial = ShowState())
+
+    fun toggle(s: Station) {
+        val add = s.id !in picked
+        picked = if (add) picked + s.id else picked - s.id
+        onToggle(s, add)
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Mono(playlistName, CliampType.chip, p.accent, maxLines = 1)
+            Spacer(Modifier.weight(1f))
+            Mono("${picked.size} selected", CliampType.meta, p.inkTertiary)
+            Chip("done", selected = false, onClick = doneAdding)
+        }
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                .padding(start = Gutter, end = Gutter, bottom = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            AddTab.entries.forEach { t -> Chip(t.label, tab == t, onClick = { tab = t }) }
+        }
+        HairlineDivider(region = true)
+
+        when (tab) {
+            AddTab.Local -> GroupList(
+                items = localSongs,
+                picked = picked,
+                subtitle = { s ->
+                    buildList {
+                        if (s.artist.isNotBlank()) add(s.artist)
+                        if (s.album.isNotBlank()) add(s.album)
+                    }.joinToString(" · ").ifBlank { durationLabel(s.durationMs) }
+                },
+                onToggle = ::toggle,
+                empty = "no local songs yet",
+            )
+            AddTab.Stations -> GroupList(
+                items = radioStations,
+                picked = picked,
+                subtitle = { s -> s.meta },
+                onToggle = ::toggle,
+                empty = "no stations to add",
+            )
+            AddTab.Podcasts -> PodcastGroups(
+                podcasts = podcasts,
+                shows = subscribedShows,
+                openShow = openShow,
+                onOpenShow = { show ->
+                    openShow = show
+                    podcasts.openShow(show)
+                },
+                onBackToShows = { openShow = null },
+                showState = showState,
+                picked = picked,
+                onToggle = ::toggle,
+            )
+        }
+    }
+}
+
+@Composable
+private fun <T : Station> GroupList(
+    items: List<T>,
+    picked: Set<String>,
+    subtitle: (Station) -> String,
+    onToggle: (Station) -> Unit,
+    empty: String,
+) {
+    val p = LocalPalette.current
+    LazyColumn(Modifier.fillMaxSize()) {
+        if (items.isEmpty()) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                    Mono(empty, CliampType.rowSecondary, p.inkFaint)
+                }
+            }
+        } else {
+            items(items, key = { it.id }) { s ->
+                val inPl = s.id in picked
+                ListRow(
+                    onClick = { onToggle(s) },
+                    verticalPadding = 8.dp,
+                    leading = {
+                        Box(
+                            Modifier.size(24.dp).clip(RoundedCornerShape(4.dp))
+                                .then(if (inPl) Modifier.background(p.accent)
+                                      else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (inPl) Icon(CliampIcons.Check, null, Modifier.size(10.dp), tint = p.onAccent)
+                        }
+                    },
+                ) {
+                    Mono(s.name, CliampType.rowPrimary, p.ink, maxLines = 1)
+                    Mono(subtitle(s), CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                }
+            }
+        }
+        item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+@Composable
+private fun PodcastGroups(
+    podcasts: PodcastRepository,
+    shows: List<PodcastShow>,
+    openShow: PodcastShow?,
+    onOpenShow: (PodcastShow) -> Unit,
+    onBackToShows: () -> Unit,
+    showState: ShowState,
+    picked: Set<String>,
+    onToggle: (Station) -> Unit,
+) {
+    val p = LocalPalette.current
+    val show = openShow
+    if (show != null) {
+        LazyColumn(Modifier.fillMaxSize()) {
+            item {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                    .padding(horizontal = Gutter, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Chip("‹ shows", selected = false, onClick = onBackToShows)
+                    Spacer(Modifier.width(2.dp))
+                    Mono(show.title, CliampType.chip, p.ink, maxLines = 1)
+                }
+            }
+            if (showState.loading) {
+                item { Mono("loading episodes…", CliampType.rowSecondary, p.inkFaint, Modifier.padding(horizontal = Gutter, vertical = 12.dp)) }
+            } else {
+                val eps = showState.episodes.filter { it.isFull }
+                items(eps, key = { "pod:${show.id}:${it.guid}" }) { e ->
+                    val s = e.toStation(show)
+                    val inPl = s.id in picked
+                    ListRow(
+                        onClick = { onToggle(s) },
+                        verticalPadding = 8.dp,
+                        leading = {
+                            Box(
+                                Modifier.size(24.dp).clip(RoundedCornerShape(4.dp))
+                                    .then(if (inPl) Modifier.background(p.accent)
+                                          else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (inPl) Icon(CliampIcons.Check, null, Modifier.size(10.dp), tint = p.onAccent)
+                            }
+                        },
+                    ) {
+                        Mono(s.name, CliampType.rowPrimary, p.ink, maxLines = 1)
+                        Mono(durationLabel(s.durationMs).ifBlank { "episode" }, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                    }
+                }
+            }
+        }
+        return
+    }
+
+    LazyColumn(Modifier.fillMaxSize()) {
+        if (shows.isEmpty()) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                    Mono("no subscribed podcasts yet", CliampType.rowSecondary, p.inkFaint)
+                }
+            }
+        } else {
+            items(shows, key = { it.feedUrl }) { show ->
+                ListRow(
+                    onClick = { onOpenShow(show) },
+                    verticalPadding = 9.dp,
+                    trailing = { Icon(CliampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary) },
+                ) {
+                    Mono(show.title, CliampType.rowPrimary, p.ink, maxLines = 1)
+                    Mono(show.meta, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                }
+            }
+        }
+        item { Spacer(Modifier.height(16.dp)) }
     }
 }
 

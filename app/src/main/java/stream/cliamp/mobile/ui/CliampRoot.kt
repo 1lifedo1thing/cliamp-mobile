@@ -151,6 +151,8 @@ fun CliampRoot(
                 Tab.Lib -> LocalScreen(
                     localLibrary = localLibrary,
                     playlists = playlists,
+                    repository = repository,
+                    podcasts = podcasts,
                     current = station,
                     playing = playerState.playing,
                     favorites = favorites,

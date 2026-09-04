@@ -14,6 +14,14 @@ interface StationDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(station: StationEntity)
+
+    /** Every persisted station referenced by some list (favs/history/playlists). */
+    @Query("SELECT * FROM stations")
+    fun all(): Flow<List<StationEntity>>
+
+    /** Resolve snapshot stations (radio/podcast playlist members) back by station id. */
+    @Query("SELECT * FROM stations WHERE stationId IN (:ids)")
+    suspend fun byStationIds(ids: List<String>): List<StationEntity>
 }
 
 @Dao

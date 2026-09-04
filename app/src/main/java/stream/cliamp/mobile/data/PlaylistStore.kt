@@ -7,13 +7,16 @@ import kotlinx.coroutines.flow.map
 import stream.cliamp.mobile.data.db.CliampDatabase
 import stream.cliamp.mobile.data.db.PlaylistEntity
 import stream.cliamp.mobile.data.db.PlaylistMemberEntity
+import stream.cliamp.mobile.data.db.toEntity
 
 /**
  * Persists user playlists. A playlist is a small [Station] (source Local): its
  * `slug` is the stable id, `name` the title, `cover` an artwork URI, and `meta`
- * a human "N songs" line. Members are remembered as `local:<id>` strings so
- * they survive a MediaStore re-scan (URIs can move). The ordered song list for
- * a playlist is resolved against the live library when you open it.
+ * a human "N songs" line. Members can be any source: local songs are remembered
+ * as `local:<id>` strings (surviving a MediaStore re-scan, since URIs move),
+ * while radio and podcast members keep a snapshot in the shared `stations`
+ * table so they resolve later without a network round-trip. The ordered list
+ * for a playlist is resolved against the live library when you open it.
  */
 class PlaylistStore(private val context: Context) {
 
@@ -25,6 +28,7 @@ class PlaylistStore(private val context: Context) {
 
     private val db by lazy { CliampDatabase.get(context) }
     private val dao by lazy { db.playlists() }
+    private val stationsDao by lazy { db.stations() }
 
     /**
      * Rows and their members, joined in memory from two flows.
@@ -71,15 +75,38 @@ class PlaylistStore(private val context: Context) {
         return true
     }
 
+    /**
+     * Adds any station to a playlist. Local songs the same as [addSong]; for
+     * radio and podcast members the full [Station] is snapshot into the shared
+     * `stations` table (the row favourites/history already use) so the member
+     * can be rebuilt by [resolveMembers] without re-fetching its feed.
+     */
+    suspend fun addStation(slug: String, station: Station): Boolean {
+        if (station.source != StationSource.Local) stationsDao.upsert(station.toEntity())
+        return addSong(slug, station.id)
+    }
+
     suspend fun removeSong(slug: String, songId: String) = dao.removeMember(slug, songId)
 
     suspend fun setOrder(slug: String, songIds: List<String>) = dao.replaceMembers(slug, songIds)
 
-    /** Resolved, playable songs for a playlist against the current library. */
-    fun songsOf(playlist: Playlist, library: List<Station>): List<Station> {
-        val byId = library.associateBy { it.id }
-        return playlist.songIds.mapNotNull(byId::get)
+    /**
+     * Resolves ordered playlist member ids to their playable stations, against
+     * the live local library plus any snapshot stations (radio/podcast). Local
+     * members are matched by `local:<id>`; everything else by station id.
+     */
+    suspend fun resolveMembers(songIds: List<String>, localSongs: List<Station>): List<Station> {
+        if (songIds.isEmpty()) return emptyList()
+        val localById = localSongs.associateBy { it.id }
+        val snapshotIds = songIds.filterNot { it.startsWith("local:") }
+        val snapshotById = if (snapshotIds.isEmpty()) emptyMap()
+        else stationsDao.byStationIds(snapshotIds).associateBy { it.stationId }
+        return songIds.mapNotNull { id -> localById[id] ?: snapshotById[id]?.toStation() }
     }
+
+    /** Persisted snapshot stations (radio/podcast) that playlists can reference. */
+    fun persistedStations(): Flow<List<Station>> =
+        stationsDao.all().map { rows -> rows.map { it.toStation() } }
 }
 
 private fun PlaylistEntity.toStation() = Station(
