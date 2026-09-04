@@ -373,9 +373,18 @@ class PlayerConnection(
         if (i < 0) return
         val before = 8
         val after = 8
+        val n = src.size
+        // Wrap both sides of the window with a positive modulo. Kotlin's `%`
+        // keeps the dividend's sign, so `(i + k) % n` is NEGATIVE when k is
+        // bigger than i - and src[negative] throws an IndexOutOfBoundsException
+        // (hitting a song inside a short search result list crashed: a 6-item
+        // source, i=0, k=-8 -> src[-2]). The +n % n floors it into range, and
+        // the source is a radio-style loop anyway: the widget's prev/next walk
+        // it as a ring.
+        fun wrap(k: Int) = ((i + k) % n + n) % n
         val win = mutableListOf<Station>()
-        for (k in -before..after) win.add(src[(i + k + src.size) % src.size])
-        val next = (1..4).mapNotNull { k -> src[(i + k) % src.size] }
+        for (k in -before..after) win.add(src[wrap(k)])
+        val next = (1..4).mapNotNull { k -> src[(i + k) % n] }
         scope.launch {
             prefs.setWidgetSource(win)
             prefs.setWidgetNext(next)
