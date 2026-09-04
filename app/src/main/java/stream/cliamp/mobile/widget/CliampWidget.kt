@@ -190,11 +190,21 @@ private fun WidgetBody(
 
         if (wide && big) {
             Spacer(GlanceModifier.height(10.dp))
-            // Meter fills the band between controls (above) and timeline
-            // (below) — no overlay, no offset hack.
             if (hasMeter) {
-                Box(GlanceModifier.defaultWeight().fillMaxWidth()) {
-                    BrickMeter(levels, peaks, p, GlanceModifier.fillMaxSize())
+                // Meter sits centred vertically in the band between controls
+                // and timeline.  The brick grid's natural height is
+                // rows × step (capped at 10 rows by Glance), and the
+                // remaining space above/below is empty.
+                val brickStep = Visualizer.Brick.brickDp.dp + Visualizer.Brick.gapDp.dp
+                val maxRows = ((size.height - 10.dp - 8.dp - 12.dp - 12.dp) / brickStep)
+                    .toInt().coerceIn(1, 10)
+                Box(
+                    GlanceModifier
+                        .defaultWeight()
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    BrickMeter(levels, peaks, p, maxRows)
                 }
             } else {
                 Box(
@@ -241,7 +251,7 @@ private fun BrickMeter(
     levels: List<Float>,
     peaks: List<Float>,
     p: stream.cliamp.mobile.ui.theme.CliampPalette,
-    modifier: GlanceModifier,
+    maxRows: Int,
 ) {
     // Three-layer brick meter matching the in-app BrickMeter exactly:
     //   1. unlit grid at full height (p.unlit)
@@ -253,15 +263,17 @@ private fun BrickMeter(
     // same brick/gap geometry (4dp/3dp), and each brick sits in a cell that
     // is vertically anchored to the bottom of its Row slice so the 3dp head-
     // room above becomes the mortar gap — identical to the in-app layout.
-    val size = LocalSize.current
     val brick = Visualizer.Brick.brickDp.dp
     val gap = Visualizer.Brick.gapDp.dp
     val step = brick + gap
-    val rows = ((size.height + gap) / step).toInt().coerceIn(1, 10)
+    val rows = maxRows.coerceIn(1, 10)
     val columns = Visualizer.Widget.columns
     val n = levels.size.coerceAtLeast(1)
 
-    Column(modifier, verticalAlignment = Alignment.Vertical.Top) {
+    Column(
+        GlanceModifier.height(step * rows),
+        verticalAlignment = Alignment.Vertical.Top,
+    ) {
         for (r in 0 until rows) {
             // Each Row is one "grid row": height = step (4dp brick + 3dp
             // gap).  The 3dp gap is the headroom above the 4dp brick cell
