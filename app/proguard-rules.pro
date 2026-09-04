@@ -26,12 +26,17 @@
 # --- WorkManager ---
 -keep class * extends androidx.work.ListenableWorker { <init>(...); }
 -keep class androidx.work.impl.** { <init>(...); }
+-keep class * extends androidx.work.InputMerger { <init>(...); }
 -keepnames class androidx.work.impl.WorkDatabase_Impl
 
 # --- Glance ---
 -keep class androidx.glance.appwidget.protobuf.** { *; }
--keep class * extends androidx.glance.appwidget.GlanceAppWidgetReceiver
--keep class * extends androidx.glance.appwidget.action.ActionCallback
+-keep class * extends androidx.glance.appwidget.GlanceAppWidgetReceiver {
+    <init>();
+}
+-keep class * extends androidx.glance.appwidget.action.ActionCallback {
+    <init>();
+}
 -dontwarn androidx.glance.**
 
 # --- Media3 ---

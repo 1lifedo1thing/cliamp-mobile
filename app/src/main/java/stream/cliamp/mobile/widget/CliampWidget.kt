@@ -60,6 +60,9 @@ import stream.cliamp.mobile.ui.theme.paletteFor
 /** Fixed vertical height the seek bar + clock eat above the meter. */
 private val SEEK_METRICS_OFFSET = 54.dp + 8.dp + 14.dp + 4.dp + 14.dp
 
+/** Fixed vertical height the streaming rule + its spacer eat above the meter. */
+private val RADIO_METRICS_OFFSET = 54.dp + 8.dp + 16.dp
+
 class CliampWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(
         setOf(SMALL, WIDE, TALL),
@@ -133,9 +136,9 @@ private fun WidgetBody(
     // player block just centres itself in the full widget height instead.
     val big = size.height >= 120.dp
     // Mirror the in-app gate: only a finite, scrubbable timeline shows a
-    // progress bar and clock. Live radio has no timeline, so it keeps the
-    // streaming rule instead.
-    val scrubbable = durationMs > 0 && station != null
+    // progress bar and clock. Live radio has no timeline (duration 0), so it
+    // keeps the streaming rule instead.
+    val scrubbable = durationMs > 0
 
     Column(
         GlanceModifier
@@ -187,16 +190,24 @@ private fun WidgetBody(
 
         if (wide && big) {
             Spacer(GlanceModifier.height(10.dp))
-            // The visualizer fills whatever vertical room is left over; on a
-            // scrubbable source a seek bar and clock sit fixed beneath it,
-            // mirroring the expanded player's meter-over-scrubber stack.
+            // Mirrors the expanded player: a visualizer on top, and beneath it
+            // either a scrub bar + clock (scrubbable source) or a streaming
+            // rule (live radio). The meter shows whenever a snapshot exists,
+            // frozen when paused just like the in-app meter settling - not only
+            // while actively playing. The below-line has a fixed height, so the
+            // meter's row count accounts for it and tiles down to it exactly.
+            val meterOffset = when {
+                scrubbable -> SEEK_METRICS_OFFSET
+                spectrum.isNotEmpty() -> RADIO_METRICS_OFFSET
+                else -> 54.dp
+            }
             Column(GlanceModifier.defaultWeight().fillMaxWidth()) {
-                if (playing && spectrum.isNotEmpty()) {
+                if (spectrum.isNotEmpty()) {
                     BrickMeter(
                         spectrum,
                         p,
                         GlanceModifier.fillMaxWidth().fillMaxHeight(),
-                        headerOffset = if (scrubbable) SEEK_METRICS_OFFSET else 54.dp,
+                        headerOffset = meterOffset,
                     )
                 } else {
                     StreamingRule(if (playing) "streaming" else "stopped", p, dim = !playing)
@@ -209,6 +220,9 @@ private fun WidgetBody(
                 WidgetScrubber(positionMs, durationMs, p)
                 Spacer(GlanceModifier.height(4.dp))
                 SeekTimeRow(positionMs, durationMs, p)
+            } else if (spectrum.isNotEmpty()) {
+                Spacer(GlanceModifier.height(8.dp))
+                StreamingRule(if (playing) "streaming" else "paused", p, dim = !playing)
             }
         }
     }

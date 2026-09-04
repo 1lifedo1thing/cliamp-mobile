@@ -174,6 +174,12 @@ class PlaybackService : MediaSessionService() {
                 if (eqOn) fx.applyBands(bands)
             }
         }
+
+        // Push whatever state exists to the widget host on cold start. Without
+        // this, a service launch that never changes state (nothing playing, no
+        // event) leaves the widget sitting on its bare "cliamp" placeholder,
+        // because publishWidgetState is otherwise only driven by player events.
+        scope.launch { publishWidgetState() }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session
@@ -372,10 +378,12 @@ class PlaybackService : MediaSessionService() {
     }
 
     /**
-     * Downsample the live 64-bin spectrum to a handful of bars and persist them
-     * for the widget, throttled so the 30-60Hz spectrum does not hammer the
-     * DataStore. A lone bucket would read as a flat meter, so the snapshot is
-     * pushed by the first few peaks rather than a uniform average.
+     * Downsample the live 64-bin spectrum to one bar per meter column and
+     * persist them for the widget, throttled so the 30-60Hz spectrum does not
+     * hammer the DataStore. The snapshot uses the same column count (24) and
+     * the same peak-pooling over each bin slice as the expanded player's
+     * NowPlaying meter, so the widget's bricks are a true mirror of what the
+     * in-app visualizer draws rather than a coarser stand-in.
      */
     private suspend fun writeWidgetSpectrum() {
         val now = System.currentTimeMillis()
@@ -391,7 +399,7 @@ class PlaybackService : MediaSessionService() {
         prefs0.setWidgetDurationMs(dur)
         val bins = PlaybackBus.spectrum.value
         if (bins.isNotEmpty()) {
-            val bars = 14
+            val bars = 24
             val snapshot = FloatArray(bars)
             val per = (bins.size.toFloat() / bars).let { if (it < 1f) 1f else it }
             for (b in 0 until bars) {

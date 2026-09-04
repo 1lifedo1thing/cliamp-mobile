@@ -19,6 +19,7 @@ class CliampWidgetReceiver : GlanceAppWidgetReceiver() {
         fun refresh(context: Context) {
             scope.launch {
                 runCatching { CliampWidget().updateAll(context.applicationContext) }
+                    .onFailure { android.util.Log.e("cliamp/wid", "widget update failed", it) }
             }
         }
     }
