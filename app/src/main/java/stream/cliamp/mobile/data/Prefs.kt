@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -54,6 +55,8 @@ class Prefs(private val context: Context) {
         val wSpectrum = stringPreferencesKey("w_spectrum")
         val wNext = stringPreferencesKey("w_next")
         val wSource = stringPreferencesKey("w_source")
+        val wPosition = longPreferencesKey("w_position")
+        val wDuration = longPreferencesKey("w_duration")
     }
 
     val palette: Flow<String> = context.settingsStore.data.map { it[K.palette] ?: "system" }
@@ -116,6 +119,18 @@ class Prefs(private val context: Context) {
             runCatching { raw.split(',').mapNotNull { it.trim().toFloatOrNull() } }.getOrNull()
         } ?: emptyList()
     }
+
+    /**
+     * The current playback clock for the widget's progress bar and time readout,
+     * persisted with the spectrum so a cold process can still draw it. Duration
+     * is 0 for live radio (nothing to scrub), which is exactly the gate the
+     * widget uses to decide whether to show a seekable bar at all.
+     */
+    val widgetPositionMs: Flow<Long> =
+        context.settingsStore.data.map { it[K.wPosition] ?: 0L }
+    val widgetDurationMs: Flow<Long> =
+        context.settingsStore.data.map { it[K.wDuration] ?: 0L }
+
     val history: Flow<List<Station>> =
         db.history().recent().map { rows -> rows.map { it.toStation() } }
     val custom: Flow<List<Station>> =
@@ -142,6 +157,8 @@ class Prefs(private val context: Context) {
     suspend fun setWidgetSpectrum(v: List<Float>) = put(K.wSpectrum, v.joinToString(","))
     suspend fun setWidgetNext(v: List<Station>) = put(K.wNext, Http.json.encodeToString(v))
     suspend fun setWidgetSource(v: List<Station>) = put(K.wSource, Http.json.encodeToString(v))
+    suspend fun setWidgetPositionMs(v: Long) = put(K.wPosition, v)
+    suspend fun setWidgetDurationMs(v: Long) = put(K.wDuration, v)
 
     suspend fun readLastStation(): Station? =
         context.settingsStore.data.first()[K.lastStation]

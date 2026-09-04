@@ -381,23 +381,31 @@ class PlaybackService : MediaSessionService() {
         val now = System.currentTimeMillis()
         if (now - lastSpectrumWrite < spectrumToWidget) return
         lastSpectrumWrite = now
+        // The widget's clock rides the same 2Hz heartbeat as the meter. Position
+        // is written even when there are no live spectrum bins (a paused or
+        // non-visualiser source), so the progress bar and time stay honest; the
+        // duration of 0 for live radio is what keeps a scrub bar off the widget.
+        val pos = player.currentPosition.coerceAtLeast(0)
+        val dur = player.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L
+        prefs0.setWidgetPositionMs(pos)
+        prefs0.setWidgetDurationMs(dur)
         val bins = PlaybackBus.spectrum.value
-        if (bins.isEmpty()) return
-        val bars = 14
-        val snapshot = FloatArray(bars)
-        val per = (bins.size.toFloat() / bars).let { if (it < 1f) 1f else it }
-        for (b in 0 until bars) {
-            val start = (b * per).toInt().coerceIn(0, bins.lastIndex)
-            val end = (((b + 1) * per).toInt() + 1).coerceIn(start, bins.size)
-            val slice = bins.sliceArray(start until end)
-            var peak = 0f
-            for (v in slice) if (v > peak) peak = v
-            snapshot[b] = peak.coerceIn(0f, 1f)
+        if (bins.isNotEmpty()) {
+            val bars = 14
+            val snapshot = FloatArray(bars)
+            val per = (bins.size.toFloat() / bars).let { if (it < 1f) 1f else it }
+            for (b in 0 until bars) {
+                val start = (b * per).toInt().coerceIn(0, bins.lastIndex)
+                val end = (((b + 1) * per).toInt() + 1).coerceIn(start, bins.size)
+                val slice = bins.sliceArray(start until end)
+                var peak = 0f
+                for (v in slice) if (v > peak) peak = v
+                snapshot[b] = peak.coerceIn(0f, 1f)
+            }
+            prefs0.setWidgetSpectrum(snapshot.toList())
         }
-        prefs0.setWidgetSpectrum(snapshot.toList())
-        Log.d("cliamp/wid", "writeWidgetSpectrum bars=${snapshot.toList()}")
-        // Nudge the widget so a dormant composition repaints the moving bars;
-        // this is throttled to ~2Hz by the guard above.
+        // Nudge the widget so a dormant composition repaints the moving bars
+        // and the clock; this is throttled to ~2Hz by the guard above.
         CliampWidgetReceiver.refresh(this@PlaybackService)
     }
 

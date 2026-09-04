@@ -56,8 +56,11 @@ import stream.cliamp.mobile.ui.theme.paletteFor
  * its place, which is honest about being static. And they cannot draw, so
  * every rule here is a coloured Box.
  */
-class CliampWidget : GlanceAppWidget() {
 
+/** Fixed vertical height the seek bar + clock eat above the meter. */
+private val SEEK_METRICS_OFFSET = 54.dp + 8.dp + 14.dp + 4.dp + 14.dp
+
+class CliampWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(
         setOf(SMALL, WIDE, TALL),
     )
@@ -97,6 +100,8 @@ internal fun CliampWidgetContent(
     val playing by prefs.widgetPlaying.collectAsState(initial = false)
     val track by prefs.widgetTrack.collectAsState(initial = "")
     val spectrum by prefs.widgetSpectrum.collectAsState(initial = emptyList())
+    val positionMs by prefs.widgetPositionMs.collectAsState(initial = 0L)
+    val durationMs by prefs.widgetDurationMs.collectAsState(initial = 0L)
     val paletteName by prefs.palette.collectAsState(initial = "system")
 
     val systemDark = (context.resources.configuration.uiMode and
@@ -109,7 +114,7 @@ internal fun CliampWidgetContent(
     // Omarchy themes.
     val palette = paletteFor(paletteName, systemDark)
 
-WidgetBody(station, track, playing, spectrum, palette)
+WidgetBody(station, track, playing, spectrum, positionMs, durationMs, palette)
 }
 
 @androidx.compose.runtime.Composable
@@ -118,6 +123,8 @@ private fun WidgetBody(
     track: String,
     playing: Boolean,
     spectrum: List<Float>,
+    positionMs: Long,
+    durationMs: Long,
     p: CliampPalette,
 ) {
     val size = LocalSize.current
@@ -125,6 +132,10 @@ private fun WidgetBody(
     // Big enough to show the visualizer: content pins to the top. Small: the
     // player block just centres itself in the full widget height instead.
     val big = size.height >= 120.dp
+    // Mirror the in-app gate: only a finite, scrubbable timeline shows a
+    // progress bar and clock. Live radio has no timeline, so it keeps the
+    // streaming rule instead.
+    val scrubbable = durationMs > 0 && station != null
 
     Column(
         GlanceModifier
@@ -176,13 +187,28 @@ private fun WidgetBody(
 
         if (wide && big) {
             Spacer(GlanceModifier.height(10.dp))
-            if (playing && spectrum.isNotEmpty()) {
-                // Brick meter, mirroring the in-app visualizer: a bottom-up
-                // stack of lit bricks over an unlit grid, with a bright peak
-                // cap floating one brick above the current level.
-                BrickMeter(spectrum, p, GlanceModifier.defaultWeight())
-            } else {
-                StreamingRule(if (playing) "streaming" else "stopped", p, dim = !playing)
+            // The visualizer fills whatever vertical room is left over; on a
+            // scrubbable source a seek bar and clock sit fixed beneath it,
+            // mirroring the expanded player's meter-over-scrubber stack.
+            Column(GlanceModifier.defaultWeight().fillMaxWidth()) {
+                if (playing && spectrum.isNotEmpty()) {
+                    BrickMeter(
+                        spectrum,
+                        p,
+                        GlanceModifier.fillMaxWidth().fillMaxHeight(),
+                        headerOffset = if (scrubbable) SEEK_METRICS_OFFSET else 54.dp,
+                    )
+                } else {
+                    StreamingRule(if (playing) "streaming" else "stopped", p, dim = !playing)
+                }
+            }
+            if (scrubbable) {
+                Spacer(GlanceModifier.height(8.dp))
+                // Glance has no per-frame gesture API, so the bar is a live
+                // progress readout that opens the full player for real scrubbing.
+                WidgetScrubber(positionMs, durationMs, p)
+                Spacer(GlanceModifier.height(4.dp))
+                SeekTimeRow(positionMs, durationMs, p)
             }
         }
     }
@@ -208,7 +234,12 @@ private fun StreamingRule(label: String, p: stream.cliamp.mobile.ui.theme.Cliamp
  * above the level. The brick pitch, not a flat bar, is what sells the match.
  */
 @androidx.compose.runtime.Composable
-private fun BrickMeter(bars: List<Float>, p: stream.cliamp.mobile.ui.theme.CliampPalette, modifier: GlanceModifier) {
+private fun BrickMeter(
+    bars: List<Float>,
+    p: stream.cliamp.mobile.ui.theme.CliampPalette,
+    modifier: GlanceModifier,
+    headerOffset: androidx.compose.ui.unit.Dp,
+) {
     // Mirrors the expanded player's NowPlaying meter exactly: 24 columns to a
     // row, small bricks stacked from the bottom edge (so the phase never
     // shifts) with a bright peak cap riding the lit edge and a column gap
@@ -219,17 +250,18 @@ private fun BrickMeter(bars: List<Float>, p: stream.cliamp.mobile.ui.theme.Cliam
     val gap = 3.dp
     val colGap = 3.dp
     val step = brick + gap
-    // The meter sits below the header, which eats roughly 54dp of the widget
-    // height. More height means more rows of the same small, fixed bricks -
-    // never bigger ones - and the count is rounded UP so the grid tiles all
-    // the way to the top (any tiny overshoot clips at the widget edge instead
-    // of leaving a gap), filling the full height exactly like in-app.
-    val rows = ((size.height - 54.dp + step - 1.dp) / step).toInt().coerceIn(3, 30)
+    // The meter sits below the header (and, on a scrubbable source, the seek
+    // bar), which between them eat [headerOffset] of the widget height. More
+    // height means more rows of the same small, fixed bricks - never bigger
+    // ones - and the count is rounded UP so the grid tiles all the way to the
+    // top (any tiny overshoot clips at the widget edge instead of leaving a
+    // gap), filling the available height exactly like in-app.
+    val rows = ((size.height - headerOffset + step - 1.dp) / step).toInt().coerceIn(3, 30)
     val columns = 24
     val n = bars.size.coerceAtLeast(1)
 
     Row(
-        modifier.fillMaxWidth().fillMaxHeight(),
+        modifier,
         verticalAlignment = Alignment.Vertical.CenterVertically,
     ) {
         for (c in 0 until columns) {
@@ -260,6 +292,84 @@ private fun BrickMeter(bars: List<Float>, p: stream.cliamp.mobile.ui.theme.Cliam
             }
         }
     }
+}
+
+/**
+ * The widget's seek/playback bar for scrubbable sources: a muted full-width
+ * track with an accent fill up to the played fraction and a bright peak line
+ * at the playhead, matching the expanded player's scrubber geometry. Glance
+ * has no per-frame gesture API, so unlike the in-app scrubber this bar is a
+ * live progress readout - tapping it opens the player, where dragging works.
+ */
+@androidx.compose.runtime.Composable
+private fun WidgetScrubber(positionMs: Long, durationMs: Long, p: CliampPalette) {
+    val fraction = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+    // The meter area is bounded by the widget's horizontal padding (14dp a
+    // side); the fill and playhead are placed at that same width * fraction,
+    // since Glance's fillMaxWidth has no fractional form and no offset modifier.
+    val contentWidth = (LocalSize.current.width - 28.dp).coerceAtLeast(0.dp)
+    val fill = contentWidth * fraction
+    Box(
+        GlanceModifier
+            .fillMaxWidth()
+            .height(14.dp)
+            .clickable(actionRunCallback<OpenAppAction>()),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(
+            GlanceModifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .background(ColorProvider(p.track)),
+        ) {}
+        Box(
+            GlanceModifier
+                .width(fill)
+                .height(4.dp)
+                .background(ColorProvider(p.accent)),
+        ) {}
+        // The bright playhead line rides the right edge of the played portion.
+        // A Row with a flexible spacer pushes the thin line to the far end,
+        // standing in for the offset the in-app scrubber gets from Compose.
+        Row(
+            GlanceModifier
+                .width(fill)
+                .fillMaxHeight(),
+            verticalAlignment = Alignment.Vertical.CenterVertically,
+        ) {
+            Box(GlanceModifier.defaultWeight().fillMaxWidth()) {}
+            Box(
+                GlanceModifier
+                    .width(3.dp)
+                    .fillMaxHeight()
+                    .background(ColorProvider(p.peak)),
+            ) {}
+        }
+    }
+}
+
+/**
+ * The live time readout under the playback bar, cropped to the same
+ * "mm:ss / -mm:ss" shape the expanded player shows next to its scrubber.
+ */
+@androidx.compose.runtime.Composable
+private fun SeekTimeRow(positionMs: Long, durationMs: Long, p: CliampPalette) {
+    Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Vertical.CenterVertically) {
+        Text(clock(positionMs), style = mono(11, FontWeight.Normal, p.inkSecondary))
+        Spacer(GlanceModifier.defaultWeight())
+        Text(
+            "-" + clock((durationMs - positionMs).coerceAtLeast(0)),
+            style = mono(11, FontWeight.Normal, p.inkSecondary),
+        )
+    }
+}
+
+private fun clock(ms: Long): String {
+    val total = (ms / 1000).coerceAtLeast(0)
+    val h = total / 3600
+    val m = (total % 3600) / 60
+    val s = total % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }
 
 /**
