@@ -7,6 +7,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.StartOffset
+import androidx.compose.animation.core.StartOffsetType
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -33,6 +35,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -481,6 +484,11 @@ fun StreamingRule(
  * it has, it scrolls in place from the start through to the end (and loops).
  * Short names simply sit still. Keeps a long station name on one row instead of
  * wrapping down and shifting the layout.
+ *
+ * The text has to be measured unbounded - softWrap off and wrapContentWidth
+ * unbounded - or Compose breaks it at the parent's edge to honour maxLines and
+ * reports back a width that can never exceed the box, so nothing ever looks
+ * like it overflows and the scroll never starts.
  */
 @Composable
 fun MarqueeLabel(
@@ -501,8 +509,15 @@ fun MarqueeLabel(
         initialValue = 0f,
         targetValue = -travel,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = (travel * 10).toInt().coerceAtLeast(1200), easing = LinearEasing),
+            // A reading pace, not a ticker: about 55px a second, and it sits
+            // still for a moment first so the start of the name is readable
+            // before anything moves.
+            animation = tween(
+                durationMillis = (travel * MARQUEE_MS_PER_PX).toInt().coerceAtLeast(4000),
+                easing = LinearEasing,
+            ),
             repeatMode = RepeatMode.Restart,
+            initialStartOffset = StartOffset(MARQUEE_HOLD_MS, StartOffsetType.Delay),
         ),
         label = "marqueeScroll",
     )
@@ -520,10 +535,19 @@ fun MarqueeLabel(
             style = style,
             color = color,
             maxLines = 1,
+            softWrap = false,
             onTextLayout = { r: TextLayoutResult ->
                 textWidth = r.size.width.toFloat()
             },
-            modifier = Modifier.offset(x = with(density) { x.toDp() }),
+            modifier = Modifier
+                .wrapContentWidth(Alignment.Start, unbounded = true)
+                .offset(x = with(density) { x.toDp() }),
         )
     }
 }
+
+/** Milliseconds per pixel of travel - roughly 55px a second. */
+private const val MARQUEE_MS_PER_PX = 18f
+
+/** How long the label sits still before each pass. */
+private const val MARQUEE_HOLD_MS = 1200

@@ -235,12 +235,11 @@ fun NowPlayingScreen(
                     p.ink,
                     modifier = Modifier.consumeAllGestures(),
                 )
-                Mono(
+                MarqueeLabel(
                     streamTitle.ifBlank { error ?: shownStation?.tagList?.take(3)?.joinToString(" · ").orEmpty() },
                     CliampType.rowPrimary,
                     if (error != null && streamTitle.isBlank()) p.destructiveInk else p.inkSecondary,
                     modifier = Modifier.consumeAllGestures(),
-                    maxLines = 2,
                 )
                 Mono(
                     buildList {
