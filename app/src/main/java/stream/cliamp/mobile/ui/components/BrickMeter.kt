@@ -16,9 +16,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import stream.cliamp.mobile.data.visualizer.MeterCore
+import stream.cliamp.mobile.data.visualizer.Visualizer
 import stream.cliamp.mobile.ui.theme.LocalPalette
-import kotlin.math.PI
-import kotlin.math.sin
 
 /**
  * The signature element. Each column is three layers, all anchored to the
@@ -82,7 +82,7 @@ fun BrickMeter(
 
 /** Column count/geometry presets, straight from the concept. */
 enum class MeterSize(val columns: Int, val brick: Dp, val gap: Dp, val height: Dp) {
-    NowPlaying(24, 4.dp, 3.dp, 66.dp),
+    NowPlaying(Visualizer.Brick.columns, 4.dp, 3.dp, 66.dp),
     Scope(32, 6.dp, 4.dp, 200.dp),
     Lockscreen(28, 3.dp, 3.dp, 40.dp),
     Mini(14, 3.dp, 2.dp, 22.dp),
@@ -129,69 +129,32 @@ fun rememberMeter(
 }
 
 /**
- * Holds the lit levels and the lagging peak caps. Both arrays are mutated in
- * place and read inside a Canvas draw, so the frame counter is what drives
- * recomposition rather than the arrays themselves.
+ * Holds the lit levels and the lagging peak caps, delegating the actual
+ * attack/release smoothing to the shared [MeterCore] so the in-app meter and
+ * the widget always derive identical values from the same spectrum. Both
+ * arrays are mutated in place and read inside a Canvas draw, so the frame
+ * counter is what drives recomposition rather than the arrays themselves.
  */
 @Stable
 class MeterFrame(val columns: Int) {
-    val levels = FloatArray(columns) { 0.05f }
-    val peaks = FloatArray(columns) { 0.07f }
+    private val core = MeterCore(columns)
+    val levels get() = core.levels
+    val peaks get() = core.peaks
     var frame by mutableIntStateOf(0)
         private set
 
-    private val attack = 0.55f
-    private val release = 0.14f
-    private val peakFall = 0.010f
-
-    /**
-     * The analyser publishes a fixed number of bands; each meter asks for its
-     * own column count. Pooling here (rather than requiring an exact match)
-     * is what stops a 24-column meter silently falling back to the fake
-     * animation while a 32-column one shows the real thing.
-     */
     fun push(source: FloatArray) {
-        if (source.isEmpty()) return
-        for (i in 0 until columns) {
-            val t = bandFor(source, i).coerceIn(0f, 1f)
-            val k = if (t > levels[i]) attack else release
-            levels[i] += (t - levels[i]) * k
-            peaks[i] = if (levels[i] >= peaks[i]) levels[i]
-            else (peaks[i] - peakFall).coerceAtLeast(levels[i])
-        }
+        core.push(source)
         frame++
     }
 
-    private fun bandFor(src: FloatArray, i: Int): Float {
-        if (src.size == columns) return src[i]
-        if (src.size < columns) {
-            // upsample: nearest band, no invented detail
-            return src[(i.toLong() * src.size / columns).toInt().coerceIn(0, src.lastIndex)]
-        }
-        val lo = (i.toLong() * src.size / columns).toInt()
-        val hi = ((i + 1).toLong() * src.size / columns).toInt().coerceAtLeast(lo + 1)
-        var peak = 0f
-        for (k in lo until hi.coerceAtMost(src.size)) if (src[k] > peak) peak = src[k]
-        return peak
-    }
-
     fun pushIdle(t: Double) {
-        for (i in 0 until columns) {
-            val period = 0.85 + (i % 7) * 0.11
-            val phase = (i % 6) * 0.07
-            val s = (sin(2 * PI * ((t / period) + phase)) + 1.0) / 2.0
-            val bias = 0.34 + 0.5 * ((i * 37 % 13) / 13.0)
-            levels[i] = (0.12 + s * bias).toFloat().coerceIn(0f, 0.96f)
-            peaks[i] = (levels[i] + 0.08f).coerceIn(0f, 0.99f)
-        }
+        core.pushIdle(t)
         frame++
     }
 
     fun settle() {
-        for (i in 0 until columns) {
-            levels[i] = 0.04f
-            peaks[i] = 0.06f
-        }
+        core.settle()
         frame++
     }
 }

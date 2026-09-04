@@ -238,7 +238,7 @@ fun NowPlayingScreen(
                     modifier = Modifier.consumeAllGestures(),
                 )
                 MarqueeLabel(
-                    streamTitle.ifBlank { error ?: shownStation?.tagList?.take(3)?.joinToString(" · ").orEmpty() },
+                    streamTitle.ifBlank { error ?: artistOrTagLine(shownStation) },
                     CliampType.rowPrimary,
                     if (error != null && streamTitle.isBlank()) p.destructiveInk else p.inkSecondary,
                     modifier = Modifier.consumeAllGestures(),
@@ -471,4 +471,19 @@ private fun SmallAction(
     ) {
         Icon(icon, description, Modifier.size(15.dp), tint = tint ?: p.inkSecondary)
     }
+}
+
+/**
+ * The line beneath the track title in the expanded player: the artist for
+ * local files (and podcasts), the stream title normally, and the station tags
+ * as a last resort - mirroring the mini player's artist line so the artist is
+ * always named under the song.
+ */
+private fun artistOrTagLine(station: Station?): String {
+    if (station == null) return ""
+    return when (station.source) {
+        StationSource.Local -> station.artistAlbum
+        StationSource.Podcast -> station.artist
+        else -> station.tagList.take(3).joinToString(" · ")
+    }.ifBlank { station.tagList.take(3).joinToString(" · ") }
 }

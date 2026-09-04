@@ -52,7 +52,8 @@ class Prefs(private val context: Context) {
         val autoResume = booleanPreferencesKey("auto_resume")
         val wPlaying = booleanPreferencesKey("w_playing")
         val wTrack = stringPreferencesKey("w_track")
-        val wSpectrum = stringPreferencesKey("w_spectrum")
+        val wLevels = stringPreferencesKey("w_levels")
+        val wPeaks = stringPreferencesKey("w_peaks")
         val wNext = stringPreferencesKey("w_next")
         val wSource = stringPreferencesKey("w_source")
         val wPosition = longPreferencesKey("w_position")
@@ -109,13 +110,23 @@ class Prefs(private val context: Context) {
     }
 
     /**
-     * A frozen 6-bar spectrum snapshot for the widget, as a comma-separated
-     * list of 0..1 values (empty when nothing is playing). Widgets cannot
-     * animate or read the live spectrum bus, so the service writes a downsampled
-     * snapshot here on a throttle and the widget renders it as static bars.
+     * The widget's brick meter snapshot: the smoothed lit levels and the
+     * lagging peak caps, computed by the same shared MeterCore the in-app
+     * visualizer uses. Two comma-separated lists of 0..1 values, one per
+     * column (empty before the service has written once). Widgets cannot
+     * animate or read the live spectrum bus, so the service persists this on a
+     * 2Hz throttle and the widget renders it as static bricks - a true mirror
+     * of the in-app meter frozen per frame. The service always writes a
+     * snapshot (idle when nothing is playing), so the widget never falls back
+     * to a bare placeholder.
      */
-    val widgetSpectrum: Flow<List<Float>> = context.settingsStore.data.map { p ->
-        p[K.wSpectrum]?.let { raw ->
+    val widgetLevels: Flow<List<Float>> = context.settingsStore.data.map { p ->
+        p[K.wLevels]?.let { raw ->
+            runCatching { raw.split(',').mapNotNull { it.trim().toFloatOrNull() } }.getOrNull()
+        } ?: emptyList()
+    }
+    val widgetPeaks: Flow<List<Float>> = context.settingsStore.data.map { p ->
+        p[K.wPeaks]?.let { raw ->
             runCatching { raw.split(',').mapNotNull { it.trim().toFloatOrNull() } }.getOrNull()
         } ?: emptyList()
     }
@@ -154,7 +165,8 @@ class Prefs(private val context: Context) {
 
     suspend fun setWidgetPlaying(v: Boolean) = put(K.wPlaying, v)
     suspend fun setWidgetTrack(v: String) = put(K.wTrack, v)
-    suspend fun setWidgetSpectrum(v: List<Float>) = put(K.wSpectrum, v.joinToString(","))
+    suspend fun setWidgetLevels(v: List<Float>) = put(K.wLevels, v.joinToString(","))
+    suspend fun setWidgetPeaks(v: List<Float>) = put(K.wPeaks, v.joinToString(","))
     suspend fun setWidgetNext(v: List<Station>) = put(K.wNext, Http.json.encodeToString(v))
     suspend fun setWidgetSource(v: List<Station>) = put(K.wSource, Http.json.encodeToString(v))
     suspend fun setWidgetPositionMs(v: Long) = put(K.wPosition, v)

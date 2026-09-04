@@ -42,6 +42,7 @@ import stream.cliamp.mobile.CliampApp
 import stream.cliamp.mobile.R
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationSource
+import stream.cliamp.mobile.data.visualizer.Visualizer
 import stream.cliamp.mobile.ui.clock
 import stream.cliamp.mobile.ui.theme.CliampPalette
 import stream.cliamp.mobile.ui.theme.paletteFor
@@ -58,11 +59,12 @@ import stream.cliamp.mobile.ui.theme.paletteFor
  * every rule here is a coloured Box.
  */
 
-/** Fixed vertical height the seek bar + clock eat above the meter. */
-private val SEEK_METRICS_OFFSET = 54.dp + 8.dp + 14.dp + 4.dp + 14.dp
-
-/** Fixed vertical height the streaming rule + its spacer eat above the meter. */
-private val RADIO_METRICS_OFFSET = 54.dp + 8.dp + 16.dp
+/**
+ * The vertical space the header row + its spacer eat above the visualizer.
+ * Used when the meter should fill the FULL height below the header, with the
+ * streaming rule / scrubber floating over the bottom of the bricks.
+ */
+private val FULL_METER_OFFSET = 54.dp + 8.dp
 
 class CliampWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(
@@ -103,7 +105,8 @@ internal fun CliampWidgetContent(
     val station by prefs.lastStation.collectAsState(initial = null)
     val playing by prefs.widgetPlaying.collectAsState(initial = false)
     val track by prefs.widgetTrack.collectAsState(initial = "")
-    val spectrum by prefs.widgetSpectrum.collectAsState(initial = emptyList())
+    val levels by prefs.widgetLevels.collectAsState(initial = emptyList())
+    val peaks by prefs.widgetPeaks.collectAsState(initial = emptyList())
     val positionMs by prefs.widgetPositionMs.collectAsState(initial = 0L)
     val durationMs by prefs.widgetDurationMs.collectAsState(initial = 0L)
     val paletteName by prefs.palette.collectAsState(initial = "system")
@@ -118,7 +121,7 @@ internal fun CliampWidgetContent(
     // Omarchy themes.
     val palette = paletteFor(paletteName, systemDark)
 
-WidgetBody(station, track, playing, spectrum, positionMs, durationMs, palette)
+    WidgetBody(station, track, playing, levels, peaks, positionMs, durationMs, palette)
 }
 
 @androidx.compose.runtime.Composable
@@ -126,7 +129,8 @@ private fun WidgetBody(
     station: Station?,
     track: String,
     playing: Boolean,
-    spectrum: List<Float>,
+    levels: List<Float>,
+    peaks: List<Float>,
     positionMs: Long,
     durationMs: Long,
     p: CliampPalette,
@@ -140,6 +144,10 @@ private fun WidgetBody(
     // progress bar and clock. Live radio has no timeline (duration 0), so it
     // keeps the streaming rule instead.
     val scrubbable = durationMs > 0
+    // The brick meter draws once the service has written any snapshot (live,
+    // idle or settled), and otherwise falls back to a static idle grid so the
+    // visualizer is always present - never a bare placeholder.
+    val hasMeter = levels.isNotEmpty() && peaks.size == levels.size
 
     Column(
         GlanceModifier
@@ -159,16 +167,12 @@ private fun WidgetBody(
                     style = mono(16, FontWeight.Bold, p.ink),
                     maxLines = 1,
                 )
+                // The artist beneath the song name, mirroring the expanded
+                // player / mini player's second line. Shown on every size so a
+                // compact widget still names who is playing.
                 if (wide) {
                     Text(
-                        track.ifBlank {
-                            when (station?.source) {
-                                StationSource.Local ->
-                                    station.artistAlbum.ifBlank { "local audio" }
-                                StationSource.Provider -> station.meta
-                                else -> station?.meta?.ifBlank { "live stream" }
-                            }.orEmpty().ifBlank { "pick a station" }
-                        },
+                        widgetSubtitle(track, station),
                         style = mono(11, FontWeight.Normal, p.inkTertiary),
                         maxLines = 1,
                     )
@@ -193,39 +197,43 @@ private fun WidgetBody(
 
         if (wide && big) {
             Spacer(GlanceModifier.height(10.dp))
-            // Mirrors the expanded player: a visualizer on top, and beneath it
-            // either a scrub bar + clock (scrubbable source) or a streaming
-            // rule (live radio). The meter shows whenever a snapshot exists,
-            // frozen when paused just like the in-app meter settling - not only
-            // while actively playing. The below-line has a fixed height, so the
-            // meter's row count accounts for it and tiles down to it exactly.
-            val meterOffset = when {
-                scrubbable -> SEEK_METRICS_OFFSET
-                spectrum.isNotEmpty() -> RADIO_METRICS_OFFSET
-                else -> 54.dp
-            }
-            Column(GlanceModifier.defaultWeight().fillMaxWidth()) {
-                if (spectrum.isNotEmpty()) {
-                    BrickMeter(
-                        spectrum,
-                        p,
-                        GlanceModifier.fillMaxWidth().fillMaxHeight(),
-                        headerOffset = meterOffset,
-                    )
+            // Mirrors the expanded player: the visualizer fills the FULL height
+            // below the header, and the streaming rule / scrubber + clock float
+            // over the bottom edge of the meter instead of eating their own
+            // band - so the bricks take the whole widget, not a short middle
+            // strip. The minuscule overlaid status can't be hidden by the bars
+            // because they dim to the unlit grid behind it.
+            Box(GlanceModifier.defaultWeight().fillMaxWidth()) {
+                if (hasMeter) {
+                    // The meter fills the whole box; the status floats over the
+                    // bottom edge of the bricks (contentAlignment anchors only
+                    // the non-filling status, not the meter which fills).
+                    Box(GlanceModifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                        BrickMeter(
+                            levels,
+                            peaks,
+                            p,
+                            GlanceModifier.fillMaxSize(),
+                            headerOffset = FULL_METER_OFFSET,
+                        )
+                        Column(GlanceModifier.fillMaxWidth()) {
+                            if (scrubbable) {
+                                // Glance has no per-frame gesture API, so the
+                                // bar is a live readout that opens the player to
+                                // scrub.
+                                WidgetScrubber(positionMs, durationMs, p)
+                                Spacer(GlanceModifier.height(4.dp))
+                                SeekTimeRow(positionMs, durationMs, p)
+                            } else {
+                                StreamingRule(if (playing) "streaming" else "paused", p, dim = !playing)
+                            }
+                        }
+                    }
                 } else {
-                    StreamingRule(if (playing) "streaming" else "stopped", p, dim = !playing)
+                    Box(GlanceModifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        StreamingRule(if (playing) "streaming" else "stopped", p, dim = !playing)
+                    }
                 }
-            }
-            if (scrubbable) {
-                Spacer(GlanceModifier.height(8.dp))
-                // Glance has no per-frame gesture API, so the bar is a live
-                // progress readout that opens the full player for real scrubbing.
-                WidgetScrubber(positionMs, durationMs, p)
-                Spacer(GlanceModifier.height(4.dp))
-                SeekTimeRow(positionMs, durationMs, p)
-            } else if (spectrum.isNotEmpty()) {
-                Spacer(GlanceModifier.height(8.dp))
-                StreamingRule(if (playing) "streaming" else "paused", p, dim = !playing)
             }
         }
     }
@@ -252,59 +260,61 @@ private fun StreamingRule(label: String, p: stream.cliamp.mobile.ui.theme.Cliamp
  */
 @androidx.compose.runtime.Composable
 private fun BrickMeter(
-    bars: List<Float>,
+    levels: List<Float>,
+    peaks: List<Float>,
     p: stream.cliamp.mobile.ui.theme.CliampPalette,
     modifier: GlanceModifier,
     headerOffset: androidx.compose.ui.unit.Dp,
 ) {
-    // Mirrors the expanded player's NowPlaying meter exactly: 24 columns to a
-    // row, small bricks stacked from the bottom edge (so the phase never
-    // shifts) with a bright peak cap riding the lit edge and a column gap
-    // between each bar. The widget width is shared out across the columns the
-    // same way, so the meter just fills whatever width it's given.
+    // Glance renders to RemoteViews, and RemoteViews hard-caps every Row/Column
+    // at 10 direct children - a flat 24-column meter throws and renders
+    // nothing. So the widget draws the SAME brick meter as a nested grid: an
+    // outer Column of brick Rows, each Row a run of column cells, each cell a
+    // single coloured Box. Every container stays under the 10-child cap, while
+    // the columns touch the bottom edge (phase-stable) exactly like in-app.
+    //
+    // The levels/peaks arrive pre-smoothed by the shared MeterCore the in-app
+    // meter uses (24 columns); we downsample those to the widget's column
+    // count so the visible bars mirror the in-app meter's values and peaks,
+    // frozen at the last 2Hz snapshot.
     val size = LocalSize.current
-    val brick = 4.dp
-    val gap = 3.dp
-    val colGap = 3.dp
+    val brick = Visualizer.Brick.brickDp.dp
+    val gap = Visualizer.Brick.gapDp.dp
     val step = brick + gap
-    // The meter sits below the header (and, on a scrubbable source, the seek
-    // bar), which between them eat [headerOffset] of the widget height. More
-    // height means more rows of the same small, fixed bricks - never bigger
-    // ones - and the count is rounded UP so the grid tiles all the way to the
-    // top (any tiny overshoot clips at the widget edge instead of leaving a
-    // gap), filling the available height exactly like in-app.
-    val rows = ((size.height - headerOffset + step - 1.dp) / step).toInt().coerceIn(3, 30)
-    val columns = 24
-    val n = bars.size.coerceAtLeast(1)
+    // More height means more brick Rows (never bigger bricks); the count is
+    // rounded UP so the grid tiles to the top, clipped to the 10-children cap.
+    val rows = (((size.height - headerOffset + step - 1.dp) / step).toInt().coerceIn(1, 10))
+    val columns = Visualizer.Widget.columns
+    val n = levels.size.coerceAtLeast(1)
 
-    Row(
-        modifier,
-        verticalAlignment = Alignment.Vertical.CenterVertically,
-    ) {
-        for (c in 0 until columns) {
-            if (c > 0) Spacer(GlanceModifier.width(colGap))
-            val level = bars[((c * n) / columns).coerceIn(0, n - 1)].coerceIn(0f, 1f)
-            val litRows = (level * rows).toInt().coerceIn(0, rows)
-            val peakRow = if (litRows < rows) litRows else -1
-            Column(GlanceModifier.defaultWeight().fillMaxHeight()) {
-                // Flex spacer absorbs any slack so the fixed-size brick stack
-                // always anchors to the bottom of the widget - the meter runs
-                // from the bottom of the player down to the bottom edge, no
-                // matter how tall the widget is.
-                Spacer(GlanceModifier.defaultWeight())
-                for (r in rows - 1 downTo 0) {
+    Column(modifier, verticalAlignment = Alignment.Vertical.Top) {
+        for (r in 0 until rows) {
+            // Row r is measured from the top; a brick is lit only in the bottom
+            // `litRows` rows of its column, so a cell is accent iff it sits at
+            // or above the bottom-outline of the column's level.
+            Row(
+                GlanceModifier.fillMaxWidth().height(step),
+                verticalAlignment = Alignment.Vertical.CenterVertically,
+            ) {
+                for (c in 0 until columns) {
+                    val idx = (c * n / columns).coerceIn(0, n - 1)
+                    val level = levels[idx].coerceIn(0f, 1f)
+                    val litRows = (level * rows).toInt().coerceIn(0, rows)
+                    // Bottom row is r == rows-1; cells grow upward from there.
+                    val fromBottom = rows - 1 - r
+                    val pk = peaks[idx].coerceIn(0f, 1f)
+                    val peakRowsFromBottom = (pk * rows.toFloat()).toInt().coerceIn(0, rows - 1)
                     val color = when {
-                        r == peakRow -> p.peak
-                        r < litRows -> p.accent
+                        fromBottom == peakRowsFromBottom -> p.peak
+                        fromBottom < litRows -> p.accent
                         else -> p.unlit
                     }
                     Box(
                         GlanceModifier
-                            .fillMaxWidth()
-                            .height(brick)
+                            .defaultWeight()
+                            .fillMaxHeight()
                             .background(ColorProvider(color)),
                     ) {}
-                    if (r > 0) Spacer(GlanceModifier.height(gap))
                 }
             }
         }
@@ -419,6 +429,23 @@ private fun Key(
             modifier = GlanceModifier.size(width = iconWidth, height = iconHeight),
             colorFilter = ColorFilter.tint(ColorProvider(fg)),
         )
+    }
+}
+
+/**
+ * The artist line beneath the song name, mirroring the mini/expanded player's
+ * second line. The live stream title (ICY metadata, the currently-served track)
+ * wins when present; otherwise it falls back to the station's own artist/album
+ * metadata per source, exactly as the in-app player does.
+ */
+private fun widgetSubtitle(track: String, station: Station?): String {
+    if (track.isNotBlank()) return track
+    return when (station?.source) {
+        StationSource.Cliamp -> "cliamp radio"
+        StationSource.Local -> station.artistAlbum.ifBlank { "local audio" }
+        StationSource.Podcast -> station.artist.ifBlank { "podcast" }
+        StationSource.Provider -> station.meta.ifBlank { "live stream" }
+        else -> station?.meta?.ifBlank { "live stream" }.orEmpty().ifBlank { "pick a station" }
     }
 }
 
