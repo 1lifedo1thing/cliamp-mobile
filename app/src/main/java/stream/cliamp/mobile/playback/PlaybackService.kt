@@ -37,7 +37,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -47,8 +46,6 @@ import stream.cliamp.mobile.MainActivity
 import stream.cliamp.mobile.R
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
-import stream.cliamp.mobile.data.visualizer.MeterCore
-import stream.cliamp.mobile.data.visualizer.Visualizer
 import stream.cliamp.mobile.net.Http
 import stream.cliamp.mobile.widget.CliampWidgetReceiver
 
@@ -183,20 +180,6 @@ class PlaybackService : MediaSessionService() {
         // event) leaves the widget sitting on its bare "cliamp" placeholder,
         // because publishWidgetState is otherwise only driven by player events.
         scope.launch { publishWidgetState() }
-
-        // A low-rate heartbeat keeps the widget's meter honest even when the
-        // Visualizer isn't delivering frames (visualiser off, or a cold
-        // re-attach that dedups on unchanged metadata). While playing we
-        // re-persist the snapshot and nudge the widget on a fixed cadence, so
-        // starting or switching a station in the app reliably reaches the home
-        // screen rather than only when a spectrum frame happens to be
-        // throttled through. writeWidgetSpectrum throttles to ~2Hz internally.
-        scope.launch {
-            while (true) {
-                if (player.isPlaying) writeWidgetSpectrum()
-                delay(750)
-            }
-        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session
@@ -331,20 +314,11 @@ class PlaybackService : MediaSessionService() {
         return (1..4).mapNotNull { k -> source[(i + k) % source.size] }
     }
 
-    /** Last time a spectrum snapshot was written, to throttle the widget path. */
-    private var lastSpectrumWrite = 0L
-    private val spectrumToWidget = 500L
-
     /**
-     * The widget's visualizer state. The same shared [MeterCore] the in-app
-     * meter uses, run here on the live spectrum so the widget persists a true
-     * mirror of the in-app brick meter (with its attack/release smoothing and
-     * lagging peaks) rather than a coarser raw downsample. Always fed (live,
-     * idle or settled) so the widget never sits on a bare placeholder.
+     * Push widget state only when something actually changed. The widget renders
+     * a static row (title, artist, controls), so continuous writes would just
+     * be launcher churn; the metadata dedup guards a quiet session.
      */
-    private val widgetMeter = MeterCore(Visualizer.Brick.columns)
-    private val widgetIdleStart = System.currentTimeMillis()
-
     private fun publishWidgetState() {
         val station = PlaybackBus.station.value
         val source = PlaybackBus.source.value
@@ -380,79 +354,21 @@ class PlaybackService : MediaSessionService() {
                 lastWidgetSourceKey = sourceKey
                 prefs0.setWidgetNext(upNext)
             }
-            // Write metadata (playing/track) in their own single transaction,
-            // then let writeWidgetSpectrum batch the spectrum data — two
-            // transactions instead of 6-7, so the widget Flow emits twice at
-            // most and Glance recomposes once.
-            prefs0.writeWidgetSnapshot(
-                playing = next.first,
-                track = next.second,
-                levels = widgetMeter.snapshotLevels().toList(),
-                peaks = widgetMeter.snapshotPeaks().toList(),
-                positionMs = player.currentPosition.coerceAtLeast(0),
-                durationMs = player.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L,
-            )
+            // One transaction for the whole widget row, so the Flow emits once
+            // and Glance recomposes once.
+            prefs0.writeWidgetSnapshot(playing = next.first, track = next.second)
             CliampWidgetReceiver.refresh(this@PlaybackService)
         }
     }
 
     /**
      * Shared spectrum sink used by every fx.attach (onCreate and the playing
-     * re-attach). Besides driving the in-app meter, it persists a downsample
-     * for the widget independently of the state dedup guard: metadata can sit
-     * still for an entire song, but the meter still has to move.
+     * re-attach). Only the in-app meter and the oscilloscope read it now: the
+     * widget is deliberately static, so nothing is persisted per frame.
      */
     private fun handleSpectrum(it: FloatArray) {
         PlaybackBus.publishSpectrum(it)
         Log.d("cliamp/wid", "handleSpectrum playing=${player.isPlaying} sz=${it.size} live=${fx.spectrumLive}")
-        // Feed the widget's meter exactly as the in-app meter gets fed, so its
-        // smoothed levels/peaks track rather than stride. Only persisted on the
-        // throttle below.
-        widgetMeter.push(it)
-        if (System.currentTimeMillis() - lastSpectrumWrite >= spectrumToWidget) {
-            scope.launch { writeWidgetSpectrum() }
-        }
-    }
-
-    /**
-     * Persist the widget's brick meter snapshot on a ~2Hz throttle so the
-     * 30-60Hz spectrum does not hammer the DataStore.
-     *
-     * The snapshot is the shared MeterCore's smoothed levels + lagging peaks -
-     * the exact arrays the in-app NowPlaying meter draws - so the widget is a
-     * true mirror of it, frozen per frame. Crucially the meter is always fed
-     * (live bins while playing, the same idle animation as the in-app meter
-     * when the visualiser is off or silent, a settle when paused), so the
-     * widget always has a snapshot to draw and never falls back to a bare
-     * placeholder or stalls on stale bars.
-     */
-    private suspend fun writeWidgetSpectrum() {
-        val now = System.currentTimeMillis()
-        if (now - lastSpectrumWrite < spectrumToWidget) return
-        lastSpectrumWrite = now
-        // Mirror the in-app rememberMeter gate exactly: when the user has the
-        // visualiser off the analyser never delivers bins, but the player is
-        // still playing - the in-app meter shows its idle animation there, so
-        // the widget should too. When paused, both settle to a flat grid.
-        val liveBins = fx.spectrumLive && PlaybackBus.spectrum.value.isNotEmpty()
-        when {
-            player.isPlaying && liveBins -> Unit // bins already pushed in handleSpectrum
-            player.isPlaying -> widgetMeter.pushIdle((now - widgetIdleStart) / 1_000.0)
-            else -> widgetMeter.settle()
-        }
-        // Single DataStore transaction for all widget state so the Flow emits
-        // once and Glance recomposes once.
-        val pos = player.currentPosition.coerceAtLeast(0)
-        val dur = player.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L
-        prefs0.writeWidgetSnapshot(
-            playing = player.isPlaying,
-            track = PlaybackBus.streamTitle.value,
-            levels = widgetMeter.snapshotLevels().toList(),
-            peaks = widgetMeter.snapshotPeaks().toList(),
-            positionMs = pos,
-            durationMs = dur,
-        )
-        CliampWidgetReceiver.refresh(this@PlaybackService)
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
