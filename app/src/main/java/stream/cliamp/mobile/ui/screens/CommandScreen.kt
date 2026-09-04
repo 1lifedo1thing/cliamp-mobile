@@ -49,7 +49,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.DirectoryQuery
 import stream.cliamp.mobile.data.LocalLibrary
-import stream.cliamp.mobile.data.PodcastQuery
+import stream.cliamp.mobile.data.PodcastDirectory
 import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.PodcastRepository
 import stream.cliamp.mobile.data.Prefs
@@ -105,6 +105,12 @@ fun CommandScreen(
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(Scope.All) }
+    // Podcast search hits, kept local to this screen. The Podcasts tab shares
+    // the same PodcastRepository, so routing search through podcasts.load()
+    // left the tab stuck on the last search query instead of its own
+    // top/category directory. The search still resolves shows by name, but
+    // through a query-scoped fetch here rather than a rewrite of the shared state.
+    var podcastHits by remember { mutableStateOf<List<PodcastShow>>(emptyList()) }
 
     val directory by repository.directory.collectAsState()
     val cliamp by repository.cliamp.collectAsState()
@@ -132,17 +138,23 @@ fun CommandScreen(
         // rather than resetting it: Apple's search returns whole shows in one
         // request with nothing to page, so the searched list IS the directory
         // for as long as the query stands, and its header names the query.
-        podcasts.load(PodcastQuery.Search(term), reset = true)
+        //
+        // This used to go through podcasts.load(), which rewrites the shared
+        // directory state the Podcasts tab reads, leaving that tab filtered by
+        // whatever was last searched instead of its own top/category browse.
+        // The search now keeps its own copy so it still resolves shows without
+        // disturbing the tab.
+        podcastHits = runCatching { PodcastDirectory.search(term) }.getOrDefault(emptyList())
     }
 
-    val podcastDirectory by podcasts.directory.collectAsState()
     val subscriptions by podcasts.subscriptions.collectAsState(initial = emptyList())
 
-    // Subscriptions are resident, the directory half is whatever the debounced
+    // Subscriptions are resident, the search half is whatever the debounced
     // query above just fetched, so a show can be found whether or not it is
-    // already followed.
-    val shows = remember(subscriptions, podcastDirectory.shows) {
-        subscriptions + podcastDirectory.shows
+    // already followed. podcastHits is this screen's own copy: the Podcasts
+    // tab reads the same repository but must keep its own top/category browse.
+    val shows = remember(subscriptions, podcastHits) {
+        subscriptions + podcastHits
     }
     val subscribedFeeds = remember(subscriptions) { subscriptions.mapTo(HashSet()) { it.feedUrl } }
 
