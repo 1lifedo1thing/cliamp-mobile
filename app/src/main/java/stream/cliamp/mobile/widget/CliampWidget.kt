@@ -162,7 +162,12 @@ private fun WidgetBody(
                     Text(
                         track.ifBlank {
                             when (station?.source) {
-                                StationSource.Local, StationSource.Provider -> station.meta
+                                StationSource.Local ->
+                                    listOf(station.artist, station.album)
+                                        .filter { it.isNotBlank() }
+                                        .joinToString(" · ")
+                                        .ifBlank { "local audio" }
+                                StationSource.Provider -> station.meta
                                 else -> station?.meta?.ifBlank { "live stream" }
                             }.orEmpty().ifBlank { "pick a station" }
                         },

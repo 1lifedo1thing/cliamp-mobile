@@ -92,6 +92,11 @@ fun MiniPlayer(
                             buffering -> "buffering…"
                             streamTitle.isNotBlank() -> streamTitle
                             station!!.source == StationSource.Cliamp -> "cliamp radio"
+                            station!!.source == StationSource.Local ->
+                                listOf(station!!.artist, station!!.album)
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" · ")
+                                    .ifBlank { "local audio" }
                             station!!.source == StationSource.Podcast ->
                                 station!!.artist.ifBlank { "podcast" }
                             else -> station!!.meta.ifBlank { "live stream" }
