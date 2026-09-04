@@ -132,6 +132,15 @@ class PlayerConnection(
     private var _navPending: Int? = null
     private var _lastNavTapMs = 0L
 
+    // Shuffle's Media3 rebuild deliberately lives off [_navJob]. A toggle
+    // followed immediately by prev/next (or an auto-advance) cancels [_navJob]
+    // to stop navigation racing a stale rebuild; routing the shuffle rebuild
+    // through [_navJob] meant that same cancel killed the shuffle window before
+    // it was applied, snapping playback back to the linear queue. This job is
+    // only cancelled by a new explicit play or a new toggle, so a shuffle
+    // always lands.
+    private var _shuffleJob: Job? = null
+
     private val NAV_DEBOUNCE_MS = 180L
 
     /** Queues larger than this are played lazily from a window, not in full. */
@@ -197,26 +206,42 @@ class PlayerConnection(
             // item back to the head of the list. Only read back the index when
             // Media3 actually holds the whole queue.
             val oneToOne = c.mediaItemCount == q.size
-            // Resolve which queued station is actually audible. When Media3 holds
-            // the whole window, match the playing item's id against the model so
-            // the queue stays the source of truth even if a shuffle toggle left
-            // Media3's window in a different order. If the id can't be found we
-            // decline to guess (raw-index fallback publishes a song that is not
-            // what is audible) and keep the current panel item instead.
-            val resolvedIndex: Int? = if (oneToOne) {
-                val curId = c.getMediaItemAt(playerIndex).mediaId
-                val hit = q.indexOfFirst { it.id == curId }
-                hit.takeIf { it >= 0 }
-            } else {
-                val curId = c.getMediaItemAt(playerIndex).mediaId
-                _queueIndex.value.takeIf { q.getOrNull(it)?.id == curId }
-            }
-            // Only publish when the resolved panel item has actually changed.
-            if (resolvedIndex != null && resolvedIndex != _queueIndex.value &&
-                q.getOrNull(resolvedIndex)?.id != q.getOrNull(_queueIndex.value)?.id
+            val curId = c.getMediaItemAt(playerIndex).mediaId
+            // Resolve which queued station is actually audible. For a real
+            // playlist [_queue] must mirror Media3's window exactly, so the
+            // currently-playing item is at [_queue][playerIndex] - by id, not by
+            // a stored index. A raw stored index is what caused "shows one song
+            // while playing another": when a near-tail roll shrank [_queue] to
+            // the source tail while Media3 kept the old wider window (or shuffle
+            // drifted the two), [_queueIndex] and Media3's index no longer named
+            // the same item. Rebuilding [_queue] from Media3's actual window
+            // keeps the display honest in every case. A radio / lone-track item
+            // (Media3 count == 1) deliberately plays a full panel window around
+            // a single Media3 item, so we find it by id instead of collapsing.
+            val resolvedIndex: Int? = if (oneToOne &&
+                q.indexOfFirst { it.id == curId } == playerIndex
             ) {
-                _queueIndex.value = resolvedIndex
-                PlaybackBus.publishStation(q[resolvedIndex])
+                playerIndex
+            } else if (c.mediaItemCount == 1) {
+                q.indexOfFirst { it.id == curId }.let { if (it >= 0) it else null }
+            } else if (mirrorQueueFromMedia3(c)) {
+                playerIndex
+            } else {
+                null
+            }
+            // Publish whenever the resolved item is genuinely different from what
+            // the bus already shows - by ID, not by queue-index. When the window
+            // had to be re-mirrored the audible song lands back at [playerIndex],
+            // so comparing indices would see "no change" and freeze the title on
+            // a stale song while its shuffle / roll actually advanced; comparing
+            // the resolved id against the published bus station keeps the title
+            // honest even through a re-mirror.
+            if (resolvedIndex != null) {
+                val resolved = q.getOrNull(resolvedIndex)
+                if (resolved != null && resolved.id != PlaybackBus.station.value?.id) {
+                    _queueIndex.value = resolvedIndex
+                    PlaybackBus.publishStation(resolved)
+                }
             }
 
             // A huge queue is played as a window; when that window is nearly
@@ -288,6 +313,37 @@ class PlayerConnection(
         }
     }
 
+    /**
+     * Rebuilds the [_queue] window mirror to match exactly what Media3 is
+     * actually holding, item by item, keyed on media id. Used when [_queue] and
+     * Media3's window have drifted out of phase - a near-tail roll that shrank
+     * [_queue] to the source tail while Media3 kept the old wider window, or a
+     * shuffle realign that moved only [_queue] - so the display always names the
+     * same songs Media3 is playing, in the same order. Returns false when Media3
+     * holds no items we can map back to [_source] (a live stream we can't anchor).
+     */
+    private fun mirrorQueueFromMedia3(c: Player): Boolean {
+        val src = _source
+        if (src.isEmpty()) return false
+        val count = c.mediaItemCount
+        if (count == 0) return false
+        val pi = c.currentMediaItemIndex.coerceIn(0, count - 1)
+        val audibleId = c.getMediaItemAt(pi).mediaId
+        val items = ArrayList<Station>(count)
+        var playerIdx = -1
+        for (i in 0 until count) {
+            val s = src.firstOrNull { it.id == c.getMediaItemAt(i).mediaId } ?: continue
+            items.add(s)
+            if (s.id == audibleId) playerIdx = items.lastIndex
+        }
+        if (items.isEmpty() || playerIdx < 0) return false
+        val first = items.first()
+        windowBase = src.indexOfFirst { it.id == first.id }.coerceAtLeast(0)
+        _queue.value = items
+        _queueIndex.value = playerIdx
+        return true
+    }
+
     fun play(station: Station, from: List<Station> = emptyList(), preserveOrder: Boolean = false) {
         var q = _queue.value
         if (from.isNotEmpty()) {
@@ -346,6 +402,7 @@ class PlayerConnection(
         // to the looper first, so that already-published new title and plate
         // draw a frame before the blocking setMediaItems/prepare work runs.
         _navJob?.cancel()
+        _shuffleJob?.cancel()
         val job = scope.launch(Dispatchers.Main) {
             val c = controller ?: return@launch
             // Any queue of finite tracks is a real playlist, so Media3 plays one
@@ -450,7 +507,21 @@ class PlayerConnection(
         val c = controller
         if (c == null || _source.isEmpty()) { _shuffle.value = newOn; sync(); return }
         val base = _baseSource.ifEmpty { _source }
-        val current = _source.getOrNull(_queueIndex.value.takeIf { it >= 0 }?.let { windowBase + it } ?: 0)
+
+        // Anchor "current" on Media3's LIVE audible item, not the model's
+        // [_queueIndex]. sync() reconciles the model to the player on a slow
+        // poll, so between a track auto-advancing (a real playlist of local
+        // songs) and the next sync() the model can lag what is genuinely
+        // audible. Rebuilding off a stale model index applies the running
+        // position across to the wrong song, then re-anchors Media3 around it -
+        // and since both model and player now agree on that wrong song, the
+        // error persists even after toggling off again. The live Media3 item is
+        // the only anchor that cannot drift.
+        val audibleId = if (c.mediaItemCount > 0) c.getMediaItemAt(
+            c.currentMediaItemIndex.coerceIn(0, c.mediaItemCount - 1)
+        ).mediaId else null
+        val current = _source.firstOrNull { it.id == audibleId }
+            ?: _source.getOrNull(_queueIndex.value.takeIf { it >= 0 }?.let { windowBase + it } ?: 0)
             ?: _baseSource.firstOrNull()
             ?: _queue.value.firstOrNull()
             ?: _source.first()
@@ -475,8 +546,14 @@ class PlayerConnection(
 
         // Rebuild Media3 to match the model so the loaded queue, the panel and
         // the audio always agree, for short lists and huge windowed ones alike.
-        _navJob?.cancel()
-        _navJob = scope.launch(Dispatchers.Main) {
+        // Cancel any in-flight window roll first: a delayed roll resuming on top
+        // of the just-rebuilt window would rewrite Media3 again and snap the
+        // audio to a wrong (repeated) song - the same hazard a manual prev/next
+        // guards against by cancelling [_extending].
+        _extending?.cancel()
+        _extending = null
+        _shuffleJob?.cancel()
+        _shuffleJob = scope.launch(Dispatchers.Main) {
             val p = controller ?: return@launch
             swapping = true
             try {
@@ -593,7 +670,15 @@ class PlayerConnection(
         // collapsing onto the same song. Either way the value is an absolute
         // index into [_source].
         val pending = _navPending
-        val here = pending ?: (windowBase + _queueIndex.value)
+        // Anchor "here" on Media3's live position (windowBase + current index)
+        // rather than the mutable [_queueIndex]. sync()/realign rewrite
+        // [_queueIndex] under rolls and could otherwise pin the target to the
+        // same song on every tap; the live index is strictly monotonic, so
+        // prev/next always advance.
+        val liveHere = controller?.let { c ->
+            if (c.mediaItemCount > 0) windowBase + c.currentMediaItemIndex else null
+        }
+        val here = pending ?: (liveHere ?: (windowBase + _queueIndex.value))
         val abs = if (_source.isEmpty() && pending == null) {
             val shown = PlaybackBus.station.value?.let { s ->
                 src.indexOfFirst { it.url == s.url }
@@ -630,6 +715,13 @@ class PlayerConnection(
     private fun applyNavigation() {
         val target = _navPending ?: return
         _navPending = null
+        // A manual seek and the auto window-roll both rewrite Media3; if the
+        // delayed roll lands on top of a user's seekTo it re-reads the seek's
+        // index as a position in the freshly-rolled window and snaps playback
+        // to the wrong (repeated) song - the "won't advance / plays same song
+        // again" stall. Cancel any pending roll so a manual next/prev wins.
+        _extending?.cancel()
+        _extending = null
         val src = _source.ifEmpty { _fallbackSource }
         if (src.isEmpty()) return
         val abs = target.coerceIn(0, src.lastIndex)
@@ -653,20 +745,28 @@ class PlayerConnection(
         val c = controller
         val inWindow = c != null && q.isNotEmpty() && abs >= windowBase && abs < windowBase + q.size
         if (inWindow) {
-            val windowIndex = (abs - windowBase).coerceIn(0, q.lastIndex)
-            _queueIndex.value = windowIndex
+            val windowIndex = (abs - windowBase)
             _navJob?.cancel()
             val job = scope.launch(Dispatchers.Main) {
                 val player = controller ?: return@launch
-                swapping = true
-                try {
-                    ensureActive()
-                    val resume = resumeAt(station)
-                    ensureActive()
-                    player.seekTo(windowIndex.coerceIn(0, player.mediaItemCount - 1), resume)
-                    player.play()
-                } finally {
-                    swapping = false
+                // Only seek in place when the target is actually loaded by Media3;
+                // a bare seekTo clamps to the last loaded item when the index is
+                // out of range, silently freezing playback on that song. Otherwise
+                // slide the window so the tapped song becomes the audible item.
+                if (windowIndex < player.mediaItemCount) {
+                    swapping = true
+                    try {
+                        ensureActive()
+                        val resume = resumeAt(station)
+                        ensureActive()
+                        player.seekTo(windowIndex.coerceIn(0, player.mediaItemCount - 1), resume)
+                        player.play()
+                    } finally {
+                        swapping = false
+                    }
+                    _queueIndex.value = windowIndex
+                } else {
+                    slideWindow(player, abs)
                 }
                 ensureActive()
                 sync()
