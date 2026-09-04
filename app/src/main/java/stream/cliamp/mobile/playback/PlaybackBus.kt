@@ -66,11 +66,4 @@ data class StreamFormat(
     val bitrateKbps: Int = 0,
     val sampleRateHz: Int = 0,
     val codec: String = "",
-) {
-    /** `mp3 · 128k · 44.1k` for the identity strip. */
-    fun summary(fallback: String): String = buildList {
-        if (codec.isNotBlank()) add(codec.lowercase())
-        if (bitrateKbps > 0) add("${bitrateKbps}k")
-        if (sampleRateHz > 0) add("%.1fk".format(sampleRateHz / 1000f))
-    }.joinToString(" · ").ifBlank { fallback }
-}
+)

@@ -105,7 +105,6 @@ fun NowPlayingScreen(
     val state by player.state.collectAsState()
     val station by PlaybackBus.station.collectAsState()
     val streamTitle by PlaybackBus.streamTitle.collectAsState()
-    val format by PlaybackBus.format.collectAsState()
     val error by PlaybackBus.error.collectAsState()
     val reconnect by PlaybackBus.reconnectAttempt.collectAsState()
     val favorites by prefs.favorites.collectAsState(initial = emptyList())
@@ -257,7 +256,6 @@ fun NowPlayingScreen(
                                 }
                             )
                             if (s.country.isNotBlank() && s.source != StationSource.Cliamp) add(s.country.lowercase())
-                            format.summary(s.meta).takeIf { it.isNotBlank() }?.let(::add)
                             if (s.votes > 0) add("${compact(s.votes)} votes")
                         }
                     }.joinToString(" · ").ifBlank { "12 cliamp channels · 50k+ directory" },
