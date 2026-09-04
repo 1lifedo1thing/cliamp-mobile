@@ -36,6 +36,12 @@ data class Station(
             if (country.isNotBlank()) add(country.lowercase())
         }.joinToString(" · ")
 
+    /** `artist · album` for local files, blank if neither is known. */
+    val artistAlbum: String
+        get() = listOf(artist, album)
+            .filter { it.isNotBlank() }
+            .joinToString(" · ")
+
     /**
      * A finite thing with an end, as opposed to a live stream. Decides whether
      * the queue is handed to the player as a real playlist it can advance

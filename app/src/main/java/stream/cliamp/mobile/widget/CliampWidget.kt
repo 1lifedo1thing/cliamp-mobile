@@ -42,6 +42,7 @@ import stream.cliamp.mobile.CliampApp
 import stream.cliamp.mobile.R
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationSource
+import stream.cliamp.mobile.ui.clock
 import stream.cliamp.mobile.ui.theme.CliampPalette
 import stream.cliamp.mobile.ui.theme.paletteFor
 
@@ -163,10 +164,7 @@ private fun WidgetBody(
                         track.ifBlank {
                             when (station?.source) {
                                 StationSource.Local ->
-                                    listOf(station.artist, station.album)
-                                        .filter { it.isNotBlank() }
-                                        .joinToString(" · ")
-                                        .ifBlank { "local audio" }
+                                    station.artistAlbum.ifBlank { "local audio" }
                                 StationSource.Provider -> station.meta
                                 else -> station?.meta?.ifBlank { "live stream" }
                             }.orEmpty().ifBlank { "pick a station" }
@@ -381,14 +379,6 @@ private fun SeekTimeRow(positionMs: Long, durationMs: Long, p: CliampPalette) {
             style = mono(11, FontWeight.Normal, p.inkSecondary),
         )
     }
-}
-
-private fun clock(ms: Long): String {
-    val total = (ms / 1000).coerceAtLeast(0)
-    val h = total / 3600
-    val m = (total % 3600) / 60
-    val s = total % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }
 
 /**

@@ -46,6 +46,8 @@ import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.playback.PlayerConnection
+import stream.cliamp.mobile.ui.clock
+import stream.cliamp.mobile.ui.compact
 import stream.cliamp.mobile.ui.components.BrickMeter
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
@@ -451,12 +453,6 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
     }
 }
 
-private fun compact(n: Int): String = when {
-    n >= 1_000_000 -> "%.1fm".format(n / 1_000_000f)
-    n >= 1_000 -> "%.1fk".format(n / 1_000f)
-    else -> n.toString()
-}
-
 /** A 15dp icon in a 28dp tap target, sized for a secondary action. */
 @Composable
 private fun SmallAction(
@@ -475,12 +471,4 @@ private fun SmallAction(
     ) {
         Icon(icon, description, Modifier.size(15.dp), tint = tint ?: p.inkSecondary)
     }
-}
-
-private fun clock(ms: Long): String {
-    val total = (ms / 1000).coerceAtLeast(0)
-    val h = total / 3600
-    val m = (total % 3600) / 60
-    val s = total % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }

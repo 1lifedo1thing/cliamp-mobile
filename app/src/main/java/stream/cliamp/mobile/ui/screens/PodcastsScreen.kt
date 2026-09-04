@@ -48,8 +48,8 @@ import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
+import stream.cliamp.mobile.ui.components.EmptyNote
 import stream.cliamp.mobile.ui.components.Gutter
-import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.OverflowButton
 import stream.cliamp.mobile.ui.components.OverflowItem
@@ -152,7 +152,7 @@ fun PodcastsScreen(
             if (pane != Pane.Directory) {
                 item { SectionLabel("subscribed — ${subscriptions.size}") }
                 if (subscriptions.isEmpty()) {
-                    item { EmptyLine("nothing subscribed — open a show and hit the star") }
+                    item { EmptyNote("nothing subscribed — open a show and hit the star") }
                 } else {
                     items(subscriptions, key = { "sub:${it.feedUrl}" }) { show ->
                         ShowRow(
@@ -199,9 +199,9 @@ fun PodcastsScreen(
                 }
                 item {
                     when {
-                        directory.error != null -> EmptyLine("directory: ${directory.error}")
-                        directory.loading -> EmptyLine("loading more…")
-                        directory.exhausted -> EmptyLine("end of ${directory.query.label}")
+                        directory.error != null -> EmptyNote("directory: ${directory.error}")
+                        directory.loading -> EmptyNote("loading more…")
+                        directory.exhausted -> EmptyNote("end of ${directory.query.label}")
                         else -> Spacer(Modifier.height(8.dp))
                     }
                 }
@@ -348,16 +348,5 @@ private fun remaining(progress: EpisodeProgress): String {
         left >= 3600 -> "${left / 3600}h ${(left % 3600) / 60}m left"
         left >= 60 -> "${left / 60}m left"
         else -> "${left}s left"
-    }
-}
-
-@Composable
-private fun EmptyLine(text: String) {
-    val p = LocalPalette.current
-    Column {
-        Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 18.dp)) {
-            Mono(text, CliampType.rowSecondary, p.inkFaint)
-        }
-        HairlineDivider()
     }
 }

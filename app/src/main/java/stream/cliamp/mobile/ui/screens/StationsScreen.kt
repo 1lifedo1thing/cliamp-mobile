@@ -43,10 +43,11 @@ import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.StationSource
+import stream.cliamp.mobile.ui.compact
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
+import stream.cliamp.mobile.ui.components.EmptyNote
 import stream.cliamp.mobile.ui.components.Gutter
-import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.ListRow
 
 import stream.cliamp.mobile.ui.components.ScreenHeader
@@ -360,21 +361,4 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
             )
         }
     }
-}
-
-@Composable
-private fun EmptyNote(text: String) {
-    val p = LocalPalette.current
-    Column {
-        Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 18.dp)) {
-            Mono(text, CliampType.rowSecondary, p.inkFaint)
-        }
-        HairlineDivider()
-    }
-}
-
-private fun compact(n: Int): String = when {
-    n >= 1_000_000 -> "%.1fm".format(n / 1_000_000f)
-    n >= 1_000 -> "%.1fk".format(n / 1_000f)
-    else -> n.toString()
 }

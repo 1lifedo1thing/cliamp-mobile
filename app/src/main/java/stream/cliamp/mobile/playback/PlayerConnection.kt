@@ -355,6 +355,16 @@ class PlayerConnection(
      * row updates in lockstep with its title the instant a song changes, rather
      * than waiting on the service's next player event.
      */
+    /** Persist the now-current station and refresh the widget, as a single choke point. */
+    private fun persistAndRefresh(station: Station) {
+        val prefs = (context.applicationContext as CliampApp).prefs
+        scope.launch {
+            prefs.setLastStation(station)
+            prefs.pushHistory(station)
+            CliampWidgetReceiver.refresh(context.applicationContext)
+        }
+    }
+
     private fun persistWidgetWindow(station: Station) {
         val src = _source
         if (src.isEmpty()) return
@@ -417,12 +427,7 @@ class PlayerConnection(
         // launch all agree on the current station. This is the single play
         // choke point, so it covers app taps, the notification, the widget and
         // auto-advance - not just plays fired through the root's onPlay hook.
-        val prefs = (context.applicationContext as CliampApp).prefs
-        scope.launch {
-            prefs.setLastStation(station)
-            prefs.pushHistory(station)
-            CliampWidgetReceiver.refresh(context.applicationContext)
-        }
+        persistAndRefresh(station)
 
         // The tapped station is published and rendered first, on the calling
         // thread, so the music screen and mini bar update the instant a song is
@@ -622,34 +627,6 @@ class PlayerConnection(
     }
 
     /**
-     * Rearranges the items already on [c] to match [order] (a list of Media3
-     * mediaIds) without stopping or resetting playback. Items are relocated with
-     * moveMediaItem; the currently-playing item is never relocated, so nothing
-     * reloads and no setMediaItems / prepare is involved. This keeps Media3 and
-     * the shuffled [_queue] aligned, so the poller's sync() cannot resolve a
-     * different song after a shuffle toggle.
-     */
-    private fun reorderPlayerItems(c: Player, order: List<String>) {
-        if (order.size != c.mediaItemCount) return
-        val cur = c.currentMediaItemIndex.coerceIn(0, c.mediaItemCount - 1)
-        val curId = c.getMediaItemAt(cur).mediaId
-        val ids = ArrayList<String>(c.mediaItemCount)
-        for (i in 0 until c.mediaItemCount) ids.add(c.getMediaItemAt(i).mediaId)
-        var i = 0
-        while (i < order.size) {
-            if (ids[i] == order[i]) { i++; continue }
-            val want = order[i]
-            if (want == curId) { i++; continue } // never relocate the playing item
-            var j = i + 1
-            while (j < c.mediaItemCount && ids[j] != want) j++
-            if (j >= c.mediaItemCount) { i++; continue }
-            c.moveMediaItem(j, i)
-            ids.add(i, ids.removeAt(j))
-            i++
-        }
-    }
-
-    /**
      * Resolves [station]'s stream URL and builds its Media3 item on a
      * background thread. Building an item renders the station's 512px artwork
      * (a first-time PNG encode, plus a synchronised cache read on every hit) -
@@ -780,12 +757,7 @@ class PlayerConnection(
         PlaybackBus.publishError(null)
         PlaybackBus.publishFormat(StreamFormat())
         persistWidgetWindow(station)
-        val prefs = (context.applicationContext as CliampApp).prefs
-        scope.launch {
-            prefs.setLastStation(station)
-            prefs.pushHistory(station)
-            CliampWidgetReceiver.refresh(context.applicationContext)
-        }
+        persistAndRefresh(station)
 
         val q = _queue.value
         val c = controller
@@ -963,9 +935,6 @@ class PlayerConnection(
         controller?.release()
         controller = null
     }
-
-    @Suppress("unused")
-    private fun currentItem(): MediaItem? = controller?.currentMediaItem
 }
 
 data class PlayerState(

@@ -42,6 +42,7 @@ import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.toStation
 import stream.cliamp.mobile.ui.components.CliampIcons
+import stream.cliamp.mobile.ui.components.EmptyNote
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.ListRow
@@ -135,9 +136,9 @@ fun PodcastShowScreen(
             }
 
             if (state.loading) {
-                item { Note("reading the feed…") }
+                item { EmptyNote("reading the feed…") }
             } else if (queue.isEmpty() && state.error == null) {
-                item { Note("no episodes in this feed") }
+                item { EmptyNote("no episodes in this feed") }
             }
 
             if (queue.isNotEmpty()) {
@@ -300,17 +301,6 @@ private fun EpisodeRow(
             if (progress != null && !done) p.amber else p.inkTertiary,
             maxLines = 1,
         )
-    }
-}
-
-@Composable
-private fun Note(text: String) {
-    val p = LocalPalette.current
-    Column {
-        Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 18.dp)) {
-            Mono(text, CliampType.rowSecondary, p.inkFaint)
-        }
-        HairlineDivider()
     }
 }
 

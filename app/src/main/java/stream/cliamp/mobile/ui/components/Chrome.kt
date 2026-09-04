@@ -320,3 +320,15 @@ fun ScreenColumn(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) = Column(modifier.fillMaxSize()) { content() }
+
+/** A full-width muted note + divider, used for empty states and transient notices. */
+@Composable
+fun EmptyNote(text: String) {
+    val p = LocalPalette.current
+    Column {
+        Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 18.dp)) {
+            Mono(text, CliampType.rowSecondary, p.inkFaint)
+        }
+        HairlineDivider()
+    }
+}

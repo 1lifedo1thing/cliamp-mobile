@@ -76,9 +76,6 @@ import stream.cliamp.mobile.ui.components.CliampTextField
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.ListRow
-import stream.cliamp.mobile.ui.components.OverflowButton
-import stream.cliamp.mobile.ui.components.OverflowItem
-import stream.cliamp.mobile.ui.components.OverflowMenu
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.components.StripedArt
@@ -698,23 +695,6 @@ private fun SmartPlaylistRow(
     }
 }
 
-/** The ⋮ overflow menu on a song row: play next, add to the queue, or replace the queue. */
-@Composable
-private fun SongRowMenu(
-    onPlayNext: () -> Unit,
-    onAddEnd: () -> Unit,
-    onReplace: () -> Unit,
-) {
-    OverflowMenu(
-        trigger = { open -> OverflowButton(open) },
-        items = listOf(
-            OverflowItem("play next", onPlayNext),
-            OverflowItem("add to queue", onAddEnd),
-            OverflowItem("replace queue", onReplace),
-        ),
-    )
-}
-
 /** The ⋮ overflow menu on a playlist row: pin/unpin, edit the name, or remove the playlist. */
 @Composable
 private fun PlaylistMenu(
@@ -899,10 +879,7 @@ private fun PlaylistDetailShown(
                 ) {
                     Mono(s.name, CliampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
                     Mono(
-                        buildList {
-                            if (s.artist.isNotBlank()) add(s.artist)
-                            if (s.album.isNotBlank()) add(s.album)
-                        }.joinToString(" · ").ifBlank {
+                        s.artistAlbum.ifBlank {
                             when {
                                 s.source == StationSource.Local -> durationLabel(s.durationMs)
                                 s.source == StationSource.Podcast -> "podcast"
@@ -973,10 +950,7 @@ private fun AddSongsPicker(
                 items = localSongs,
                 picked = picked,
                 subtitle = { s ->
-                    buildList {
-                        if (s.artist.isNotBlank()) add(s.artist)
-                        if (s.album.isNotBlank()) add(s.album)
-                    }.joinToString(" · ").ifBlank { durationLabel(s.durationMs) }
+                    s.artistAlbum.ifBlank { durationLabel(s.durationMs) }
                 },
                 onToggle = ::toggle,
                 empty = "no local songs yet",
@@ -1175,10 +1149,7 @@ private fun SmartPlaylistDetail(
                 ) {
                     Mono(s.name, CliampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
                     Mono(
-                        buildList {
-                            if (s.artist.isNotBlank()) add(s.artist)
-                            if (s.album.isNotBlank()) add(s.album)
-                        }.joinToString(" · ").ifBlank { s.meta },
+                        s.artistAlbum.ifBlank { s.meta },
                         CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
                     )
                 }
