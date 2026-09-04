@@ -59,13 +59,6 @@ import stream.cliamp.mobile.ui.theme.paletteFor
  * every rule here is a coloured Box.
  */
 
-/**
- * The vertical space the header row + its spacer eat above the visualizer.
- * Used when the meter should fill the FULL height below the header, with the
- * streaming rule / scrubber floating over the bottom of the bricks.
- */
-private val FULL_METER_OFFSET = 54.dp + 8.dp
-
 class CliampWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(
         setOf(SMALL, WIDE, TALL),
@@ -197,43 +190,28 @@ private fun WidgetBody(
 
         if (wide && big) {
             Spacer(GlanceModifier.height(10.dp))
-            // Mirrors the expanded player: the visualizer fills the FULL height
-            // below the header, and the streaming rule / scrubber + clock float
-            // over the bottom edge of the meter instead of eating their own
-            // band - so the bricks take the whole widget, not a short middle
-            // strip. The minuscule overlaid status can't be hidden by the bars
-            // because they dim to the unlit grid behind it.
-            Box(GlanceModifier.defaultWeight().fillMaxWidth()) {
-                if (hasMeter) {
-                    // The meter fills the whole box; the status floats over the
-                    // bottom edge of the bricks (contentAlignment anchors only
-                    // the non-filling status, not the meter which fills).
-                    Box(GlanceModifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-                        BrickMeter(
-                            levels,
-                            peaks,
-                            p,
-                            GlanceModifier.fillMaxSize(),
-                            headerOffset = FULL_METER_OFFSET,
-                        )
-                        Column(GlanceModifier.fillMaxWidth()) {
-                            if (scrubbable) {
-                                // Glance has no per-frame gesture API, so the
-                                // bar is a live readout that opens the player to
-                                // scrub.
-                                WidgetScrubber(positionMs, durationMs, p)
-                                Spacer(GlanceModifier.height(4.dp))
-                                SeekTimeRow(positionMs, durationMs, p)
-                            } else {
-                                StreamingRule(if (playing) "streaming" else "paused", p, dim = !playing)
-                            }
-                        }
-                    }
-                } else {
-                    Box(GlanceModifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        StreamingRule(if (playing) "streaming" else "stopped", p, dim = !playing)
-                    }
+            // Meter fills the band between controls (above) and timeline
+            // (below) — no overlay, no offset hack.
+            if (hasMeter) {
+                Box(GlanceModifier.defaultWeight().fillMaxWidth()) {
+                    BrickMeter(levels, peaks, p, GlanceModifier.fillMaxSize())
                 }
+            } else {
+                Box(
+                    GlanceModifier.defaultWeight().fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    StreamingRule(if (playing) "streaming" else "stopped", p, dim = !playing)
+                }
+            }
+            // Timeline sits below the meter, not overlaid on it.
+            Spacer(GlanceModifier.height(8.dp))
+            if (scrubbable) {
+                WidgetScrubber(positionMs, durationMs, p)
+                Spacer(GlanceModifier.height(4.dp))
+                SeekTimeRow(positionMs, durationMs, p)
+            } else if (hasMeter) {
+                StreamingRule(if (playing) "streaming" else "paused", p, dim = !playing)
             }
         }
     }
@@ -264,43 +242,38 @@ private fun BrickMeter(
     peaks: List<Float>,
     p: stream.cliamp.mobile.ui.theme.CliampPalette,
     modifier: GlanceModifier,
-    headerOffset: androidx.compose.ui.unit.Dp,
 ) {
-    // Glance renders to RemoteViews, and RemoteViews hard-caps every Row/Column
-    // at 10 direct children - a flat 24-column meter throws and renders
-    // nothing. So the widget draws the SAME brick meter as a nested grid: an
-    // outer Column of brick Rows, each Row a run of column cells, each cell a
-    // single coloured Box. Every container stays under the 10-child cap, while
-    // the columns touch the bottom edge (phase-stable) exactly like in-app.
+    // Three-layer brick meter matching the in-app BrickMeter exactly:
+    //   1. unlit grid at full height (p.unlit)
+    //   2. lit bricks climbing from the baseline (p.accent)
+    //   3. peak cap one brick above the lit level (p.peak)
     //
-    // The levels/peaks arrive pre-smoothed by the shared MeterCore the in-app
-    // meter uses (24 columns); we downsample those to the widget's column
-    // count so the visible bars mirror the in-app meter's values and peaks,
-    // frozen at the last 2Hz snapshot.
+    // Glance hard-caps every Row/Column at 10 direct children, so the full
+    // 24-column in-app meter cannot render here.  We use 10 columns with the
+    // same brick/gap geometry (4dp/3dp), and each brick sits in a cell that
+    // is vertically anchored to the bottom of its Row slice so the 3dp head-
+    // room above becomes the mortar gap — identical to the in-app layout.
     val size = LocalSize.current
     val brick = Visualizer.Brick.brickDp.dp
     val gap = Visualizer.Brick.gapDp.dp
     val step = brick + gap
-    // More height means more brick Rows (never bigger bricks); the count is
-    // rounded UP so the grid tiles to the top, clipped to the 10-children cap.
-    val rows = (((size.height - headerOffset + step - 1.dp) / step).toInt().coerceIn(1, 10))
+    val rows = ((size.height + gap) / step).toInt().coerceIn(1, 10)
     val columns = Visualizer.Widget.columns
     val n = levels.size.coerceAtLeast(1)
 
     Column(modifier, verticalAlignment = Alignment.Vertical.Top) {
         for (r in 0 until rows) {
-            // Row r is measured from the top; a brick is lit only in the bottom
-            // `litRows` rows of its column, so a cell is accent iff it sits at
-            // or above the bottom-outline of the column's level.
+            // Each Row is one "grid row": height = step (4dp brick + 3dp
+            // gap).  The 3dp gap is the headroom above the 4dp brick cell
+            // anchored at the bottom — identical to the in-app vertical mortar.
             Row(
                 GlanceModifier.fillMaxWidth().height(step),
-                verticalAlignment = Alignment.Vertical.CenterVertically,
+                verticalAlignment = Alignment.Vertical.Bottom,
             ) {
                 for (c in 0 until columns) {
                     val idx = (c * n / columns).coerceIn(0, n - 1)
                     val level = levels[idx].coerceIn(0f, 1f)
                     val litRows = (level * rows).toInt().coerceIn(0, rows)
-                    // Bottom row is r == rows-1; cells grow upward from there.
                     val fromBottom = rows - 1 - r
                     val pk = peaks[idx].coerceIn(0f, 1f)
                     val peakRowsFromBottom = (pk * rows.toFloat()).toInt().coerceIn(0, rows - 1)
@@ -309,12 +282,22 @@ private fun BrickMeter(
                         fromBottom < litRows -> p.accent
                         else -> p.unlit
                     }
+                    // defaultWeight() distributes columns evenly across the
+                    // full width; padding(horizontal) carves the 3dp column
+                    // gap (1.5dp on each side) so the horizontal mortar
+                    // matches the in-app columnGap exactly.
                     Box(
-                        GlanceModifier
-                            .defaultWeight()
-                            .fillMaxHeight()
-                            .background(ColorProvider(color)),
-                    ) {}
+                        GlanceModifier.defaultWeight().height(step),
+                        contentAlignment = Alignment.BottomCenter,
+                    ) {
+                        Box(
+                            GlanceModifier
+                                .fillMaxWidth()
+                                .height(brick)
+                                .padding(horizontal = gap / 2)
+                                .background(ColorProvider(color)),
+                        ) {}
+                    }
                 }
             }
         }

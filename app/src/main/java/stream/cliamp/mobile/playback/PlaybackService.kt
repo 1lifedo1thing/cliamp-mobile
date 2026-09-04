@@ -367,8 +367,6 @@ class PlaybackService : MediaSessionService() {
                     (application as CliampApp).player.shuffle.value,
                 )
             )
-            prefs0.setWidgetPlaying(next.first)
-            prefs0.setWidgetTrack(next.second)
             val upNext = widgetUpNext(source, station)
             Log.d("cliamp/wid", "nextUp source.size=${source.size} count=${upNext.size} names=${upNext.map { it.name }}")
             val sourceKey = (source.map { it.url } + (station?.url.orEmpty())).joinToString("|")
@@ -382,15 +380,18 @@ class PlaybackService : MediaSessionService() {
                 lastWidgetSourceKey = sourceKey
                 prefs0.setWidgetNext(upNext)
             }
-            // Always refresh the meter snapshot so the widget syncs on play,
-            // pause and advance - writeWidgetSpectrum settles or idles the
-            // meter when there is no live signal, so a paused widget never
-            // keeps stale bars. The 2Hz throttle inside keeps DataStore writes
-            // bounded.
-            writeWidgetSpectrum()
-            // Collecting the flows inside the composition only updates the
-            // widget while its Glance session is alive, and sessions are
-            // short-lived. The nudge is what covers a dormant widget.
+            // Write metadata (playing/track) in their own single transaction,
+            // then let writeWidgetSpectrum batch the spectrum data — two
+            // transactions instead of 6-7, so the widget Flow emits twice at
+            // most and Glance recomposes once.
+            prefs0.writeWidgetSnapshot(
+                playing = next.first,
+                track = next.second,
+                levels = widgetMeter.snapshotLevels().toList(),
+                peaks = widgetMeter.snapshotPeaks().toList(),
+                positionMs = player.currentPosition.coerceAtLeast(0),
+                durationMs = player.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L,
+            )
             CliampWidgetReceiver.refresh(this@PlaybackService)
         }
     }
@@ -439,18 +440,18 @@ class PlaybackService : MediaSessionService() {
             player.isPlaying -> widgetMeter.pushIdle((now - widgetIdleStart) / 1_000.0)
             else -> widgetMeter.settle()
         }
-        // The widget's clock rides the same 2Hz heartbeat as the meter. Position
-        // is written even when there are no live spectrum bins (a paused or
-        // non-visualiser source), so the progress bar and time stay honest; the
-        // duration of 0 for live radio is what keeps a scrub bar off the widget.
+        // Single DataStore transaction for all widget state so the Flow emits
+        // once and Glance recomposes once.
         val pos = player.currentPosition.coerceAtLeast(0)
         val dur = player.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L
-        prefs0.setWidgetPositionMs(pos)
-        prefs0.setWidgetDurationMs(dur)
-        prefs0.setWidgetLevels(widgetMeter.snapshotLevels().toList())
-        prefs0.setWidgetPeaks(widgetMeter.snapshotPeaks().toList())
-        // Nudge the widget so a dormant composition repaints the moving bars
-        // and the clock; this is throttled to ~2Hz by the guard above.
+        prefs0.writeWidgetSnapshot(
+            playing = player.isPlaying,
+            track = PlaybackBus.streamTitle.value,
+            levels = widgetMeter.snapshotLevels().toList(),
+            peaks = widgetMeter.snapshotPeaks().toList(),
+            positionMs = pos,
+            durationMs = dur,
+        )
         CliampWidgetReceiver.refresh(this@PlaybackService)
     }
 

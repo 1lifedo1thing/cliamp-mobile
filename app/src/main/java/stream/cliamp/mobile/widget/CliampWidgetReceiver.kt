@@ -10,17 +10,21 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 class CliampWidgetReceiver : GlanceAppWidgetReceiver() {
-    override val glanceAppWidget: GlanceAppWidget = CliampWidget()
+    override val glanceAppWidget: GlanceAppWidget = WidgetInstance.instance
 
     companion object {
-        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         /** Called by the service whenever what the widget shows has changed. */
         fun refresh(context: Context) {
             scope.launch {
-                runCatching { CliampWidget().updateAll(context.applicationContext) }
+                runCatching { WidgetInstance.instance.updateAll(context.applicationContext) }
                     .onFailure { android.util.Log.e("cliamp/wid", "widget update failed", it) }
             }
         }
     }
+}
+
+private object WidgetInstance {
+    val instance = CliampWidget()
 }

@@ -172,6 +172,29 @@ class Prefs(private val context: Context) {
     suspend fun setWidgetPositionMs(v: Long) = put(K.wPosition, v)
     suspend fun setWidgetDurationMs(v: Long) = put(K.wDuration, v)
 
+    /**
+     * Write all widget playback state in a single DataStore transaction so the
+     * Flow emits once and Glance recomposes once instead of cascading through
+     * 6-7 separate edits.
+     */
+    suspend fun writeWidgetSnapshot(
+        playing: Boolean,
+        track: String,
+        levels: List<Float>,
+        peaks: List<Float>,
+        positionMs: Long,
+        durationMs: Long,
+    ) {
+        context.settingsStore.edit {
+            it[K.wPlaying] = playing
+            it[K.wTrack] = track
+            it[K.wLevels] = levels.joinToString(",")
+            it[K.wPeaks] = peaks.joinToString(",")
+            it[K.wPosition] = positionMs
+            it[K.wDuration] = durationMs
+        }
+    }
+
     suspend fun readLastStation(): Station? =
         context.settingsStore.data.first()[K.lastStation]
             ?.let { runCatching { Http.json.decodeFromString<Station>(it) }.getOrNull() }
