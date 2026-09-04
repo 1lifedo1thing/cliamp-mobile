@@ -415,7 +415,23 @@ class PlayerConnection(
             try {
                 ensureActive()
                 if (allTracks) {
-                    slideWindow(c, start)
+                    // If Media3 already holds exactly the window the model now
+                    // expects (same ids, same order - the common case of tapping a
+                    // song inside a source that is already loaded), switch in place
+                    // by index with seekTo instead of tearing the whole window down
+                    // and rebuilding it. A full setMediaItems keeps the previous
+                    // song audible for a second or two while every item in the new
+                    // window is re-resolved and re-published; seekTo is instant.
+                    val cq = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId }
+                    val wq = queue.map { it.id }
+                    val alreadyLoaded = cq.size == wq.size && wq.indices.all { cq[it] == wq[it] }
+                    if (alreadyLoaded) {
+                        val target = _queueIndex.value.coerceIn(0, c.mediaItemCount - 1)
+                        val resume = queue.getOrNull(target)?.let { resumeAt(it) } ?: 0L
+                        c.seekTo(target, resume)
+                    } else {
+                        slideWindow(c, start)
+                    }
                 } else {
                     // Single live stream or lone track: Media3 holds just the
                     // tapped playable. The queue window was already computed

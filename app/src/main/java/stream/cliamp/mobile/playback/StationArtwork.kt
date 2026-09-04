@@ -41,8 +41,26 @@ object StationArtwork {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?) = size > 12
     }
 
+    /**
+     * Every finite track (local / provider / podcast) renders the same generic
+     * no-art plate - its real cover, when there is one, is applied separately via
+     * [withArt] once it loads. So the plate is a pure constant for all tracks, and
+     * rendering it once and reusing the bytes across the whole queue turns a
+     * 60-track window rebuild (which previously re-rendered and re-compressed a
+     * full 512px PNG per item, ~1s of work on every tap) into a constant-time
+     * lookup. Rendered lazily on first use, off the read path.
+     */
+    private var genericTrackPlate: ByteArray? = null
+
     /** Fast path: no network, drawn locally, safe to call before playback starts. */
     fun forStation(context: Context, station: Station): ByteArray? = synchronized(cache) {
+        // Only share the plate across tracks that render the literal generic
+        // caption; a track that somehow carries a slug or country code would
+        // draw a distinct caption and must keep its own art.
+        if (station.isTrack && station.slug.isBlank() && station.countryCode.isBlank()) {
+            genericTrackPlate?.let { return@synchronized it }
+            return@synchronized render(context, station, null).also { genericTrackPlate = it }
+        }
         cache.getOrPut(station.id) { render(context, station, null) }
     }
 
