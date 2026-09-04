@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Format
@@ -291,28 +292,63 @@ class PlaybackService : MediaSessionService() {
      */
     private var lastWidgetState: Triple<Boolean, String, String>? = null
 
+    /** Identity of the last list published, so next-up rewrites when the list or current song moves. */
+    private var lastWidgetSourceKey: String? = null
+
+    /**
+     * The four stations that come after the current one in the list being
+     * played, wrapping around the end. This is what the widget shows under the
+     * meter as "up next", for local songs, radio directories and podcasts all
+     * alike.
+     */
+    private fun widgetUpNext(source: List<Station>, station: Station?): List<Station> {
+        if (source.isEmpty() || station == null) return emptyList()
+        val i = source.indexOfFirst { it.url == station.url }
+        if (i < 0) return emptyList()
+        return (1..4).mapNotNull { k -> source[(i + k) % source.size] }
+    }
+
     /** Last time a spectrum snapshot was written, to throttle the widget path. */
     private var lastSpectrumWrite = 0L
     private val spectrumToWidget = 500L
 
     private fun publishWidgetState() {
+        val station = PlaybackBus.station.value
+        val source = PlaybackBus.source.value
         val next = Triple(
             player.isPlaying,
             PlaybackBus.streamTitle.value,
-            PlaybackBus.station.value?.url.orEmpty(),
+            station?.url.orEmpty(),
         )
-        if (next == lastWidgetState) return
+        Log.d("cliamp/wid", "publishWidgetState playing=${next.first} streamTitle=${next.second} url=${next.third} station=${station?.name}")
+        if (next == lastWidgetState) {
+            val sourceKey = (source.map { it.url } + (station?.url.orEmpty())).joinToString("|")
+            if (sourceKey == lastWidgetSourceKey) return
+        }
         lastWidgetState = next
         scope.launch {
             val favs = prefs0.favorites.first()
             session?.setMediaButtonPreferences(
                 buttons(
-                    favs.any { it.url == PlaybackBus.station.value?.url },
+                    favs.any { it.url == station?.url },
                     (application as CliampApp).player.shuffle.value,
                 )
             )
             prefs0.setWidgetPlaying(next.first)
             prefs0.setWidgetTrack(next.second)
+            val upNext = widgetUpNext(source, station)
+            Log.d("cliamp/wid", "nextUp source.size=${source.size} count=${upNext.size} names=${upNext.map { it.name }}")
+            val sourceKey = (source.map { it.url } + (station?.url.orEmpty())).joinToString("|")
+            // Only ever write a real, non-empty next-up. When the in-memory
+            // source is empty (playback started/tuned through the widget's
+            // MediaController, which never populates PlayerConnection's source)
+            // an empty write here would clobber the correct list that
+            // persistWidgetWindow / WidgetControl.tune already saved, sinking the
+            // widget back to the built-in radio channels.
+            if (sourceKey != lastWidgetSourceKey && upNext.isNotEmpty()) {
+                lastWidgetSourceKey = sourceKey
+                prefs0.setWidgetNext(upNext)
+            }
             if (next.first) writeWidgetSpectrum()
             // Collecting the flows inside the composition only updates the
             // widget while its Glance session is alive, and sessions are
@@ -329,6 +365,7 @@ class PlaybackService : MediaSessionService() {
      */
     private fun handleSpectrum(it: FloatArray) {
         PlaybackBus.publishSpectrum(it)
+        Log.d("cliamp/wid", "handleSpectrum playing=${player.isPlaying} sz=${it.size} live=${fx.spectrumLive}")
         if (player.isPlaying &&
             System.currentTimeMillis() - lastSpectrumWrite >= spectrumToWidget
         ) scope.launch { writeWidgetSpectrum() }
@@ -346,7 +383,7 @@ class PlaybackService : MediaSessionService() {
         lastSpectrumWrite = now
         val bins = PlaybackBus.spectrum.value
         if (bins.isEmpty()) return
-        val bars = 6
+        val bars = 14
         val snapshot = FloatArray(bars)
         val per = (bins.size.toFloat() / bars).let { if (it < 1f) 1f else it }
         for (b in 0 until bars) {
@@ -358,6 +395,7 @@ class PlaybackService : MediaSessionService() {
             snapshot[b] = peak.coerceIn(0f, 1f)
         }
         prefs0.setWidgetSpectrum(snapshot.toList())
+        Log.d("cliamp/wid", "writeWidgetSpectrum bars=${snapshot.toList()}")
         // Nudge the widget so a dormant composition repaints the moving bars;
         // this is throttled to ~2Hz by the guard above.
         CliampWidgetReceiver.refresh(this@PlaybackService)

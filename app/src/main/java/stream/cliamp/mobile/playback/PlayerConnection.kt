@@ -344,10 +344,37 @@ class PlayerConnection(
         return true
     }
 
+    /**
+     * Persist a bounded window of the list being played, centred on [station],
+     * so the widget's prev/next can walk the current domain (local / radio /
+     * podcast) without depending on the in-memory PlaybackBus, which is empty
+     * when the widget wakes a cold process. Kept small because the whole source
+     * (e.g. the full local library) is far too large to serialize per play.
+     *
+     * The up-next four are written in the same write so the widget's "next"
+     * row updates in lockstep with its title the instant a song changes, rather
+     * than waiting on the service's next player event.
+     */
+    private fun persistWidgetWindow(station: Station) {
+        val src = _source
+        if (src.isEmpty()) return
+        val prefs = (context.applicationContext as CliampApp).prefs
+        val i = src.indexOfFirst { it.url == station.url }
+        if (i < 0) return
+        val before = 8
+        val after = 8
+        val win = mutableListOf<Station>()
+        for (k in -before..after) win.add(src[(i + k + src.size) % src.size])
+        val next = (1..4).mapNotNull { k -> src[(i + k) % src.size] }
+        scope.launch {
+            prefs.setWidgetSource(win)
+            prefs.setWidgetNext(next)
+        }
+    }
+
     fun play(station: Station, from: List<Station> = emptyList(), preserveOrder: Boolean = false) {
         var q = _queue.value
         if (from.isNotEmpty()) {
-            if (!preserveOrder) _baseSource = from
             // Cap the queued list to a bounded window around the tapped track so
             // a huge source (the whole local library) doesn't flood the queue.
             // The active order is linear, or shuffled if shuffle is on; the
@@ -381,6 +408,8 @@ class PlayerConnection(
 
         PlaybackBus.publishStation(station)
         PlaybackBus.publishSource(_source)
+        android.util.Log.d("cliamp/wid", "PLAY source.size=${_source.size} station=${station.name} preserve=$preserveOrder")
+        persistWidgetWindow(station)
         PlaybackBus.publishError(null)
         PlaybackBus.publishFormat(StreamFormat())
 
@@ -750,6 +779,7 @@ class PlayerConnection(
         PlaybackBus.publishSource(src)
         PlaybackBus.publishError(null)
         PlaybackBus.publishFormat(StreamFormat())
+        persistWidgetWindow(station)
         val prefs = (context.applicationContext as CliampApp).prefs
         scope.launch {
             prefs.setLastStation(station)

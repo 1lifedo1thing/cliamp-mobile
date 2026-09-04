@@ -42,6 +42,7 @@ object WidgetControl {
 
     private suspend fun <T> withController(context: Context, block: (MediaController) -> T): T? =
         withContext(Dispatchers.Main) {
+            val t0 = System.currentTimeMillis()
             val token = SessionToken(
                 context.applicationContext,
                 ComponentName(context.applicationContext, PlaybackService::class.java),
@@ -49,6 +50,7 @@ object WidgetControl {
             val controller = MediaController.Builder(context.applicationContext, token)
                 .buildAsync()
                 .await() ?: return@withContext null
+            android.util.Log.d("cliamp/wid", "controller build ms=${System.currentTimeMillis() - t0}")
             try {
                 block(controller)
             } finally {
@@ -58,49 +60,79 @@ object WidgetControl {
 
     suspend fun toggle(context: Context) {
         val app = context.applicationContext as CliampApp
-        val started = withController(context) { c ->
+        var target: Boolean? = null
+        withController(context) { c ->
             when {
-                c.isPlaying -> { c.pause(); true }
-                c.mediaItemCount > 0 -> { c.prepare(); c.play(); true }
-                else -> false
+                c.isPlaying -> { c.pause(); target = false }
+                c.mediaItemCount > 0 -> { c.prepare(); c.play(); target = true }
+                else -> target = null
             }
         }
-        if (started != true) {
+        if (target == null) {
             // nothing loaded yet: fall back to whatever was on last
             val station = app.prefs.readLastStation()
                 ?: app.repository.cliamp.value.firstOrNull()
                 ?: CliampRadio.builtin.first()
             tune(context, station)
+        } else {
+            // Reflect the flip immediately instead of waiting on a second
+            // controller round-trip, which is what made stop/resume lag.
+            app.prefs.setWidgetPlaying(target == true)
+            CliampWidgetReceiver.refresh(context)
         }
-        publish(context)
     }
 
     suspend fun step(context: Context, delta: Int) {
         val app = context.applicationContext as CliampApp
-        // Walk the list currently playing (local songs, favourites, a provider
-        // album, a directory); fall back to favourites, then cliamp's channels.
-        val list = PlaybackBus.source.value.ifEmpty {
-            app.prefs.favorites.first().ifEmpty { CliampRadio.builtin }
+        val t0 = System.currentTimeMillis()
+        // Walk the persisted window of the current list (local / radio /
+        // podcast) rather than the in-memory PlaybackBus, which is empty when
+        // the widget wakes a cold process and made prev/next fall back to the
+        // built-in radio channels. Falls back to favourites, then cliamp's
+        // channels, only when there is no window at all.
+        val list = app.prefs.widgetSource.first().ifEmpty {
+            PlaybackBus.source.value.ifEmpty {
+                app.prefs.favorites.first().ifEmpty { CliampRadio.builtin }
+            }
         }
         if (list.isEmpty()) return
         val here = PlaybackBus.station.value?.url ?: app.prefs.readLastStation()?.url
         val i = list.indexOfFirst { it.url == here }
-        tune(context, if (i < 0) list.first() else list[(i + delta + list.size) % list.size])
+        val target = if (i < 0) list.first() else list[(i + delta + list.size) % list.size]
+        android.util.Log.d("cliamp/wid", "step delta=$delta src=${list.size} here=$here target=${target.name} ms=${System.currentTimeMillis() - t0}")
+        tune(context, target)
     }
 
     suspend fun tune(context: Context, station: Station) {
         val app = context.applicationContext as CliampApp
+        val t0 = System.currentTimeMillis()
         PlaybackBus.publishStation(station)
         PlaybackBus.publishError(null)
         app.prefs.setLastStation(station)
         app.prefs.pushHistory(station)
 
+        // Reflect the tap immediately: the widget's up-next row and title must
+        // follow whatever was just tuned, instead of waiting on the service's
+        // next spectrum/state write. Anchored on the persisted window so it
+        // works even when the widget wakes a cold process.
+        val win = app.prefs.widgetSource.first()
+        if (win.isNotEmpty()) {
+            val j = win.indexOfFirst { it.url == station.url }
+            if (j >= 0) {
+                val up = (1..4).mapNotNull { k -> win[(j + k) % win.size] }
+                app.prefs.setWidgetNext(up)
+            }
+        }
+        app.prefs.setWidgetTrack(station.meta.orEmpty())
+
         val resolved = StreamResolver.resolve(station.url)
+        android.util.Log.d("cliamp/wid", "tune resolve ms=${System.currentTimeMillis() - t0}")
         withController(context) { c ->
             c.setMediaItem(PlaybackService.mediaItem(context, station, resolved))
             c.prepare()
             c.play()
         }
+        android.util.Log.d("cliamp/wid", "tune controller+play ms=${System.currentTimeMillis() - t0}")
         publish(context)
     }
 

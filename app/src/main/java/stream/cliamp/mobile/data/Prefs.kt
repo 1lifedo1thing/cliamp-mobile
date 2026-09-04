@@ -52,6 +52,8 @@ class Prefs(private val context: Context) {
         val wPlaying = booleanPreferencesKey("w_playing")
         val wTrack = stringPreferencesKey("w_track")
         val wSpectrum = stringPreferencesKey("w_spectrum")
+        val wNext = stringPreferencesKey("w_next")
+        val wSource = stringPreferencesKey("w_source")
     }
 
     val palette: Flow<String> = context.settingsStore.data.map { it[K.palette] ?: "system" }
@@ -79,6 +81,29 @@ class Prefs(private val context: Context) {
      */
     val widgetPlaying: Flow<Boolean> = context.settingsStore.data.map { it[K.wPlaying] ?: false }
     val widgetTrack: Flow<String> = context.settingsStore.data.map { it[K.wTrack] ?: "" }
+
+    /**
+     * The up-next stations (4 after the current one in the list being played)
+     * the widget shows under the meter. Written by the service whenever the
+     * now-playing or the list changes; empty when nothing is loaded.
+     */
+    val widgetNext: Flow<List<Station>> = context.settingsStore.data.map { p ->
+        p[K.wNext]?.let { raw ->
+            runCatching { Http.json.decodeFromString<List<Station>>(raw) }.getOrNull()
+        } ?: emptyList()
+    }
+
+    /**
+     * A bounded window of the list being played, centred on the current song,
+     * so the widget's prev/next can walk the right domain (local / radio /
+     * podcast) without relying on the in-memory PlaybackBus, which is empty on
+     * a cold process. Written by PlayerConnection whenever the list changes.
+     */
+    val widgetSource: Flow<List<Station>> = context.settingsStore.data.map { p ->
+        p[K.wSource]?.let { raw ->
+            runCatching { Http.json.decodeFromString<List<Station>>(raw) }.getOrNull()
+        } ?: emptyList()
+    }
 
     /**
      * A frozen 6-bar spectrum snapshot for the widget, as a comma-separated
@@ -115,6 +140,8 @@ class Prefs(private val context: Context) {
     suspend fun setWidgetPlaying(v: Boolean) = put(K.wPlaying, v)
     suspend fun setWidgetTrack(v: String) = put(K.wTrack, v)
     suspend fun setWidgetSpectrum(v: List<Float>) = put(K.wSpectrum, v.joinToString(","))
+    suspend fun setWidgetNext(v: List<Station>) = put(K.wNext, Http.json.encodeToString(v))
+    suspend fun setWidgetSource(v: List<Station>) = put(K.wSource, Http.json.encodeToString(v))
 
     suspend fun readLastStation(): Station? =
         context.settingsStore.data.first()[K.lastStation]

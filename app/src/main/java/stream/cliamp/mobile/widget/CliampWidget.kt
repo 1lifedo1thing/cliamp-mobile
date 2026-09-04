@@ -27,6 +27,7 @@ import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
@@ -39,7 +40,6 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import stream.cliamp.mobile.CliampApp
 import stream.cliamp.mobile.R
-import stream.cliamp.mobile.data.CliampRadio
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.ui.theme.CliampPalette
@@ -77,25 +77,7 @@ class CliampWidget : GlanceAppWidget() {
         val prefs = (context.applicationContext as CliampApp).prefs
 
         provideContent {
-            val station by prefs.lastStation.collectAsState(initial = null)
-            val playing by prefs.widgetPlaying.collectAsState(initial = false)
-            val track by prefs.widgetTrack.collectAsState(initial = "")
-            val spectrum by prefs.widgetSpectrum.collectAsState(initial = emptyList())
-            val favourites by prefs.favorites.collectAsState(initial = emptyList())
-            val paletteName by prefs.palette.collectAsState(initial = "system")
-
-            val systemDark = (context.resources.configuration.uiMode and
-                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-            // Resolved through paletteFor rather than mapped to dark-or-light
-            // here, so the widget actually wears the chosen theme. The old
-            // version only knew "light" and "system" and fell through to the
-            // dark green pair for everything else, which now means every
-            // default install - and which was already wrong for the light
-            // Omarchy themes.
-            val palette = paletteFor(paletteName, systemDark)
-            val tune = favourites.ifEmpty { CliampRadio.builtin }
-
-WidgetBody(station, track, playing, spectrum, tune, palette)
+            CliampWidgetContent(context, prefs)
         }
     }
 
@@ -107,17 +89,42 @@ WidgetBody(station, track, playing, spectrum, tune, palette)
 }
 
 @androidx.compose.runtime.Composable
+internal fun CliampWidgetContent(
+    context: Context,
+    prefs: stream.cliamp.mobile.data.Prefs,
+) {
+    val station by prefs.lastStation.collectAsState(initial = null)
+    val playing by prefs.widgetPlaying.collectAsState(initial = false)
+    val track by prefs.widgetTrack.collectAsState(initial = "")
+    val spectrum by prefs.widgetSpectrum.collectAsState(initial = emptyList())
+    val paletteName by prefs.palette.collectAsState(initial = "system")
+
+    val systemDark = (context.resources.configuration.uiMode and
+        Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+    // Resolved through paletteFor rather than mapped to dark-or-light
+    // here, so the widget actually wears the chosen theme. The old
+    // version only knew "light" and "system" and fell through to the
+    // dark green pair for everything else, which now means every
+    // default install - and which was already wrong for the light
+    // Omarchy themes.
+    val palette = paletteFor(paletteName, systemDark)
+
+WidgetBody(station, track, playing, spectrum, palette)
+}
+
+@androidx.compose.runtime.Composable
 private fun WidgetBody(
     station: Station?,
     track: String,
     playing: Boolean,
     spectrum: List<Float>,
-    tune: List<Station>,
     p: CliampPalette,
 ) {
     val size = LocalSize.current
     val wide = size.width >= 220.dp
-    val tall = size.height >= 120.dp
+    // Big enough to show the visualizer: content pins to the top. Small: the
+    // player block just centres itself in the full widget height instead.
+    val big = size.height >= 120.dp
 
     Column(
         GlanceModifier
@@ -125,10 +132,10 @@ private fun WidgetBody(
             .cornerRadius(18.dp)
             .background(ColorProvider(p.ground))
             .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.Vertical.CenterVertically,
+        verticalAlignment = if (big) Alignment.Top else Alignment.Vertical.CenterVertically,
     ) {
-        Row(
-            GlanceModifier.fillMaxWidth().clickable(actionRunCallback<OpenAppAction>()),
+    Row(
+        GlanceModifier.fillMaxWidth().clickable(actionRunCallback<OpenAppAction>()),
             verticalAlignment = Alignment.Vertical.CenterVertically,
         ) {
             Column(GlanceModifier.defaultWeight()) {
@@ -167,25 +174,15 @@ private fun WidgetBody(
             }
         }
 
-        if (wide) {
+        if (wide && big) {
             Spacer(GlanceModifier.height(10.dp))
             if (playing && spectrum.isNotEmpty()) {
-                // The widget's visualizer: the service downsampled the live
-                // spectrum into a handful of bars and wrote it here, so this
-                // renders as a (static between refreshes) spectrum meter.
-                SpectrumBars(spectrum, p)
+                // Brick meter, mirroring the in-app visualizer: a bottom-up
+                // stack of lit bricks over an unlit grid, with a bright peak
+                // cap floating one brick above the current level.
+                BrickMeter(spectrum, p, GlanceModifier.defaultWeight())
             } else {
                 StreamingRule(if (playing) "streaming" else "stopped", p, dim = !playing)
-            }
-        }
-
-        if (tall) {
-            Spacer(GlanceModifier.height(10.dp))
-            Row(GlanceModifier.fillMaxWidth()) {
-                tune.take(4).forEachIndexed { i, s ->
-                    if (i > 0) Spacer(GlanceModifier.width(6.dp))
-                    TuneChip(s, active = s.url == station?.url, palette = p, modifier = GlanceModifier.defaultWeight())
-                }
             }
         }
     }
@@ -204,28 +201,61 @@ private fun StreamingRule(label: String, p: stream.cliamp.mobile.ui.theme.Cliamp
 }
 
 /**
- * The widget's static spectrum visualizer: a row of bars whose heights mirror
- * the downsampled snapshot the service persisted. Bars are drawn bottom-up,
- * tallest (i.e. the lowest accent looks like a meter sitting on the baseline).
+ * The widget's static brick meter, matching the in-app visualizer's look.
+ * Widgets cannot animate or draw, so the service's downsampled snapshot
+ * becomes a fixed arrangement of bricks: an unlit grid at full height, lit
+ * accent bricks climbing from the baseline, and a bright peak cap one brick
+ * above the level. The brick pitch, not a flat bar, is what sells the match.
  */
 @androidx.compose.runtime.Composable
-private fun SpectrumBars(bars: List<Float>, p: stream.cliamp.mobile.ui.theme.CliampPalette) {
-    val active = p.accent
-    Column(GlanceModifier.fillMaxWidth()) {
-        Spacer(GlanceModifier.height(2.dp))
-        Row(GlanceModifier.fillMaxWidth().height(20.dp)) {
-            // Normalise so the bar that carries the most level sits at full height.
-            val max = (bars.maxOrNull() ?: 0f).coerceAtLeast(0.12f)
-            bars.forEachIndexed { i, v ->
-                val h = (6f + (v / max) * 12f).dp
-                Box(
-                    GlanceModifier
-                        .defaultWeight()
-                        .height(h)
-                        .background(ColorProvider(if (i % 2 == 0) active else p.track)),
-                ) {}
-                if (i < bars.lastIndex) {
-                    Box(GlanceModifier.width(4.dp).height(20.dp).background(ColorProvider(p.ground))) {}
+private fun BrickMeter(bars: List<Float>, p: stream.cliamp.mobile.ui.theme.CliampPalette, modifier: GlanceModifier) {
+    // Mirrors the expanded player's NowPlaying meter exactly: 24 columns to a
+    // row, small bricks stacked from the bottom edge (so the phase never
+    // shifts) with a bright peak cap riding the lit edge and a column gap
+    // between each bar. The widget width is shared out across the columns the
+    // same way, so the meter just fills whatever width it's given.
+    val size = LocalSize.current
+    val brick = 4.dp
+    val gap = 3.dp
+    val colGap = 3.dp
+    val step = brick + gap
+    // The meter sits below the header, which eats roughly 54dp of the widget
+    // height. More height means more rows of the same small, fixed bricks -
+    // never bigger ones - and the count is rounded UP so the grid tiles all
+    // the way to the top (any tiny overshoot clips at the widget edge instead
+    // of leaving a gap), filling the full height exactly like in-app.
+    val rows = ((size.height - 54.dp + step - 1.dp) / step).toInt().coerceIn(3, 30)
+    val columns = 24
+    val n = bars.size.coerceAtLeast(1)
+
+    Row(
+        modifier.fillMaxWidth().fillMaxHeight(),
+        verticalAlignment = Alignment.Vertical.CenterVertically,
+    ) {
+        for (c in 0 until columns) {
+            if (c > 0) Spacer(GlanceModifier.width(colGap))
+            val level = bars[((c * n) / columns).coerceIn(0, n - 1)].coerceIn(0f, 1f)
+            val litRows = (level * rows).toInt().coerceIn(0, rows)
+            val peakRow = if (litRows < rows) litRows else -1
+            Column(GlanceModifier.defaultWeight().fillMaxHeight()) {
+                // Flex spacer absorbs any slack so the fixed-size brick stack
+                // always anchors to the bottom of the widget - the meter runs
+                // from the bottom of the player down to the bottom edge, no
+                // matter how tall the widget is.
+                Spacer(GlanceModifier.defaultWeight())
+                for (r in rows - 1 downTo 0) {
+                    val color = when {
+                        r == peakRow -> p.peak
+                        r < litRows -> p.accent
+                        else -> p.unlit
+                    }
+                    Box(
+                        GlanceModifier
+                            .fillMaxWidth()
+                            .height(brick)
+                            .background(ColorProvider(color)),
+                    ) {}
+                    if (r > 0) Spacer(GlanceModifier.height(gap))
                 }
             }
         }
@@ -269,31 +299,6 @@ private fun Key(
             contentDescription = null,
             modifier = GlanceModifier.size(width = iconWidth, height = iconHeight),
             colorFilter = ColorFilter.tint(ColorProvider(fg)),
-        )
-    }
-}
-
-@androidx.compose.runtime.Composable
-private fun TuneChip(
-    station: Station,
-    active: Boolean,
-    palette: stream.cliamp.mobile.ui.theme.CliampPalette,
-    modifier: GlanceModifier,
-) {
-    val bg = if (active) palette.accent else palette.panel
-    val fg = if (active) palette.onAccent else palette.inkSecondary
-    Box(
-        modifier
-            .height(32.dp)
-            .cornerRadius(6.dp)
-            .background(ColorProvider(bg))
-            .clickable(actionRunCallback<TuneAction>(tuneParams(station))),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            station.name.lowercase().take(9),
-            style = mono(10, FontWeight.Normal, fg),
-            maxLines = 1,
         )
     }
 }

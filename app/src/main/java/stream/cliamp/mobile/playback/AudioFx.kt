@@ -79,6 +79,8 @@ class AudioFx(private val bands: Int = 64) {
                 )
                 enabled = true
             }
+        }.onSuccess {
+            Log.d("cliamp/wid", "ATTACH visualizer ok session=$audioSessionId")
         }.onFailure {
             Log.w(TAG, "visualizer unavailable (RECORD_AUDIO?): ${it.message}")
             visualizer = null

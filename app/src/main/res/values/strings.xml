@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">cliamp</string>
-    <string name="widget_name">cliamp radio</string>
-    <string name="widget_description">Tune a station and control playback from the home screen.</string>
+    <string name="widget_name">cliamp</string>
+    <string name="widget_description">Control playback and see the live visualizer from the home screen.</string>
     <string name="tile_label">cliamp</string>
 </resources>
