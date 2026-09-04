@@ -297,10 +297,10 @@ fun NowPlayingScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.Bottom,
                     ) {
-                        Mono(clock(state.positionMs), CliampType.rowSecondary, p.inkSecondary)
+                        Mono(clock(state.positionMs), CliampType.time, p.inkSecondary)
                         Mono(
                             "-" + clock((state.durationMs - state.positionMs).coerceAtLeast(0)),
-                            CliampType.rowSecondary,
+                            CliampType.time,
                             p.inkSecondary,
                         )
                     }
@@ -327,11 +327,11 @@ fun NowPlayingScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.Bottom,
                     ) {
-                        Mono(clock(state.positionMs), CliampType.rowSecondary, p.inkSecondary)
+                        Mono(clock(state.positionMs), CliampType.time, p.inkSecondary)
                         Mono(
                             if (state.playing) "${state.bufferedMs / 1000}s buffered"
                             else "tap the meter for scope · eq",
-                            CliampType.meta,
+                            CliampType.timeSmall,
                             p.inkFaint,
                             maxLines = 1,
                         )

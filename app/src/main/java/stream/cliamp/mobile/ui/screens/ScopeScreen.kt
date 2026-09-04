@@ -106,7 +106,7 @@ fun ScopeScreen(
         Column(Modifier.fillMaxWidth().padding(horizontal = Gutter)) {
             Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 Mono("PEAK", CliampType.sectionLabel, p.inkFaint)
-                Mono("%.0f dB".format(peakDb.coerceIn(-48f, 0f)), CliampType.rowSecondary, p.accent)
+                Mono("%.0f dB".format(peakDb.coerceIn(-48f, 0f)), CliampType.datum, p.accent)
             }
             BrickMeter(
                 frame = frame,

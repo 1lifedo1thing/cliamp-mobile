@@ -283,7 +283,7 @@ private fun EpisodeResumeRow(
         },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                progress?.let { Mono(remaining(it), CliampType.meta, p.amber) }
+                progress?.let { Mono(remaining(it), CliampType.timeSmall, p.amber) }
                 OverflowMenu(
                     trigger = { open -> OverflowButton(open) },
                     items = listOf(

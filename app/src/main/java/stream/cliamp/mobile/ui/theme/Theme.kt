@@ -90,7 +90,7 @@ fun CliampTheme(
     }
 }
 
-/** Terse text helper: everything is monospace, so style + colour is all we pass. */
+/** Terse text helper: the style carries its own family, so style + colour is all we pass. */
 @Composable
 fun Mono(
     text: String,
