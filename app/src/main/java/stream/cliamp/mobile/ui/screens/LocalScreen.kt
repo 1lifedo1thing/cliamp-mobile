@@ -825,13 +825,20 @@ private fun PlaylistDetailShown(
     val members = playlist.songIds.mapNotNull { id -> songs.firstOrNull { it.id == id } }
 
     if (adding && allSongs.isNotEmpty()) {
-        // add mode: show all songs with a check affordance
+        // add mode: show all songs with a check affordance. The header carries
+        // the done control (and a live count) so it is always visible instead
+        // of being buried at the bottom of the scroll.
         LazyColumn(Modifier.fillMaxSize()) {
             item {
-                Row(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp)) {
-                    Mono(playlist.station.name, CliampType.chip, p.accent)
-                    Spacer(Modifier.width(8.dp))
-                    Mono("· tap to add", CliampType.meta, p.inkTertiary)
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Mono(playlist.station.name, CliampType.chip, p.accent, maxLines = 1)
+                    Spacer(Modifier.weight(1f))
+                    Mono("${songIds.size} selected", CliampType.meta, p.inkTertiary)
+                    Chip("done", selected = false, onClick = doneAdding)
                 }
             }
             items(allSongs, key = { it.id }) { s ->
@@ -853,11 +860,6 @@ private fun PlaylistDetailShown(
                 ) {
                     Mono(s.name, CliampType.rowPrimary, p.ink, maxLines = 1)
                     Mono(if (s.artist.isNotBlank()) s.artist else s.meta, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
-                }
-            }
-            item {
-                Row(Modifier.fillMaxWidth().padding(Gutter).horizontalScroll(rememberScrollState())) {
-                    Chip("done", selected = false, onClick = doneAdding)
                 }
             }
             item { Spacer(Modifier.height(16.dp)) }
