@@ -155,14 +155,14 @@ fun BoxScope.TabCorners(
             Modifier
                 .size(22.dp)
                 .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onOpenSearch),
-            tint = p.inkSecondary,
+            tint = p.accent,
         )
         Icon(
             CliampIcons.Gear, "settings",
             Modifier
                 .size(22.dp)
                 .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onOpenSettings),
-            tint = p.inkSecondary,
+            tint = p.accent,
         )
     }
 }
