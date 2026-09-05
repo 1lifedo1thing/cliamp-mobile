@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
@@ -193,6 +194,76 @@ private fun TabItem(
 
 private fun Modifier.offsetTopBorder(color: Color) = drawBehind {
     drawRect(color = color, topLeft = Offset(0f, -1.dp.toPx()), size = Size(size.width, 2.dp.toPx()))
+}
+
+/**
+ * The landscape tab bar: a slim vertical rail on the left edge instead of the
+ * bottom strip, so the horizontal frame keeps its full height for content.
+ * Same four tabs, same active accent - just rotated.
+ */
+@Composable
+fun CliampTabRail(
+    current: Tab,
+    onSelect: (Tab) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    Row(modifier.fillMaxHeight().background(p.ground)) {
+        Column(
+            Modifier
+                .width(78.dp)
+                .fillMaxHeight()
+                .padding(top = statusTop + 10.dp, bottom = navBottom + 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Tab.entries.forEach { tab ->
+                RailItem(
+                    tab = tab,
+                    active = tab == current,
+                    onClick = { onSelect(tab) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        Box(Modifier.width(1.dp).fillMaxHeight().background(p.hairlineRegion))
+    }
+}
+
+@Composable
+private fun RailItem(
+    tab: Tab,
+    active: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    val tint = if (active) p.accent else p.inkTertiary
+    Column(
+        modifier
+            .width(70.dp)
+            .then(if (active) Modifier.offsetLeftBorder(p.accent) else Modifier)
+            .clip(RoundedCornerShape(7.dp))
+            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterVertically),
+    ) {
+        Box(Modifier.height(17.dp), contentAlignment = Alignment.Center) {
+            when (tab) {
+                Tab.Lib -> Icon(CliampIcons.LibTab, null, Modifier.size(17.dp), tint = tint)
+                Tab.Stations -> Icon(CliampIcons.StationsTab, null, Modifier.size(17.dp), tint = tint)
+                Tab.Pods -> Icon(CliampIcons.PodsTab, null, Modifier.size(17.dp), tint = tint)
+                Tab.Cmd -> Icon(CliampIcons.SearchTab, null, Modifier.size(17.dp), tint = tint)
+            }
+        }
+        Mono(tab.label, CliampType.tabLabel, tint, maxLines = 1)
+    }
+}
+
+private fun Modifier.offsetLeftBorder(color: Color) = drawBehind {
+    drawRect(color = color, topLeft = Offset(0f, 0f), size = Size(2.dp.toPx(), size.height))
 }
 
 /**

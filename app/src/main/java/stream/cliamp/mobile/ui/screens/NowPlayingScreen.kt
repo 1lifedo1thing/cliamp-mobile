@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +48,7 @@ import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.playback.PlayerConnection
+import stream.cliamp.mobile.playback.PlayerState
 import stream.cliamp.mobile.ui.clock
 import stream.cliamp.mobile.ui.compact
 import stream.cliamp.mobile.ui.components.BrickMeter
@@ -92,6 +95,31 @@ private fun Modifier.consumeAllGestures(): Modifier = this.pointerInput(Unit) {
     }
 }
 
+/** Everything the player screen needs to draw, read once per frame. */
+private data class PlayerModel(
+    val state: PlayerState,
+    val shownStation: Station?,
+    val streamTitle: String,
+    val reconnect: Int,
+    val error: String?,
+    val isFav: Boolean,
+    val shuffled: Boolean,
+    val visualizer: String,
+    val spectrum: State<FloatArray>,
+)
+
+/** Every control the player screen can take, so both layouts share one set. */
+private data class PlayerActions(
+    val onBack: () -> Unit,
+    val onToggleShuffle: () -> Unit,
+    val onOpenScope: () -> Unit,
+    val onToggleFav: () -> Unit,
+    val onSeek: (Float) -> Unit,
+    val onPrev: () -> Unit,
+    val onPlayPause: () -> Unit,
+    val onNext: () -> Unit,
+)
+
 @UnstableApi
 @Composable
 fun NowPlayingScreen(
@@ -112,15 +140,37 @@ fun NowPlayingScreen(
     val favorites by prefs.favorites.collectAsState(initial = emptyList())
     val recent by prefs.history.collectAsState(initial = emptyList())
     val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
+    val shuffled by player.shuffle.collectAsState()
+    val spectrumSource = PlaybackBus.spectrum.collectAsState()
 
     // Before anything has been played this session the live bus carries no
     // station, so fall back to the last-played station from history - the same
     // fallback the mini bar uses - rather than showing an empty "no track".
     val lastPlayed = recent.firstOrNull()
     val shownStation = station ?: lastPlayed
-
-    val spectrumSource = PlaybackBus.spectrum.collectAsState()
     val isFav = shownStation != null && favorites.any { it.url == shownStation.url }
+
+    val model = PlayerModel(
+        state = state,
+        shownStation = shownStation,
+        streamTitle = streamTitle,
+        reconnect = reconnect,
+        error = error,
+        isFav = isFav,
+        shuffled = shuffled,
+        visualizer = visualizer,
+        spectrum = spectrumSource,
+    )
+    val actions = PlayerActions(
+        onBack = onBack,
+        onToggleShuffle = { player.toggleShuffle() },
+        onOpenScope = onOpenScope,
+        onToggleFav = { shownStation?.let { s -> scope.launch { prefs.toggleFavorite(s) } } },
+        onSeek = { player.seekTo(it) },
+        onPrev = { player.prev() },
+        onPlayPause = { player.toggle(station ?: shownStation) },
+        onNext = { player.next() },
+    )
 
     Box(Modifier.fillMaxSize()) {
         // Whole-overlay blocker, drawn FIRST (bottom-most) so every interactive
@@ -131,21 +181,35 @@ fun NowPlayingScreen(
         // stays composed behind this overlay. Being a sibling (not an ancestor)
         // of the scrubber means it never swallows drag-to-seek.
         Box(Modifier.fillMaxSize().consumeAllGestures())
-    Column(Modifier.fillMaxSize().background(p.ground).statusBarsPadding()) {
+
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            // Wide frames (landscape phones, tablets on their side) split the
+            // player across the frame: art on the left, transport on the right.
+            // Portrait keeps the original single-column stack untouched.
+            if (maxWidth > maxHeight) {
+                LandscapePlayer(model, actions, frameWidth = maxWidth, frameHeight = maxHeight)
+            } else {
+                PortraitPlayer(model, actions)
+            }
+        }
+    }
+}
+
+/** The portrait player: art plate over text, meter, then the transport. */
+@Composable
+private fun PortraitPlayer(
+    model: PlayerModel,
+    actions: PlayerActions,
+    modifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    Column(modifier.fillMaxSize().background(p.ground).statusBarsPadding()) {
         Row(
             Modifier.fillMaxWidth().padding(start = Gutter, top = 6.dp, end = 16.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .padding(horizontal = 8.dp, vertical = 6.dp)
-                    .clickable(onClick = onBack),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(CliampIcons.Down, "back", Modifier.size(width = 16.dp, height = 10.dp), tint = p.ink)
-            }
+            BackChevron(onClick = actions.onBack)
         }
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
         // it is the first thing to give way. Compose has no shrink factor, so
@@ -159,224 +223,354 @@ fun NowPlayingScreen(
             val reserved = 356.dp
             val artSide = minOf(maxWidth - Gutter * 2, (maxHeight - reserved)).coerceIn(96.dp, 284.dp)
 
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(horizontal = Gutter),
-            verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterVertically),
-        ) {
-            // The art plate and the text block below it share a flexed block
-            // that absorbs however tall a long station name or stream title
-            // grows, so the meter and the transport beneath stay pinned and
-            // never shrink or shift when the names change length.
             Column(
                 Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxSize()
+                    .padding(horizontal = Gutter),
                 verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterVertically),
             ) {
-            StationArt(
-                station = shownStation,
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .size(artSide),
-            )
-
-            // The station name, stream title and meta line below the plate are
-            // gesture-inert: taps and swipes on them (or anywhere around the
-            // centre of the expanded player) can never advance or restart the
-            // song. Only the small action icons in the strip above stay live.
-            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                // The art plate and the text block below it share a flexed block
+                // that absorbs however tall a long station name or stream title
+                // grows, so the meter and the transport beneath stay pinned and
+                // never shrink or shift when the names change length.
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterVertically),
                 ) {
-                    Icon(CliampIcons.PlayTiny, null, Modifier.size(width = 9.dp, height = 10.dp), tint = p.accent)
-                    Mono(
-                        when {
-                            reconnect > 0 -> "RECONNECTING · $reconnect"
-                            error != null -> "STREAM ERROR"
-                            state.buffering -> "BUFFERING"
-                            state.playing -> "ON AIR"
-                            shownStation != null -> "PAUSED"
-                            else -> "NOTHING TUNED"
-                        },
-                        CliampType.nowPlayingLabel,
-                        when {
-                            reconnect > 0 -> p.amber
-                            error != null -> p.destructiveInk
-                            else -> p.accent
-                        },
-                        modifier = Modifier.consumeAllGestures(),
-                    )
-
-                    Spacer(
-                        Modifier
-                            .weight(1f)
-                            .height(18.dp)
-                            .consumeAllGestures(),
-                    )
-
-                    val shuffled by player.shuffle.collectAsState()
-                    SmallAction(
-                        CliampIcons.Shuffle,
-                        if (shuffled) "stop shuffling" else "shuffle",
-                        tint = if (shuffled) p.accent else p.inkSecondary,
-                    ) { player.toggleShuffle() }
-                    SmallAction(CliampIcons.MeterSmall, "scope and equaliser", onClick = onOpenScope)
-                    SmallAction(
-                        if (isFav) CliampIcons.StarFilled else CliampIcons.Star,
-                        if (isFav) "remove favourite" else "favourite",
-                        tint = if (isFav) p.accent else p.inkTertiary,
-                    ) { shownStation?.let { s -> scope.launch { prefs.toggleFavorite(s) } } }
-                }
-                MarqueeLabel(
-                    shownStation?.name ?: "pick a station",
-                    CliampType.trackTitle,
-                    p.ink,
-                    modifier = Modifier.consumeAllGestures(),
-                )
-                MarqueeLabel(
-                    streamTitle.ifBlank { error ?: artistOrTagLine(shownStation) },
-                    CliampType.rowPrimary,
-                    if (error != null && streamTitle.isBlank()) p.destructiveInk else p.inkSecondary,
-                    modifier = Modifier.consumeAllGestures(),
-                )
-                Mono(
-                    buildList {
-                        shownStation?.let { s ->
-                            add(
-                                when (s.source) {
-                                    StationSource.Cliamp -> "cliamp radio"
-                                    StationSource.Directory -> "directory"
-                                    StationSource.Local -> "on device"
-                                    StationSource.Provider -> "provider"
-                                    StationSource.Podcast -> "podcast"
-                                    StationSource.Custom -> "custom"
-                                }
-                            )
-                            if (s.country.isNotBlank() && s.source != StationSource.Cliamp) add(s.country.lowercase())
-                            if (s.votes > 0) add("${compact(s.votes)} votes")
-                        }
-                    }.joinToString(" · ").ifBlank { "12 cliamp channels · 50k+ directory" },
-                    CliampType.body,
-                    p.inkTertiary,
-                    modifier = Modifier.consumeAllGestures(),
-                    maxLines = 1,
-                )
-            }
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
-                // The meter is the visualizer: when the setting is off it is
-                // removed entirely, not just fed idle data - so neither the
-                // frame loop nor a static brick grid exists in the player.
-                if (visualizer != "off") {
-                    val frame = rememberMeter(
-                        columns = MeterSize.NowPlaying.columns,
-                        live = state.playing,
-                        spectrum = spectrumSource,
-                    )
-                    BrickMeter(
-                        frame = frame,
+                    StationArt(
+                        station = model.shownStation,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(MeterSize.NowPlaying.height)
-                            .consumeAllGestures(),
-                        brick = MeterSize.NowPlaying.brick,
-                        gap = MeterSize.NowPlaying.gap,
+                            .align(Alignment.CenterHorizontally)
+                            .size(artSide),
                     )
-                }
 
-                // What the transport shows follows what the player says the
-                // source can do, not what kind of station it is. A local file
-                // and a provider track scrub; ICY radio does not.
-                if (state.scrubbable && reconnect == 0 && error == null) {
-                    Scrubber(
-                        fraction = state.positionMs.toFloat() / state.durationMs,
-                        onSeek = { player.seekTo(it) },
-                    )
-                    Row(
-                        Modifier.fillMaxWidth().consumeAllGestures(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Bottom,
-                    ) {
-                        Mono(clock(state.positionMs), CliampType.time, p.inkSecondary)
-                        Mono(
-                            "-" + clock((state.durationMs - state.positionMs).coerceAtLeast(0)),
-                            CliampType.time,
-                            p.inkSecondary,
+                    // The station name, stream title and meta line below the
+                    // plate are gesture-inert: taps and swipes on them (or
+                    // anywhere around the centre of the expanded player) can
+                    // never advance or restart the song. Only the small action
+                    // icons in the strip above stay live.
+                    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        PlayerStatusRow(
+                            model = model,
+                            actions = actions,
                         )
-                    }
-                } else {
-                    StreamingRule(
-                        label = when {
-                            reconnect > 0 -> "reconnecting"
-                            error != null -> "no signal"
-                            state.buffering -> "buffering"
-                            state.playing -> "streaming"
-                            shownStation != null -> "paused"
-                            else -> "stopped"
-                        },
-                        modifier = Modifier.consumeAllGestures(),
-                        color = when {
-                            reconnect > 0 -> p.amber
-                            error != null -> p.destructiveInk
-                            else -> p.accent
-                        },
-                        dim = !state.playing && reconnect == 0,
-                    )
-                    Row(
-                        Modifier.fillMaxWidth().consumeAllGestures(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Bottom,
-                    ) {
-                        Mono(clock(state.positionMs), CliampType.time, p.inkSecondary)
-                        Mono(
-                            if (state.playing) "${state.bufferedMs / 1000}s buffered"
-                            else "tap the meter for scope · eq",
-                            CliampType.timeSmall,
-                            p.inkFaint,
-                            maxLines = 1,
-                        )
+                        PlayerMeta(model)
                     }
                 }
+
+                PlayerTransport(model, actions)
+
+                TransportKeys(model, actions)
             }
-
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                    MechKey(
-                        onClick = { player.prev() },
-                        modifier = Modifier.weight(1f),
-                        enabled = state.hasPrev,
-                    ) { Icon(CliampIcons.Prev, "previous station", Modifier.size(width = 21.dp, height = 17.dp)) }
-
-                    MechKey(
-                        onClick = { player.toggle(station ?: shownStation) },
-                        modifier = Modifier.weight(1.7f),
-                        filled = true,
-                    ) {
-                        if (state.playing) {
-                            Icon(CliampIcons.Pause, "pause", Modifier.size(width = 20.dp, height = 22.dp))
-                        } else {
-                            Icon(CliampIcons.PlayTab, "play", Modifier.size(22.dp))
-                        }
-                    }
-
-                    MechKey(
-                        onClick = { player.next() },
-                        modifier = Modifier.weight(1f),
-                        enabled = state.hasNext,
-                    ) { Icon(CliampIcons.Next, "next station", Modifier.size(width = 21.dp, height = 17.dp)) }
-                }
-
-            }
-        }
         }
         Spacer(Modifier.height(10.dp))
     }
+}
+
+/**
+ * The landscape player: art plate on the left, everything else on the right.
+ * The transport keeps its full height of keys instead of conceding them to a
+ * short portrait column, and the meter/queue/now-tuned rows pin to the bottom
+ * of the right pane while the title block flexes above them.
+ */
+@Composable
+private fun LandscapePlayer(
+    model: PlayerModel,
+    actions: PlayerActions,
+    frameWidth: androidx.compose.ui.unit.Dp,
+    frameHeight: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    Row(
+        modifier
+            .fillMaxSize()
+            .background(p.ground)
+            .statusBarsPadding()
+            .padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val side = minOf(frameHeight - 24.dp, (frameWidth - Gutter * 2) * 0.44f).coerceIn(96.dp, 284.dp)
+        Box(
+            Modifier
+                .weight(0.95f)
+                .fillMaxHeight(),
+            contentAlignment = Alignment.Center,
+        ) {
+            StationArt(
+                station = model.shownStation,
+                modifier = Modifier.size(side),
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(
+            Modifier
+                .weight(1.05f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(end = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BackChevron(onClick = actions.onBack)
+                Spacer(Modifier.width(10.dp))
+                PlayerStatusRow(
+                    model = model,
+                    actions = actions,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            PlayerMeta(model)
+            Spacer(Modifier.weight(1f))
+            PlayerTransport(model, actions)
+            TransportKeys(model, actions)
+        }
     }
+}
+
+/** The status strip: ON AIR / BUFFERING badge, then the shuffle-scope-fav keys. */
+@Composable
+private fun PlayerStatusRow(
+    model: PlayerModel,
+    actions: PlayerActions,
+    modifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    Row(
+        modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(CliampIcons.PlayTiny, null, Modifier.size(width = 9.dp, height = 10.dp), tint = p.accent)
+        Mono(
+            statusLabel(model),
+            CliampType.nowPlayingLabel,
+            statusColor(model),
+            modifier = Modifier.consumeAllGestures(),
+        )
+        Spacer(
+            Modifier
+                .weight(1f)
+                .height(18.dp)
+                .consumeAllGestures(),
+        )
+        SmallAction(
+            CliampIcons.Shuffle,
+            if (model.shuffled) "stop shuffling" else "shuffle",
+            tint = if (model.shuffled) p.accent else p.inkSecondary,
+        ) { actions.onToggleShuffle() }
+        SmallAction(CliampIcons.MeterSmall, "scope and equaliser", onClick = actions.onOpenScope)
+        SmallAction(
+            if (model.isFav) CliampIcons.StarFilled else CliampIcons.Star,
+            if (model.isFav) "remove favourite" else "favourite",
+            tint = if (model.isFav) p.accent else p.inkTertiary,
+        ) { actions.onToggleFav() }
+    }
+}
+
+/** The station name, stream title and source meta line. All gesture-inert. */
+@Composable
+private fun PlayerMeta(
+    model: PlayerModel,
+    modifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        MarqueeLabel(
+            model.shownStation?.name ?: "pick a station",
+            CliampType.trackTitle,
+            p.ink,
+            modifier = Modifier.consumeAllGestures(),
+        )
+        MarqueeLabel(
+            model.streamTitle.ifBlank { model.error ?: artistOrTagLine(model.shownStation) },
+            CliampType.rowPrimary,
+            if (model.error != null && model.streamTitle.isBlank()) p.destructiveInk else p.inkSecondary,
+            modifier = Modifier.consumeAllGestures(),
+        )
+        Mono(
+            sourceLine(model.shownStation),
+            CliampType.body,
+            p.inkTertiary,
+            modifier = Modifier.consumeAllGestures(),
+            maxLines = 1,
+        )
+    }
+}
+
+/** The meter/scrubber zone plus its time readout, shared by both layouts. */
+@Composable
+private fun PlayerTransport(
+    model: PlayerModel,
+    actions: PlayerActions,
+    modifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(11.dp)) {
+        // The meter is the visualizer: when the setting is off it is
+        // removed entirely, not just fed idle data - so neither the
+        // frame loop nor a static brick grid exists in the player.
+        if (model.visualizer != "off") {
+            val frame = rememberMeter(
+                columns = MeterSize.NowPlaying.columns,
+                live = model.state.playing,
+                spectrum = model.spectrum,
+            )
+            BrickMeter(
+                frame = frame,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(MeterSize.NowPlaying.height)
+                    .consumeAllGestures(),
+                brick = MeterSize.NowPlaying.brick,
+                gap = MeterSize.NowPlaying.gap,
+            )
+        }
+
+        // What the transport shows follows what the player says the
+        // source can do, not what kind of station it is. A local file
+        // and a provider track scrub; ICY radio does not.
+        if (model.state.scrubbable && model.reconnect == 0 && model.error == null) {
+            Scrubber(
+                fraction = model.state.positionMs.toFloat() / model.state.durationMs,
+                onSeek = actions.onSeek,
+            )
+            Row(
+                Modifier.fillMaxWidth().consumeAllGestures(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Mono(clock(model.state.positionMs), CliampType.time, p.inkSecondary)
+                Mono(
+                    "-" + clock((model.state.durationMs - model.state.positionMs).coerceAtLeast(0)),
+                    CliampType.time,
+                    p.inkSecondary,
+                )
+            }
+        } else {
+            StreamingRule(
+                label = transportLabel(model),
+                modifier = Modifier.consumeAllGestures(),
+                color = statusColor(model),
+                dim = !model.state.playing && model.reconnect == 0,
+            )
+            Row(
+                Modifier.fillMaxWidth().consumeAllGestures(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Mono(clock(model.state.positionMs), CliampType.time, p.inkSecondary)
+                Mono(
+                    if (model.state.playing) "${model.state.bufferedMs / 1000}s buffered"
+                    else "tap the meter for scope · eq",
+                    CliampType.timeSmall,
+                    p.inkFaint,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+/** The prev / play-pause / next row. */
+@Composable
+private fun TransportKeys(
+    model: PlayerModel,
+    actions: PlayerActions,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+        MechKey(
+            onClick = actions.onPrev,
+            modifier = Modifier.weight(1f),
+            enabled = model.state.hasPrev,
+        ) { Icon(CliampIcons.Prev, "previous station", Modifier.size(width = 21.dp, height = 17.dp)) }
+
+        MechKey(
+            onClick = actions.onPlayPause,
+            modifier = Modifier.weight(1.7f),
+            filled = true,
+        ) {
+            if (model.state.playing) {
+                Icon(CliampIcons.Pause, "pause", Modifier.size(width = 20.dp, height = 22.dp))
+            } else {
+                Icon(CliampIcons.PlayTab, "play", Modifier.size(22.dp))
+            }
+        }
+
+        MechKey(
+            onClick = actions.onNext,
+            modifier = Modifier.weight(1f),
+            enabled = model.state.hasNext,
+        ) { Icon(CliampIcons.Next, "next station", Modifier.size(width = 21.dp, height = 17.dp)) }
+    }
+}
+
+/** The collapse chip at the top-left, shared by both layouts. */
+@Composable
+private fun BackChevron(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val p = LocalPalette.current
+    Box(
+        modifier
+            .clip(RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(CliampIcons.Down, "back", Modifier.size(width = 16.dp, height = 10.dp), tint = p.ink)
+    }
+}
+
+private fun statusLabel(model: PlayerModel): String = when {
+    model.reconnect > 0 -> "RECONNECTING · ${model.reconnect}"
+    model.error != null -> "STREAM ERROR"
+    model.state.buffering -> "BUFFERING"
+    model.state.playing -> "ON AIR"
+    model.shownStation != null -> "PAUSED"
+    else -> "NOTHING TUNED"
+}
+
+@Composable
+private fun statusColor(model: PlayerModel): androidx.compose.ui.graphics.Color {
+    val p = LocalPalette.current
+    return when {
+        model.reconnect > 0 -> p.amber
+        model.error != null -> p.destructiveInk
+        else -> p.accent
+    }
+}
+
+private fun transportLabel(model: PlayerModel): String = when {
+    model.reconnect > 0 -> "reconnecting"
+    model.error != null -> "no signal"
+    model.state.buffering -> "buffering"
+    model.state.playing -> "streaming"
+    model.shownStation != null -> "paused"
+    else -> "stopped"
+}
+
+/** The "cliamp radio · france · 123 votes" line under the stream title. */
+private fun sourceLine(shownStation: Station?): String {
+    val parts = buildList {
+        shownStation?.let { s ->
+            add(
+                when (s.source) {
+                    StationSource.Cliamp -> "cliamp radio"
+                    StationSource.Directory -> "directory"
+                    StationSource.Local -> "on device"
+                    StationSource.Provider -> "provider"
+                    StationSource.Podcast -> "podcast"
+                    StationSource.Custom -> "custom"
+                }
+            )
+            if (s.country.isNotBlank() && s.source != StationSource.Cliamp) add(s.country.lowercase())
+            if (s.votes > 0) add("${compact(s.votes)} votes")
+        }
+    }
+    return parts.joinToString(" · ").ifBlank { "12 cliamp channels · 50k+ directory" }
 }
 
 /**

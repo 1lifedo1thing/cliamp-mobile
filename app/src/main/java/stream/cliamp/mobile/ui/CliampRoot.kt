@@ -8,7 +8,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
@@ -32,6 +35,7 @@ import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.ui.components.CliampTabBar
+import stream.cliamp.mobile.ui.components.CliampTabRail
 import stream.cliamp.mobile.ui.components.SettingsArm
 import stream.cliamp.mobile.ui.components.Tab
 import stream.cliamp.mobile.ui.screens.CommandScreen
@@ -127,8 +131,20 @@ fun CliampRoot(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(p.ground)) {
-        Column(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(p.ground)) {
+        // Landscape gets a left-hand rail instead of the bottom tab strip so
+        // the horizontal frame keeps its full height for content. Portrait is
+        // untouched: the same bottom tabs, the same bottom mini player.
+        val rail = maxWidth > maxHeight
+        Row(Modifier.fillMaxSize()) {
+            if (rail) {
+                CliampTabRail(
+                    current = tab,
+                    onSelect = { tab = it; overlay = Overlay.None },
+                    modifier = Modifier.fillMaxHeight(),
+                )
+            }
+        Column(Modifier.weight(1f).fillMaxHeight()) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             // The active tab stays composed regardless of which overlay is up,
             // so opening the player (or queue/scope/settings) and coming back
@@ -323,11 +339,12 @@ fun CliampRoot(
 
         // The player is an overlay, but it is a destination rather than a
         // modal: keeping the menu means you can leave it without a back press.
-        if (overlay == Overlay.None || overlay == Overlay.Player) {
+        if (!rail && (overlay == Overlay.None || overlay == Overlay.Player)) {
             CliampTabBar(
                 current = tab,
                 onSelect = { tab = it; overlay = Overlay.None },
             )
+        }
         }
         }
 
