@@ -36,8 +36,10 @@ import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.ui.components.CliampTabBar
 import stream.cliamp.mobile.ui.components.CliampTabRail
+import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.SettingsArm
 import stream.cliamp.mobile.ui.components.Tab
+import stream.cliamp.mobile.ui.components.TabRailWidth
 import stream.cliamp.mobile.ui.screens.CommandScreen
 import stream.cliamp.mobile.ui.screens.LocalScreen
 import stream.cliamp.mobile.ui.screens.MiniPlayer
@@ -132,18 +134,11 @@ fun CliampRoot(
     }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(p.ground)) {
-        // Landscape gets a left-hand rail instead of the bottom tab strip so
+        // Landscape gets a right-hand rail instead of the bottom tab strip so
         // the horizontal frame keeps its full height for content. Portrait is
         // untouched: the same bottom tabs, the same bottom mini player.
         val rail = maxWidth > maxHeight
         Row(Modifier.fillMaxSize()) {
-            if (rail) {
-                CliampTabRail(
-                    current = tab,
-                    onSelect = { tab = it; overlay = Overlay.None },
-                    modifier = Modifier.fillMaxHeight(),
-                )
-            }
         Column(Modifier.weight(1f).fillMaxHeight()) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             // The active tab stays composed regardless of which overlay is up,
@@ -346,11 +341,21 @@ fun CliampRoot(
             )
         }
         }
+        if (rail) {
+            CliampTabRail(
+                current = tab,
+                onSelect = { tab = it; overlay = Overlay.None },
+                modifier = Modifier.fillMaxHeight(),
+            )
+        }
         }
 
         if (overlay == Overlay.None) {
             SettingsArm(
                 onOpenSettings = { overlay = Overlay.Settings },
+                // In landscape the right-hand corner is the tab rail, so the
+                // arm clears it and sits at the corner of the content instead.
+                endInset = if (rail) TabRailWidth + Gutter else Gutter,
             )
         }
     }

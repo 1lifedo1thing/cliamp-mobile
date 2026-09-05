@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import stream.cliamp.mobile.ui.theme.CliampType
@@ -48,6 +49,13 @@ import stream.cliamp.mobile.ui.theme.Mono
 
 /** Screen gutter, fixed at 22dp everywhere in the concept. */
 val Gutter = 22.dp
+
+/**
+ * Full width of the landscape tab rail, its separator included. Anything that
+ * must clear the rail (like the floating settings arm) insets by this much
+ * from the screen edge.
+ */
+val TabRailWidth = 79.dp
 
 @Composable
 fun HairlineDivider(modifier: Modifier = Modifier, region: Boolean = false) {
@@ -121,12 +129,14 @@ enum class Tab(val label: String) {
  * A single bare settings icon floating in the top-right corner of every tab.
  * It takes no layout space — it overlays the screen via [Modifier.offset] and
  * [align], so the tabs keep their own full bleed. (The queue moved into the
- * mini player bar.)
+ * mini player bar.) In landscape the corner belongs to the tab rail, so the
+ * arm slides in to sit just clear of it via [endInset].
  */
 @Composable
 fun BoxScope.SettingsArm(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    endInset: Dp = Gutter,
 ) {
     val p = LocalPalette.current
     Icon(
@@ -134,7 +144,7 @@ fun BoxScope.SettingsArm(
         modifier
             .align(Alignment.TopEnd)
             .offset(y = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
-            .padding(top = 12.dp, end = Gutter)
+            .padding(top = 12.dp, end = endInset)
             .size(17.dp)
             .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onOpenSettings),
         tint = p.inkSecondary,
@@ -197,9 +207,9 @@ private fun Modifier.offsetTopBorder(color: Color) = drawBehind {
 }
 
 /**
- * The landscape tab bar: a slim vertical rail on the left edge instead of the
- * bottom strip, so the horizontal frame keeps its full height for content.
- * Same four tabs, same active accent - just rotated.
+ * The landscape tab bar: a slim vertical rail on the right edge instead of
+ * the bottom strip, so the horizontal frame keeps its full height for
+ * content. Same four tabs, same active accent - just rotated.
  */
 @Composable
 fun CliampTabRail(
@@ -211,9 +221,10 @@ fun CliampTabRail(
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Row(modifier.fillMaxHeight().background(p.ground)) {
+        Box(Modifier.width(1.dp).fillMaxHeight().background(p.hairlineRegion))
         Column(
             Modifier
-                .width(78.dp)
+                .width(TabRailWidth - 1.dp)
                 .fillMaxHeight()
                 .padding(top = statusTop + 10.dp, bottom = navBottom + 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -228,7 +239,6 @@ fun CliampTabRail(
                 )
             }
         }
-        Box(Modifier.width(1.dp).fillMaxHeight().background(p.hairlineRegion))
     }
 }
 
@@ -244,7 +254,7 @@ private fun RailItem(
     Column(
         modifier
             .width(70.dp)
-            .then(if (active) Modifier.offsetLeftBorder(p.accent) else Modifier)
+            .then(if (active) Modifier.offsetRightBorder(p.accent) else Modifier)
             .clip(RoundedCornerShape(7.dp))
             .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -262,8 +272,8 @@ private fun RailItem(
     }
 }
 
-private fun Modifier.offsetLeftBorder(color: Color) = drawBehind {
-    drawRect(color = color, topLeft = Offset(0f, 0f), size = Size(2.dp.toPx(), size.height))
+private fun Modifier.offsetRightBorder(color: Color) = drawBehind {
+    drawRect(color = color, topLeft = Offset(size.width - 2.dp.toPx(), 0f), size = Size(2.dp.toPx(), size.height))
 }
 
 /**
