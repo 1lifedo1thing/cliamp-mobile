@@ -211,13 +211,34 @@ fun LocalScreen(
     // bar at the bottom is tapped.
     val justPlay: (Station, List<Station>) -> Unit = { s, list -> onPlay(s, list) }
 
+    // The favourites sub-tab is chosen while browsing the list; the favourite's
+    // pinned tile collage follows it, so the covers preview the filtered scope.
+    val prefs = (context.applicationContext as CliampApp).prefs
+    val localSort by prefs.playlistSort("local-songs")
+        .collectAsState(initial = prefs.playlistSortValue("local-songs"))
+    var favScope by remember { mutableStateOf(FavScope.All) }
+
     // Pinned smart playlists — auto-populated from global state, non-removable.
-    // The "local songs" row is always at the very top, above everything else.
-    val smartPlaylists = listOf(
-        SmartPlaylist(SmartKind.LocalSongs, filtered),
-        SmartPlaylist(SmartKind.Favorites, favorites),
-        SmartPlaylist(SmartKind.RecentlyPlayed, recent),
-    )
+    // "local songs" is always at the very top. Their tile collages preview the
+    // first four members *exactly as the detail pane lists them*, i.e. under
+    // the same sort (local songs) and type filter (favourites) the user chose.
+    val smartPlaylists = remember(filtered, favorites, recent, localSort, favScope) {
+        val local = sortedStations(filtered, localSort)
+        val favs = if (favScope == FavScope.All) favorites
+        else favorites.filter { s ->
+            when (favScope) {
+                FavScope.Local -> s.source == StationSource.Local
+                FavScope.Stations -> s.source != StationSource.Local && s.source != StationSource.Podcast
+                FavScope.Pods -> s.source == StationSource.Podcast
+                FavScope.All -> true
+            }
+        }
+        listOf(
+            SmartPlaylist(SmartKind.LocalSongs, local),
+            SmartPlaylist(SmartKind.Favorites, favs),
+            SmartPlaylist(SmartKind.RecentlyPlayed, recent),
+        )
+    }
     val openSmartPlaylist = smartPlaylists.firstOrNull { it.kind == openSmart }
     val paneVisible = openSmartPlaylist == null && showing == null
 
@@ -302,6 +323,8 @@ fun LocalScreen(
                     onPlayNext = onPlayNext,
                     onAddToQueue = onAddToQueue,
                     onReplaceQueue = onReplaceQueue,
+                    favScope = favScope,
+                    onFavScopeChange = { favScope = it },
                 )
                 showing != null -> PlaylistDetailShown(
                     playlist = showing,
@@ -1195,6 +1218,8 @@ private fun SmartPlaylistDetail(
     onPlayNext: (Station) -> Unit = {},
     onAddToQueue: (Station) -> Unit = {},
     onReplaceQueue: (Station, List<Station>) -> Unit = { s, _ -> onPlay(s, emptyList()) },
+    favScope: FavScope = FavScope.All,
+    onFavScopeChange: (FavScope) -> Unit = {},
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
@@ -1205,7 +1230,6 @@ private fun SmartPlaylistDetail(
     // Favourites mix local songs, radio stations and podcasts, so they get
     // their own type sub-tabs: all / local / stations / podcasts.
     val isFav = pl.kind == SmartKind.Favorites
-    var favScope by remember(pl.kind) { mutableStateOf(FavScope.All) }
     val sort by prefs.playlistSort("local-songs")
         .collectAsState(initial = prefs.playlistSortValue("local-songs"))
     val members = pl.stations
@@ -1230,7 +1254,7 @@ private fun SmartPlaylistDetail(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
                     FavScope.entries.forEach { f ->
-                        Chip(f.label, favScope == f, onClick = { favScope = f })
+                        Chip(f.label, favScope == f, onClick = { onFavScopeChange(f) })
                     }
                 }
             }
