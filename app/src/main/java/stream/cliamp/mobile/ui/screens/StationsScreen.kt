@@ -323,10 +323,11 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
                 )
             }
         } else if (bmp == null) {
-            // Without art there is nothing but the empty plate, so the play
-            // affordance carries the thumb; a covered thumb stays clean until
-            // it actually plays.
-            Icon(CliampIcons.PlayRow, null, Modifier.size(11.dp), tint = p.inkTertiary)
+            // No art to show, so the plate carries the broadcast-signal mark
+            // the way a podcast row carries its feed glyph - still recognisably
+            // a radio station, not just an empty play affordance. The real play
+            // state still gets its accent badge below.
+            Icon(CliampIcons.StationsTab, null, Modifier.size(15.dp), tint = p.inkTertiary)
         }
     }
 }
