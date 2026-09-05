@@ -14,8 +14,11 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,6 +27,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -45,8 +52,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -410,9 +420,15 @@ private fun PlaylistList(
     val p = LocalPalette.current
     val context = LocalContext.current
     Column(Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(150.dp),
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             val pinnedCount = smart.size + pinnedPlaylists.size
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 SectionLabel("pinned — $pinnedCount") {
                     if (!creating) {
                         Box(
@@ -429,11 +445,22 @@ private fun PlaylistList(
                     }
                 }
             }
+            if (creating) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    InlineNameField(
+                        text = editText,
+                        onTextChange = onEditTextChange,
+                        placeholder = "name this playlist",
+                        onDone = onCreate,
+                        onCancel = onCancel,
+                    )
+                }
+            }
             items(smart, key = { it.key }) { sp ->
-                SmartPlaylistRow(sp = sp, onOpen = { onOpenSmart(sp) }, context = context, loading = loading)
+                SmartPlaylistTile(sp = sp, onOpen = { onOpenSmart(sp) }, loading = loading)
             }
 
-            items(pinnedPlaylists, key = { it.station.slug }) { pl ->
+            items(pinnedPlaylists, key = { it.station.slug }, span = { GridItemSpan(maxLineSpan) }) { pl ->
                 if (pl.station.slug == renamingSlug) {
                     InlineNameField(
                         text = editText,
@@ -456,21 +483,10 @@ private fun PlaylistList(
                     )
                 }
             }
-            if (creating) {
-                item {
-                    InlineNameField(
-                        text = editText,
-                        onTextChange = onEditTextChange,
-                        placeholder = "name this playlist",
-                        onDone = onCreate,
-                        onCancel = onCancel,
-                    )
-                }
-            }
             if (playlists.isNotEmpty()) {
-                item { SectionLabel("playlists — ${playlists.size}") }
+                item(span = { GridItemSpan(maxLineSpan) }) { SectionLabel("playlists — ${playlists.size}") }
             }
-            items(playlists, key = { it.station.slug }) { pl ->
+            items(playlists, key = { it.station.slug }, span = { GridItemSpan(maxLineSpan) }) { pl ->
                 if (pl.station.slug == renamingSlug) {
                     InlineNameField(
                         text = editText,
@@ -493,7 +509,7 @@ private fun PlaylistList(
                     )
                 }
             }
-            item { Spacer(Modifier.height(20.dp)) }
+            item(span = { GridItemSpan(maxLineSpan) }) { Spacer(Modifier.height(20.dp)) }
         }
         Spacer(Modifier.height(8.dp))
     }
@@ -632,73 +648,129 @@ private fun PlaylistRow(
     }
 }
 
-/** A pinned, auto-populated smart playlist row — always present, not removable. */
+/** A pinned, auto-populated smart playlist as a cover-collage tile. */
 @Composable
-private fun SmartPlaylistRow(
+private fun SmartPlaylistTile(
     sp: SmartPlaylist,
     onOpen: () -> Unit,
-    context: android.content.Context,
     loading: Boolean = false,
 ) {
     val p = LocalPalette.current
+    val context = LocalContext.current
     val scanning = loading && sp.kind == SmartKind.LocalSongs && sp.stations.isEmpty()
+    val kindIcon = when (sp.kind) {
+        SmartKind.LocalSongs -> CliampIcons.MusicNote
+        SmartKind.Favorites -> CliampIcons.Star
+        SmartKind.RecentlyPlayed -> CliampIcons.Clock
+    }
     val pulse = rememberInfiniteTransition(label = "scan")
     val shimmer by pulse.animateFloat(
         initialValue = 1f, targetValue = 0.35f,
         animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
         label = "shimmer",
     )
-    ListRow(
-        onClick = onOpen,
-        verticalPadding = 9.dp,
-        leading = {
+
+    val members = remember(sp.stations) { sp.stations.take(4) }
+    var arts by remember(members) { mutableStateOf<List<ImageBitmap?>>(members.map { null }) }
+    LaunchedEffect(members) {
+        arts = members.map { s ->
+            val bmp = when (s.source) {
+                StationSource.Local ->
+                    LocalArt.bitmapForSmall(s.cover, context.contentResolver)
+                        ?: StationArtSource.bitmapForSmall(s)
+                else -> StationArtSource.bitmapForSmall(s)
+            }
+            bmp?.asImageBitmap()
+        }
+    }
+
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(8.dp))
+            .then(
+                if (scanning) Modifier.background(if (p.dark) p.ground else p.keyFace)
+                else Modifier.background(p.panel)
+            )
+            .border(1.dp, p.chipBorder, RoundedCornerShape(8.dp))
+            .clickable(onClick = onOpen),
+    ) {
+        if (scanning) {
+            Box(Modifier.fillMaxSize().background(p.inkFaint.copy(alpha = 0.35f * shimmer)),
+                contentAlignment = Alignment.Center) {
+                Icon(kindIcon, sp.label, Modifier.size(22.dp), tint = p.inkFaint.copy(alpha = 0.7f * shimmer))
+            }
+        } else {
+            Column(
+                Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
+                Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                    CoverCell(arts.getOrNull(0), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
+                    CoverCell(arts.getOrNull(1), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
+                }
+                Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                    CoverCell(arts.getOrNull(2), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
+                    CoverCell(arts.getOrNull(3), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
+                }
+            }
             Box(
-                Modifier.size(44.dp)
-                    .then(
-                        if (scanning)
-                            Modifier.clip(RoundedCornerShape(5.dp)).background(p.inkFaint.copy(alpha = 0.35f * shimmer))
-                        else
-                            Modifier.border(1.dp, p.accent.copy(alpha = 0.5f), RoundedCornerShape(5.dp))
-                    ),
+                Modifier
+                    .align(Alignment.TopStart)
+                    .padding(10.dp)
+                    .size(26.dp)
+                    .background(p.ground.copy(alpha = 0.85f), RoundedCornerShape(6.dp))
+                    .border(1.dp, p.chipBorder, RoundedCornerShape(6.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                if (!scanning) {
-                    Icon(
-                        when (sp.kind) {
-                            SmartKind.LocalSongs -> CliampIcons.MusicNote
-                            SmartKind.Favorites -> CliampIcons.Star
-                            SmartKind.RecentlyPlayed -> CliampIcons.Clock
-                        },
-                        sp.label,
-                        Modifier.size(16.dp),
-                        tint = p.accent,
+                Icon(kindIcon, sp.label, Modifier.size(12.dp), tint = p.accent)
+            }
+        }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .align(Alignment.BottomCenter)
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        1f to p.ground.copy(alpha = 0.92f),
                     )
-                }
+                ),
+        )
+        Column(Modifier.align(Alignment.BottomStart).padding(12.dp)) {
+            Mono(sp.label, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+            if (scanning) {
+                Box(Modifier.padding(top = 3.dp).width(110.dp).height(10.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(p.inkFaint.copy(alpha = 0.5f * shimmer)))
+            } else {
+                Mono(
+                    if (sp.stations.isEmpty()) "nothing here yet" else "${sp.stations.size} items",
+                    CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
+                )
             }
-        },
-        trailing = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (scanning) {
-                    Box(Modifier.width(52.dp).height(12.dp).clip(RoundedCornerShape(6.dp))
-                        .background(p.inkFaint.copy(alpha = 0.35f * shimmer)))
-                } else {
-                    Mono("${sp.stations.size} items", CliampType.meta, p.inkFaint)
-                }
-                Icon(CliampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary)
-            }
-        },
-    ) {
-        Mono(sp.label, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
-        if (scanning) {
-            Box(Modifier.width(150.dp).height(12.dp).clip(RoundedCornerShape(6.dp))
-                .background(p.inkFaint.copy(alpha = 0.35f * shimmer)))
+        }
+    }
+}
+
+/** One quarter of a smart-playlist collage: member cover art, or a striped plate. */
+@Composable
+private fun CoverCell(
+    art: ImageBitmap?,
+    kindIcon: ImageVector,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    Box(modifier.background(p.artB)) {
+        if (art != null) {
+            Image(art, contentDescription, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
-            Mono(
-                smartPreview(sp.stations).ifBlank {
-                    if (sp.stations.isEmpty()) "nothing here yet" else ""
-                },
-                CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
-            )
+            StripedArt(modifier = Modifier.fillMaxSize(), caption = null) {
+                Icon(kindIcon, null, Modifier.align(Alignment.Center).size(18.dp), tint = p.accent.copy(alpha = 0.22f))
+            }
         }
     }
 }
@@ -796,20 +868,6 @@ private fun InlineNameField(
             Modifier.clip(RoundedCornerShape(4.dp)).border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))
                 .clickable(onClick = onCancel).padding(horizontal = 9.dp, vertical = 7.dp))
     }
-}
-
-/**
- * Preview line under a smart-playlist row. Joining every member name would
- * build a ~hundreds-of-KB string on every recomposition (e.g. "local songs"
- * with a big library), which is what made the Library tab take seconds to
- * respond to touch. Cap it to a few names plus a "+N" suffix.
- */
-private fun smartPreview(stations: List<Station>): String {
-    if (stations.isEmpty()) return ""
-    val head = 4
-    val names = stations.take(head).joinToString(" · ") { it.name }
-    if (stations.size <= head) return names
-    return "$names · +${stations.size - head} more"
 }
 
 /**
