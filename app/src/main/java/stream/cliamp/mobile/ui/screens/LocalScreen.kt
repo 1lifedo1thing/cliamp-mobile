@@ -838,8 +838,8 @@ private fun PlaylistDetailShown(
     val p = LocalPalette.current
     val context = LocalContext.current
     val prefs = (context.applicationContext as CliampApp).prefs
-    val scope = rememberCoroutineScope()
-    val sort by prefs.playlistSort(playlist.station.slug).collectAsState(initial = PlaylistSort.Title)
+    val sort by prefs.playlistSort(playlist.station.slug)
+        .collectAsState(initial = prefs.playlistSortValue(playlist.station.slug))
 
     // Members can be any source now, so they resolve against the live local
     // library plus the persisted snapshot stations (radio/podcast members).
@@ -879,7 +879,7 @@ private fun PlaylistDetailShown(
                 ) {
                     PlaylistSort.entries.forEach { t ->
                         Chip(t.label, sort == t, onClick = {
-                            scope.launch { prefs.setPlaylistSort(playlist.station.slug, t) }
+                            prefs.setPlaylistSort(playlist.station.slug, t)
                         })
                     }
                 }
@@ -1136,11 +1136,11 @@ private fun SmartPlaylistDetail(
     val p = LocalPalette.current
     val context = LocalContext.current
     val prefs = (context.applicationContext as CliampApp).prefs
-    val scope = rememberCoroutineScope()
     // Only the local-songs smart list sorts; favourites and recent have their
     // own fixed orders (recent is already time-sorted).
     val local = pl.kind == SmartKind.LocalSongs
-    val sort by prefs.playlistSort("local-songs").collectAsState(initial = PlaylistSort.Title)
+    val sort by prefs.playlistSort("local-songs")
+        .collectAsState(initial = prefs.playlistSortValue("local-songs"))
     val members = pl.stations
     val visible = remember(members, local, sort) {
         if (local) sortedStations(members, sort) else members
@@ -1170,7 +1170,7 @@ private fun SmartPlaylistDetail(
                     ) {
                         PlaylistSort.entries.forEach { t ->
                             Chip(t.label, sort == t, onClick = {
-                                scope.launch { prefs.setPlaylistSort("local-songs", t) }
+                                prefs.setPlaylistSort("local-songs", t)
                             })
                         }
                     }

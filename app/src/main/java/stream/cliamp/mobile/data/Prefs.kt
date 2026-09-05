@@ -10,9 +10,15 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.db.CliampDatabase
 import stream.cliamp.mobile.data.db.CustomStationEntity
 import stream.cliamp.mobile.data.db.FavoriteEntity
@@ -133,18 +139,34 @@ class Prefs(private val context: Context) {
     val custom: Flow<List<Station>> =
         db.customStations().all().map { rows -> rows.map { it.toStation() } }
 
-    /** Per-playlist remembered sort, keyed by playlist slug. */
-    val playlistSorts: Flow<Map<String, Int>> = context.settingsStore.data.map { p ->
-        p[K.playlistSorts]?.let { raw ->
-            runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
-        } ?: emptyMap()
+    /** Per-playlist remembered sort, seeded into memory at construction. */
+    private val persist = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Per-playlist sort lives in memory so a chip tap renumbers the list on
+    // the same frame and reopening a list starts already ordered; the
+    // DataStore file is only the restore-after-boot source.
+    private val sortOverrides = MutableStateFlow<Map<String, Int>>(emptyMap())
+    private var sortPersist: Job? = null
+
+    init {
+        persist.launch {
+            context.settingsStore.data.first().let { p ->
+                sortOverrides.value = p[K.playlistSorts]?.let { raw ->
+                    runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
+                } ?: emptyMap()
+            }
+        }
     }
 
     /** The sort choice for one list, defaulting to the current title order. */
     fun playlistSort(slug: String): Flow<PlaylistSort> =
-        playlistSorts.map { map ->
+        sortOverrides.map { map ->
             map[slug]?.let { PlaylistSort.entries.getOrNull(it) } ?: PlaylistSort.Title
         }
+
+    /** The sort choice today, for the first frame of a freshly opened list. */
+    fun playlistSortValue(slug: String): PlaylistSort =
+        sortOverrides.value[slug]?.let { PlaylistSort.entries.getOrNull(it) } ?: PlaylistSort.Title
 
     val lastStation: Flow<Station?> = context.settingsStore.data.map { p ->
         p[K.lastStation]?.let { raw -> runCatching { Http.json.decodeFromString<Station>(raw) }.getOrNull() }
@@ -164,12 +186,16 @@ class Prefs(private val context: Context) {
     suspend fun setVolume(v: Float) = put(K.volume, v)
 
     /** Remember a playlist's sort; edits merge so other playlists are untouched. */
-    suspend fun setPlaylistSort(slug: String, sort: PlaylistSort) {
-        context.settingsStore.edit { p ->
-            val current = p[K.playlistSorts]?.let { raw ->
-                runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
-            } ?: emptyMap()
-            p[K.playlistSorts] = Http.json.encodeToString(current + (slug to sort.ordinal))
+    fun setPlaylistSort(slug: String, sort: PlaylistSort) {
+        sortOverrides.value = sortOverrides.value + (slug to sort.ordinal)
+        sortPersist?.cancel()
+        sortPersist = persist.launch {
+            context.settingsStore.edit { p ->
+                val current = p[K.playlistSorts]?.let { raw ->
+                    runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
+                } ?: emptyMap()
+                p[K.playlistSorts] = Http.json.encodeToString(current + sortOverrides.value)
+            }
         }
     }
 
