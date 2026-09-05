@@ -402,6 +402,17 @@ class PlayerConnection(
             // shuffled list instead of re-randomising - and restarting - on
             // every prev/next.
             val order = if (!preserveOrder && _shuffle.value && from.size > 1) shuffledKeepFirst(from, station) else from
+            // A fresh play from a list rebases the shuffle bookkeeping on that
+            // list's own order - already the user's chosen sort from the screen
+            // the tap came from. Without this rebase a stale _baseSource from an
+            // earlier play survives, so a later shuffle toggle rebuilds - and
+            // toggling off restores - the *previous* list instead of this one.
+            // Navigation (preserveOrder) rides the already-active order, so it
+            // must leave that bookkeeping untouched.
+            if (!preserveOrder) {
+                _baseSource = from
+                _shuffledSource = if (_shuffle.value && from.size > 1) order else null
+            }
             _source = order
             val srcIdxO = order.indexOfFirst { it.url == station.url }.coerceAtLeast(0)
             windowBase = if (order.size > WINDOW) srcIdxO else 0
