@@ -269,20 +269,25 @@ fun NowPlayingScreen(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
-                val frame = rememberMeter(
-                    columns = MeterSize.NowPlaying.columns,
-                    live = state.playing,
-                    spectrum = if (visualizer != "off") spectrumSource else null,
-                )
-                BrickMeter(
-                    frame = frame,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(MeterSize.NowPlaying.height)
-                        .consumeAllGestures(),
-                    brick = MeterSize.NowPlaying.brick,
-                    gap = MeterSize.NowPlaying.gap,
-                )
+                // The meter is the visualizer: when the setting is off it is
+                // removed entirely, not just fed idle data - so neither the
+                // frame loop nor a static brick grid exists in the player.
+                if (visualizer != "off") {
+                    val frame = rememberMeter(
+                        columns = MeterSize.NowPlaying.columns,
+                        live = state.playing,
+                        spectrum = spectrumSource,
+                    )
+                    BrickMeter(
+                        frame = frame,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(MeterSize.NowPlaying.height)
+                            .consumeAllGestures(),
+                        brick = MeterSize.NowPlaying.brick,
+                        gap = MeterSize.NowPlaying.gap,
+                    )
+                }
 
                 // What the transport shows follows what the player says the
                 // source can do, not what kind of station it is. A local file

@@ -64,15 +64,6 @@ fun ScopeScreen(
     val eqBands by prefs.eqBands.collectAsState(initial = List(7) { 0f })
     val eqPreset by prefs.eqPreset.collectAsState(initial = "flat")
 
-    val frame = rememberMeter(
-        columns = MeterSize.Scope.columns,
-        live = playing,
-        spectrum = if (visualizer != "off") spectrum else null,
-    )
-
-    // Peak level in dBFS, read straight off the folded spectrum.
-    val peakDb = spectrum.value.maxOrNull()?.let { -48f + it * 48f } ?: -48f
-
     Column(
         Modifier
             .fillMaxSize()
@@ -103,25 +94,39 @@ fun ScopeScreen(
             )
         }
 
-        Column(Modifier.fillMaxWidth().padding(horizontal = Gutter)) {
-            Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Mono("PEAK", CliampType.sectionLabel, p.inkFaint)
-                Mono("%.0f dB".format(peakDb.coerceIn(-48f, 0f)), CliampType.datum, p.accent)
-            }
-            BrickMeter(
-                frame = frame,
-                modifier = Modifier.fillMaxWidth().height(MeterSize.Scope.height),
-                brick = MeterSize.Scope.brick,
-                gap = MeterSize.Scope.gap,
-                columnGap = 3.dp,
+        // The meter is the visualizer: when the setting is off it is removed
+        // entirely (no frame loop, no grid, no peak readout), leaving just the
+        // equalizer on this screen.
+        if (visualizer != "off") {
+            val frame = rememberMeter(
+                columns = MeterSize.Scope.columns,
+                live = playing,
+                spectrum = spectrum,
             )
-        }
 
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            rulerLabels.forEach { Mono(it, CliampType.meta, p.inkFaint) }
+            // Peak level in dBFS, read straight off the folded spectrum.
+            val peakDb = spectrum.value.maxOrNull()?.let { -48f + it * 48f } ?: -48f
+
+            Column(Modifier.fillMaxWidth().padding(horizontal = Gutter)) {
+                Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Mono("PEAK", CliampType.sectionLabel, p.inkFaint)
+                    Mono("%.0f dB".format(peakDb.coerceIn(-48f, 0f)), CliampType.datum, p.accent)
+                }
+                BrickMeter(
+                    frame = frame,
+                    modifier = Modifier.fillMaxWidth().height(MeterSize.Scope.height),
+                    brick = MeterSize.Scope.brick,
+                    gap = MeterSize.Scope.gap,
+                    columnGap = 3.dp,
+                )
+            }
+
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                rulerLabels.forEach { Mono(it, CliampType.meta, p.inkFaint) }
+            }
         }
 
         HairlineDivider(region = true)
