@@ -205,6 +205,14 @@ object CliampIcons {
     val More = solid(16f, 16f, circle(8f, 3f, 2.2f), circle(8f, 8f, 2.2f), circle(8f, 13f, 2.2f))
     val Lines = solid(16f, 14f, rect(0f, 0f, 16f, 2f), rect(0f, 6f, 16f, 2f), rect(0f, 12f, 16f, 2f))
     val ListShort = stroked(16f, 16f, 1.7f, "M1 3h14M1 8h9M1 13h9")
+    /** 2x2 square grid: the "show playlists as tiles" layout toggle. */
+    val Grid = stroked(
+        16f, 16f, 1.6f,
+        rrect(1f, 1f, 6f, 6f, 1f),
+        rrect(9f, 1f, 6f, 6f, 1f),
+        rrect(1f, 9f, 6f, 6f, 1f),
+        rrect(9f, 9f, 6f, 6f, 1f),
+    )
     /**
      * Sliders: three horizontal rails, each with a knob positioned at a
      * different setting offset. A well-known "settings / controls" glyph built

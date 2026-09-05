@@ -216,6 +216,9 @@ fun LocalScreen(
     val prefs = (context.applicationContext as CliampApp).prefs
     val localSort by prefs.playlistSort("local-songs")
         .collectAsState(initial = prefs.playlistSortValue("local-songs"))
+    // Grid/list layout for each playlist section, remembered on disk.
+    val pinnedGrid by prefs.pinnedGrid.collectAsState(initial = true)
+    val playlistsGrid by prefs.playlistsGrid.collectAsState(initial = false)
     var favScope by remember { mutableStateOf(FavScope.All) }
 
     // Pinned smart playlists — auto-populated from global state, non-removable.
@@ -380,6 +383,10 @@ fun LocalScreen(
                     onPin = { slug, pinned -> scope.launch { playlists.setPinned(slug, pinned) } },
                     onOpen = { openSlug = it.station.slug },
                     onOpenSmart = { openSmart = it.kind },
+                    pinnedGrid = pinnedGrid,
+                    onTogglePinnedGrid = { scope.launch { prefs.setPinnedGrid(!pinnedGrid) } },
+                    playlistsGrid = playlistsGrid,
+                    onTogglePlaylistsGrid = { scope.launch { prefs.setPlaylistsGrid(!playlistsGrid) } },
                     loading = loading,
                 )
             }
@@ -438,6 +445,10 @@ private fun PlaylistList(
     onPin: (String, Boolean) -> Unit,
     onOpen: (PlaylistStore.Playlist) -> Unit,
     onOpenSmart: (SmartPlaylist) -> Unit,
+    pinnedGrid: Boolean = true,
+    onTogglePinnedGrid: () -> Unit = {},
+    playlistsGrid: Boolean = false,
+    onTogglePlaylistsGrid: () -> Unit = {},
     loading: Boolean = false,
 ) {
     val p = LocalPalette.current
@@ -454,16 +465,19 @@ private fun PlaylistList(
             item(span = { GridItemSpan(maxLineSpan) }) {
                 SectionLabel("pinned — $pinnedCount") {
                     if (!creating) {
-                        Box(
-                            Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (p.dark) p.keyFace else p.ground)
-                                .border(1.dp, p.keyBorder, RoundedCornerShape(6.dp))
-                                .clickable(onClick = onBeginCreate),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(CliampIcons.Plus, "new playlist", Modifier.size(16.dp), tint = p.accent)
+                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            GridListToggle(gridMode = pinnedGrid, onToggle = onTogglePinnedGrid)
+                            Box(
+                                Modifier
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (p.dark) p.keyFace else p.ground)
+                                    .border(1.dp, p.keyBorder, RoundedCornerShape(6.dp))
+                                    .clickable(onClick = onBeginCreate),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(CliampIcons.Plus, "new playlist", Modifier.size(16.dp), tint = p.accent)
+                            }
                         }
                     }
                 }
@@ -479,11 +493,19 @@ private fun PlaylistList(
                     )
                 }
             }
-            items(smart, key = { it.key }) { sp ->
-                SmartPlaylistTile(sp = sp, onOpen = { onOpenSmart(sp) }, loading = loading)
+            items(smart, key = { it.key }, span = { GridItemSpan(if (pinnedGrid) 1 else maxLineSpan) }) { sp ->
+                if (pinnedGrid) {
+                    SmartPlaylistTile(sp = sp, onOpen = { onOpenSmart(sp) }, loading = loading)
+                } else {
+                    SmartPlaylistRow(sp = sp, onOpen = { onOpenSmart(sp) }, loading = loading)
+                }
             }
 
-            items(pinnedPlaylists, key = { it.station.slug }, span = { GridItemSpan(maxLineSpan) }) { pl ->
+            items(
+                pinnedPlaylists,
+                key = { it.station.slug },
+                span = { GridItemSpan(if (pinnedGrid) 1 else maxLineSpan) },
+            ) { pl ->
                 if (pl.station.slug == renamingSlug) {
                     InlineNameField(
                         text = editText,
@@ -491,6 +513,18 @@ private fun PlaylistList(
                         placeholder = "rename playlist",
                         onDone = { onRename(pl.station.slug, it) },
                         onCancel = onCancel,
+                    )
+                } else if (pinnedGrid) {
+                    PlaylistTile(
+                        pl = pl,
+                        songs = songs,
+                        pinned = true,
+                        onOpen = onOpen,
+                        onEdit = { onBeginRename(pl.station.slug) },
+                        onDelete = { onDelete(pl.station.slug) },
+                        onAddSongs = { onAddSongs(pl.station.slug) },
+                        onPin = { onPin(pl.station.slug, false) },
+                        context = context,
                     )
                 } else {
                     PlaylistRow(
@@ -507,9 +541,17 @@ private fun PlaylistList(
                 }
             }
             if (playlists.isNotEmpty()) {
-                item(span = { GridItemSpan(maxLineSpan) }) { SectionLabel("playlists — ${playlists.size}") }
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    SectionLabel("playlists — ${playlists.size}") {
+                        GridListToggle(gridMode = playlistsGrid, onToggle = onTogglePlaylistsGrid)
+                    }
+                }
             }
-            items(playlists, key = { it.station.slug }, span = { GridItemSpan(maxLineSpan) }) { pl ->
+            items(
+                playlists,
+                key = { it.station.slug },
+                span = { GridItemSpan(if (playlistsGrid) 1 else maxLineSpan) },
+            ) { pl ->
                 if (pl.station.slug == renamingSlug) {
                     InlineNameField(
                         text = editText,
@@ -517,6 +559,18 @@ private fun PlaylistList(
                         placeholder = "rename playlist",
                         onDone = { onRename(pl.station.slug, it) },
                         onCancel = onCancel,
+                    )
+                } else if (playlistsGrid) {
+                    PlaylistTile(
+                        pl = pl,
+                        songs = songs,
+                        pinned = false,
+                        onOpen = onOpen,
+                        onEdit = { onBeginRename(pl.station.slug) },
+                        onDelete = { onDelete(pl.station.slug) },
+                        onAddSongs = { onAddSongs(pl.station.slug) },
+                        onPin = { onPin(pl.station.slug, true) },
+                        context = context,
                     )
                 } else {
                     PlaylistRow(
@@ -671,6 +725,85 @@ private fun PlaylistRow(
     }
 }
 
+/** The grid/list toggle at the head of each playlist section. Shows the mode
+ * you switch *into*: a grid glyph while listed, a list glyph while tiled. */
+@Composable
+private fun GridListToggle(gridMode: Boolean, onToggle: () -> Unit) {
+    val p = LocalPalette.current
+    Box(
+        Modifier
+            .size(34.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (p.dark) p.keyFace else p.ground)
+            .border(1.dp, p.keyBorder, RoundedCornerShape(6.dp))
+            .clickable(onClick = onToggle),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            if (gridMode) CliampIcons.ListShort else CliampIcons.Grid,
+            if (gridMode) "show playlists as a list" else "show playlists as a grid",
+            Modifier.size(16.dp),
+            tint = p.accent,
+        )
+    }
+}
+
+/** A user playlist as a square tile: cover art, name, size, and the ⁝ menu.
+ * The tile body opens the playlist; the ⁝ in the corner is the row's menu. */
+@Composable
+private fun PlaylistTile(
+    pl: PlaylistStore.Playlist,
+    songs: List<Station>,
+    pinned: Boolean,
+    onOpen: (PlaylistStore.Playlist) -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onAddSongs: () -> Unit,
+    onPin: () -> Unit,
+    context: android.content.Context,
+) {
+    val p = LocalPalette.current
+    val cover = pl.station.cover
+    var art by remember(pl.station.slug) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(pl.station.slug, cover) {
+        art = LocalArt.bitmapFor(cover, context.contentResolver)?.asImageBitmap()
+    }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(8.dp))
+            .background(p.panel)
+            .border(1.dp, p.chipBorder, RoundedCornerShape(8.dp))
+            .clickable(onClick = { onOpen(pl) }),
+    ) {
+        if (art != null) {
+            Image(art!!, pl.station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        } else {
+            StripedArt(modifier = Modifier.fillMaxSize(), caption = null)
+        }
+        Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
+            PlaylistMenu(pinned = pinned, onAddSongs = onAddSongs, onEdit = onEdit, onDelete = onDelete, onPin = onPin)
+        }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .align(Alignment.BottomCenter)
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        1f to p.ground.copy(alpha = 0.92f),
+                    )
+                ),
+        )
+        Column(Modifier.align(Alignment.BottomStart).padding(12.dp)) {
+            Mono(pl.station.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+            Mono("${pl.songIds.size} songs", CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+        }
+    }
+}
+
 /** A pinned, auto-populated smart playlist as a cover-collage tile. */
 @Composable
 private fun SmartPlaylistTile(
@@ -679,33 +812,14 @@ private fun SmartPlaylistTile(
     loading: Boolean = false,
 ) {
     val p = LocalPalette.current
-    val context = LocalContext.current
     val scanning = loading && sp.kind == SmartKind.LocalSongs && sp.stations.isEmpty()
-    val kindIcon = when (sp.kind) {
-        SmartKind.LocalSongs -> CliampIcons.MusicNote
-        SmartKind.Favorites -> CliampIcons.Star
-        SmartKind.RecentlyPlayed -> CliampIcons.Clock
-    }
+    val kindIcon = smartKindIcon(sp.kind)
     val pulse = rememberInfiniteTransition(label = "scan")
     val shimmer by pulse.animateFloat(
         initialValue = 1f, targetValue = 0.35f,
         animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
         label = "shimmer",
     )
-
-    val members = remember(sp.stations) { sp.stations.take(4) }
-    var arts by remember(members) { mutableStateOf<List<ImageBitmap?>>(members.map { null }) }
-    LaunchedEffect(members) {
-        arts = members.map { s ->
-            val bmp = when (s.source) {
-                StationSource.Local ->
-                    LocalArt.bitmapForSmall(s.cover, context.contentResolver)
-                        ?: StationArtSource.bitmapForSmall(s)
-                else -> StationArtSource.bitmapForSmall(s)
-            }
-            bmp?.asImageBitmap()
-        }
-    }
 
     Box(
         Modifier
@@ -725,19 +839,7 @@ private fun SmartPlaylistTile(
                 Icon(kindIcon, sp.label, Modifier.size(22.dp), tint = p.inkFaint.copy(alpha = 0.7f * shimmer))
             }
         } else {
-            Column(
-                Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(1.dp),
-            ) {
-                Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                    CoverCell(arts.getOrNull(0), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
-                    CoverCell(arts.getOrNull(1), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
-                }
-                Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                    CoverCell(arts.getOrNull(2), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
-                    CoverCell(arts.getOrNull(3), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
-                }
-            }
+            SmartCollage(sp, Modifier.fillMaxSize())
             Box(
                 Modifier
                     .align(Alignment.TopStart)
@@ -774,6 +876,98 @@ private fun SmartPlaylistTile(
                     CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
                 )
             }
+        }
+    }
+}
+
+/** A pinned, auto-populated smart playlist as a list row (list layout). */
+@Composable
+private fun SmartPlaylistRow(
+    sp: SmartPlaylist,
+    onOpen: () -> Unit,
+    loading: Boolean = false,
+) {
+    val p = LocalPalette.current
+    val scanning = loading && sp.kind == SmartKind.LocalSongs && sp.stations.isEmpty()
+    val kindIcon = smartKindIcon(sp.kind)
+    val pulse = rememberInfiniteTransition(label = "scan")
+    val shimmer by pulse.animateFloat(
+        initialValue = 1f, targetValue = 0.35f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "shimmer",
+    )
+    ListRow(
+        onClick = onOpen,
+        verticalPadding = 8.dp,
+        leading = {
+            Box(Modifier.size(44.dp).clip(RoundedCornerShape(6.dp))) {
+                if (scanning) {
+                    Box(
+                        Modifier.fillMaxSize().background(p.inkFaint.copy(alpha = 0.35f * shimmer)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(kindIcon, sp.label, Modifier.size(16.dp), tint = p.inkFaint.copy(alpha = 0.7f * shimmer))
+                    }
+                } else {
+                    SmartCollage(sp, Modifier.fillMaxSize())
+                }
+            }
+        },
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (scanning) {
+                    Box(Modifier.width(52.dp).height(12.dp).clip(RoundedCornerShape(6.dp))
+                        .background(p.inkFaint.copy(alpha = 0.35f * shimmer)))
+                } else {
+                    Mono(
+                        if (sp.stations.isEmpty()) "empty" else "${sp.stations.size} items",
+                        CliampType.meta, p.inkFaint,
+                    )
+                }
+                Icon(CliampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary)
+            }
+        },
+    ) {
+        Mono(sp.label, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+        if (!scanning && sp.stations.isEmpty()) {
+            Mono("nothing here yet", CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+        }
+    }
+}
+
+/** The smart playlist's identifying glyph. */
+private fun smartKindIcon(kind: SmartKind): ImageVector = when (kind) {
+    SmartKind.LocalSongs -> CliampIcons.MusicNote
+    SmartKind.Favorites -> CliampIcons.Star
+    SmartKind.RecentlyPlayed -> CliampIcons.Clock
+}
+
+/** The 2x2 member-cover mosaic shared by the smart-playlist tile and row. */
+@Composable
+private fun SmartCollage(sp: SmartPlaylist, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val kindIcon = smartKindIcon(sp.kind)
+    val members = remember(sp.stations) { sp.stations.take(4) }
+    var arts by remember(members) { mutableStateOf<List<ImageBitmap?>>(members.map { null }) }
+    LaunchedEffect(members) {
+        arts = members.map { s ->
+            val bmp = when (s.source) {
+                StationSource.Local ->
+                    LocalArt.bitmapForSmall(s.cover, context.contentResolver)
+                        ?: StationArtSource.bitmapForSmall(s)
+                else -> StationArtSource.bitmapForSmall(s)
+            }
+            bmp?.asImageBitmap()
+        }
+    }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+            CoverCell(arts.getOrNull(0), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
+            CoverCell(arts.getOrNull(1), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
+        }
+        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+            CoverCell(arts.getOrNull(2), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
+            CoverCell(arts.getOrNull(3), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
         }
     }
 }

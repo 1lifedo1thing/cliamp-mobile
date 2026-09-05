@@ -82,6 +82,8 @@ class Prefs(private val context: Context) {
         val wNext = stringPreferencesKey("w_next")
         val wSource = stringPreferencesKey("w_source")
         val playlistSorts = stringPreferencesKey("playlist_sorts")  // slug -> PlaylistSort.ordinal
+        val pinnedGrid = booleanPreferencesKey("pinned_grid")       // library: pinned pinned playlists as tiles
+        val playlistsGrid = booleanPreferencesKey("playlists_grid") // library: user playlists as tiles
     }
 
     val palette: Flow<String> = context.settingsStore.data.map { it[K.palette] ?: "system" }
@@ -93,6 +95,11 @@ class Prefs(private val context: Context) {
     val eqPreset: Flow<String> = context.settingsStore.data.map { it[K.eqPreset] ?: "flat" }
     val autoResume: Flow<Boolean> = context.settingsStore.data.map { it[K.autoResume] ?: false }
     val volume: Flow<Float> = context.settingsStore.data.map { it[K.volume] ?: 1f }
+
+    /** Library pinned section (smart playlists + pinned user playlists) as a grid. */
+    val pinnedGrid: Flow<Boolean> = context.settingsStore.data.map { it[K.pinnedGrid] ?: true }
+    /** Library user-playlists section as a grid. */
+    val playlistsGrid: Flow<Boolean> = context.settingsStore.data.map { it[K.playlistsGrid] ?: false }
 
     val eqBands: Flow<List<Float>> = context.settingsStore.data.map { p ->
         p[K.eqBands]?.let { raw -> runCatching { Http.json.decodeFromString<List<Float>>(raw) }.getOrNull() }
@@ -184,6 +191,8 @@ class Prefs(private val context: Context) {
     suspend fun setEqPreset(v: String) = put(K.eqPreset, v)
     suspend fun setAutoResume(v: Boolean) = put(K.autoResume, v)
     suspend fun setVolume(v: Float) = put(K.volume, v)
+    suspend fun setPinnedGrid(v: Boolean) = put(K.pinnedGrid, v)
+    suspend fun setPlaylistsGrid(v: Boolean) = put(K.playlistsGrid, v)
 
     /** Remember a playlist's sort; edits merge so other playlists are untouched. */
     fun setPlaylistSort(slug: String, sort: PlaylistSort) {
