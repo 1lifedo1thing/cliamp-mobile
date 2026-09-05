@@ -37,8 +37,8 @@ import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.ui.components.CliampTabBar
 import stream.cliamp.mobile.ui.components.CliampTabRail
 import stream.cliamp.mobile.ui.components.Gutter
-import stream.cliamp.mobile.ui.components.SettingsArm
 import stream.cliamp.mobile.ui.components.Tab
+import stream.cliamp.mobile.ui.components.TabCorners
 import stream.cliamp.mobile.ui.components.TabRailWidth
 import stream.cliamp.mobile.ui.screens.CommandScreen
 import stream.cliamp.mobile.ui.screens.LocalScreen
@@ -65,6 +65,7 @@ private sealed interface Overlay {
     data object Settings : Overlay
     data object Queue : Overlay
     data object Player : Overlay
+    data object Command : Overlay
 
     /** The add-provider wizard. [account] non-null means edit rather than add. */
     data class Wizard(val providerKey: String, val account: ProviderAccount?) : Overlay
@@ -200,36 +201,6 @@ fun CliampRoot(
                     onAddToQueue = { player.addToQueue(it) },
                     onPlayNext = { player.playNext(it) },
                 )
-                Tab.Cmd -> CommandScreen(
-                    repository = repository,
-                    podcasts = podcasts,
-                    prefs = prefs,
-                    localLibrary = localLibrary,
-                    providers = providers,
-                    onPlay = onPlay,
-                    onOpenScope = { overlay = Overlay.Scope },
-                    onOpenSettings = { overlay = Overlay.Settings },
-                    onOpenProvider = { account ->
-                        libSubTab = LibSubTab.Providers
-                        overlay = Overlay.Browse(account.id)
-                    },
-                    // Lands on the Podcasts tab behind the episode list, so
-                    // backing out of the show leaves you somewhere coherent
-                    // rather than on the search results you came from.
-                    onOpenShow = { show: PodcastShow ->
-                        podcasts.openShow(show)
-                        tab = Tab.Pods
-                        overlay = Overlay.Show
-                    },
-                    // A tag is a directory filter: land on the Stations tab so
-                    // the tapping user actually sees the tagged stations rather
-                    // than silently priming a list they are not looking at.
-                    onOpenTag = { name ->
-                        repository.loadDirectory(DirectoryQuery.Tag(name), reset = true)
-                        focusDirectory = true
-                        tab = Tab.Stations
-                    },
-                )
             }
 
             when (overlay) {
@@ -296,6 +267,38 @@ fun CliampRoot(
                     onAddToQueue = { player.addToQueue(it) },
                     onPlayNext = { player.playNext(it) },
                 )
+                Overlay.Command -> CommandScreen(
+                    repository = repository,
+                    podcasts = podcasts,
+                    prefs = prefs,
+                    localLibrary = localLibrary,
+                    providers = providers,
+                    onPlay = onPlay,
+                    onOpenScope = { overlay = Overlay.Scope },
+                    onOpenSettings = { overlay = Overlay.Settings },
+                    onOpenProvider = { account ->
+                        libSubTab = LibSubTab.Providers
+                        overlay = Overlay.Browse(account.id)
+                    },
+                    // Lands on the Podcasts tab behind the episode list, so
+                    // backing out of the show leaves you somewhere coherent
+                    // rather than on the search results you came from.
+                    onOpenShow = { show: PodcastShow ->
+                        podcasts.openShow(show)
+                        tab = Tab.Pods
+                        overlay = Overlay.Show
+                    },
+                    // A tag is a directory filter: land on the Stations tab so
+                    // the tapping user actually sees the tagged stations rather
+                    // than silently priming a list they are not looking at.
+                    onOpenTag = { name ->
+                        repository.loadDirectory(DirectoryQuery.Tag(name), reset = true)
+                        focusDirectory = true
+                        tab = Tab.Stations
+                        overlay = Overlay.None
+                    },
+                    onBack = { overlay = Overlay.None },
+                )
                 Overlay.Settings -> SettingsScreen(
                     prefs = prefs,
                     repository = repository,
@@ -351,10 +354,11 @@ fun CliampRoot(
         }
 
         if (overlay == Overlay.None) {
-            SettingsArm(
+            TabCorners(
+                onOpenSearch = { overlay = Overlay.Command },
                 onOpenSettings = { overlay = Overlay.Settings },
                 // In landscape the right-hand corner is the tab rail, so the
-                // arm clears it and sits at the corner of the content instead.
+                // pair clears it and sits at the corner of the content instead.
                 endInset = if (rail) TabRailWidth + Gutter else Gutter,
             )
         }

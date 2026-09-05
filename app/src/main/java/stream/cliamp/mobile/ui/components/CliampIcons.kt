@@ -166,9 +166,7 @@ object CliampIcons {
     val LibTab = stroked(18f, 18f, 1.7f, rect(1f, 1f, 5f, 16f), rect(8f, 1f, 5f, 16f), "M15 2l2 15")
     val QueueTabLines = stroked(18f, 18f, 1.7f, "M1 4h16M1 9h11M1 14h11")
     val CmdSmall = stroked(18f, 18f, 1.7f, rrect(0.9f, 1.9f, 16.2f, 14.2f, 2f), "M4.5 7l2.2 2.2L4.5 11.4")
-    val Search = stroked(16f, 16f, 1.8f, circle(11.7f, 6.6f, 5.1f), "M10.4 10.4L15 15")
-    /** The magnifier used as the app-wide finder's tab glyph. */
-    val SearchTab = stroked(18f, 18f, 1.6f, circle(8f, 8f, 4.4f), "M11.2 11.4L15.8 16")
+    val Search = stroked(16f, 16f, 1.5f, circle(7.1f, 7.1f, 3.9f), "M9.9 9.9L14 14.2")
 
     /**
      * A microphone: capsule, cradle, stand. Stroked like [LibTab] because the
@@ -217,6 +215,17 @@ object CliampIcons {
         "M2 3.5h12", "M6 1.5v4",
         "M2 8h12", "M11 6v4",
         "M2 12.5h12", "M8 10.5v4",
+    )
+    /**
+     * A gear: a stroked ring with eight straight teeth radiating from it. The
+     * classic settings glyph drawn from circles and lines, so it stays inside
+     * the straight-paths-only rule.
+     */
+    val Gear = stroked(
+        16f, 16f, 1.8f,
+        circle(8f, 8f, 4.6f),
+        "M12.6 8L15 8", "M11.25 11.25L12.95 12.95", "M8 12.6L8 15", "M4.75 11.25L3.05 12.95",
+        "M3.4 8L1 8", "M4.75 4.75L3.05 3.05", "M8 3.4L8 1", "M11.25 4.75L12.95 3.05",
     )
     val MeterSmall = solid(
         14f, 14f,

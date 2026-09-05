@@ -59,6 +59,7 @@ import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.data.provider.ProviderStore
 import stream.cliamp.mobile.playback.PlaybackBus
+import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampTextField
@@ -100,6 +101,7 @@ fun CommandScreen(
     onOpenProvider: (ProviderAccount) -> Unit,
     onOpenShow: (PodcastShow) -> Unit,
     onOpenTag: (String) -> Unit,
+    onBack: () -> Unit,
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -227,6 +229,8 @@ fun CommandScreen(
                     .padding(top = 10.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                BackChip(onClick = onBack)
+                Spacer(Modifier.width(6.dp))
                 CliampTextField(
                     value = query,
                     onValueChange = { query = it },

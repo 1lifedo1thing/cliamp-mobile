@@ -121,34 +121,50 @@ fun IdentityBar(left: String, right: String, modifier: Modifier = Modifier) {
 
 enum class Tab(val label: String) {
     // Play is gone: the full player opens from the mini-player bar. Servers is
-    // gone too, folded into Library beside the other sources.
-    Lib("Library"), Stations("STATIONS"), Pods("PODCASTS"), Cmd("Search")
+    // gone too, folded into Library beside the other sources. Search is gone
+    // too: it is a floating corner icon rather than a destination.
+    Lib("Library"), Stations("STATIONS"), Pods("PODCASTS")
 }
 
 /**
- * A single bare settings icon floating in the top-right corner of every tab.
- * It takes no layout space — it overlays the screen via [Modifier.offset] and
- * [align], so the tabs keep their own full bleed. (The queue moved into the
- * mini player bar.) In landscape the corner belongs to the tab rail, so the
- * arm slides in to sit just clear of it via [endInset].
+ * The two bare icons floating in the top-right corner of every tab: the
+ * magnifier opens the app-wide finder, the gear opens settings. They take no
+ * layout space — they overlay the screen via [Modifier.offset] and [align],
+ * so the tabs keep their own full bleed. (The queue moved into the mini
+ * player bar.) In landscape the corner belongs to the tab rail, so the pair
+ * slides in to sit just clear of it via [endInset].
  */
 @Composable
-fun BoxScope.SettingsArm(
+fun BoxScope.TabCorners(
+    onOpenSearch: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     endInset: Dp = Gutter,
 ) {
     val p = LocalPalette.current
-    Icon(
-        CliampIcons.Settings, "settings",
+    Row(
         modifier
             .align(Alignment.TopEnd)
             .offset(y = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
-            .padding(top = 12.dp, end = endInset)
-            .size(17.dp)
-            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onOpenSettings),
-        tint = p.inkSecondary,
-    )
+            .padding(top = 12.dp, end = endInset),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            CliampIcons.Search, "search",
+            Modifier
+                .size(22.dp)
+                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onOpenSearch),
+            tint = p.inkSecondary,
+        )
+        Icon(
+            CliampIcons.Gear, "settings",
+            Modifier
+                .size(22.dp)
+                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onOpenSettings),
+            tint = p.inkSecondary,
+        )
+    }
 }
 
 @Composable
@@ -195,7 +211,6 @@ private fun TabItem(
                 Tab.Lib -> Icon(CliampIcons.LibTab, null, Modifier.size(17.dp), tint = tint)
                 Tab.Stations -> Icon(CliampIcons.StationsTab, null, Modifier.size(17.dp), tint = tint)
                 Tab.Pods -> Icon(CliampIcons.PodsTab, null, Modifier.size(17.dp), tint = tint)
-                Tab.Cmd -> Icon(CliampIcons.SearchTab, null, Modifier.size(17.dp), tint = tint)
             }
         }
         Mono(tab.label, CliampType.tabLabel, tint)
@@ -209,7 +224,7 @@ private fun Modifier.offsetTopBorder(color: Color) = drawBehind {
 /**
  * The landscape tab bar: a slim vertical rail on the right edge instead of
  * the bottom strip, so the horizontal frame keeps its full height for
- * content. Same four tabs, same active accent - just rotated.
+ * content. Same three tabs, same active accent - just rotated.
  */
 @Composable
 fun CliampTabRail(
@@ -265,7 +280,6 @@ private fun RailItem(
                 Tab.Lib -> Icon(CliampIcons.LibTab, null, Modifier.size(17.dp), tint = tint)
                 Tab.Stations -> Icon(CliampIcons.StationsTab, null, Modifier.size(17.dp), tint = tint)
                 Tab.Pods -> Icon(CliampIcons.PodsTab, null, Modifier.size(17.dp), tint = tint)
-                Tab.Cmd -> Icon(CliampIcons.SearchTab, null, Modifier.size(17.dp), tint = tint)
             }
         }
         Mono(tab.label, CliampType.tabLabel, tint, maxLines = 1)
