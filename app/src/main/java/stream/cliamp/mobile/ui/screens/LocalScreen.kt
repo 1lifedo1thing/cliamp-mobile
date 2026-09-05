@@ -57,8 +57,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -813,37 +811,27 @@ private fun PlaylistTile(
     LaunchedEffect(pl.station.slug, cover) {
         art = LocalArt.bitmapFor(cover, context.contentResolver)?.asImageBitmap()
     }
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
-            .clip(RoundedCornerShape(8.dp))
-            .background(p.panel)
-            .border(1.dp, p.chipBorder, RoundedCornerShape(8.dp))
-            .clickable(onClick = { onOpen(pl) }),
-    ) {
-        if (art != null) {
-            Image(art!!, pl.station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        } else {
-            StripedArt(modifier = Modifier.fillMaxSize(), caption = null)
-        }
-        Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
-            PlaylistMenu(pinned = pinned, onAddSongs = onAddSongs, onEdit = onEdit, onDelete = onDelete, onPin = onPin)
-        }
+    Column(Modifier.fillMaxWidth().clickable(onClick = { onOpen(pl) })) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(56.dp)
-                .align(Alignment.BottomCenter)
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Transparent,
-                        1f to p.ground.copy(alpha = 0.92f),
-                    )
-                ),
-        )
-        Column(Modifier.align(Alignment.BottomStart).padding(12.dp)) {
-            Mono(pl.station.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(p.panel)
+                .border(1.dp, p.chipBorder, RoundedCornerShape(8.dp)),
+        ) {
+            if (art != null) {
+                Image(art!!, pl.station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            } else {
+                StripedArt(modifier = Modifier.fillMaxSize(), caption = null)
+            }
+            Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
+                PlaylistMenu(pinned = pinned, onAddSongs = onAddSongs, onEdit = onEdit, onDelete = onDelete, onPin = onPin)
+            }
+        }
+        Spacer(Modifier.height(7.dp))
+        Column(Modifier.padding(horizontal = 2.dp)) {
+            Mono(pl.station.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 2)
             Mono("${pl.songIds.size} songs", CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
         }
     }
@@ -866,51 +854,41 @@ private fun SmartPlaylistTile(
         label = "shimmer",
     )
 
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
-            .clip(RoundedCornerShape(8.dp))
-            .then(
-                if (scanning) Modifier.background(if (p.dark) p.ground else p.keyFace)
-                else Modifier.background(p.panel)
-            )
-            .border(1.dp, p.chipBorder, RoundedCornerShape(8.dp))
-            .clickable(onClick = onOpen),
-    ) {
-        if (scanning) {
-            Box(Modifier.fillMaxSize().background(p.inkFaint.copy(alpha = 0.35f * shimmer)),
-                contentAlignment = Alignment.Center) {
-                Icon(kindIcon, sp.label, Modifier.size(22.dp), tint = p.inkFaint.copy(alpha = 0.7f * shimmer))
-            }
-        } else {
-            SmartCollage(sp, Modifier.fillMaxSize())
-            Box(
-                Modifier
-                    .align(Alignment.TopStart)
-                    .padding(10.dp)
-                    .size(26.dp)
-                    .background(p.ground.copy(alpha = 0.85f), RoundedCornerShape(6.dp))
-                    .border(1.dp, p.chipBorder, RoundedCornerShape(6.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(kindIcon, sp.label, Modifier.size(12.dp), tint = p.accent)
-            }
-        }
+    Column(Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(56.dp)
-                .align(Alignment.BottomCenter)
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Transparent,
-                        1f to p.ground.copy(alpha = 0.92f),
-                    )
-                ),
-        )
-        Column(Modifier.align(Alignment.BottomStart).padding(12.dp)) {
-            Mono(sp.label, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(8.dp))
+                .then(
+                    if (scanning) Modifier.background(if (p.dark) p.ground else p.keyFace)
+                    else Modifier.background(p.panel)
+                )
+                .border(1.dp, p.chipBorder, RoundedCornerShape(8.dp)),
+        ) {
+            if (scanning) {
+                Box(Modifier.fillMaxSize().background(p.inkFaint.copy(alpha = 0.35f * shimmer)),
+                    contentAlignment = Alignment.Center) {
+                    Icon(kindIcon, sp.label, Modifier.size(22.dp), tint = p.inkFaint.copy(alpha = 0.7f * shimmer))
+                }
+            } else {
+                SmartCollage(sp, Modifier.fillMaxSize())
+                Box(
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(10.dp)
+                        .size(26.dp)
+                        .background(p.ground.copy(alpha = 0.85f), RoundedCornerShape(6.dp))
+                        .border(1.dp, p.chipBorder, RoundedCornerShape(6.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(kindIcon, sp.label, Modifier.size(12.dp), tint = p.accent)
+                }
+            }
+        }
+        Spacer(Modifier.height(7.dp))
+        Column(Modifier.padding(horizontal = 2.dp)) {
+            Mono(sp.label, CliampType.rowPrimaryMedium, p.ink, maxLines = 2)
             if (scanning) {
                 Box(Modifier.padding(top = 3.dp).width(110.dp).height(10.dp)
                     .clip(RoundedCornerShape(5.dp))
