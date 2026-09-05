@@ -46,6 +46,7 @@ import stream.cliamp.mobile.MainActivity
 import stream.cliamp.mobile.R
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
+import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.net.Http
 import stream.cliamp.mobile.widget.CliampWidgetReceiver
 
@@ -497,7 +498,7 @@ class PlaybackService : MediaSessionService() {
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(station.name)
-                        .setArtist(station.meta.ifBlank { "cliamp radio" })
+                        .setArtist(notificationArtist(station))
                         .setStation(station.name)
                         .setArtworkData(
                             StationArtwork.forStation(context, station),
@@ -509,6 +510,13 @@ class PlaybackService : MediaSessionService() {
                         .build()
                 )
                 .build()
+
+        /** The artist/subtitle line the notification reads, per source. */
+        fun notificationArtist(station: Station): String = when (station.source) {
+            StationSource.Local -> station.artistAlbum.ifBlank { "local audio" }
+            StationSource.Podcast -> station.artist.ifBlank { "podcast" }
+            else -> station.meta.ifBlank { "cliamp radio" }
+        }
     }
 }
 
