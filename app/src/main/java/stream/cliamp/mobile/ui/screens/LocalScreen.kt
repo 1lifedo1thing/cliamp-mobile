@@ -95,6 +95,11 @@ private enum class SmartKind(val label: String) {
     val key: String get() = "smart:$name"
 }
 
+/** The favourites playlist's type sub-tabs. */
+private enum class FavScope(val label: String) {
+    All("all"), Local("local"), Stations("stations"), Pods("podcasts")
+}
+
 /** A derived smart playlist: a label plus its current member stations. */
 private class SmartPlaylist(val kind: SmartKind, val stations: List<Station>) {
     val label: String get() = kind.label
@@ -1139,28 +1144,57 @@ private fun SmartPlaylistDetail(
     // Only the local-songs smart list sorts; favourites and recent have their
     // own fixed orders (recent is already time-sorted).
     val local = pl.kind == SmartKind.LocalSongs
+    // Favourites mix local songs, radio stations and podcasts, so they get
+    // their own type sub-tabs: all / local / stations / podcasts.
+    val isFav = pl.kind == SmartKind.Favorites
+    var favScope by remember(pl.kind) { mutableStateOf(FavScope.All) }
     val sort by prefs.playlistSort("local-songs")
         .collectAsState(initial = prefs.playlistSortValue("local-songs"))
     val members = pl.stations
-    val visible = remember(members, local, sort) {
-        if (local) sortedStations(members, sort) else members
+    val visible = remember(members, local, sort, isFav, favScope) {
+        val base = if (local) sortedStations(members, sort) else members
+        if (!isFav || favScope == FavScope.All) base
+        else base.filter { s ->
+            when (favScope) {
+                FavScope.Local -> s.source == StationSource.Local
+                FavScope.Stations -> s.source != StationSource.Local && s.source != StationSource.Podcast
+                FavScope.Pods -> s.source == StationSource.Podcast
+                FavScope.All -> true
+            }
+        }
     }
     LazyColumn(Modifier.fillMaxSize()) {
-        if (members.isEmpty()) {
+        if (visible.isEmpty()) {
             item {
                 Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
                     Mono(
-                        when (pl.kind) {
-                            SmartKind.LocalSongs ->
+                        when {
+                            pl.kind == SmartKind.Favorites && favScope == FavScope.Local -> "no local favourites yet"
+                            pl.kind == SmartKind.Favorites && favScope == FavScope.Stations -> "no station favourites yet"
+                            pl.kind == SmartKind.Favorites && favScope == FavScope.Pods -> "no podcast favourites yet"
+                            pl.kind == SmartKind.LocalSongs ->
                                 if (loading) "scanning for songs…" else "no songs on the phone yet"
-                            SmartKind.Favorites -> "no favourites yet"
-                            SmartKind.RecentlyPlayed -> "nothing played recently"
+                            pl.kind == SmartKind.Favorites -> "no favourites yet"
+                            else -> "nothing played recently"
                         },
                         CliampType.rowSecondary, p.inkFaint,
                     )
                 }
             }
         } else {
+            if (isFav) {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                            .padding(start = Gutter, end = Gutter, top = 4.dp, bottom = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        FavScope.entries.forEach { f ->
+                            Chip(f.label, favScope == f, onClick = { favScope = f })
+                        }
+                    }
+                }
+            }
             if (local) {
                 item {
                     Row(
@@ -1176,7 +1210,7 @@ private fun SmartPlaylistDetail(
                     }
                 }
             }
-            item { SectionLabel("${pl.label} — ${members.size}") }
+            item { SectionLabel("${pl.label} — ${visible.size}") }
             items(visible, key = { it.url }, contentType = { "local-song" }) { s ->
                 ListRow(
                     onClick = { onPlay(s, visible) },
@@ -1195,7 +1229,14 @@ private fun SmartPlaylistDetail(
                 ) {
                     Mono(s.name, CliampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
                     Mono(
-                        s.artistAlbum.ifBlank { s.meta },
+                        when (s.source) {
+                            StationSource.Podcast -> s.artist.ifBlank { s.meta.ifBlank { "podcast" } }
+                            StationSource.Local -> s.artistAlbum.ifBlank { s.meta }
+                            else -> buildList {
+                                s.meta.takeIf { it.isNotBlank() }?.let { add(it) }
+                                s.tagList.take(2).forEach { add(it) }
+                            }.joinToString(" · ")
+                        },
                         CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
                     )
                 }

@@ -57,7 +57,7 @@ import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
 
 private enum class Source(val label: String) {
-    All("all"), Cliamp("cliamp"), Directory("directory"), Favs("favs")
+    All("all"), Cliamp("cliamp"), Directory("directory")
 }
 
 @Composable
@@ -77,12 +77,6 @@ fun StationsScreen(
     val p = LocalPalette.current
     var source by remember { mutableStateOf(Source.All) }
 
-    // The LIB tab's favourites row shows radio stations only — local songs
-    // live in their own smart playlists on the PLAYLISTS tab.
-    val radioFavorites = favorites.filterNot {
-        it.source == StationSource.Local || it.source == StationSource.Podcast
-    }
-
     val cliamp by repository.cliamp.collectAsState()
     val directory by repository.directory.collectAsState()
     val dirStats by repository.directoryStats.collectAsState()
@@ -96,7 +90,7 @@ fun StationsScreen(
         }
     }
     LaunchedEffect(nearEnd, directory.stations.size) {
-        if (nearEnd && source != Source.Cliamp && source != Source.Favs) repository.nextPage()
+        if (nearEnd && source != Source.Cliamp) repository.nextPage()
     }
 
     // A global search in the command/tab writes its temporary query into the
@@ -119,10 +113,6 @@ fun StationsScreen(
         val directoryShown = source == Source.All || source == Source.Directory
         if (!directoryShown) return@LaunchedEffect
         var idx = 0
-        if (source == Source.All || source == Source.Favs) {
-            if (radioFavorites.isNotEmpty()) idx += 1 + radioFavorites.size
-            else if (source == Source.Favs) idx += 1
-        }
         if (source == Source.All || source == Source.Cliamp) idx += 1 + cliamp.size
         listState.animateScrollToItem(idx)
         onDirectoryFocusConsumed()
@@ -163,26 +153,6 @@ fun StationsScreen(
         }
 
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
-
-            if (source == Source.Favs || source == Source.All) {
-                if (radioFavorites.isNotEmpty()) {
-                    item {
-                        SectionLabel("favourites — ${radioFavorites.size}")
-                    }
-                    items(radioFavorites, key = { "fav:${it.url}" }) { s ->
-                        StationRow(
-                            station = s,
-                            active = current?.url == s.url,
-                            playing = playing && current?.url == s.url,
-                            favorite = true,
-                            onPlay = { onPlay(s, radioFavorites) },
-                            onToggleFavorite = { onToggleFavorite(s) },
-                        )
-                    }
-                } else if (source == Source.Favs) {
-                    item { EmptyNote("no favourites yet — star a station from any list") }
-                }
-            }
 
             if (source == Source.All || source == Source.Cliamp) {
                 item {
