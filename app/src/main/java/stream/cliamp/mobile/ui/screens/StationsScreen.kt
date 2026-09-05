@@ -39,8 +39,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -173,7 +171,7 @@ fun StationsScreen(
         // for the grid's whole lifetime, and a toggle just rebuilds it.
         key(cliampGrid, directoryGrid) {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(110.dp),
+                columns = GridCells.Adaptive(150.dp),
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 state = listState,
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
@@ -414,62 +412,52 @@ private fun StationTile(
         if (station.source == StationSource.Cliamp) return@LaunchedEffect
         art = StationArtSource.bitmapForSmall(station)?.asImageBitmap()
     }
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
-            .clip(RoundedCornerShape(8.dp))
-            .background(p.panel)
-            .border(1.dp, p.chipBorder, RoundedCornerShape(8.dp))
-            .clickable(onClick = onPlay),
-    ) {
-        if (art != null) {
-            Image(art!!, station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        } else {
-            Box(
-                Modifier.fillMaxSize().background(if (p.dark) p.ground else p.keyFace),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(CliampIcons.StationsTab, null, Modifier.size(26.dp), tint = p.chipBorder)
-            }
-        }
-        Icon(
-            if (favorite) CliampIcons.StarFilled else CliampIcons.Star,
-            "favourite",
-            Modifier.align(Alignment.TopEnd).padding(10.dp).size(15.dp).clickable(onClick = onToggleFavorite),
-            tint = if (favorite) p.accent else p.inkFaint,
-        )
-        if (active) {
-            Box(
-                Modifier
-                    .align(Alignment.Center)
-                    .size(24.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(p.accent.copy(alpha = 0.92f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    if (playing) CliampIcons.Pause else CliampIcons.PlayRow,
-                    null,
-                    Modifier.size(11.dp),
-                    tint = p.onAccent,
-                )
-            }
-        }
+    Column(Modifier.fillMaxWidth().clickable(onClick = onPlay)) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(48.dp)
-                .align(Alignment.BottomCenter)
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Transparent,
-                        1f to p.ground.copy(alpha = 0.92f),
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(p.panel)
+                .border(1.dp, p.chipBorder, RoundedCornerShape(8.dp)),
+        ) {
+            if (art != null) {
+                Image(art!!, station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            } else {
+                Box(
+                    Modifier.fillMaxSize().background(if (p.dark) p.ground else p.keyFace),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(CliampIcons.StationsTab, null, Modifier.size(26.dp), tint = p.chipBorder)
+                }
+            }
+            Icon(
+                if (favorite) CliampIcons.StarFilled else CliampIcons.Star,
+                "favourite",
+                Modifier.align(Alignment.TopEnd).padding(10.dp).size(15.dp).clickable(onClick = onToggleFavorite),
+                tint = if (favorite) p.accent else p.inkFaint,
+            )
+            if (active) {
+                Box(
+                    Modifier
+                        .align(Alignment.Center)
+                        .size(24.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(p.accent.copy(alpha = 0.92f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (playing) CliampIcons.Pause else CliampIcons.PlayRow,
+                        null,
+                        Modifier.size(11.dp),
+                        tint = p.onAccent,
                     )
-                ),
-        )
-        Column(Modifier.align(Alignment.BottomStart).padding(8.dp)) {
-            Mono(station.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+                }
+            }
+        }
+        Spacer(Modifier.height(7.dp))
+        Column(Modifier.padding(horizontal = 2.dp)) {
+            Mono(station.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 2)
             Mono(
                 buildList {
                     if (station.source == StationSource.Cliamp) add("cliamp")

@@ -39,8 +39,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -148,7 +146,7 @@ fun PodcastsScreen(
         // spans never flip in place while the directory is appending pages.
         key(subsGrid, podDirectoryGrid) {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(110.dp),
+                columns = GridCells.Adaptive(150.dp),
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 state = listState,
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
@@ -429,45 +427,35 @@ private fun ShowTile(
             art = StationArtSource.bitmapForUrl(show.artwork)?.asImageBitmap()
         }
     }
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
-            .clip(RoundedCornerShape(8.dp))
-            .background(p.panel)
-            .border(1.dp, p.chipBorder, RoundedCornerShape(8.dp))
-            .clickable(onClick = onOpen),
-    ) {
-        if (art != null) {
-            Image(art!!, show.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        } else {
-            Box(
-                Modifier.fillMaxSize().background(if (p.dark) p.ground else p.keyFace),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(CliampIcons.PodRow, null, Modifier.size(26.dp), tint = p.chipBorder)
-            }
-        }
-        Icon(
-            if (subscribed) CliampIcons.StarFilled else CliampIcons.Star,
-            "subscribe",
-            Modifier.align(Alignment.TopEnd).padding(10.dp).size(15.dp).clickable(onClick = onToggleSubscribe),
-            tint = if (subscribed) p.accent else p.inkFaint,
-        )
+    Column(Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(48.dp)
-                .align(Alignment.BottomCenter)
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Transparent,
-                        1f to p.ground.copy(alpha = 0.92f),
-                    )
-                ),
-        )
-        Column(Modifier.align(Alignment.BottomStart).padding(8.dp)) {
-            Mono(show.title, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(p.panel)
+                .border(1.dp, p.chipBorder, RoundedCornerShape(8.dp)),
+        ) {
+            if (art != null) {
+                Image(art!!, show.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            } else {
+                Box(
+                    Modifier.fillMaxSize().background(if (p.dark) p.ground else p.keyFace),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(CliampIcons.PodRow, null, Modifier.size(26.dp), tint = p.chipBorder)
+                }
+            }
+            Icon(
+                if (subscribed) CliampIcons.StarFilled else CliampIcons.Star,
+                "subscribe",
+                Modifier.align(Alignment.TopEnd).padding(10.dp).size(15.dp).clickable(onClick = onToggleSubscribe),
+                tint = if (subscribed) p.accent else p.inkFaint,
+            )
+        }
+        Spacer(Modifier.height(7.dp))
+        Column(Modifier.padding(horizontal = 2.dp)) {
+            Mono(show.title, CliampType.rowPrimaryMedium, p.ink, maxLines = 2)
             Mono(show.meta, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
         }
     }
