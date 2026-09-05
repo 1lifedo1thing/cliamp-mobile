@@ -40,6 +40,7 @@ import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.MeterFrame
 import stream.cliamp.mobile.ui.components.MeterSize
+import stream.cliamp.mobile.ui.components.StripedArt
 import stream.cliamp.mobile.ui.components.rememberMeter
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -54,6 +55,7 @@ fun MiniPlayer(
     buffering: Boolean,
     reconnecting: Int = 0,
     queueCount: Int,
+    visualizer: String = "spectrum",
     onOpenQueue: () -> Unit,
     onToggle: () -> Unit,
     onOpen: () -> Unit,
@@ -62,7 +64,11 @@ fun MiniPlayer(
     // The bar never goes away: it shows the current or last-played station,
     // or the empty "nothing playing" state when nothing has played yet.
     val empty = station == null
-    val frame = rememberMeter(columns = MeterSize.Mini.columns, live = playing)
+    // The meter is the visualizer; when the setting is off the frame loop is
+    // not run at all, so the brick meter is truly gone from the bar.
+    val frame = if (visualizer != "off")
+        rememberMeter(columns = MeterSize.Mini.columns, live = playing)
+    else null
 
     Column(Modifier.fillMaxWidth().background(p.panel)) {
         HairlineDivider(region = true)
@@ -134,11 +140,13 @@ fun MiniPlayer(
 
 /**
  * The mini bar's leading slot: a small square cover thumbnail for anything
- * that has real art, falling back to the brick meter for radio (which has no
- * artwork of its own, and whose signature look is the meter anyway).
+ * that has art - local embedded art, a provider/podcast cover, or scraped
+ * radio branding (og:image, touch icon, favicon). Only when no cover exists
+ * does it fall back to the brick meter, and that meter only when the
+ * visualizer is on; with it off the striped placeholder plate is shown.
  */
 @Composable
-private fun MiniArt(station: Station?, frame: MeterFrame) {
+private fun MiniArt(station: Station?, frame: MeterFrame?) {
     val p = LocalPalette.current
     val context = LocalContext.current
     var art by remember(station?.id) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
@@ -150,7 +158,10 @@ private fun MiniArt(station: Station?, frame: MeterFrame) {
                 LocalArt.bitmapForSmall(s.cover, context.contentResolver)
                     ?: StationArtSource.bitmapForSmall(s) // else embedded album art
             s.cover.startsWith("http") -> StationArtSource.bitmapForUrl(s.cover)
-            else -> null // radio: no scraping in the tiny bar, keep the meter
+            // Radio streams carry no cover of their own, so the best available
+            // branding is scraped: og:image, then apple-touch-icon, then the
+            // directory's favicon. Cliamp channels return null here.
+            else -> StationArtSource.bitmapForSmall(s)
         }?.asImageBitmap()
     }
     if (art != null) {
@@ -164,7 +175,7 @@ private fun MiniArt(station: Station?, frame: MeterFrame) {
                 .clip(RoundedCornerShape(8.dp)),
             contentScale = ContentScale.Crop,
         )
-    } else {
+    } else if (frame != null) {
         BrickMeter(
             frame = frame,
             modifier = Modifier.size(width = 40.dp, height = MeterSize.Mini.height),
@@ -172,6 +183,11 @@ private fun MiniArt(station: Station?, frame: MeterFrame) {
             gap = MeterSize.Mini.gap,
             columnGap = 2.dp,
             showPeaks = false,
+        )
+    } else {
+        StripedArt(
+            modifier = Modifier.size(40.dp),
+            radius = 8.dp,
         )
     }
 }

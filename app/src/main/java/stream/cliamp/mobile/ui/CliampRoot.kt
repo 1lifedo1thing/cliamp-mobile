@@ -106,6 +106,7 @@ fun CliampRoot(
     val streamTitle by PlaybackBus.streamTitle.collectAsState()
     val favorites by prefs.favorites.collectAsState(initial = emptyList())
     val recent by prefs.history.collectAsState(initial = emptyList())
+    val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
     val reconnect by PlaybackBus.reconnectAttempt.collectAsState()
     val providerAccounts by providers.accounts.collectAsState(initial = emptyList())
     val queue by player.queue.collectAsState(initial = emptyList())
@@ -312,6 +313,7 @@ fun CliampRoot(
                     buffering = playerState.buffering,
                     reconnecting = reconnect,
                     queueCount = queue.size,
+                    visualizer = visualizer,
                     onOpenQueue = { overlay = Overlay.Queue },
                     onToggle = { player.toggle(station ?: recent.firstOrNull()) },
                     onOpen = { overlay = Overlay.Player },
