@@ -150,6 +150,9 @@ interface LocalSongDao {
 
     @Query("DELETE FROM local_songs")
     suspend fun clear()
+
+    @Query("DELETE FROM local_songs WHERE songId = :songId")
+    suspend fun delete(songId: String)
 }
 
 @Dao

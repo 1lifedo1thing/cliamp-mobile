@@ -1,7 +1,10 @@
 package stream.cliamp.mobile.data
 
+import android.app.PendingIntent
+import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.provider.MediaStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -232,5 +235,62 @@ class LocalLibrary(context: Context) {
                 )
             }
         }
+    }
+
+    // ── removing a song from the phone ──────────────────────────────────────
+
+    private fun pathOf(s: Station): String = s.url.removePrefix("file://").let(Uri::decode)
+
+    /**
+     * The MediaStore `content:` uri for a local song item, so it can be shown
+     * and deleted through the OS index rather than by reaching into the
+     * filesystem. Built from the item's own row id via [ContentUris]: the raw
+     * [MediaStore.Audio.Media.getContentUriForPath] uri has no id, and the
+     * system's delete sheet rejects id-less collection uris.
+     */
+    private fun mediaUri(s: Station): Uri? {
+        val path = pathOf(s)
+        return runCatching {
+            resolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.Audio.Media._ID),
+                "${MediaStore.Audio.Media.DATA} = ?",
+                arrayOf(path),
+                null,
+            )?.use { c ->
+                if (c.moveToFirst()) ContentUris.withAppendedId(
+                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                    c.getLong(0)
+                ) else null
+            }
+        }.getOrNull()
+    }
+
+    /**
+     * On Android 11+ (API 30) deleting media that the app does not own goes
+     * through the system's own confirmation sheet: [MediaStore.createDeleteRequest]
+     * hands back a [PendingIntent] the UI launches, and the OS directory is
+     * only touched when the user agrees. Returns null on older systems (or when
+     * the item cannot be located), where the caller falls back to [removeLocal].
+     */
+    fun deleteRequest(s: Station): PendingIntent? {
+        if (Build.VERSION.SDK_INT < 30) return null
+        val uri = mediaUri(s) ?: return null
+        return runCatching { MediaStore.createDeleteRequest(resolver, listOf(uri)) }.getOrNull()
+    }
+
+    /**
+     * Drop a song from the library and the disk cache, and best-effort remove
+     * its file (the Android 11+ path does this via the OS dialog; below that it
+     * happens here under the legacy write permission).
+     */
+    fun removeLocal(s: Station) {
+        val path = pathOf(s)
+        if (_songs.value.any { it.id == s.id }) {
+            _songs.value = _songs.value.filterNot { it.id == s.id }
+        }
+        runBlocking { runCatching { dao.delete(s.id) } }
+        if (!s.url.startsWith("file://")) return // a stream-ish id, not a real file
+        runCatching { File(path).delete() }
     }
 }

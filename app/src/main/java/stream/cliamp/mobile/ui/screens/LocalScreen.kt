@@ -1,9 +1,12 @@
 package stream.cliamp.mobile.ui.screens
 
 import android.Manifest
+import android.app.Activity
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -32,6 +35,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.animation.core.RepeatMode
@@ -64,6 +68,10 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import kotlinx.coroutines.launch
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import stream.cliamp.mobile.CliampApp
 import stream.cliamp.mobile.data.LocalArt
 import stream.cliamp.mobile.data.StationArtSource
@@ -91,6 +99,9 @@ import stream.cliamp.mobile.ui.components.GridListToggle
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.ListRow
+import stream.cliamp.mobile.ui.components.OverflowButton
+import stream.cliamp.mobile.ui.components.OverflowItem
+import stream.cliamp.mobile.ui.components.OverflowMenu
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.components.StripedArt
@@ -160,6 +171,10 @@ fun LocalScreen(
     var creatingName by remember { mutableStateOf(false) }
     var renamingSlug by remember { mutableStateOf<String?>(null) }
     var nameText by remember { mutableStateOf("") }
+    // The per-song ⋮ menu: "info" opens the full song detail, "remove" hands
+    // the file to the OS delete sheet (or drops it directly on old Android).
+    var infoFor by remember { mutableStateOf<Station?>(null) }
+    var pendingDelete by remember { mutableStateOf<Station?>(null) }
 
     val songs by localLibrary.songs.collectAsState()
     val loading by localLibrary.loading.collectAsState()
@@ -223,6 +238,34 @@ fun LocalScreen(
     val playlistsGrid by prefs.playlistsGrid.collectAsState(initial = prefs.playlistsGrid.value)
     var favScope by remember { mutableStateOf(FavScope.All) }
 
+    // Result of the OS "delete these files from the device?" sheet. Only the
+    // confirmed case drops the song; a cancel leaves the file untouched.
+    val favoriteUrls = remember(favorites) { favorites.mapTo(HashSet()) { it.url } }
+    val dropLocal: (Station) -> Unit = { s ->
+        scope.launch {
+            localLibrary.removeLocal(s)
+            if (s.url in favoriteUrls) prefs.removeFavorite(s)
+            if (infoFor?.url == s.url) infoFor = null
+        }
+    }
+    val deleteLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { res ->
+        pendingDelete?.let { s ->
+            if (res.resultCode == Activity.RESULT_OK) dropLocal(s)
+            pendingDelete = null
+        }
+    }
+    val removeLocalSong: (Station) -> Unit = { s ->
+        val start = localLibrary.deleteRequest(s)
+        if (start != null) {
+            pendingDelete = s
+            deleteLauncher.launch(IntentSenderRequest.Builder(start).build())
+        } else {
+            dropLocal(s)
+        }
+    }
+
     // Pinned smart playlists — auto-populated from global state, non-removable.
     // "local songs" is always at the very top. Their tile collages preview the
     // first four members *exactly as the detail pane lists them*, i.e. under
@@ -247,9 +290,10 @@ fun LocalScreen(
     val openSmartPlaylist = smartPlaylists.firstOrNull { it.kind == openSmart }
     val paneVisible = openSmartPlaylist == null && showing == null
 
-    val canGoBack = showProviders || showing != null || openSmartPlaylist != null || addingTo != null
+    val canGoBack = showProviders || showing != null || openSmartPlaylist != null || addingTo != null || infoFor != null
     BackHandler(enabled = backEnabled && canGoBack) {
         when {
+            infoFor != null -> infoFor = null
             addingTo != null -> addingTo = null
             showing != null -> openSlug = null
             openSmartPlaylist != null -> openSmart = null
@@ -268,6 +312,7 @@ fun LocalScreen(
             ) {
                 Mono(
                     when {
+                        infoFor != null -> "song info"
                         showing != null -> showing.station.name
                         openSmartPlaylist != null -> openSmartPlaylist.label
                         else -> "Library"
@@ -275,7 +320,7 @@ fun LocalScreen(
                     CliampType.screenTitle, p.ink, maxLines = 1,
                 )
             }
-            if (showing == null && openSmartPlaylist == null) {
+            if (infoFor == null && showing == null && openSmartPlaylist == null) {
                 // Sub-tabs: the library list, and a dedicated providers pane.
                 // A little top padding keeps them from sticking to the title.
                 Row(
@@ -286,7 +331,7 @@ fun LocalScreen(
                     Chip("providers", selected = showProviders, onClick = { onShowProviders(true) })
                 }
             }
-            if (showing != null) {
+            if (infoFor == null && showing != null) {
                 // playlist detail sub-header
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
@@ -330,6 +375,8 @@ fun LocalScreen(
                     onReplaceQueue = onReplaceQueue,
                     favScope = favScope,
                     onFavScopeChange = { favScope = it },
+                    onInfo = { infoFor = it },
+                    onRemove = removeLocalSong,
                 )
                 showing != null -> PlaylistDetailShown(
                     playlist = showing,
@@ -396,6 +443,19 @@ fun LocalScreen(
         }
 
     }
+    // The full song-detail overlay, on top of whatever pane is open.
+    if (infoFor != null) SongInfoView(
+        s = infoFor!!,
+        systemBack = canGoBack,
+        onDismiss = { infoFor = null },
+        onToggleFavorite = onToggleFavorite,
+        favorite = infoFor!!.url in favoriteUrls,
+        onRemove = {
+            val s = infoFor!!
+            infoFor = null
+            removeLocalSong(s)
+        },
+    )
 }
 
 private fun checkAudio(context: android.content.Context, perm: String): Boolean =
@@ -1399,6 +1459,8 @@ private fun SmartPlaylistDetail(
     onReplaceQueue: (Station, List<Station>) -> Unit = { s, _ -> onPlay(s, emptyList()) },
     favScope: FavScope = FavScope.All,
     onFavScopeChange: (FavScope) -> Unit = {},
+    onInfo: (Station) -> Unit = {},
+    onRemove: (Station) -> Unit = {},
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
@@ -1480,12 +1542,22 @@ private fun SmartPlaylistDetail(
                         SongCover(s = s, current = current, playing = playing)
                     },
                     trailing = {
-                        Icon(
-                            if (s.url in favorites) CliampIcons.StarFilled else CliampIcons.Star,
-                            "favourite",
-                            Modifier.size(15.dp).clickable { onToggleFavorite(s) },
-                            tint = if (s.url in favorites) p.accent else p.inkFaint,
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // ⋮ menu sits immediately to the left of the star.
+                            OverflowMenu(
+                                trigger = { open -> OverflowButton(open, size = 16) },
+                                items = listOf(
+                                    OverflowItem("info", color = p.ink, action = { onInfo(s) }),
+                                    OverflowItem("remove", color = p.destructiveInk, action = { onRemove(s) }),
+                                ),
+                            )
+                            Icon(
+                                if (s.url in favorites) CliampIcons.StarFilled else CliampIcons.Star,
+                                "favourite",
+                                Modifier.size(15.dp).clickable { onToggleFavorite(s) },
+                                tint = if (s.url in favorites) p.accent else p.inkFaint,
+                            )
+                        }
                     },
                 ) {
                     Mono(s.name, CliampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
@@ -1554,5 +1626,143 @@ private fun SongCover(s: Station, current: Station?, playing: Boolean) {
                 )
             }
         }
+    }
+}
+/**
+ * Full-bleed song detail reached from a song row's ⋮ → "info": the cover art
+ * up top with every scrap of metadata, a favourite toggle, and the destructive
+ * "remove from device" action. It overlays the Library tab (own back handler)
+ * instead of being pushed into the row-scroll stack.
+ */
+@Composable
+private fun SongInfoView(
+    s: Station,
+    systemBack: Boolean,
+    onDismiss: () -> Unit,
+    onToggleFavorite: (Station) -> Unit,
+    favorite: Boolean,
+    onRemove: () -> Unit,
+) {
+    val p = LocalPalette.current
+    val context = LocalContext.current
+    var art by remember(s.id) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(s.id) {
+        art = (LocalArt.bitmapFor(s.cover, context.contentResolver)
+            ?: StationArtSource.bitmapFor(s))?.asImageBitmap()
+    }
+
+    // The overlay handles its own back press (it is not part of the list pane's
+    // navigation), but must stand down when a player/queue overlay is on top.
+    BackHandler(enabled = systemBack) { onDismiss() }
+
+    val path = s.url.removePrefix("file://").let(Uri::decode)
+    val sizeLabel = remember(s.url) {
+        val f = File(path)
+        val mb = f.length() / 1_048_576f
+        String.format(Locale.US, "%.1f MB", mb)
+    }
+    val added = remember(s.dateAdded) {
+        if (s.dateAdded > 0) SimpleDateFormat("dd MMM yyyy", Locale.US)
+            .format(Date(s.dateAdded * 1000L)) else "—"
+    }
+
+    Box(Modifier.fillMaxSize().background(p.ground)) {
+        Column(Modifier.fillMaxSize()) {
+            ScreenHeader {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Mono("Info", CliampType.screenTitle, p.ink, maxLines = 1)
+                }
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                        .padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    Chip("‹ back", selected = false, onClick = onDismiss)
+                }
+            }
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+                Box(
+                    Modifier.size(260.dp).align(Alignment.CenterHorizontally).padding(top = 18.dp)
+                        .clip(RoundedCornerShape(8.dp)).background(p.artB),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (art != null) {
+                        Image(art!!, s.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    } else {
+                        Icon(CliampIcons.MusicNote, null, Modifier.size(40.dp), tint = p.inkTertiary)
+                    }
+                    if (favorite) {
+                        Mono(
+                            "♥ favourite", CliampType.chip, p.onAccent,
+                            Modifier.align(Alignment.TopStart).padding(8.dp)
+                                .clip(RoundedCornerShape(4.dp)).background(p.accent.copy(alpha = 0.92f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+
+                Column(Modifier.padding(horizontal = Gutter, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Mono(s.name, CliampType.trackTitleSmall, p.ink, maxLines = 2)
+                    Mono(s.artist.ifBlank { "unknown artist" }, CliampType.rowSecondary, p.inkTertiary)
+                    if (s.album.isNotBlank()) Mono(s.album, CliampType.body, p.inkTertiary)
+                }
+
+                Column(
+                    Modifier.fillMaxWidth().padding(Gutter),
+                    verticalArrangement = Arrangement.spacedBy(1.dp),
+                ) {
+                    SongInfoRow("duration", durationLabel(s.durationMs))
+                    SongInfoRow("added", added)
+                    SongInfoRow("size", sizeLabel)
+                    SongInfoRow("format", File(path).extension.uppercase().ifBlank { "—" })
+                    SongInfoRow("location", File(path).parent.orEmpty())
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                // Actions: favourite toggle and destructive remove, side by side.
+                Row(Modifier.fillMaxWidth().padding(Gutter)) {
+                    Row(
+                        Modifier.padding(end = 4.dp).weight(1f).clip(RoundedCornerShape(6.dp)).background(p.panel)
+                            .clickable { onToggleFavorite(s) }
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            if (favorite) CliampIcons.StarFilled else CliampIcons.Star,
+                            "favourite",
+                            Modifier.size(15.dp).padding(end = 6.dp),
+                            tint = if (favorite) p.accent else p.inkTertiary,
+                        )
+                        Mono(if (favorite) "favourited" else "favourite", CliampType.chip, p.ink)
+                    }
+                    Row(
+                        Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).background(p.panel)
+                            .clickable { onRemove() }
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Mono("remove from device", CliampType.chip, p.destructiveInk)
+                    }
+                }
+
+                Spacer(Modifier.height(48.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SongInfoRow(label: String, value: String) {
+    val p = LocalPalette.current
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Mono(label, CliampType.meta, p.inkFaint, Modifier.width(80.dp))
+        Mono(value, CliampType.rowSecondary, p.ink, maxLines = 2)
     }
 }
