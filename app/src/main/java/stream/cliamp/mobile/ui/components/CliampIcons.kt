@@ -110,7 +110,13 @@ object CliampIcons {
     val Pause = solid(20f, 22f, rrect(1f, 0f, 6.5f, 22f, 1f), rrect(12.5f, 0f, 6.5f, 22f, 1f))
     val Stop = solid(20f, 20f, rect(1f, 1f, 18f, 18f))
 
-    val Shuffle = stroked(18f, 14f, 1.8f, "M1 3h4l8 8h4", "M1 11h4l8-8h4")
+    val Shuffle = stroked(
+        18f, 14f, 1.8f,
+        "M1 3h4l8 8h3",
+        "M14.5 9.5l1.5 1.5-1.5 1.5",
+        "M1 11h4l8-8h3",
+        "M14.5 2.5l1.5 1.5-1.5 1.5",
+    )
     val Repeat = stroked(18f, 14f, 1.8f, "M2 5V3h14v8H4", "M6 8l-3 3 3 3")
     val Star = stroked(16f, 16f, 1.8f, "M8 1.5l1.9 4.2 4.6.5-3.4 3.1.9 4.5L8 11.6 4 13.8l.9-4.5L1.5 6.2l4.6-.5z")
     val StarFilled = solid(16f, 16f, "M8 1.5l1.9 4.2 4.6.5-3.4 3.1.9 4.5L8 11.6 4 13.8l.9-4.5L1.5 6.2l4.6-.5z")
