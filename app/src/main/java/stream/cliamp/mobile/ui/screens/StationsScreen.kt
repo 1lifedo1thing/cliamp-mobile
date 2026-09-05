@@ -322,13 +322,11 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
                     tint = p.onAccent,
                 )
             }
-        } else {
-            Icon(
-                if (playing) CliampIcons.Pause else CliampIcons.PlayRow,
-                null,
-                Modifier.size(if (playing) 9.dp else 11.dp),
-                tint = p.inkTertiary,
-            )
+        } else if (bmp == null) {
+            // Without art there is nothing but the empty plate, so the play
+            // affordance carries the thumb; a covered thumb stays clean until
+            // it actually plays.
+            Icon(CliampIcons.PlayRow, null, Modifier.size(11.dp), tint = p.inkTertiary)
         }
     }
 }
