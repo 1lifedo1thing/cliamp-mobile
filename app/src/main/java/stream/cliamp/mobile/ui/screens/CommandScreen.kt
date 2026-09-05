@@ -234,7 +234,6 @@ fun CommandScreen(
                     placeholder = "Search",
                     imeAction = ImeAction.Go,
                     onAction = { run(query) },
-                    autoFocus = true,
                 )
             }
             Row(
