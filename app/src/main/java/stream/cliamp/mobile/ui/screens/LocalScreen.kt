@@ -1521,14 +1521,18 @@ private fun SmartPlaylistDetail(
                     },
                     trailing = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            // ⋮ menu sits immediately to the left of the star.
-                            OverflowMenu(
-                                trigger = { open -> OverflowButton(open, size = 16) },
-                                items = listOf(
-                                    OverflowItem("info", color = p.ink, action = { onInfo(s) }),
-                                    OverflowItem("remove", color = p.destructiveInk, action = { onRemove(s) }),
-                                ),
-                            )
+                            // ⋮ menu sits immediately to the left of the star,
+                            // only on the local-songs list: favourites and
+                            // recently-played are read-only views.
+                            if (local) {
+                                OverflowMenu(
+                                    trigger = { open -> OverflowButton(open, size = 16) },
+                                    items = listOf(
+                                        OverflowItem("info", color = p.ink, action = { onInfo(s) }),
+                                        OverflowItem("remove", color = p.destructiveInk, action = { onRemove(s) }),
+                                    ),
+                                )
+                            }
                             Icon(
                                 if (s.url in favorites) CliampIcons.StarFilled else CliampIcons.Star,
                                 "favourite",
