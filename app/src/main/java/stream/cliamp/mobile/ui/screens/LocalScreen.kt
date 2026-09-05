@@ -1164,6 +1164,19 @@ private fun SmartPlaylistDetail(
         }
     }
     LazyColumn(Modifier.fillMaxSize()) {
+        if (isFav) {
+            item {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                        .padding(start = Gutter, end = Gutter, top = 4.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    FavScope.entries.forEach { f ->
+                        Chip(f.label, favScope == f, onClick = { favScope = f })
+                    }
+                }
+            }
+        }
         if (visible.isEmpty()) {
             item {
                 Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
@@ -1182,19 +1195,6 @@ private fun SmartPlaylistDetail(
                 }
             }
         } else {
-            if (isFav) {
-                item {
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                            .padding(start = Gutter, end = Gutter, top = 4.dp, bottom = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    ) {
-                        FavScope.entries.forEach { f ->
-                            Chip(f.label, favScope == f, onClick = { favScope = f })
-                        }
-                    }
-                }
-            }
             if (local) {
                 item {
                     Row(
