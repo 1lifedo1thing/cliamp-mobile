@@ -191,6 +191,7 @@ fun CliampRoot(
                 )
                 Tab.Pods -> PodcastsScreen(
                     podcasts = podcasts,
+                    prefs = prefs,
                     current = station,
                     playing = playerState.playing,
                     onPlay = onPlay,

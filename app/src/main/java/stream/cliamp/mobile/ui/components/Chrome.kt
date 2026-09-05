@@ -81,6 +81,29 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier, trailing: (@Compos
     }
 }
 
+/** The grid/list toggle at a section header. Shows the mode you switch *into*:
+ * a grid glyph while listed, a list glyph while tiled. */
+@Composable
+fun GridListToggle(gridMode: Boolean, onToggle: () -> Unit) {
+    val p = LocalPalette.current
+    Box(
+        Modifier
+            .size(34.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (p.dark) p.keyFace else p.ground)
+            .border(1.dp, p.keyBorder, RoundedCornerShape(6.dp))
+            .clickable(onClick = onToggle),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            if (gridMode) CliampIcons.ListShort else CliampIcons.Grid,
+            if (gridMode) "show as a list" else "show as a grid",
+            Modifier.size(16.dp),
+            tint = p.accent,
+        )
+    }
+}
+
 /** Fixed header: the system status bar inset, then title + filters. */
 @Composable
 fun ScreenHeader(

@@ -43,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -86,6 +87,7 @@ import stream.cliamp.mobile.data.provider.ProviderSpec
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampTextField
+import stream.cliamp.mobile.ui.components.GridListToggle
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.ListRow
@@ -217,8 +219,8 @@ fun LocalScreen(
     val localSort by prefs.playlistSort("local-songs")
         .collectAsState(initial = prefs.playlistSortValue("local-songs"))
     // Grid/list layout for each playlist section, remembered on disk.
-    val pinnedGrid by prefs.pinnedGrid.collectAsState(initial = true)
-    val playlistsGrid by prefs.playlistsGrid.collectAsState(initial = false)
+    val pinnedGrid by prefs.pinnedGrid.collectAsState(initial = prefs.pinnedGrid.value)
+    val playlistsGrid by prefs.playlistsGrid.collectAsState(initial = prefs.playlistsGrid.value)
     var favScope by remember { mutableStateOf(FavScope.All) }
 
     // Pinned smart playlists — auto-populated from global state, non-removable.
@@ -454,8 +456,13 @@ private fun PlaylistList(
     val p = LocalPalette.current
     val context = LocalContext.current
     Column(Modifier.fillMaxSize()) {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(150.dp),
+        // Remount the grid whenever a section flips grid/list: LazyGrid caches
+        // measured item spans, so mutating them in place (toggle + long list)
+        // hits the known androidx "Place was called on a node which was placed
+        // already" crash. A fresh grid keeps spans constant for its lifetime.
+        key(pinnedGrid, playlistsGrid) {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(150.dp),
             modifier = Modifier.weight(1f).fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -587,6 +594,7 @@ private fun PlaylistList(
                 }
             }
             item(span = { GridItemSpan(maxLineSpan) }) { Spacer(Modifier.height(20.dp)) }
+        }
         }
         Spacer(Modifier.height(8.dp))
     }
@@ -721,29 +729,6 @@ private fun PlaylistRow(
         Mono(
             playlistPreview(pl.songIds, byId).ifBlank { "empty playlist" },
             CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
-        )
-    }
-}
-
-/** The grid/list toggle at the head of each playlist section. Shows the mode
- * you switch *into*: a grid glyph while listed, a list glyph while tiled. */
-@Composable
-private fun GridListToggle(gridMode: Boolean, onToggle: () -> Unit) {
-    val p = LocalPalette.current
-    Box(
-        Modifier
-            .size(34.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (p.dark) p.keyFace else p.ground)
-            .border(1.dp, p.keyBorder, RoundedCornerShape(6.dp))
-            .clickable(onClick = onToggle),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            if (gridMode) CliampIcons.ListShort else CliampIcons.Grid,
-            if (gridMode) "show playlists as a list" else "show playlists as a grid",
-            Modifier.size(16.dp),
-            tint = p.accent,
         )
     }
 }

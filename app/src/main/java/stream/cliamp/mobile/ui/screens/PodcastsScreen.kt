@@ -8,17 +8,21 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -27,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -34,6 +39,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -44,11 +51,13 @@ import stream.cliamp.mobile.data.PodcastDirectory
 import stream.cliamp.mobile.data.PodcastQuery
 import stream.cliamp.mobile.data.PodcastRepository
 import stream.cliamp.mobile.data.PodcastShow
+import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.EmptyNote
+import stream.cliamp.mobile.ui.components.GridListToggle
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.OverflowButton
@@ -76,6 +85,7 @@ private enum class Pane(val label: String) {
 @Composable
 fun PodcastsScreen(
     podcasts: PodcastRepository,
+    prefs: Prefs,
     current: Station?,
     playing: Boolean,
     onPlay: (Station, List<Station>) -> Unit,
@@ -86,13 +96,15 @@ fun PodcastsScreen(
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
     var pane by remember { mutableStateOf(Pane.All) }
+    val subsGrid by prefs.subsGrid.collectAsState(initial = prefs.subsGrid.value)
+    val podDirectoryGrid by prefs.podDirectoryGrid.collectAsState(initial = prefs.podDirectoryGrid.value)
 
     val directory by podcasts.directory.collectAsState()
     val subscriptions by podcasts.subscriptions.collectAsState(initial = emptyList())
     val continueList by podcasts.continueListening.collectAsState(initial = emptyList())
     val progress by podcasts.progress.collectAsState(initial = emptyMap())
 
-    val listState = rememberLazyListState()
+    val listState = rememberLazyGridState()
     val nearEnd by remember {
         derivedStateOf {
             val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
@@ -131,83 +143,132 @@ fun PodcastsScreen(
             }
         }
 
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
+        // Same known androidx LazyGrid span-flip crash guard as Stations:
+        // remount the grid when either mode toggle changes so measured item
+        // spans never flip in place while the directory is appending pages.
+        key(subsGrid, podDirectoryGrid) {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(110.dp),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                state = listState,
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
 
-            if (pane != Pane.Directory && continueList.isNotEmpty()) {
-                item { SectionLabel("continue — ${continueList.size}") }
-                items(continueList, key = { "cont:${it.url}" }) { episode ->
-                    EpisodeResumeRow(
-                        episode = episode,
-                        progress = progress[episode.url],
-                        active = current?.url == episode.url,
-                        playing = playing && current?.url == episode.url,
-                        onPlay = { onPlay(episode, continueList) },
-                        onPlayNext = { onPlayNext(episode) },
-                        onAddToQueue = { onAddToQueue(episode) },
-                        onForget = { scope.launch { podcasts.clearProgress(episode) } },
-                    )
-                }
-            }
-
-            if (pane != Pane.Directory) {
-                item { SectionLabel("subscribed — ${subscriptions.size}") }
-                if (subscriptions.isEmpty()) {
-                    item { EmptyNote("nothing subscribed — open a show and hit the star") }
-                } else {
-                    items(subscriptions, key = { "sub:${it.feedUrl}" }) { show ->
-                        ShowRow(
-                            show = show,
-                            subscribed = true,
-                            onOpen = { onOpenShow(show) },
-                            onToggleSubscribe = { scope.launch { podcasts.toggleSubscription(show) } },
+                if (pane != Pane.Directory && continueList.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) { SectionLabel("continue — ${continueList.size}") }
+                    items(continueList, key = { "cont:${it.url}" }, span = { GridItemSpan(maxLineSpan) }) { episode ->
+                        EpisodeResumeRow(
+                            episode = episode,
+                            progress = progress[episode.url],
+                            active = current?.url == episode.url,
+                            playing = playing && current?.url == episode.url,
+                            onPlay = { onPlay(episode, continueList) },
+                            onPlayNext = { onPlayNext(episode) },
+                            onAddToQueue = { onAddToQueue(episode) },
+                            onForget = { scope.launch { podcasts.clearProgress(episode) } },
                         )
                     }
                 }
-            }
 
-            if (pane != Pane.Subs) {
-                item {
-                    SectionLabel("directory") {
-                        Mono(directory.query.label, CliampType.meta, p.inkTertiary)
+                if (pane != Pane.Directory) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        SectionLabel("subscribed — ${subscriptions.size}") {
+                            GridListToggle(subsGrid) { scope.launch { prefs.setSubsGrid(!subsGrid) } }
+                        }
                     }
-                }
-                item {
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                            .padding(horizontal = Gutter, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    ) {
-                        PodcastDirectory.genres.forEach { g ->
-                            val q = directory.query
-                            Chip(
-                                g.name.lowercase(),
-                                selected = q is PodcastQuery.Category && q.genre.id == g.id,
-                                onClick = { podcasts.load(PodcastQuery.Category(g), reset = true) },
-                            )
+                    if (subscriptions.isEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            EmptyNote("nothing subscribed — open a show and hit the star")
+                        }
+                    } else {
+                        items(
+                            subscriptions,
+                            key = { "sub:${it.feedUrl}" },
+                            span = { GridItemSpan(if (subsGrid) 1 else maxLineSpan) },
+                        ) { show ->
+                            if (subsGrid) {
+                                ShowTile(
+                                    show = show,
+                                    subscribed = true,
+                                    onOpen = { onOpenShow(show) },
+                                    onToggleSubscribe = { scope.launch { podcasts.toggleSubscription(show) } },
+                                )
+                            } else {
+                                ShowRow(
+                                    show = show,
+                                    subscribed = true,
+                                    onOpen = { onOpenShow(show) },
+                                    onToggleSubscribe = { scope.launch { podcasts.toggleSubscription(show) } },
+                                )
+                            }
                         }
                     }
                 }
-                item { Spacer(Modifier.height(6.dp)) }
 
-                items(directory.shows, key = { "dir:${it.feedUrl}" }) { show ->
-                    ShowRow(
-                        show = show,
-                        subscribed = show.feedUrl in subscribedFeeds,
-                        onOpen = { onOpenShow(show) },
-                        onToggleSubscribe = { scope.launch { podcasts.toggleSubscription(show) } },
-                    )
-                }
-                item {
-                    when {
-                        directory.error != null -> EmptyNote("directory: ${directory.error}")
-                        directory.loading -> EmptyNote("loading more…")
-                        directory.exhausted -> EmptyNote("end of ${directory.query.label}")
-                        else -> Spacer(Modifier.height(8.dp))
+                if (pane != Pane.Subs) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        SectionLabel("directory") {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Mono(directory.query.label, CliampType.meta, p.inkTertiary)
+                                GridListToggle(podDirectoryGrid) {
+                                    scope.launch { prefs.setPodDirectoryGrid(!podDirectoryGrid) }
+                                }
+                            }
+                        }
+                    }
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                                .padding(horizontal = Gutter, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        ) {
+                            PodcastDirectory.genres.forEach { g ->
+                                val q = directory.query
+                                Chip(
+                                    g.name.lowercase(),
+                                    selected = q is PodcastQuery.Category && q.genre.id == g.id,
+                                    onClick = { podcasts.load(PodcastQuery.Category(g), reset = true) },
+                                )
+                            }
+                        }
+                    }
+                    item(span = { GridItemSpan(maxLineSpan) }) { Spacer(Modifier.height(6.dp)) }
+
+                    items(
+                        directory.shows,
+                        key = { "dir:${it.feedUrl}" },
+                        span = { GridItemSpan(if (podDirectoryGrid) 1 else maxLineSpan) },
+                    ) { show ->
+                        if (podDirectoryGrid) {
+                            ShowTile(
+                                show = show,
+                                subscribed = show.feedUrl in subscribedFeeds,
+                                onOpen = { onOpenShow(show) },
+                                onToggleSubscribe = { scope.launch { podcasts.toggleSubscription(show) } },
+                            )
+                        } else {
+                            ShowRow(
+                                show = show,
+                                subscribed = show.feedUrl in subscribedFeeds,
+                                onOpen = { onOpenShow(show) },
+                                onToggleSubscribe = { scope.launch { podcasts.toggleSubscription(show) } },
+                            )
+                        }
+                    }
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        when {
+                            directory.error != null -> EmptyNote("directory: ${directory.error}")
+                            directory.loading -> EmptyNote("loading more…")
+                            directory.exhausted -> EmptyNote("end of ${directory.query.label}")
+                            else -> Spacer(Modifier.height(8.dp))
+                        }
                     }
                 }
-            }
 
-            item { Spacer(Modifier.height(20.dp)) }
+                item(span = { GridItemSpan(maxLineSpan) }) { Spacer(Modifier.height(20.dp)) }
+            }
         }
     }
 }
@@ -348,5 +409,66 @@ private fun remaining(progress: EpisodeProgress): String {
         left >= 3600 -> "${left / 3600}h ${(left % 3600) / 60}m left"
         left >= 60 -> "${left / 60}m left"
         else -> "${left}s left"
+    }
+}
+
+/** A show as a small square tile: artwork (or the mic mark), subscribe star,
+ * and title/author on a scrim. The grid layout's cell. */
+@Composable
+private fun ShowTile(
+    show: PodcastShow,
+    subscribed: Boolean,
+    onOpen: () -> Unit,
+    onToggleSubscribe: () -> Unit,
+) {
+    val p = LocalPalette.current
+    var art by remember(show.artwork) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(show.artwork) {
+        art = null
+        if (show.artwork.startsWith("http")) {
+            art = StationArtSource.bitmapForUrl(show.artwork)?.asImageBitmap()
+        }
+    }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(8.dp))
+            .background(p.panel)
+            .border(1.dp, p.chipBorder, RoundedCornerShape(8.dp))
+            .clickable(onClick = onOpen),
+    ) {
+        if (art != null) {
+            Image(art!!, show.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        } else {
+            Box(
+                Modifier.fillMaxSize().background(if (p.dark) p.ground else p.keyFace),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(CliampIcons.PodRow, null, Modifier.size(26.dp), tint = p.chipBorder)
+            }
+        }
+        Icon(
+            if (subscribed) CliampIcons.StarFilled else CliampIcons.Star,
+            "subscribe",
+            Modifier.align(Alignment.TopEnd).padding(10.dp).size(15.dp).clickable(onClick = onToggleSubscribe),
+            tint = if (subscribed) p.accent else p.inkFaint,
+        )
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .align(Alignment.BottomCenter)
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        1f to p.ground.copy(alpha = 0.92f),
+                    )
+                ),
+        )
+        Column(Modifier.align(Alignment.BottomStart).padding(8.dp)) {
+            Mono(show.title, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+            Mono(show.meta, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+        }
     }
 }

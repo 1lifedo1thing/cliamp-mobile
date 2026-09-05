@@ -16,9 +16,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import stream.cliamp.mobile.data.db.CliampDatabase
 import stream.cliamp.mobile.data.db.CustomStationEntity
 import stream.cliamp.mobile.data.db.FavoriteEntity
@@ -62,6 +65,16 @@ class Prefs(private val context: Context) {
 
     private val db by lazy { CliampDatabase.get(context) }
 
+    // Grid/list layout flags live in memory first (so a toggle is instant on
+    // the frame it is tapped) and only settle onto the DataStore file for the
+    // restore-after-boot source, like the per-playlist sorts below.
+    private val pinnedGridFlag = MutableStateFlow(true)
+    private val playlistsGridFlag = MutableStateFlow(false)
+    private val cliampGridFlag = MutableStateFlow(false)
+    private val directoryGridFlag = MutableStateFlow(true)
+    private val subsGridFlag = MutableStateFlow(true)
+    private val podDirectoryGridFlag = MutableStateFlow(true)
+
     private object K {
         val palette = stringPreferencesKey("palette")           // system | oxide | dark | ...
         val haptics = booleanPreferencesKey("haptics")
@@ -84,6 +97,10 @@ class Prefs(private val context: Context) {
         val playlistSorts = stringPreferencesKey("playlist_sorts")  // slug -> PlaylistSort.ordinal
         val pinnedGrid = booleanPreferencesKey("pinned_grid")       // library: pinned pinned playlists as tiles
         val playlistsGrid = booleanPreferencesKey("playlists_grid") // library: user playlists as tiles
+        val cliampGrid = booleanPreferencesKey("cliamp_grid")       // stations: cliamp channel tiles
+        val directoryGrid = booleanPreferencesKey("directory_grid") // stations: directory tiles
+        val subsGrid = booleanPreferencesKey("subs_grid")           // podcasts: subscribed shows as tiles
+        val podDirectoryGrid = booleanPreferencesKey("pod_directory_grid") // podcasts: directory as tiles
     }
 
     val palette: Flow<String> = context.settingsStore.data.map { it[K.palette] ?: "system" }
@@ -97,9 +114,17 @@ class Prefs(private val context: Context) {
     val volume: Flow<Float> = context.settingsStore.data.map { it[K.volume] ?: 1f }
 
     /** Library pinned section (smart playlists + pinned user playlists) as a grid. */
-    val pinnedGrid: Flow<Boolean> = context.settingsStore.data.map { it[K.pinnedGrid] ?: true }
+    val pinnedGrid: StateFlow<Boolean> = pinnedGridFlag.asStateFlow()
     /** Library user-playlists section as a grid. */
-    val playlistsGrid: Flow<Boolean> = context.settingsStore.data.map { it[K.playlistsGrid] ?: false }
+    val playlistsGrid: StateFlow<Boolean> = playlistsGridFlag.asStateFlow()
+    /** Stations cliamp channel section as a grid. */
+    val cliampGrid: StateFlow<Boolean> = cliampGridFlag.asStateFlow()
+    /** Stations directory section as a grid. */
+    val directoryGrid: StateFlow<Boolean> = directoryGridFlag.asStateFlow()
+    /** Podcasts subscribed-shows section as a grid. */
+    val subsGrid: StateFlow<Boolean> = subsGridFlag.asStateFlow()
+    /** Podcasts directory section as a grid. */
+    val podDirectoryGrid: StateFlow<Boolean> = podDirectoryGridFlag.asStateFlow()
 
     val eqBands: Flow<List<Float>> = context.settingsStore.data.map { p ->
         p[K.eqBands]?.let { raw -> runCatching { Http.json.decodeFromString<List<Float>>(raw) }.getOrNull() }
@@ -156,13 +181,24 @@ class Prefs(private val context: Context) {
     private var sortPersist: Job? = null
 
     init {
-        persist.launch {
-            context.settingsStore.data.first().let { p ->
-                sortOverrides.value = p[K.playlistSorts]?.let { raw ->
-                    runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
-                } ?: emptyMap()
-            }
-        }
+        // Read the whole preferences file once, on construction (Application
+        // startup, before any UI exists) rather than arriving at the values
+        // asynchronously after the first frame. The layout flags are what a
+        // user sees the moment a tab opens, so a grid that starts default and
+        // snaps to their choice a beat later would be visible every launch:
+        // they asked for a grid, the app should open already in their grid.
+        // The settings file is a few bytes - this blocking read is
+        // milliseconds, and it happens before the activity exists.
+        val p = runBlocking { context.settingsStore.data.first() }
+        sortOverrides.value = p[K.playlistSorts]?.let { raw ->
+            runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
+        } ?: emptyMap()
+        pinnedGridFlag.value = p[K.pinnedGrid] ?: true
+        playlistsGridFlag.value = p[K.playlistsGrid] ?: false
+        cliampGridFlag.value = p[K.cliampGrid] ?: false
+        directoryGridFlag.value = p[K.directoryGrid] ?: true
+        subsGridFlag.value = p[K.subsGrid] ?: true
+        podDirectoryGridFlag.value = p[K.podDirectoryGrid] ?: true
     }
 
     /** The sort choice for one list, defaulting to the current title order. */
@@ -191,8 +227,30 @@ class Prefs(private val context: Context) {
     suspend fun setEqPreset(v: String) = put(K.eqPreset, v)
     suspend fun setAutoResume(v: Boolean) = put(K.autoResume, v)
     suspend fun setVolume(v: Float) = put(K.volume, v)
-    suspend fun setPinnedGrid(v: Boolean) = put(K.pinnedGrid, v)
-    suspend fun setPlaylistsGrid(v: Boolean) = put(K.playlistsGrid, v)
+    suspend fun setPinnedGrid(v: Boolean) {
+        pinnedGridFlag.value = v
+        put(K.pinnedGrid, v)
+    }
+    suspend fun setPlaylistsGrid(v: Boolean) {
+        playlistsGridFlag.value = v
+        put(K.playlistsGrid, v)
+    }
+    suspend fun setCliampGrid(v: Boolean) {
+        cliampGridFlag.value = v
+        put(K.cliampGrid, v)
+    }
+    suspend fun setDirectoryGrid(v: Boolean) {
+        directoryGridFlag.value = v
+        put(K.directoryGrid, v)
+    }
+    suspend fun setSubsGrid(v: Boolean) {
+        subsGridFlag.value = v
+        put(K.subsGrid, v)
+    }
+    suspend fun setPodDirectoryGrid(v: Boolean) {
+        podDirectoryGridFlag.value = v
+        put(K.podDirectoryGrid, v)
+    }
 
     /** Remember a playlist's sort; edits merge so other playlists are untouched. */
     fun setPlaylistSort(slug: String, sort: PlaylistSort) {
