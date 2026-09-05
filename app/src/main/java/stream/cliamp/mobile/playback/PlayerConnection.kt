@@ -70,6 +70,14 @@ class PlayerConnection(
     /** Set by the root with recent history so prev/next work from a fresh launch. */
     fun setFallbackSource(list: List<Station>) { _fallbackSource = list }
 
+    /**
+     * While navigation is walking the launch-seeded fallback (nothing has been
+     * played from a real list this session), prev/next run it as a ring - the
+     * same wrap the widget uses - so both keys always have somewhere to go from
+     * the restored song. Cleared the moment the user plays from an actual list.
+     */
+    private var _ringFallback = false
+
     // If the app is opened straight into the notification (or nothing has UI-composed
     // yet), there is no root to seed the fallback list, so prime it from history and
     // favourites ourselves. The root's seed wins when it arrives.
@@ -282,6 +290,17 @@ class PlayerConnection(
 
         val qi = _queueIndex.value
         val abs = windowBase + qi
+        // Prev/next navigate whichever list [step] walks: the live [_source]
+        // after anything has played, else the seeded fallback (recent history /
+        // favourites) so the buttons work from the song shown at launch, before
+        // anything has actually played this session.
+        val nav = _source.ifEmpty { _fallbackSource }
+        val ring = nav.size > 1 && (_source.isEmpty() || _ringFallback)
+        val navIdx = if (ring) -1
+        else if (_source.isNotEmpty() || _queueIndex.value >= 0) abs
+        else (PlaybackBus.station.value ?: nav.firstOrNull())?.let { s ->
+            nav.indexOfFirst { it.url == s.url }
+        } ?: -1
         _state.value = PlayerState(
             playing = c.isPlaying,
             buffering = c.playbackState == Player.STATE_BUFFERING,
@@ -292,8 +311,8 @@ class PlayerConnection(
             durationMs = c.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L,
             seekable = c.isCurrentMediaItemSeekable,
             live = c.isCurrentMediaItemLive,
-            hasPrev = abs > 0,
-            hasNext = _source.size > 1 && abs < _source.lastIndex,
+            hasPrev = if (ring) true else nav.isNotEmpty() && navIdx > 0,
+            hasNext = if (ring) true else nav.size > 1 && navIdx in 0 until nav.lastIndex,
         )
 
         // Episode positions are written from here because this is the only
@@ -394,6 +413,9 @@ class PlayerConnection(
     fun play(station: Station, from: List<Station> = emptyList(), preserveOrder: Boolean = false) {
         var q = _queue.value
         if (from.isNotEmpty()) {
+            // A play tapped on a real screen hands navigation over to that list
+            // (linear, not the launch fallback ring).
+            if (!preserveOrder) _ringFallback = false
             // Cap the queued list to a bounded window around the tapped track so
             // a huge source (the whole local library) doesn't flood the queue.
             // The active order is linear, or shuffled if shuffle is on; the
@@ -721,11 +743,18 @@ class PlayerConnection(
             if (c.mediaItemCount > 0) windowBase + c.currentMediaItemIndex else null
         }
         val here = pending ?: (liveHere ?: (windowBase + _queueIndex.value))
+        val wrap = { k: Int -> ((k % src.size) + src.size) % src.size }
         val abs = if (_source.isEmpty() && pending == null) {
-            val shown = PlaybackBus.station.value?.let { s ->
+            val shown = (PlaybackBus.station.value ?: src.firstOrNull())?.let { s ->
                 src.indexOfFirst { it.url == s.url }
             } ?: -1
-            (if (shown >= 0) shown + delta else 0).coerceIn(0, src.lastIndex)
+            // Launch fallback: walk history as a ring so the first prev/next
+            // from the restored song have somewhere to go.
+            _ringFallback = true
+            if (shown >= 0) wrap(shown + delta) else (0 + delta).coerceIn(0, src.lastIndex)
+        } else if (_source.isEmpty() || _ringFallback) {
+            _ringFallback = true
+            wrap(here + delta)
         } else {
             (here + delta).coerceIn(0, src.lastIndex)
         }
@@ -766,7 +795,8 @@ class PlayerConnection(
         _extending = null
         val src = _source.ifEmpty { _fallbackSource }
         if (src.isEmpty()) return
-        val abs = target.coerceIn(0, src.lastIndex)
+        val abs = if (_ringFallback && src.size > 1) ((target % src.size) + src.size) % src.size
+        else target.coerceIn(0, src.lastIndex)
         val station = src[abs]
 
         // Publish and persist the target exactly as play() would, so the UI and
@@ -842,6 +872,7 @@ class PlayerConnection(
     private fun applyQueueToPlayer() {
         val q = _queue.value
         if (q.isEmpty()) return
+        _ringFallback = false
         val idx = _queueIndex.value.coerceIn(0, q.lastIndex)
         _baseSource = q
         _source = q

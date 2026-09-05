@@ -1,6 +1,7 @@
 package stream.cliamp.mobile.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -56,6 +57,10 @@ fun MiniPlayer(
     reconnecting: Int = 0,
     queueCount: Int,
     visualizer: String = "spectrum",
+    hasPrev: Boolean = false,
+    hasNext: Boolean = false,
+    onPrev: () -> Unit = {},
+    onNext: () -> Unit = {},
     onOpenQueue: () -> Unit,
     onToggle: () -> Unit,
     onOpen: () -> Unit,
@@ -110,7 +115,7 @@ fun MiniPlayer(
                     )
                 }
             }
-            // Queue sits before the play key on the right edge of the bar.
+            // Queue sits before the transport cluster on the right edge.
             Icon(
                 CliampIcons.QueueTabLines,
                 "queue",
@@ -119,22 +124,67 @@ fun MiniPlayer(
                     .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onOpenQueue),
                 tint = p.ink,
             )
-            Box(
-                Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (p.dark) p.accent else p.ink)
-                    .clickable(onClick = onToggle),
-                contentAlignment = Alignment.Center,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Icon(
-                    if (playing) CliampIcons.Pause else CliampIcons.PlayTab,
-                    if (playing) "pause" else "play",
-                    Modifier.size(if (playing) 13.dp else 15.dp),
-                    tint = if (p.dark) p.onAccent else p.ground,
+                MiniKey(
+                    icon = CliampIcons.Prev,
+                    label = "previous",
+                    enabled = hasPrev,
+                    onClick = onPrev,
+                )
+                Box(
+                    Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (p.dark) p.accent else p.ink)
+                        .clickable(onClick = onToggle),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (playing) CliampIcons.Pause else CliampIcons.PlayTab,
+                        if (playing) "pause" else "play",
+                        Modifier.size(if (playing) 13.dp else 15.dp),
+                        tint = if (p.dark) p.onAccent else p.ground,
+                    )
+                }
+                MiniKey(
+                    icon = CliampIcons.Next,
+                    label = "next",
+                    enabled = hasNext,
+                    onClick = onNext,
                 )
             }
         }
+    }
+}
+
+/** A small prev/next key for the mini bar transport cluster. */
+@Composable
+private fun MiniKey(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val p = LocalPalette.current
+    Row(
+        Modifier
+            .size(28.dp)
+            .clip(RoundedCornerShape(7.dp))
+            .background(p.keyFace)
+            .border(1.dp, p.keyBorder, RoundedCornerShape(7.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            icon,
+            label,
+            Modifier.size(width = 14.dp, height = 11.dp),
+            tint = if (enabled) p.ink else p.inkFaint,
+        )
     }
 }
 
