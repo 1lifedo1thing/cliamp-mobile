@@ -141,7 +141,7 @@ Conscrypt and provider secrets still go through `AndroidKeyStore`.
 Streams carry no cover art, so the app looks for the station's own branding: the
 og:image on its homepage, then the apple-touch-icon, then the favicon the directory
 recorded. About 23 of 25 top stations yield something usable. Whatever turns up is
-letterboxed onto the striped plate rather than centre-cropped, because most og:images
+letterboxed onto the generated plate rather than centre-cropped, because most og:images
 are 1200x630 wordmarks and a square crop cuts them in half.
 
 cliamp's own channels are excluded on purpose. cliamp.stream has an og:image, but it is
@@ -170,7 +170,7 @@ destructive actions.
 
 ## Notification
 
-Radio has no cover art, so the app draws its own: the striped plate and the phosphor
+Radio has no cover art, so the app draws its own: the generated plate and the phosphor
 mark, generated per station at 512px. That is not decoration. Android derives the media
 player's background and accent from the artwork, so with no artwork the notification is
 grey system chrome and with it the whole chip picks up the green.
@@ -229,7 +229,7 @@ Where the build departs from the document, and why:
 | Concept | Here | Why |
 | --- | --- | --- |
 | Scrubber with playhead | Both, chosen per source | Seekable sources get the scrubber; live streams get `--- STREAMING ---`, matching `renderSeekBar()` in the cliamp TUI. |
-| Striped art placeholder | Real art where it exists, plate as fallback | Local tags, provider `getCoverArt`, then a station's og:image. None of that is invented art; the plate still covers the misses. |
+| Striped art placeholder | Real art where it exists, a generated plate as fallback | Local tags, provider `getCoverArt`, then a station's og:image. None of that is invented art. The fallback used to be one striped plate for everything, which across a grid of tiles was indistinguishable and dull; it is now one of six figures picked by a hash of the item's own id, drawn from palette roles. |
 | Amber means remote host | Also means reconnecting | Red is reserved for destructive actions, so amber was the only honest choice left. |
 | Identity strip on the player | Removed | Its format readout moved into the meta line under the title. |
 | Three descending bars as the mark | The real eight-bar logo | The concept's mark was a stand-in for exactly this. |

@@ -314,16 +314,18 @@ private fun Modifier.offsetRightBorder(color: Color) = drawBehind {
 }
 
 /**
- * Album art is never invented: a 135-degree striped placeholder with a
- * monospace caption saying what belongs there.
+ * The plate that stands in for missing cover art.
+ *
+ * [seed] is the item's own id. The figure is derived from it, so a given album
+ * keeps its plate for good; pass something stable, not a title that can change.
  */
 @Composable
-fun StripedArt(
+fun ArtPlate(
     modifier: Modifier = Modifier,
+    seed: String = "cliamp",
     caption: String? = null,
     badge: String? = null,
     radius: androidx.compose.ui.unit.Dp = 5.dp,
-    stripe: androidx.compose.ui.unit.Dp = 6.dp,
     overlay: (@Composable androidx.compose.foundation.layout.BoxScope.() -> Unit)? = null,
 ) {
     val p = LocalPalette.current
@@ -331,7 +333,7 @@ fun StripedArt(
         modifier
             .clip(RoundedCornerShape(radius))
             .border(1.dp, p.artBorder, RoundedCornerShape(radius))
-            .drawBehind { drawStripes(p.artA, p.artB, stripe.toPx()) }
+            .drawBehind { drawArtPlate(seed, p) }
     ) {
         overlay?.invoke(this)
         if (caption != null) {
@@ -356,25 +358,6 @@ fun StripedArt(
     }
 }
 
-private fun DrawScope.drawStripes(a: Color, b: Color, w: Float) {
-    clipRect {
-        rotate(degrees = -45f, pivot = Offset(size.width / 2f, size.height / 2f)) {
-            val diag = kotlin.math.hypot(size.width, size.height)
-            val x0 = size.width / 2f - diag
-            var x = x0
-            var i = 0
-            while (x < size.width / 2f + diag) {
-                drawRect(
-                    color = if (i % 2 == 0) a else b,
-                    topLeft = Offset(x, size.height / 2f - diag),
-                    size = Size(w, diag * 2f),
-                )
-                x += w
-                i++
-            }
-        }
-    }
-}
 
 /** A hairline-separated list row. Cards are for objects with state, not lists. */
 @Composable

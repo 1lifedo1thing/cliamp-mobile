@@ -41,7 +41,7 @@ import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.MeterFrame
 import stream.cliamp.mobile.ui.components.MeterSize
-import stream.cliamp.mobile.ui.components.StripedArt
+import stream.cliamp.mobile.ui.components.ArtPlate
 import stream.cliamp.mobile.ui.components.rememberMeter
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -235,8 +235,9 @@ private fun MiniArt(station: Station?, frame: MeterFrame?) {
             showPeaks = false,
         )
     } else {
-        StripedArt(
+        ArtPlate(
             modifier = Modifier.size(40.dp),
+            seed = station?.url.orEmpty(),
             radius = 8.dp,
         )
     }

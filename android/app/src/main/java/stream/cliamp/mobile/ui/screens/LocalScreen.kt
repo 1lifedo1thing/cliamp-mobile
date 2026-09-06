@@ -102,7 +102,7 @@ import stream.cliamp.mobile.ui.components.OverflowItem
 import stream.cliamp.mobile.ui.components.OverflowMenu
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
-import stream.cliamp.mobile.ui.components.StripedArt
+import stream.cliamp.mobile.ui.components.ArtPlate
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
@@ -798,7 +798,7 @@ private fun PlaylistRow(
                 if (art != null) {
                     Image(art!!, pl.station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 } else {
-                    StripedArt(modifier = Modifier.fillMaxSize(), radius = 5.dp, caption = null)
+                    ArtPlate(modifier = Modifier.fillMaxSize(), seed = pl.station.slug, radius = 5.dp, caption = null)
                 }
             }
         },
@@ -850,7 +850,7 @@ private fun PlaylistTile(
             if (art != null) {
                 Image(art!!, pl.station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             } else {
-                StripedArt(modifier = Modifier.fillMaxSize(), caption = null)
+                ArtPlate(modifier = Modifier.fillMaxSize(), seed = pl.station.slug, caption = null)
             }
             Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
                 PlaylistMenu(pinned = pinned, onAddSongs = onAddSongs, onEdit = onEdit, onDelete = onDelete, onPin = onPin)
@@ -1012,22 +1012,31 @@ private fun SmartCollage(sp: SmartPlaylist, modifier: Modifier = Modifier) {
     }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
         Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-            CoverCell(arts.getOrNull(0), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
-            CoverCell(arts.getOrNull(1), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
+            CoverCell(arts.getOrNull(0), kindIcon, sp.label, cellSeed(sp, members, 0), Modifier.weight(1f).fillMaxHeight())
+            CoverCell(arts.getOrNull(1), kindIcon, sp.label, cellSeed(sp, members, 1), Modifier.weight(1f).fillMaxHeight())
         }
         Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-            CoverCell(arts.getOrNull(2), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
-            CoverCell(arts.getOrNull(3), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
+            CoverCell(arts.getOrNull(2), kindIcon, sp.label, cellSeed(sp, members, 2), Modifier.weight(1f).fillMaxHeight())
+            CoverCell(arts.getOrNull(3), kindIcon, sp.label, cellSeed(sp, members, 3), Modifier.weight(1f).fillMaxHeight())
         }
     }
 }
 
-/** One quarter of a smart-playlist collage: member cover art, or a striped plate. */
+/**
+ * A cell's plate is seeded from the member it stands for, so the four quarters
+ * of a collage differ. The index is in the fallback because an empty playlist
+ * has no members to differ by, and four identical quarters look like a bug.
+ */
+private fun cellSeed(sp: SmartPlaylist, members: List<Station>, i: Int): String =
+    members.getOrNull(i)?.url ?: "${sp.label}#$i"
+
+/** One quarter of a smart-playlist collage: member cover art, or a generated plate. */
 @Composable
 private fun CoverCell(
     art: ImageBitmap?,
     kindIcon: ImageVector,
     contentDescription: String?,
+    seed: String,
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
@@ -1035,7 +1044,7 @@ private fun CoverCell(
         if (art != null) {
             Image(art, contentDescription, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
-            StripedArt(modifier = Modifier.fillMaxSize(), caption = null) {
+            ArtPlate(modifier = Modifier.fillMaxSize(), seed = seed, caption = null) {
                 Icon(kindIcon, null, Modifier.align(Alignment.Center).size(18.dp), tint = p.accent.copy(alpha = 0.22f))
             }
         }
