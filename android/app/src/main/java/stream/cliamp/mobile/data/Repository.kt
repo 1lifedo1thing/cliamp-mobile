@@ -65,7 +65,7 @@ class Repository(
         scope.launch { _cliamp.value = CliampRadio.fetchStations() }
         scope.launch { _directoryStats.value = RadioBrowser.stats() }
         scope.launch { _tags.value = RadioBrowser.topTags(60) }
-        scope.launch { _countries.value = RadioBrowser.topCountries(80) }
+        scope.launch { _countries.value = RadioBrowser.topCountries() }
         loadDirectory(DirectoryQuery.TopVoted, reset = true)
     }
 

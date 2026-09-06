@@ -83,9 +83,13 @@ object RadioBrowser {
             )
         }.getOrDefault(emptyList())
 
-    suspend fun topCountries(limit: Int = 60): List<CountryCount> =
+    /** Every country that exists in the directory, most stations first. */
+    suspend fun topCountries(limit: Int? = null): List<CountryCount> =
         runCatching {
-            Http.json.decodeFromString<List<CountryCount>>(get("/json/countries?order=stationcount&reverse=true&limit=$limit"))
+            val q = if (limit == null) "" else "&limit=$limit"
+            Http.json.decodeFromString<List<CountryCount>>(
+                get("/json/countries?order=stationcount&reverse=true$q")
+            )
         }.getOrDefault(emptyList())
 
     /**

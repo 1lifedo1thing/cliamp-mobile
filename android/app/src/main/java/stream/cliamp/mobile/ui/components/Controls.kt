@@ -26,16 +26,21 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -64,9 +69,11 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.window.Popup
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalHapticsEnabled
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -228,6 +235,76 @@ fun Chip(
             .padding(horizontal = 11.dp, vertical = 7.dp),
     ) {
         Mono(label.uppercase(), CliampType.chip, if (selected) onFill else p.inkTertiary, maxLines = 1)
+    }
+}
+
+/** A single entry in a [ChipDropdown] menu. */
+data class ChipOption(
+    val label: String,
+    val action: () -> Unit,
+)
+
+/**
+ * A chip with a caret that opens a dropdown menu of [options] - the filter
+ * chip's look, for cases where a value (a country, a sort order) is chosen
+ * from a list rather than toggled. The current choice is the chip's label.
+ */
+@Composable
+fun ChipDropdown(
+    label: String,
+    selected: Boolean,
+    options: List<ChipOption>,
+    menuWidth: Int = 180,
+    modifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    var open by remember { mutableStateOf(false) }
+    val fill = if (p.dark) p.accent else p.ink
+    val onFill = if (p.dark) p.onAccent else p.ground
+    Box(modifier) {
+        Row(
+            Modifier
+                .clip(RoundedCornerShape(5.dp))
+                .background(if (selected) fill else Color.Transparent)
+                .then(if (selected) Modifier else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(5.dp)))
+                .clickable { open = !open }
+                .padding(horizontal = 11.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Mono(label.uppercase(), CliampType.chip, if (selected) onFill else p.inkTertiary, maxLines = 1)
+            Icon(
+                CliampIcons.CaretDown,
+                null,
+                Modifier.size(8.dp),
+                tint = if (selected) onFill else p.inkTertiary,
+            )
+        }
+        if (open) {
+            Popup(
+                onDismissRequest = { open = false },
+                alignment = Alignment.TopStart,
+                offset = IntOffset(0, 8),
+            ) {
+                LazyColumn(
+                    Modifier.width(menuWidth.dp).heightIn(max = 300.dp).clip(RoundedCornerShape(6.dp))
+                        .background(p.ground).border(1.dp, p.hairlineRegion, RoundedCornerShape(6.dp)),
+                ) {
+                    itemsIndexed(options) { i, opt ->
+                        if (i > 0) HairlineDivider(region = true)
+                        Row(
+                            Modifier.fillMaxWidth().clickable {
+                                open = false
+                                opt.action()
+                            }.padding(horizontal = 16.dp, vertical = 13.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Mono(opt.label, CliampType.chip, p.ink)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

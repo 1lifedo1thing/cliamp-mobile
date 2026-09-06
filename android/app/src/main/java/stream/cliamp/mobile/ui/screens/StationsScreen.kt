@@ -52,6 +52,8 @@ import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.ui.compact
 import stream.cliamp.mobile.ui.components.Chip
+import stream.cliamp.mobile.ui.components.ChipDropdown
+import stream.cliamp.mobile.ui.components.ChipOption
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.EmptyNote
 import stream.cliamp.mobile.ui.components.GridListToggle
@@ -92,6 +94,7 @@ fun StationsScreen(
     val directory by repository.directory.collectAsState()
     val dirStats by repository.directoryStats.collectAsState()
     val tags by repository.tags.collectAsState()
+    val countries by repository.countries.collectAsState(initial = emptyList())
 
     val listState = rememberLazyGridState()
     val nearEnd by remember {
@@ -159,6 +162,21 @@ fun StationsScreen(
                     "top voted",
                     directory.query == DirectoryQuery.TopVoted,
                     onClick = { repository.loadDirectory(DirectoryQuery.TopVoted, reset = true) },
+                )
+                Spacer(Modifier.width(4.dp))
+                val countryQuery = directory.query as? DirectoryQuery.Country
+                ChipDropdown(
+                    label = countryQuery?.countryName ?: "all countries",
+                    selected = countryQuery != null,
+                    options = listOf(
+                        ChipOption("all countries") {
+                            repository.loadDirectory(DirectoryQuery.TopVoted, reset = true)
+                        },
+                    ) + countries.map { c ->
+                        ChipOption(c.name) {
+                            repository.loadDirectory(DirectoryQuery.Country(c.iso_3166_1, c.name), reset = true)
+                        }
+                    },
                 )
             }
         }

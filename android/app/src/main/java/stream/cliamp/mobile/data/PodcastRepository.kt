@@ -19,20 +19,21 @@ import stream.cliamp.mobile.data.db.toEntity
 
 /** How the podcast directory is currently ordered or filtered. */
 sealed interface PodcastQuery {
-    data object Top : PodcastQuery
+    /** An empty [country] is "all countries", resolved as Apple's global chart. */
+    data class Top(val country: String = "") : PodcastQuery
     data class Search(val text: String) : PodcastQuery
     data class Category(val genre: PodcastGenre) : PodcastQuery
 
     val label: String
         get() = when (this) {
-            Top -> "top shows"
+            is Top -> "top shows"
             is Search -> "\"$text\""
             is Category -> genre.name.lowercase()
         }
 }
 
 data class PodcastDirectoryState(
-    val query: PodcastQuery = PodcastQuery.Top,
+    val query: PodcastQuery = PodcastQuery.Top(),
     val shows: List<PodcastShow> = emptyList(),
     val loading: Boolean = false,
     val exhausted: Boolean = false,
@@ -111,7 +112,7 @@ class PodcastRepository(
             _continueListening.value = dao.continueListening().first().map { it.toStation() }
         }
         _subscriptionsReady.value = true
-        load(PodcastQuery.Top, reset = true)
+        load(PodcastQuery.Top(), reset = true)
     }
 
     fun load(query: PodcastQuery, reset: Boolean) {
@@ -128,7 +129,7 @@ class PodcastRepository(
                     pending = emptyList()
                     val primed = runCatching {
                         when (query) {
-                            PodcastQuery.Top -> chartCursor = PodcastDirectory.chartIds(limit = 100)
+                            is PodcastQuery.Top -> chartCursor = PodcastDirectory.chartIds(country = query.country.ifEmpty { "us" }, limit = 100)
                             is PodcastQuery.Search -> pending = PodcastDirectory.search(query.text)
                             is PodcastQuery.Category -> pending = PodcastDirectory.byGenre(query.genre)
                         }

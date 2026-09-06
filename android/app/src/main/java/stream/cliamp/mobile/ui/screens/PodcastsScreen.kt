@@ -43,7 +43,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import stream.cliamp.mobile.data.CountryCount
 import stream.cliamp.mobile.data.PodcastDirectory
 import stream.cliamp.mobile.data.PodcastQuery
 import stream.cliamp.mobile.data.PodcastRepository
@@ -52,6 +54,8 @@ import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.ui.components.Chip
+import stream.cliamp.mobile.ui.components.ChipDropdown
+import stream.cliamp.mobile.ui.components.ChipOption
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.EmptyNote
 import stream.cliamp.mobile.ui.components.GridListToggle
@@ -82,6 +86,7 @@ fun PodcastsScreen(
     prefs: Prefs,
     current: Station?,
     playing: Boolean,
+    countries: StateFlow<List<CountryCount>>,
     onPlay: (Station, List<Station>) -> Unit,
     onOpenShow: (PodcastShow) -> Unit,
     onAddToQueue: (Station) -> Unit = {},
@@ -92,6 +97,8 @@ fun PodcastsScreen(
     var pane by remember { mutableStateOf(Pane.All) }
     val subsGrid by prefs.subsGrid.collectAsState(initial = prefs.subsGrid.value)
     val podDirectoryGrid by prefs.podDirectoryGrid.collectAsState(initial = prefs.podDirectoryGrid.value)
+
+    val countryList by countries.collectAsState(initial = emptyList())
 
     val directory by podcasts.directory.collectAsState()
     val subscriptions by podcasts.subscriptions.collectAsState(initial = emptyList())
@@ -127,10 +134,27 @@ fun PodcastsScreen(
             ) {
                 Pane.entries.forEach { s -> Chip(s.label, pane == s, onClick = { pane = s }) }
                 Spacer(Modifier.width(4.dp))
+                val topQuery = directory.query as? PodcastQuery.Top
                 Chip(
                     "top",
-                    directory.query == PodcastQuery.Top,
-                    onClick = { podcasts.load(PodcastQuery.Top, reset = true) },
+                    topQuery != null,
+                    onClick = { podcasts.load(PodcastQuery.Top(), reset = true) },
+                )
+                Spacer(Modifier.width(4.dp))
+                ChipDropdown(
+                    label = topQuery?.country?.takeIf { it.isNotEmpty() }?.let { c ->
+                        countryList.firstOrNull { it.iso_3166_1.equals(c, ignoreCase = true) }?.name ?: c
+                    } ?: "all countries",
+                    selected = topQuery != null && topQuery.country.isNotEmpty(),
+                    options = listOf(
+                        ChipOption("all countries") {
+                            podcasts.load(PodcastQuery.Top(), reset = true)
+                        },
+                    ) + countryList.map { c ->
+                        ChipOption(c.name) {
+                            podcasts.load(PodcastQuery.Top(c.iso_3166_1), reset = true)
+                        }
+                    },
                 )
             }
         }

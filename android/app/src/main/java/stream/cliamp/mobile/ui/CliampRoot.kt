@@ -205,6 +205,7 @@ fun CliampRoot(
                     prefs = prefs,
                     current = station,
                     playing = playerState.playing,
+                    countries = repository.countries,
                     onPlay = onPlay,
                     onOpenShow = { show: PodcastShow ->
                         podcasts.openShow(show)
