@@ -44,7 +44,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import stream.cliamp.mobile.data.EpisodeProgress
 import stream.cliamp.mobile.data.PodcastDirectory
 import stream.cliamp.mobile.data.PodcastQuery
 import stream.cliamp.mobile.data.PodcastRepository
@@ -58,9 +57,6 @@ import stream.cliamp.mobile.ui.components.EmptyNote
 import stream.cliamp.mobile.ui.components.GridListToggle
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
-import stream.cliamp.mobile.ui.components.OverflowButton
-import stream.cliamp.mobile.ui.components.OverflowItem
-import stream.cliamp.mobile.ui.components.OverflowMenu
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.theme.CliampType
@@ -99,8 +95,6 @@ fun PodcastsScreen(
 
     val directory by podcasts.directory.collectAsState()
     val subscriptions by podcasts.subscriptions.collectAsState(initial = emptyList())
-    val continueList by podcasts.continueListening.collectAsState(initial = emptyList())
-    val progress by podcasts.progress.collectAsState(initial = emptyMap())
 
     val listState = rememberLazyGridState()
     val nearEnd by remember {
@@ -154,23 +148,7 @@ fun PodcastsScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
 
-                if (pane != Pane.Directory && continueList.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) { SectionLabel("continue — ${continueList.size}") }
-                    items(continueList, key = { "cont:${it.url}" }, span = { GridItemSpan(maxLineSpan) }) { episode ->
-                        EpisodeResumeRow(
-                            episode = episode,
-                            progress = progress[episode.url],
-                            active = current?.url == episode.url,
-                            playing = playing && current?.url == episode.url,
-                            onPlay = { onPlay(episode, continueList) },
-                            onPlayNext = { onPlayNext(episode) },
-                            onAddToQueue = { onAddToQueue(episode) },
-                            onForget = { scope.launch { podcasts.clearProgress(episode) } },
-                        )
-                    }
-                }
-
-                if (pane != Pane.Directory) {
+                if (pane == Pane.Subs) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         SectionLabel("subscribed — ${subscriptions.size}") {
                             GridListToggle(subsGrid) { scope.launch { prefs.setSubsGrid(!subsGrid) } }
@@ -302,69 +280,6 @@ private fun ShowRow(
 }
 
 /**
- * An episode with somewhere to get back to. The show name is the second line
- * rather than the episode's own metadata, because out of the show's own screen
- * "which podcast is this" is the question being asked.
- */
-@Composable
-private fun EpisodeResumeRow(
-    episode: Station,
-    progress: EpisodeProgress?,
-    active: Boolean,
-    playing: Boolean,
-    onPlay: () -> Unit,
-    onPlayNext: () -> Unit,
-    onAddToQueue: () -> Unit,
-    onForget: () -> Unit,
-) {
-    val p = LocalPalette.current
-    ListRow(
-        onClick = onPlay,
-        verticalPadding = 11.dp,
-        leading = {
-            Box(
-                Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .then(
-                        if (active) Modifier.background(p.accent)
-                        else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    if (playing) CliampIcons.Pause else CliampIcons.PlayRow,
-                    null,
-                    Modifier.size(if (playing) 9.dp else 11.dp),
-                    tint = if (active) p.onAccent else p.inkTertiary,
-                )
-            }
-        },
-        trailing = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                progress?.let { Mono(remaining(it), CliampType.timeSmall, p.amber) }
-                OverflowMenu(
-                    trigger = { open -> OverflowButton(open) },
-                    items = listOf(
-                        OverflowItem("play next", onPlayNext),
-                        OverflowItem("add to queue", onAddToQueue),
-                        OverflowItem("forget position", onForget),
-                    ),
-                )
-            }
-        },
-    ) {
-        Mono(
-            episode.name,
-            if (active) CliampType.rowPrimaryMedium else CliampType.rowPrimary,
-            if (active) p.accent else p.ink,
-            maxLines = 1,
-        )
-        Mono(episode.artist.ifBlank { "podcast" }, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
-    }
-}
-
-/**
  * Show artwork, or the mic if there is none yet. Loaded through the same source
  * radio favicons use, which already caches by URL and decodes small.
  */
@@ -376,8 +291,11 @@ private fun Artwork(url: String) {
         art = null
         if (url.startsWith("http")) {
             art = StationArtSource.bitmapForUrl(url)?.asImageBitmap()
+        } else {
+            art = null
         }
     }
+    val bmp = art
     Box(
         Modifier
             .size(34.dp)
@@ -385,7 +303,6 @@ private fun Artwork(url: String) {
             .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
         contentAlignment = Alignment.Center,
     ) {
-        val bmp = art
         if (bmp != null) {
             Image(
                 bitmap = bmp,
@@ -396,17 +313,6 @@ private fun Artwork(url: String) {
         } else {
             Icon(CliampIcons.PodRow, null, Modifier.size(13.dp), tint = p.inkFaint)
         }
-    }
-}
-
-/** `24m left`, which is the number that decides whether to press play. */
-private fun remaining(progress: EpisodeProgress): String {
-    val left = ((progress.durationMs - progress.positionMs) / 1000).coerceAtLeast(0L)
-    return when {
-        progress.durationMs <= 0 -> "started"
-        left >= 3600 -> "${left / 3600}h ${(left % 3600) / 60}m left"
-        left >= 60 -> "${left / 60}m left"
-        else -> "${left}s left"
     }
 }
 
