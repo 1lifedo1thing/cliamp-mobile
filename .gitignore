@@ -15,3 +15,6 @@ local.properties
 *.jks
 *.keystore
 keystore.properties
+
+# test artifact: local Room database dump
+kls_database.db
