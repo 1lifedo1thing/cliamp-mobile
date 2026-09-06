@@ -1,5 +1,6 @@
 package stream.cliamp.mobile.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -143,7 +145,11 @@ fun ProviderBrowseScreen(
 
     fun pop() { if (stack.size > 1) stack = stack.dropLast(1) else onBack() }
 
-    Column(Modifier.fillMaxSize().background(p.ground)) {
+    // Without this the system back closed the provider outright from inside an
+    // album, throwing away the artist and album you had drilled through.
+    BackHandler(enabled = stack.size > 1) { stack = stack.dropLast(1) }
+
+    Column(Modifier.fillMaxSize().background(p.ground).navigationBarsPadding()) {
         stream.cliamp.mobile.ui.components.ScreenHeader {
             Row(
                 Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),

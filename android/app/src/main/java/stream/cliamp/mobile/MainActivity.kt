@@ -5,12 +5,14 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.util.UnstableApi
 import stream.cliamp.mobile.ui.CliampRoot
@@ -24,41 +26,29 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { }
 
-    /**
-     * Drops the system navigation bar and leaves it swipeable.
-     *
-     * The app is already edge-to-edge, but the tab bar reserves the navigation
-     * bar's inset, so on three-button navigation the OS strip sat below the
-     * tabs as a permanent band of somebody else's chrome. Drawing under it
-     * instead is not an option there: the back, home and recents buttons would
-     * land on top of the tab labels.
-     *
-     * BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE means a swipe from the edge still
-     * brings it back, and it leaves again by itself, so nothing is unreachable.
-     * The status bar stays - the clock and battery are worth their strip.
-     */
-    private fun hideNavigationBar() {
-        WindowInsetsControllerCompat(window, window.decorView).apply {
-            hide(WindowInsetsCompat.Type.navigationBars())
-            systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
-    }
-
-    /**
-     * Coming back from another app, or from a transient reveal, can leave the
-     * bar showing, so the request is re-made rather than assumed to stick.
-     */
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) hideNavigationBar()
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        // Both bars stay, both are transparent, and the app draws through
+        // them.
+        //
+        // The navigation bar used to be hidden outright, because on
+        // three-button navigation it sat below the tabs as a band of somebody
+        // else's chrome. The cost of that was the whole point of the bar: back
+        // was reachable only by swiping the bar out first, which left the
+        // "back" line at the top of every overlay as the one dependable way
+        // out - the far corner of a big phone, and the wrong end of it for a
+        // thumb. A transparent bar over the app's own ground is not somebody
+        // else's chrome; it is three glyphs on our background.
+        //
+        // `dark` on both styles rather than `auto` is what keeps them
+        // transparent: auto paints a scrim behind the navigation bar in light
+        // mode. The icon colour is not fixed here - it follows the palette
+        // below, which the system's own light/dark mode cannot know.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        hideNavigationBar()
 
         val app = application as CliampApp
         app.player.connect()
@@ -84,6 +74,17 @@ class MainActivity : ComponentActivity() {
             val palette = paletteFor(preference, systemDark)
             val haptics by app.prefs.haptics.collectAsState(initial = true)
             val dark = palette.dark
+
+            // A light palette on a device in dark mode was getting white
+            // status icons on a cream ground. The palette is the only thing
+            // that knows what is actually behind them.
+            val view = LocalView.current
+            LaunchedEffect(dark) {
+                WindowInsetsControllerCompat(window, view).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
 
             CliampTheme(palette = palette, haptics = haptics) {
                 CliampRoot(

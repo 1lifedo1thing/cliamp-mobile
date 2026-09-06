@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -220,7 +221,7 @@ fun CommandScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize().background(p.ground)) {
+    Column(Modifier.fillMaxSize().background(p.ground).navigationBarsPadding()) {
         ScreenHeader(divider = false) {
             Row(
                 Modifier

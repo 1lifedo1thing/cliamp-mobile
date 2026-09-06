@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -94,7 +95,7 @@ fun PodcastShowScreen(
         show?.let { s -> state.episodes.map { it.toStation(s) } } ?: emptyList()
     }
 
-    Column(Modifier.fillMaxSize().background(p.ground)) {
+    Column(Modifier.fillMaxSize().background(p.ground).navigationBarsPadding()) {
         ScreenHeader {
             Row(
                 Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
