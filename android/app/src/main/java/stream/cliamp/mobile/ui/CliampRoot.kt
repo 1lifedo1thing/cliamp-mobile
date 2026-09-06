@@ -187,6 +187,17 @@ fun CliampRoot(
                         libSubTab = LibSubTab.Providers
                         overlay = Overlay.Wizard(spec.key, null)
                     },
+                    onRemoveProvider = { account ->
+                        // Removal takes the account's cached library and its
+                        // open connections with it; ProviderStore.remove owns
+                        // that. Anything already playing keeps its open handle
+                        // and stops at the end of the track.
+                        scope.launch { providers.remove(account.id) }
+                        val open = overlay
+                        if (open is Overlay.Browse && open.accountId == account.id) {
+                            overlay = Overlay.None
+                        }
+                    },
                     backEnabled = overlay == Overlay.None,
                 )
                 Tab.Pods -> PodcastsScreen(

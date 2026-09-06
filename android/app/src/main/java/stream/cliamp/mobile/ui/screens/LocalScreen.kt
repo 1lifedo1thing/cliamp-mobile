@@ -153,6 +153,7 @@ fun LocalScreen(
     onShowProviders: (Boolean) -> Unit = {},
     onOpenProvider: (ProviderAccount) -> Unit = {},
     onAddProvider: (ProviderSpec) -> Unit = {},
+    onRemoveProvider: (ProviderAccount) -> Unit = {},
     // False while an overlay (player, queue, settings…) is on top of this tab.
     // The tab stays composed underneath so its navigation state survives, but
     // its own back handling must stand down or it would steal the back press
@@ -359,6 +360,7 @@ fun LocalScreen(
                     providers = providers,
                     onOpenProvider = onOpenProvider,
                     onAddProvider = onAddProvider,
+                    onRemoveProvider = onRemoveProvider,
                 )
                 openSmartPlaylist != null -> SmartPlaylistDetail(
                     pl = openSmartPlaylist,
@@ -664,6 +666,7 @@ private fun ProvidersView(
     providers: List<ProviderAccount>,
     onOpenProvider: (ProviderAccount) -> Unit,
     onAddProvider: (ProviderSpec) -> Unit,
+    onRemoveProvider: (ProviderAccount) -> Unit,
 ) {
     val p = LocalPalette.current
     val connectedKeys = providers.map { it.providerKey }.toSet()
@@ -694,7 +697,25 @@ private fun ProvidersView(
                             Icon(CliampIcons.Server, null, Modifier.size(14.dp), tint = p.amber)
                         }
                     },
-                    trailing = { Icon(CliampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary) },
+                    // Adding an account was always possible and removing one
+                    // never was, which mattered little when each provider could
+                    // only be connected once and matters a lot now that SSH
+                    // hosts can be added without limit.
+                    trailing = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OverflowMenu(
+                                trigger = { open -> OverflowButton(open, size = 16) },
+                                items = listOf(
+                                    OverflowItem(
+                                        "remove account",
+                                        color = p.destructiveInk,
+                                        action = { onRemoveProvider(acc) },
+                                    ),
+                                ),
+                            )
+                            Icon(CliampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary)
+                        }
+                    },
                 ) {
                     Mono(acc.label.ifBlank { "provider" }, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
                     Mono(
