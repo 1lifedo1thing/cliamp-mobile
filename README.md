@@ -14,7 +14,7 @@ about any of them.
 | [`android/`](android) | The Android app. Kotlin, Compose, Media3. Shipping; its README is the one with build instructions. |
 | [`ios/`](ios) | Nothing yet. |
 | [`desktop/`](desktop) | Nothing yet. |
-| [`docs/`](docs) | The design system the clients are built to, and the concept it came from. |
+| [`docs/`](docs) | [`design.md`](docs/design.md), the system the clients are built to, read out of the Android build; [`concept.md`](docs/concept.md) and the artboards it came from. |
 
 `LICENSE`, `THIRD-PARTY-NOTICES.md` and `licenses/` cover the repository as a
 whole and stay here.

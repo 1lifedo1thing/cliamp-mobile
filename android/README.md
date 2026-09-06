@@ -210,17 +210,19 @@ redirect first; on a slow connection that window closes and the system kills the
 
 ## Design
 
-`docs/design.md` is the source of truth for palette, type scale, control geometry and the
-brick meter, and `docs/Cliamp Mobile.dc.html` holds the twelve artboards it refers to.
-Both are the concept's own documents, copied in verbatim.
+`../docs/design.md` is the source of truth for palette, type scale, control geometry and
+the brick meter, read out of `ui/theme/` rather than out of the concept. `../docs/concept.md`
+is the original spec and `../docs/Cliamp Mobile.dc.html` the twelve artboards it describes.
 
 Open the HTML in any browser. It renders standalone: the canvas runtime it was authored
 with is not included, and does not need to be, because the artboards are plain HTML and
 CSS and the font link and keyframes still apply from the body.
 
-Colours in `ui/theme/Palette.kt` are straight sRGB conversions of its oklch values. Two
-rules worth repeating: amber means "this lives somewhere else" and nothing else, red is
-only ever destructive, and there is never a third accent hue.
+The five built-in palettes in `ui/theme/Palette.kt` began as sRGB conversions of the
+concept's oklch values; `ui/theme/OmarchyThemes.kt` adds twenty-two more, generated from
+the themes Omarchy ships. Two rules worth repeating: amber means "this lives somewhere
+else" and nothing else, red is only ever destructive, and there is never a third accent
+hue.
 
 Where the build departs from the document, and why:
 
@@ -232,14 +234,15 @@ Where the build departs from the document, and why:
 | Identity strip on the player | Removed | Its format readout moved into the meta line under the title. |
 | Three descending bars as the mark | The real eight-bar logo | The concept's mark was a stand-in for exactly this. |
 | Remote hosts screen | cliamp radio statistics | Same amber semantics, pointed at the thing that actually is remote. |
-| One monospace face everywhere | System mono in the widget | Android widgets cannot load `res/font`. |
+| One monospace face everywhere | Poppins for text, JetBrains Mono for numeric readouts | One face could not carry both an editorial title and a clock that ticks without shifting. The widget falls back to system mono either way: Android widgets cannot load `res/font`. |
+| Two palettes | Twenty-seven | Every Omarchy theme, generated into the same 32-role contract. |
 | Animated brick meter | Static rule in widget and notification | Neither surface can animate. |
 
 ## Licence
 
-Proprietary. All rights reserved, see `LICENSE`. No permission is granted to use,
+Proprietary. All rights reserved, see `../LICENSE`. No permission is granted to use,
 copy, modify or redistribute this code.
 
 Bundled third-party components keep their own terms, listed in
-`THIRD-PARTY-NOTICES.md`. JetBrains Mono ships under the SIL Open Font License,
-so `licenses/JetBrainsMono-OFL.txt` has to travel with any build.
+`../THIRD-PARTY-NOTICES.md`. JetBrains Mono ships under the SIL Open Font License,
+so `../licenses/JetBrainsMono-OFL.txt` has to travel with any build.
