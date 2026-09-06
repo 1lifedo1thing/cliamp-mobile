@@ -16,6 +16,12 @@ concurrency:
 jobs:
   apk:
     runs-on: ubuntu-latest
+    # The Android project is one workspace of a monorepo; every run step
+    # below is relative to it. `uses:` steps are not affected and still take
+    # workspace-relative paths.
+    defaults:
+      run:
+        working-directory: android
     steps:
       - uses: actions/checkout@v4
 
@@ -51,5 +57,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: cliamp-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14

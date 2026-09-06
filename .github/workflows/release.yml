@@ -15,6 +15,12 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # The Android project is one workspace of a monorepo; every run step
+    # below is relative to it. `uses:` steps are not affected and still take
+    # workspace-relative paths.
+    defaults:
+      run:
+        working-directory: android
     steps:
       - uses: actions/checkout@v4
         with:
