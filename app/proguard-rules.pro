@@ -41,3 +41,23 @@
 
 # --- Media3 ---
 -dontwarn androidx.media3.**
+
+# --- SSH / SFTP (sshj + BouncyCastle) ---
+# BouncyCastle's JCE provider maps algorithm names to implementation classes as
+# strings and instantiates them reflectively:
+#   put("KeyAgreement.X25519", "org.bouncycastle.jcajce.provider.asymmetric...")
+# R8 cannot see that link, and a shrunk provider registers a handshake's worth
+# of missing ciphers - silently, because BouncyCastle skips what it cannot load.
+-keep class org.bouncycastle.jce.provider.** { *; }
+-keep class org.bouncycastle.jcajce.provider.** { *; }
+-dontwarn org.bouncycastle.**
+
+# sshj reaches BouncyCastle by name and nothing else by reflection, so the
+# library itself shrinks like any other code.
+-dontwarn net.schmizz.**
+-dontwarn com.hierynomus.**
+
+# slf4j 2.x finds its binding through META-INF/services, which is a reflective
+# lookup of a class nothing references.
+-keep class uk.uuid.slf4j.android.** { *; }
+-dontwarn org.slf4j.**

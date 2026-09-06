@@ -667,7 +667,9 @@ private fun ProvidersView(
 ) {
     val p = LocalPalette.current
     val connectedKeys = providers.map { it.providerKey }.toSet()
-    val available = ProviderCatalog.all.filter { it.key !in connectedKeys }
+    // A Subsonic server holds one library and there is no point adding it
+    // twice; SSH hosts are machines, and a nas and a seedbox are two of them.
+    val available = ProviderCatalog.all.filter { it.multiple || it.key !in connectedKeys }
     LazyColumn(Modifier.fillMaxSize()) {
         item {
             SectionLabel("connected — ${providers.size}") { }
@@ -695,7 +697,11 @@ private fun ProvidersView(
                     trailing = { Icon(CliampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary) },
                 ) {
                     Mono(acc.label.ifBlank { "provider" }, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
-                    Mono(acc.url, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                    Mono(
+                        ProviderCatalog.byKey(acc.providerKey)?.summary?.invoke(acc.values)
+                            ?: acc.url,
+                        CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
+                    )
                 }
             }
         }

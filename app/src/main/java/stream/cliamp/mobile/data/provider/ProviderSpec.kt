@@ -13,8 +13,18 @@ package stream.cliamp.mobile.data.provider
  * then on, so it stays "navidrome" rather than drifting every time the server
  * is upgraded; [detail] is the version, shown once as probe feedback to
  * confirm you reached the box you meant.
+ *
+ * [values] are fields the probe filled in on the form's behalf, merged back
+ * into it before saving. SSH needs both halves of that: the host key
+ * fingerprint, which only the server can supply and which is pinned from then
+ * on, and the music folders, which the probe can go and find rather than
+ * making someone recall an absolute path from memory.
  */
-data class ProviderIdentity(val name: String, val detail: String = "")
+data class ProviderIdentity(
+    val name: String,
+    val detail: String = "",
+    val values: Map<String, String> = emptyMap(),
+)
 
 data class FieldSpec(
     val key: String,
@@ -25,6 +35,11 @@ data class FieldSpec(
     val default: String = "",
     val keyboard: FieldKeyboard = FieldKeyboard.Text,
     /**
+     * Rows to show for fields whose value is not one line: a list of folders,
+     * or a pasted private key.
+     */
+    val lines: Int = 1,
+    /**
      * Hides the field unless the predicate holds. Jellyfin needs this: it takes
      * either an API token or a username and password, and a flat form cannot
      * express "one or the other".
@@ -32,7 +47,7 @@ data class FieldSpec(
     val onlyIf: ((Map<String, String>) -> Boolean)? = null,
 )
 
-enum class FieldKeyboard { Text, Url }
+enum class FieldKeyboard { Text, Url, Number }
 
 /** A fixed set of choices, rendered as chips rather than a text field. */
 data class PickerSpec(
@@ -58,6 +73,14 @@ data class ProviderSpec(
     val validate: suspend (Map<String, String>) -> Result<ProviderIdentity>,
     /** Cross-field rules, run before [validate]. Returns an error or null. */
     val extraValidate: ((Map<String, String>) -> String?)? = null,
+    /**
+     * Whether more than one account of this type makes sense. A Subsonic
+     * server holds one library and the app only wants one of it; SSH hosts are
+     * machines, and people have several.
+     */
+    val multiple: Boolean = false,
+    /** The line under a configured account's name in the providers list. */
+    val summary: (Map<String, String>) -> String = { it["url"].orEmpty() },
 ) {
     /** Fields currently applicable, honouring every [FieldSpec.onlyIf]. */
     fun visibleFields(values: Map<String, String>): List<FieldSpec> =

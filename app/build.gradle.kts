@@ -126,4 +126,12 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
+
+    // sshj brings bouncycastle and slf4j-api transitively, but declares both at
+    // runtime scope, so bcprov has to be named again to be visible at compile
+    // time - the SSH layer registers the provider itself. slf4j 2.x finds no
+    // provider on its own, so without a binding its output would vanish.
+    implementation(libs.sshj)
+    implementation(libs.bouncycastle)
+    implementation(libs.slf4j.android)
 }

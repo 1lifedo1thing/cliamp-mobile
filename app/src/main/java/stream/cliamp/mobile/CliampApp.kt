@@ -11,11 +11,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.provider.ProviderStore
+import stream.cliamp.mobile.data.provider.SftpLibrary
 import stream.cliamp.mobile.data.provider.audiobookshelf
 import stream.cliamp.mobile.data.provider.jellyfin
 import stream.cliamp.mobile.data.provider.plex
 import stream.cliamp.mobile.data.provider.subsonic
 import stream.cliamp.mobile.playback.ResolvedStream
+import stream.cliamp.mobile.playback.SftpDataSource
 import stream.cliamp.mobile.playback.StreamResolver
 import stream.cliamp.mobile.net.Http
 import stream.cliamp.mobile.data.LocalLibrary
@@ -48,12 +50,16 @@ class CliampApp : Application() {
         Http.init(this)
 
         StationArtSource.init(this)
+        SftpLibrary.init(this, providers, appScope)
 
         // Provider stream URLs are signed per request, so they are resolved
         // here at play time rather than stored.
         StreamResolver.providerResolver = resolve@ { accountId, trackId ->
             val account = providers.read().firstOrNull { it.id == accountId } ?: return@resolve null
             when (account.providerKey) {
+                // Not an HTTP URL at all: the track id is the remote path, and
+                // the data source opens it over the account's SSH connection.
+                "ssh" -> ResolvedStream(SftpDataSource.uriFor(account.id, trackId))
                 "jellyfin", "emby" -> account.jellyfin().stream(trackId)
                 "plex" -> account.plex().stream(trackId)
                 "abs" -> account.audiobookshelf().stream(trackId)

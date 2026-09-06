@@ -221,3 +221,91 @@ interface PodcastDao {
     """)
     fun continueListening(limit: Int = 30): Flow<List<StationEntity>>
 }
+
+/** An album as the index sees it: a directory of tracks, grouped. */
+data class SftpAlbumRow(
+    val id: String,
+    val name: String,
+    val artist: String,
+    val songCount: Int,
+    val year: Int,
+)
+
+data class SftpArtistRow(val id: String, val name: String, val albumCount: Int)
+
+@Dao
+interface SftpDao {
+    /**
+     * The three writes a scan makes are blocking rather than suspending: the
+     * walk itself is a blocking SFTP call, and the batches come back inside it.
+     * Everything the UI reads suspends as usual.
+     */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insert(rows: List<SftpTrackEntity>)
+
+    @Query("DELETE FROM sftp_tracks WHERE accountId = :accountId AND scanId != :scanId")
+    fun pruneOlderThan(accountId: String, scanId: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun record(row: SftpIndexEntity)
+
+    @Query("DELETE FROM sftp_tracks WHERE accountId = :accountId")
+    suspend fun clear(accountId: String)
+
+    @Query("SELECT COUNT(*) FROM sftp_tracks WHERE accountId = :accountId")
+    suspend fun count(accountId: String): Int
+
+    /**
+     * MAX(mtime) rather than the row's own: an album is as new as its newest
+     * file, which is when the folder was copied across.
+     */
+    @Query("""
+        SELECT albumKey AS id, album AS name, artist AS artist,
+               COUNT(*) AS songCount, MAX(year) AS year
+        FROM sftp_tracks WHERE accountId = :accountId
+        GROUP BY albumKey
+        ORDER BY MAX(mtime) DESC, album COLLATE NOCASE
+    """)
+    suspend fun albumsByNewest(accountId: String): List<SftpAlbumRow>
+
+    @Query("""
+        SELECT albumKey AS id, album AS name, artist AS artist,
+               COUNT(*) AS songCount, MAX(year) AS year
+        FROM sftp_tracks WHERE accountId = :accountId
+        GROUP BY albumKey
+        ORDER BY album COLLATE NOCASE, artist COLLATE NOCASE
+    """)
+    suspend fun albumsByName(accountId: String): List<SftpAlbumRow>
+
+    @Query("""
+        SELECT albumKey AS id, album AS name, artist AS artist,
+               COUNT(*) AS songCount, MAX(year) AS year
+        FROM sftp_tracks WHERE accountId = :accountId AND artistKey = :artistKey
+        GROUP BY albumKey
+        ORDER BY MAX(year), album COLLATE NOCASE
+    """)
+    suspend fun albumsByArtist(accountId: String, artistKey: String): List<SftpAlbumRow>
+
+    @Query("""
+        SELECT artistKey AS id, MIN(artist) AS name, COUNT(DISTINCT albumKey) AS albumCount
+        FROM sftp_tracks WHERE accountId = :accountId AND artistKey != ''
+        GROUP BY artistKey
+        ORDER BY name COLLATE NOCASE
+    """)
+    suspend fun artists(accountId: String): List<SftpArtistRow>
+
+    @Query("""
+        SELECT * FROM sftp_tracks WHERE accountId = :accountId AND albumKey = :albumKey
+        ORDER BY track, title COLLATE NOCASE
+    """)
+    suspend fun albumTracks(accountId: String, albumKey: String): List<SftpTrackEntity>
+
+    @Query("SELECT * FROM sftp_tracks WHERE accountId = :accountId AND path = :path")
+    suspend fun track(accountId: String, path: String): SftpTrackEntity?
+
+    @Query("SELECT * FROM sftp_index WHERE accountId = :accountId")
+    suspend fun index(accountId: String): SftpIndexEntity?
+
+    @Query("DELETE FROM sftp_index WHERE accountId = :accountId")
+    suspend fun clearIndex(accountId: String)
+}

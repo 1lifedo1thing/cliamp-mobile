@@ -43,6 +43,13 @@ fun CliampTextField(
     imeAction: ImeAction = ImeAction.Done,
     autoCorrect: Boolean = false,
     autoFocus: Boolean = false,
+    /**
+     * Rows for a value that is not one line - a list of folders, a pasted
+     * private key. Multi-line fields are never masked: a PEM block that has
+     * become a field of dots cannot be checked against what was pasted, and
+     * the value is encrypted at rest either way.
+     */
+    lines: Int = 1,
     onAction: () -> Unit = {},
 ) {
     val p = LocalPalette.current
@@ -50,18 +57,24 @@ fun CliampTextField(
 
     LaunchedEffect(autoFocus) { if (autoFocus) runCatching { requester.requestFocus() } }
 
+    val multiline = lines > 1
+
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
-        singleLine = true,
+        singleLine = !multiline,
+        minLines = if (multiline) lines else 1,
+        maxLines = if (multiline) Int.MAX_VALUE else 1,
         textStyle = textStyle.copy(color = p.ink),
         cursorBrush = SolidColor(p.accent),
         visualTransformation =
-            if (secret) PasswordVisualTransformation() else VisualTransformation.None,
+            if (secret && !multiline) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(
-            keyboardType = if (secret) KeyboardType.Password else keyboardType,
+            keyboardType = if (secret && !multiline) KeyboardType.Password else keyboardType,
             autoCorrectEnabled = autoCorrect,
-            imeAction = imeAction,
+            // A newline is the separator in a multi-line field, so the return
+            // key has to stay a return key.
+            imeAction = if (multiline) ImeAction.Default else imeAction,
         ),
         keyboardActions = KeyboardActions(
             onDone = { onAction() },
@@ -74,7 +87,7 @@ fun CliampTextField(
         decorationBox = { inner ->
             Box {
                 if (value.isEmpty() && placeholder.isNotEmpty()) {
-                    Mono(placeholder, textStyle, p.inkFaint, maxLines = 1)
+                    Mono(placeholder, textStyle, p.inkFaint, maxLines = if (multiline) lines else 1)
                 }
                 inner()
             }

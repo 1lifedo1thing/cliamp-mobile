@@ -20,15 +20,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.Station
+import stream.cliamp.mobile.data.provider.IndexState
 import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.data.provider.ProviderAlbum
 import stream.cliamp.mobile.data.provider.ProviderArtist
@@ -80,17 +85,23 @@ fun ProviderBrowseScreen(
     onPlayNext: (Station) -> Unit = {},
 ) {
     val p = LocalPalette.current
+    val scope = rememberCoroutineScope()
     val client = remember(account.id) { account.browseClient() }
     // Roots with no semantics on the server are dropped from the chip row.
     val roots = remember(account.providerKey) {
-        if (account.providerKey == "jellyfin" || account.providerKey == "emby" ||
-            account.providerKey == "plex" || account.providerKey == "abs"
-        ) {
-            listOf(Root.Newest, Root.AZ)
-        } else {
-            Root.entries
+        when (account.providerKey) {
+            "jellyfin", "emby", "plex", "abs" -> listOf(Root.Newest, Root.AZ)
+            // A filesystem has play counts and stars nowhere; newest is the
+            // newest file in a folder, which is when it was copied across.
+            "ssh" -> listOf(Root.Newest, Root.AZ, Root.Artists)
+            else -> Root.entries
         }
     }
+    // Remembered unconditionally: switching to an account whose provider does
+    // keep an index would otherwise change how many slots this composition uses.
+    val noIndex = remember { MutableStateFlow(IndexState()) }
+    val indexing = client.index
+    val indexState by (indexing ?: noIndex).collectAsState()
 
     var stack by remember(account.id) { mutableStateOf<List<Node>>(listOf(Node.Home)) }
     var root by remember(account.id) { mutableStateOf(roots.first()) }
@@ -102,7 +113,9 @@ fun ProviderBrowseScreen(
 
     val here = stack.last()
 
-    LaunchedEffect(account.id, here, root) {
+    // Keyed on the scan too: an index that has just finished filling in is a
+    // different answer to the same question.
+    LaunchedEffect(account.id, here, root, indexState.scanning) {
         busy = true
         failure = null
         albums = emptyList(); artists = emptyList(); tracks = emptyList()
@@ -170,6 +183,13 @@ fun ProviderBrowseScreen(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
                     roots.forEach { r -> Chip(r.label, root == r, onClick = { root = r }) }
+                    if (indexing != null) {
+                        Chip(
+                            if (indexState.scanning) "scanning" else "rescan",
+                            selected = false,
+                            onClick = { if (!indexState.scanning) scope.launch { client.reindex() } },
+                        )
+                    }
                 }
             } else {
                 Spacer(Modifier.height(10.dp))
@@ -177,6 +197,18 @@ fun ProviderBrowseScreen(
         }
 
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
+            if (indexState.text.isNotBlank()) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 10.dp)) {
+                        Mono(
+                            indexState.text,
+                            CliampType.rowSecondary,
+                            if (indexState.scanning) p.amber else p.inkFaint,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
             failure?.let { msg ->
                 item {
                     Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 20.dp)) {
@@ -269,7 +301,9 @@ fun ProviderBrowseScreen(
                 }
             }
 
-            if (!busy && failure == null && artists.isEmpty() && albums.isEmpty() && tracks.isEmpty()) {
+            if (!busy && failure == null && !indexState.scanning &&
+                artists.isEmpty() && albums.isEmpty() && tracks.isEmpty()
+            ) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 20.dp)) {
                         Mono("nothing here", CliampType.rowSecondary, p.inkFaint)

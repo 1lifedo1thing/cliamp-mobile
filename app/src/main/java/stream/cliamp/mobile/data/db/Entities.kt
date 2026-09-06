@@ -177,3 +177,54 @@ data class EpisodeProgressEntity(
         url = url, positionMs = positionMs, durationMs = durationMs, completed = completed,
     )
 }
+
+/**
+ * One audio file on an SSH host, as the last scan of that account saw it.
+ *
+ * Keyed by path rather than by an id the server assigns, because SFTP assigns
+ * none: the path is the identity, and it is also what the data source needs to
+ * open the file, so a track survives a rescan and a cold start without any
+ * lookup table in between.
+ *
+ * [scanId] is how a rescan replaces a library rather than merging into it.
+ * Rows are written as they are found so the list fills in progressively, and
+ * whatever still carries an older scan id at the end is what has since been
+ * deleted from the server.
+ */
+@Entity(
+    tableName = "sftp_tracks",
+    primaryKeys = ["accountId", "path"],
+    indices = [
+        Index("accountId", "albumKey"),
+        Index("accountId", "artistKey"),
+        Index("accountId", "scanId"),
+    ],
+)
+data class SftpTrackEntity(
+    val accountId: String,
+    val path: String,
+    val title: String,
+    val artist: String,
+    val album: String,
+    val albumKey: String,
+    val artistKey: String,
+    val track: Int,
+    val year: Int,
+    val size: Long,
+    val mtime: Long,
+    val ext: String,
+    val scanId: Long,
+)
+
+/**
+ * What the last scan covered. [folders] is compared against the account's
+ * current folder list so that editing it rescans instead of leaving the old
+ * tree indexed under a path nobody asked for any more.
+ */
+@Entity(tableName = "sftp_index")
+data class SftpIndexEntity(
+    @PrimaryKey val accountId: String,
+    val folders: String,
+    val scannedAt: Long,
+    val tracks: Int,
+)

@@ -35,9 +35,17 @@ class ProviderStore(private val context: Context) {
                 valuesJson = Http.json.encodeToString(sealed),
             )
         )
+        // Editing a host or a password leaves open SSH connections still
+        // speaking as whoever the account used to be, so they are retired here
+        // rather than left to drop on their own.
+        SshPool.evict(account.id)
     }
 
-    suspend fun remove(id: String) = dao.remove(id)
+    suspend fun remove(id: String) {
+        dao.remove(id)
+        SshPool.evict(id)
+        SftpLibrary.forget(id)
+    }
 
     /** Secrets are opened here and nowhere else. */
     private fun ProviderEntity.toAccount(): ProviderAccount {

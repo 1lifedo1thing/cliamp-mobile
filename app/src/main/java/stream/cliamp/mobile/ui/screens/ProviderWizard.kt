@@ -112,7 +112,15 @@ fun ProviderWizard(
             }
             values.value = normalised
             probe = spec.validate(normalised).fold(
-                onSuccess = { Probe.Ok(it) },
+                onSuccess = { identity ->
+                    // What the probe worked out for itself - an SSH host key,
+                    // the music folders it found - goes back into the form so
+                    // that SAVE writes it with everything else.
+                    if (identity.values.isNotEmpty()) {
+                        values.value = values.value + identity.values
+                    }
+                    Probe.Ok(identity)
+                },
                 onFailure = { Probe.Failed(it.message ?: "could not reach the server") },
             )
         }
@@ -159,7 +167,7 @@ fun ProviderWizard(
                     last = i == visible.lastIndex,
                     // the first field takes focus so the wizard is typeable on
                     // arrival instead of needing a tap first
-                    autoFocus = i == 0 && existing == null,
+                    autoFocus = i == 0 && existing == null && field.lines == 1,
                     onValue = { set(field.key, it) },
                     onNext = { focus.moveFocus(FocusDirection.Next) },
                     onDone = { focus.clearFocus(); runProbe() },
@@ -267,9 +275,14 @@ private fun FieldRow(
             placeholder = field.help.ifBlank { field.label.lowercase() },
             textStyle = CliampType.trackTitleSmall,
             secret = field.secret,
-            keyboardType = if (field.keyboard == FieldKeyboard.Url) KeyboardType.Uri else KeyboardType.Text,
+            keyboardType = when (field.keyboard) {
+                FieldKeyboard.Url -> KeyboardType.Uri
+                FieldKeyboard.Number -> KeyboardType.Number
+                FieldKeyboard.Text -> KeyboardType.Text
+            },
             imeAction = if (last) ImeAction.Done else ImeAction.Next,
             autoFocus = autoFocus,
+            lines = field.lines,
             onAction = { if (last) onDone() else onNext() },
         )
         Box(

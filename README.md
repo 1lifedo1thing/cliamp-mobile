@@ -92,6 +92,48 @@ Two things worth knowing about the design:
   play time: a real stream URL embeds a token that never expires, and persisting one to
   history would put a replayable credential in a plain file.
 
+### SSH / SFTP
+
+The one provider that is not a music server. Give it a host, a password or a pasted
+private key, and one music folder per line; add as many hosts as you have. Leave the
+folder field empty and the probe looks in `~/Music`, `/srv/music` and the other usual
+places and fills in what it finds.
+
+There is no album endpoint on a filesystem, so the tree is walked once over SFTP and
+kept in `sftp_tracks`. Tags are not read: pulling the header of every file would be tens
+of thousands of round trips, and `Artist/Album/01 - Title.flac` already says all of it.
+Rows are written as they are found, so the library fills in while the walk is still
+going, and a rescan replaces rather than merges - anything still carrying the previous
+scan's id at the end is what has since been deleted from the server.
+
+Playback is a real stream, not a download: `SftpDataSource` opens the remote file at
+`DataSpec.position`, so seeking inside a track works and nothing is staged on disk.
+Connections are pooled three per host - the playing track, the one the player primes
+behind it, and a scan alongside both.
+
+Tailscale SSH works and needs no credentials at all: pick `Tailscale` in the wizard and
+give it a host and a username. `tailscaled` terminates the connection itself and
+authenticates on tailnet identity - the WireGuard session is the credential - so it
+offers no password or public-key method, only `none`. The client sends `none` first in
+every case, the way OpenSSH's own does, so a Tailscale host works whichever credential
+type an account was set up with. It does serve the SFTP subsystem, so browsing and
+streaming are unchanged.
+
+Two things to get right on the Tailscale side: the phone needs to be on the tailnet (the
+Tailscale app is a system VPN, so cliamp's socket rides it like any other app's), and the
+ACL wants `"action": "accept"` rather than `"check"` - check mode asks for a browser
+re-auth that a background media player has nowhere to show.
+
+Host keys are trust-on-first-use and pinned afterwards. The first probe shows the
+fingerprint in OpenSSH's own format, so it can be checked against `ssh-keygen -lf` on the
+server, and it is stored against the host it was seen on - repointing an account at a
+different machine is a different host, not a key change.
+
+`sshj` and BouncyCastle cost about 2.3 MB of the release APK. Android ships a cut-down
+BouncyCastle under the name `BC` that is missing most of what a current key exchange
+needs, so the SSH layer removes it and registers the real one; TLS still goes through
+Conscrypt and provider secrets still go through `AndroidKeyStore`.
+
 ## Artwork
 
 Streams carry no cover art, so the app looks for the station's own branding: the

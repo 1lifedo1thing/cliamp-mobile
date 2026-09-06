@@ -270,7 +270,93 @@ object ProviderCatalog {
         },
     )
 
-    val all: List<ProviderSpec> = listOf(navidrome, subsonic, jellyfin, emby, plex, abs, lyrion)
+    /**
+     * Not a music server at all: a machine with music on it.
+     *
+     * Everything else here answers an API that already knows what an album is.
+     * This one gets a filesystem, so the layout is the metadata and the folders
+     * have to be named up front - or found, if the field is left empty.
+     */
+    val ssh = ProviderSpec(
+        key = "ssh",
+        name = "SSH / SFTP",
+        intro = listOf(
+            "any box you can ssh into: a nas, a pi, a seedbox, a desktop.",
+            "tailscale ssh needs no credentials - the tailnet is the login.",
+            "name the music folders; tracks stream over sftp, nothing is downloaded.",
+        ),
+        picker = PickerSpec(
+            key = "_auth",
+            label = "sign in with",
+            options = listOf(
+                PickerOption("password", "Password"),
+                PickerOption("key", "Private Key"),
+                PickerOption("none", "Tailscale"),
+            ),
+            default = "password",
+        ),
+        fields = listOf(
+            FieldSpec(
+                key = "host",
+                label = "Host",
+                help = "nas.local, 10.0.0.4, or a tailscale name",
+                keyboard = FieldKeyboard.Url,
+            ),
+            FieldSpec(
+                key = "port",
+                label = "Port",
+                help = "22",
+                required = false,
+                default = "22",
+                keyboard = FieldKeyboard.Number,
+            ),
+            FieldSpec(key = "user", label = "Username"),
+            FieldSpec(
+                key = "password",
+                label = "Password",
+                secret = true,
+                onlyIf = { it["_auth"] == "password" },
+            ),
+            FieldSpec(
+                key = "key",
+                label = "Private Key",
+                help = "paste the whole -----BEGIN ... PRIVATE KEY----- block",
+                secret = true,
+                lines = 4,
+                onlyIf = { it["_auth"] == "key" },
+            ),
+            FieldSpec(
+                key = "passphrase",
+                label = "Key Passphrase",
+                secret = true,
+                required = false,
+                onlyIf = { it["_auth"] == "key" },
+            ),
+            FieldSpec(
+                key = "folders",
+                label = "Music Folders",
+                help = "one per line - leave empty and the probe goes looking",
+                required = false,
+                lines = 3,
+            ),
+        ),
+        multiple = true,
+        summary = { v ->
+            val cfg = sshConfig(v)
+            val folders = cfg.folders.size
+            listOf(
+                cfg.where,
+                when (folders) {
+                    0 -> ""
+                    1 -> cfg.folders.first()
+                    else -> "$folders folders"
+                },
+            ).filter { it.isNotBlank() }.joinToString(" · ")
+        },
+        validate = { v -> probeSsh(v) },
+    )
+
+    val all: List<ProviderSpec> = listOf(navidrome, subsonic, jellyfin, emby, plex, abs, lyrion, ssh)
 
     fun byKey(key: String): ProviderSpec? = all.firstOrNull { it.key == key }
 }

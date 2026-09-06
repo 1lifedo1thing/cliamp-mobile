@@ -76,7 +76,7 @@ class PlaybackService : MediaSessionService() {
             .setDefaultRequestProperties(mapOf(IcyHeaders.REQUEST_HEADER_ENABLE_METADATA_NAME to "1"))
 
         val sources = DefaultMediaSourceFactory(this)
-            .setDataSourceFactory(DefaultDataSource.Factory(this, http))
+            .setDataSourceFactory(CliampDataSourceFactory(DefaultDataSource.Factory(this, http)))
 
         // Buffer tuning has to serve two very different cases in one player.
         // Live radio cannot re-buffer from the past, so it wants a deep ceiling

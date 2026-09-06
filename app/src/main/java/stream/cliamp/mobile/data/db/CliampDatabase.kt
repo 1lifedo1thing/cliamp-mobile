@@ -19,8 +19,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ProviderEntity::class,
         PodcastSubscriptionEntity::class,
         EpisodeProgressEntity::class,
+        SftpTrackEntity::class,
+        SftpIndexEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class CliampDatabase : RoomDatabase() {
@@ -32,6 +34,7 @@ abstract class CliampDatabase : RoomDatabase() {
     abstract fun localSongs(): LocalSongDao
     abstract fun providers(): ProviderDao
     abstract fun podcasts(): PodcastDao
+    abstract fun sftp(): SftpDao
 
     companion object {
         @Volatile private var instance: CliampDatabase? = null
@@ -79,6 +82,45 @@ abstract class CliampDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * The SSH/SFTP library index. Two new tables and nothing touched, so
+         * additive again - and a real migration rather than a destructive
+         * fallback for the same reason as the others: v3 holds favourites,
+         * playlists and provider accounts that cannot be re-derived. The index
+         * itself could be, but dropping the whole database to rebuild it would
+         * take everything else with it.
+         */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sftp_tracks` (" +
+                        "`accountId` TEXT NOT NULL, `path` TEXT NOT NULL, `title` TEXT NOT NULL, " +
+                        "`artist` TEXT NOT NULL, `album` TEXT NOT NULL, `albumKey` TEXT NOT NULL, " +
+                        "`artistKey` TEXT NOT NULL, `track` INTEGER NOT NULL, `year` INTEGER NOT NULL, " +
+                        "`size` INTEGER NOT NULL, `mtime` INTEGER NOT NULL, `ext` TEXT NOT NULL, " +
+                        "`scanId` INTEGER NOT NULL, PRIMARY KEY(`accountId`, `path`))"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_sftp_tracks_accountId_albumKey` " +
+                        "ON `sftp_tracks` (`accountId`, `albumKey`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_sftp_tracks_accountId_artistKey` " +
+                        "ON `sftp_tracks` (`accountId`, `artistKey`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_sftp_tracks_accountId_scanId` " +
+                        "ON `sftp_tracks` (`accountId`, `scanId`)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sftp_index` (" +
+                        "`accountId` TEXT NOT NULL, `folders` TEXT NOT NULL, " +
+                        "`scannedAt` INTEGER NOT NULL, `tracks` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`accountId`))"
+                )
+            }
+        }
+
         fun get(context: Context): CliampDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
@@ -88,7 +130,7 @@ abstract class CliampDatabase : RoomDatabase() {
                 // playlist_members cascades from playlists, which only works
                 // with foreign keys actually switched on
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
                 .also { instance = it }
         }
