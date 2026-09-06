@@ -127,11 +127,11 @@ fun CliampRoot(
         repository.reportPlay(s)
     }
 
-    BackHandler(enabled = overlay != Overlay.None || tab != Tab.Lib) {
-        when {
-            overlay != Overlay.None -> overlay = Overlay.None
-            else -> tab = Tab.Lib
-        }
+    // Back closes whatever overlay is up; on the first page of any tab it
+    // falls through to the system and leaves the app, so the tab shell itself
+    // is never a back-stack.
+    BackHandler(enabled = overlay != Overlay.None) {
+        overlay = Overlay.None
     }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(p.ground)) {
