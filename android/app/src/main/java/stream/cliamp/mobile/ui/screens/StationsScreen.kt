@@ -428,7 +428,7 @@ private fun StationTile(
     var art by remember(station.id) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(station.id) {
         if (station.source == StationSource.Cliamp) return@LaunchedEffect
-        art = StationArtSource.bitmapForSmall(station)?.asImageBitmap()
+        art = StationArtSource.bitmapFor(station)?.asImageBitmap()
     }
     Column(Modifier.fillMaxWidth().clickable(onClick = onPlay)) {
         Box(
