@@ -304,8 +304,9 @@ private fun ShowRow(
 }
 
 /**
- * Show artwork, or the mic if there is none yet. Loaded through the same source
- * radio favicons use, which already caches by URL and decodes small.
+ * Show artwork, or the mic if there is none yet. A row icon only ever sits at
+ * thumbnails size, so it decodes small like a station's row thumbnail does;
+ * the grid tile decodes full-res separately.
  */
 @Composable
 private fun Artwork(url: String) {
@@ -314,7 +315,7 @@ private fun Artwork(url: String) {
     LaunchedEffect(url) {
         art = null
         if (url.startsWith("http")) {
-            art = StationArtSource.bitmapForUrl(url)?.asImageBitmap()
+            art = StationArtSource.bitmapForUrlSmall(url)?.asImageBitmap()
         } else {
             art = null
         }

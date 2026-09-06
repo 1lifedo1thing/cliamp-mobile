@@ -143,6 +143,18 @@ object StationArtSource {
         return bmp
     }
 
+    /** A known URL's low-quality art for tiny surfaces, the [bitmapForSmall]
+     * counterpart for art we did not have to discover. Podcast rows use this -
+     * the catalogue already knows the artwork URL, so only the decode differs. */
+    suspend fun bitmapForUrlSmall(url: String): Bitmap? {
+        if (url.isBlank()) return null
+        smallBitmaps.get(url)?.let { return it }
+        if (misses.get(url) == true) return null
+        val bmp = downloadSmall(url)
+        if (bmp == null) misses.put(url, true) else smallBitmaps.put(url, bmp)
+        return bmp
+    }
+
     private suspend fun imageUrl(station: Station): String? {
         resolved.get(station.id)?.let { return it }
         val fromPage = station.homepage.takeIf { it.startsWith("http") }?.let { scrape(it) }
