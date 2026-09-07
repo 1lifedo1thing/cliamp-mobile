@@ -100,6 +100,7 @@ import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.OverflowButton
 import stream.cliamp.mobile.ui.components.OverflowItem
 import stream.cliamp.mobile.ui.components.OverflowMenu
+import stream.cliamp.mobile.ui.components.BackPage
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.components.ArtPlate
@@ -287,20 +288,7 @@ fun LocalScreen(
         )
     }
     val openSmartPlaylist = smartPlaylists.firstOrNull { it.kind == openSmart }
-    val paneVisible = openSmartPlaylist == null && showing == null
-
-    val canGoBack = showProviders || showing != null || openSmartPlaylist != null || addingTo != null || infoFor != null
-    BackHandler(enabled = backEnabled && canGoBack) {
-        when {
-            infoFor != null -> infoFor = null
-            addingTo != null -> addingTo = null
-            showing != null -> openSlug = null
-            openSmartPlaylist != null -> openSmart = null
-            showProviders -> onShowProviders(false)
-            else -> {}
-        }
-    }
-
+    // ---- base page (always composed, previews itself beneath each overlay) ----
     Box(Modifier.fillMaxSize().background(p.ground)) {
     Column(Modifier.fillMaxSize()) {
         ScreenHeader {
@@ -309,46 +297,14 @@ fun LocalScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Mono(
-                    when {
-                        infoFor != null -> "song info"
-                        showing != null -> showing.station.name
-                        openSmartPlaylist != null -> openSmartPlaylist.label
-                        else -> "Library"
-                    },
-                    CliampType.screenTitle, p.ink, maxLines = 1,
-                )
+                Mono("Library", CliampType.screenTitle, p.ink, maxLines = 1)
             }
-            if (infoFor == null && showing == null && openSmartPlaylist == null) {
-                // Sub-tabs: the library list, and a dedicated providers pane.
-                // A little top padding keeps them from sticking to the title.
-                Row(
-                    Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    Chip("playlists", selected = !showProviders, onClick = { onShowProviders(false) })
-                    Chip("providers", selected = showProviders, onClick = { onShowProviders(true) })
-                }
-            }
-            if (infoFor == null && showing != null) {
-                // playlist detail sub-header
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                        .padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    Chip("‹ back", selected = false, onClick = { openSlug = null })
-                    Chip("add", selected = false, onClick = { addingTo = showing.station.slug })
-                    Chip("set cover", selected = false, onClick = { coverLauncher.launch("image/*") })
-                }
-            } else if (openSmartPlaylist != null) {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                        .padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    Chip("‹ back", selected = false, onClick = { openSmart = null })
-                }
+            Row(
+                Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                Chip("playlists", selected = !showProviders, onClick = { onShowProviders(false) })
+                Chip("providers", selected = showProviders, onClick = { onShowProviders(true) })
             }
         }
 
@@ -356,48 +312,6 @@ fun LocalScreen(
             when {
                 !haveAudio -> PermissionNote()
                 libError != null && songs.isEmpty() -> CenterNote(libError!!, p.destructiveInk)
-                showProviders -> ProvidersView(
-                    providers = providers,
-                    onOpenProvider = onOpenProvider,
-                    onAddProvider = onAddProvider,
-                    onRemoveProvider = onRemoveProvider,
-                )
-                openSmartPlaylist != null -> SmartPlaylistDetail(
-                    pl = openSmartPlaylist,
-                    current = current,
-                    playing = playing,
-                    onPlay = justPlay,
-                    onToggleFavorite = onToggleFavorite,
-                    favorites = favorites.map { it.url }.toSet(),
-                    loading = loading,
-                    onPlayNext = onPlayNext,
-                    onAddToQueue = onAddToQueue,
-                    onReplaceQueue = onReplaceQueue,
-                    favScope = favScope,
-                    onFavScopeChange = { favScope = it },
-                    onInfo = { infoFor = it },
-                    onRemove = removeLocalSong,
-                )
-                showing != null -> PlaylistDetailShown(
-                    playlist = showing,
-                    songIds = showing.songIds,
-                    playlists = playlists,
-                    localSongs = filtered,
-                    radioStations = radioStations,
-                    podcasts = podcasts,
-                    subscribedShows = subscriptions,
-                    current = current,
-                    playing = playing,
-                    onPlay = justPlay,
-                    onToggle = { s, add ->
-                        scope.launch {
-                            if (add) playlists.addStation(showing.station.slug, s)
-                            else playlists.removeSong(showing.station.slug, s.id)
-                        }
-                    },
-                    adding = addingTo != null,
-                    doneAdding = { addingTo = null },
-                )
                 else -> PlaylistList(
                     smart = smartPlaylists,
                     pinnedPlaylists = pinnedPlaylists,
@@ -441,21 +355,151 @@ fun LocalScreen(
             }
         }
         }
-
     }
-    // The full song-detail overlay, on top of whatever pane is open.
-    if (infoFor != null) SongInfoView(
-        s = infoFor!!,
-        systemBack = canGoBack,
-        onDismiss = { infoFor = null },
-        onToggleFavorite = onToggleFavorite,
-        favorite = infoFor!!.url in favoriteUrls,
-        onRemove = {
-            val s = infoFor!!
-            infoFor = null
-            removeLocalSong(s)
-        },
-    )
+
+    // ---- non-main pages as overlays, each riding predictive back ----
+
+    // Providers pane
+    BackPage(visible = showProviders, onBack = { onShowProviders(false) }) {
+        Column(Modifier.fillMaxSize().background(p.ground)) {
+            ScreenHeader {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Mono("providers", CliampType.screenTitle, p.ink, maxLines = 1)
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    Chip("‹ back", selected = false, onClick = { onShowProviders(false) })
+                }
+            }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                ProvidersView(
+                    providers = providers,
+                    onOpenProvider = onOpenProvider,
+                    onAddProvider = onAddProvider,
+                    onRemoveProvider = onRemoveProvider,
+                )
+            }
+        }
+    }
+
+    // Smart playlist detail pane
+    BackPage(visible = openSmartPlaylist != null, onBack = { openSmart = null }) {
+        Column(Modifier.fillMaxSize().background(p.ground)) {
+            ScreenHeader {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Mono(
+                        openSmartPlaylist?.label ?: "playlist",
+                        CliampType.screenTitle, p.ink, maxLines = 1,
+                    )
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    Chip("‹ back", selected = false, onClick = { openSmart = null })
+                }
+            }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                openSmartPlaylist?.let { pl ->
+                    SmartPlaylistDetail(
+                        pl = pl,
+                        current = current,
+                        playing = playing,
+                        onPlay = justPlay,
+                        onToggleFavorite = onToggleFavorite,
+                        favorites = favorites.map { it.url }.toSet(),
+                        loading = loading,
+                        onPlayNext = onPlayNext,
+                        onAddToQueue = onAddToQueue,
+                        onReplaceQueue = onReplaceQueue,
+                        favScope = favScope,
+                        onFavScopeChange = { favScope = it },
+                        onInfo = { infoFor = it },
+                        onRemove = removeLocalSong,
+                    )
+                }
+            }
+        }
+    }
+
+    // Playlist detail pane
+    BackPage(visible = showing != null, onBack = { openSlug = null }) {
+        Column(Modifier.fillMaxSize().background(p.ground)) {
+            ScreenHeader {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Mono(
+                        showing?.station?.name ?: "playlist",
+                        CliampType.screenTitle, p.ink, maxLines = 1,
+                    )
+                }
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                        .padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    Chip("‹ back", selected = false, onClick = { openSlug = null })
+                    showing?.let { pl ->
+                        Chip("add", selected = false, onClick = { addingTo = pl.station.slug })
+                        Chip("set cover", selected = false, onClick = { coverLauncher.launch("image/*") })
+                    }
+                }
+            }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                showing?.let { pl ->
+                    PlaylistDetailShown(
+                        playlist = pl,
+                        songIds = pl.songIds,
+                        playlists = playlists,
+                        localSongs = filtered,
+                        radioStations = radioStations,
+                        podcasts = podcasts,
+                        subscribedShows = subscriptions,
+                        current = current,
+                        playing = playing,
+                        onPlay = justPlay,
+                        onToggle = { s, add ->
+                            scope.launch {
+                                if (add) playlists.addStation(pl.station.slug, s)
+                                else playlists.removeSong(pl.station.slug, s.id)
+                            }
+                        },
+                        adding = addingTo != null,
+                        doneAdding = { addingTo = null },
+                    )
+                }
+            }
+        }
+    }
+
+    // Song info overlay (on top of whatever pane is open)
+    BackPage(visible = infoFor != null, onBack = { infoFor = null }) {
+        SongInfoView(
+            s = infoFor!!,
+            systemBack = false,
+            onDismiss = { infoFor = null },
+            onToggleFavorite = onToggleFavorite,
+            favorite = infoFor!!.url in favoriteUrls,
+            onRemove = {
+                val s = infoFor!!
+                infoFor = null
+                removeLocalSong(s)
+            },
+        )
+    }
 }
 
 private fun checkAudio(context: android.content.Context, perm: String): Boolean =

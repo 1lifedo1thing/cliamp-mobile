@@ -1,7 +1,9 @@
 package stream.cliamp.mobile.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -15,15 +17,19 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.launch
+import kotlin.math.absoluteValue
 import stream.cliamp.mobile.data.DirectoryQuery
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.LocalLibrary
@@ -37,6 +43,7 @@ import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.ui.components.CliampTabBar
 import stream.cliamp.mobile.ui.components.CliampTabRail
 import stream.cliamp.mobile.ui.components.Gutter
+import stream.cliamp.mobile.ui.components.PredictiveBackSurface
 import stream.cliamp.mobile.ui.components.Tab
 import stream.cliamp.mobile.ui.components.TabCorners
 import stream.cliamp.mobile.ui.components.TabRailWidth
@@ -99,7 +106,13 @@ fun CliampRoot(
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf(Tab.Lib) }
-    var overlay by remember { mutableStateOf<Overlay>(Overlay.None) }
+    // Overlays stack like Android pages: opening one from another (a scope
+    // from the player, an edit from a browse) pushes it, and back pops to the
+    // one it came from. The top is what is drawn over the tab.
+    var overlayStack by remember { mutableStateOf<List<Overlay>>(emptyList()) }
+    val overlay = overlayStack.lastOrNull() ?: Overlay.None
+    val pushOverlay: (Overlay) -> Unit = { overlayStack = overlayStack + it }
+    val popOverlay: () -> Unit = { overlayStack = overlayStack.dropLast(1) }
     // A one-shot "scroll the Stations tab down to the directory section"
     // request, raised by tapping a tag in search. Cleared once consumed.
     var focusDirectory by remember { mutableStateOf(false) }
@@ -127,11 +140,19 @@ fun CliampRoot(
         repository.reportPlay(s)
     }
 
-    // Back closes whatever overlay is up; on the first page of any tab it
-    // falls through to the system and leaves the app, so the tab shell itself
-    // is never a back-stack.
-    BackHandler(enabled = overlay != Overlay.None) {
-        overlay = Overlay.None
+    // The overlays ride the back gesture to reveal this tab beneath them; as
+    // one slides aside the tab scales back on the same progress, so the page
+    // you are returning to previews itself the way the system back does.
+    //
+    // The shrink is driven by its own spring that always eases toward where
+    // the gesture says: during the swipe the surface and this scale move
+    // together, and when the overlay pops the scale eases back to 1.0 instead
+    // of snapping - committing the back is seamless, never a jump.
+    var backPreview by remember { mutableFloatStateOf(0f) }
+    val previewEase = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+    val previewShrink = remember { Animatable(0f) }
+    LaunchedEffect(backPreview) {
+        previewShrink.animateTo(0.03f * backPreview.absoluteValue, previewEase)
     }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(p.ground)) {
@@ -141,7 +162,16 @@ fun CliampRoot(
         val rail = maxWidth > maxHeight
         Row(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).fillMaxHeight()) {
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .graphicsLayer {
+                    val s = previewShrink.value
+                    scaleX = 1f - s
+                    scaleY = 1f - s
+                },
+        ) {
             // The active tab stays composed regardless of which overlay is up,
             // so opening the player (or queue/scope/settings) and coming back
             // lands on the exact page you left: the Library detail, provider
@@ -175,17 +205,17 @@ fun CliampRoot(
                     onAddToQueue = { player.addToQueue(it) },
                     onPlayNext = { player.playNext(it) },
                     onReplaceQueue = { s, from -> player.replaceQueue(s, from) },
-                    onOpenPlayer = { overlay = Overlay.Player },
+                    onOpenPlayer = { pushOverlay(Overlay.Player) },
                     providers = providerAccounts,
                     showProviders = libSubTab == LibSubTab.Providers,
                     onShowProviders = { v -> libSubTab = if (v) LibSubTab.Providers else LibSubTab.Library },
                     onOpenProvider = { a ->
                         libSubTab = LibSubTab.Providers
-                        overlay = Overlay.Browse(a.id)
+                        pushOverlay(Overlay.Browse(a.id))
                     },
                     onAddProvider = { spec ->
                         libSubTab = LibSubTab.Providers
-                        overlay = Overlay.Wizard(spec.key, null)
+                        pushOverlay(Overlay.Wizard(spec.key, null))
                     },
                     onRemoveProvider = { account ->
                         // Removal takes the account's cached library and its
@@ -195,7 +225,7 @@ fun CliampRoot(
                         scope.launch { providers.remove(account.id) }
                         val open = overlay
                         if (open is Overlay.Browse && open.accountId == account.id) {
-                            overlay = Overlay.None
+                            popOverlay()
                         }
                     },
                     backEnabled = overlay == Overlay.None,
@@ -209,47 +239,56 @@ fun CliampRoot(
                     onPlay = onPlay,
                     onOpenShow = { show: PodcastShow ->
                         podcasts.openShow(show)
-                        overlay = Overlay.Show
+                        pushOverlay(Overlay.Show)
                     },
                     onAddToQueue = { player.addToQueue(it) },
                     onPlayNext = { player.playNext(it) },
                 )
             }
 
-            when (overlay) {
+            // Overlays ride the predictive-back gesture: the whole layer slides
+            // aside with the finger just like the settings app, exposing the
+            // tab beneath, then commits by popping one page off the stack.
+            PredictiveBackSurface(
+                enabled = overlayStack.isNotEmpty(),
+                onBack = { overlayStack = overlayStack.dropLast(1) },
+                onProgress = { backPreview = it },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                when (overlay) {
                 Overlay.Player -> NowPlayingScreen(
                     repository = repository,
                     prefs = prefs,
                     player = player,
-                    onOpenScope = { overlay = Overlay.Scope },
-                    onBack = { overlay = Overlay.None },
+                    onOpenScope = { pushOverlay(Overlay.Scope) },
+                    onBack = { popOverlay() },
                 )
                 Overlay.Queue -> QueueScreen(
                     player = player,
                     current = station,
                     playing = playerState.playing,
                     onPlay = onPlay,
-                    onBack = { overlay = Overlay.None },
+                    onBack = { popOverlay() },
                 )
                 Overlay.Scope -> ScopeScreen(
                     prefs = prefs,
                     station = station,
                     streamTitle = streamTitle,
                     playing = playerState.playing,
-                    onBack = { overlay = Overlay.None },
+                    onBack = { popOverlay() },
                 )
                 is Overlay.Browse -> {
                     val id = (overlay as Overlay.Browse).accountId
                     val account = providerAccounts.firstOrNull { it.id == id }
                     if (account == null) {
-                        overlay = Overlay.None
+                        popOverlay()
                     } else {
                         ProviderBrowseScreen(
                             account = account,
-                            onBack = { overlay = Overlay.None },
-                            onEdit = { overlay = Overlay.Wizard(account.providerKey, account) },
+                            onBack = { popOverlay() },
+                            onEdit = { pushOverlay(Overlay.Wizard(account.providerKey, account)) },
                             onPlay = onPlay,
-                            onOpenPlayer = { overlay = Overlay.Player },
+                            onOpenPlayer = { pushOverlay(Overlay.Player) },
                             onAddToQueue = { player.addToQueue(it) },
                             onPlayNext = { player.playNext(it) },
                         )
@@ -258,15 +297,15 @@ fun CliampRoot(
                 is Overlay.Wizard -> {
                     val spec = ProviderCatalog.byKey((overlay as Overlay.Wizard).providerKey)
                     if (spec == null) {
-                        overlay = Overlay.None
+                        popOverlay()
                     } else {
                         ProviderWizard(
                             spec = spec,
                             existing = (overlay as Overlay.Wizard).account,
-                            onCancel = { overlay = Overlay.None },
+                            onCancel = { popOverlay() },
                             onSave = { account ->
                                 scope.launch { providers.save(account) }
-                                overlay = Overlay.None
+                                popOverlay()
                             },
                         )
                     }
@@ -275,7 +314,7 @@ fun CliampRoot(
                     podcasts = podcasts,
                     current = station,
                     playing = playerState.playing,
-                    onBack = { overlay = Overlay.None },
+                    onBack = { popOverlay() },
                     onPlay = onPlay,
                     onAddToQueue = { player.addToQueue(it) },
                     onPlayNext = { player.playNext(it) },
@@ -287,11 +326,11 @@ fun CliampRoot(
                     localLibrary = localLibrary,
                     providers = providers,
                     onPlay = onPlay,
-                    onOpenScope = { overlay = Overlay.Scope },
-                    onOpenSettings = { overlay = Overlay.Settings },
+                    onOpenScope = { pushOverlay(Overlay.Scope) },
+                    onOpenSettings = { pushOverlay(Overlay.Settings) },
                     onOpenProvider = { account ->
                         libSubTab = LibSubTab.Providers
-                        overlay = Overlay.Browse(account.id)
+                        pushOverlay(Overlay.Browse(account.id))
                     },
                     // Lands on the Podcasts tab behind the episode list, so
                     // backing out of the show leaves you somewhere coherent
@@ -299,7 +338,7 @@ fun CliampRoot(
                     onOpenShow = { show: PodcastShow ->
                         podcasts.openShow(show)
                         tab = Tab.Pods
-                        overlay = Overlay.Show
+                        pushOverlay(Overlay.Show)
                     },
                     // A tag is a directory filter: land on the Stations tab so
                     // the tapping user actually sees the tagged stations rather
@@ -308,16 +347,17 @@ fun CliampRoot(
                         repository.loadDirectory(DirectoryQuery.Tag(name), reset = true)
                         focusDirectory = true
                         tab = Tab.Stations
-                        overlay = Overlay.None
+                        popOverlay()
                     },
-                    onBack = { overlay = Overlay.None },
+                    onBack = { popOverlay() },
                 )
                 Overlay.Settings -> SettingsScreen(
                     prefs = prefs,
                     repository = repository,
-                    onBack = { overlay = Overlay.None },
+                    onBack = { popOverlay() },
                 )
                 Overlay.None -> Unit
+                }
             }
         }
 
@@ -345,9 +385,9 @@ fun CliampRoot(
                     hasNext = playerState.hasNext,
                     onPrev = { player.prev() },
                     onNext = { player.next() },
-                    onOpenQueue = { overlay = Overlay.Queue },
+                    onOpenQueue = { pushOverlay(Overlay.Queue) },
                     onToggle = { player.toggle(station ?: recent.firstOrNull()) },
-                    onOpen = { overlay = Overlay.Player },
+                    onOpen = { pushOverlay(Overlay.Player) },
                 )
             }
         }
@@ -357,14 +397,14 @@ fun CliampRoot(
         if (!rail && (overlay == Overlay.None || overlay == Overlay.Player)) {
             CliampTabBar(
                 current = tab,
-                onSelect = { tab = it; overlay = Overlay.None },
+                onSelect = { tab = it; popOverlay() },
             )
         }
         }
         if (rail) {
             CliampTabRail(
                 current = tab,
-                onSelect = { tab = it; overlay = Overlay.None },
+                onSelect = { tab = it; popOverlay() },
                 modifier = Modifier.fillMaxHeight(),
             )
         }
@@ -372,8 +412,8 @@ fun CliampRoot(
 
         if (overlay == Overlay.None) {
             TabCorners(
-                onOpenSearch = { overlay = Overlay.Command },
-                onOpenSettings = { overlay = Overlay.Settings },
+                onOpenSearch = { pushOverlay(Overlay.Command) },
+                onOpenSettings = { pushOverlay(Overlay.Settings) },
                 // In landscape the right-hand corner is the tab rail, so the
                 // pair clears it and sits at the corner of the content instead.
                 endInset = if (rail) TabRailWidth + Gutter else Gutter,
