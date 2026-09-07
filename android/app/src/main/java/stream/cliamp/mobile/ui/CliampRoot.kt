@@ -91,7 +91,7 @@ fun CliampRoot(
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
-    var tab by remember { mutableStateOf(Tab.Lib) }
+    var tab by remember { mutableStateOf(Tab.Stations) }
     // Overlays stack like Android pages: opening one from another (a scope
     // from the player, an edit from a browse) pushes it, and back pops to the
     // one it came from. The top is what is drawn over the tab.

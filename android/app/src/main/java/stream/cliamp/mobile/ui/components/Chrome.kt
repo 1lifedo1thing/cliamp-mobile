@@ -146,7 +146,7 @@ enum class Tab(val label: String) {
     // Play is gone: the full player opens from the mini-player bar. Servers is
     // gone too, folded into Library beside the other sources. Search is gone
     // too: it is a floating corner icon rather than a destination.
-    Lib("Library"), Stations("STATIONS"), Pods("PODCASTS")
+    Stations("STATIONS"), Pods("PODCASTS"), Lib("Library")
 }
 
 /**
