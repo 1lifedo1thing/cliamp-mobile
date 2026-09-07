@@ -103,7 +103,10 @@ fun StationsScreen(
             last >= listState.layoutInfo.totalItemsCount - 8
         }
     }
-    LaunchedEffect(nearEnd, directory.stations.size) {
+    // error is in the key so a page that failed is retried: the list did not
+    // grow, so size alone would never re-trigger this and the directory would
+    // stall at the last successful page with its "directory: …" note on screen.
+    LaunchedEffect(nearEnd, directory.stations.size, directory.error) {
         if (nearEnd && source != Source.Cliamp) repository.nextPage()
     }
 

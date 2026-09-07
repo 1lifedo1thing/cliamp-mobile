@@ -98,7 +98,11 @@ class Repository(
                             query = query,
                             stations = merged,
                             loading = false,
-                            exhausted = list.size < pageSize,
+                            // Only an empty page is the end. A short page is
+                            // usually a slow server trimming the answer, not the
+                            // last of the catalogue, and calling it exhausted
+                            // froze the directory mid-list.
+                            exhausted = list.isEmpty(),
                         )
                     },
                     onFailure = { e ->
