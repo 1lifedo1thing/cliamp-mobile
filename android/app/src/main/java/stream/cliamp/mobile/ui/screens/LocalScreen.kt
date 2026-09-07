@@ -392,7 +392,7 @@ fun LocalScreen(
     // is on top of everything that came from it, the corner included.
 
     // Providers pane
-    BackPage(visible = showProviders, onBack = { onShowProviders(false) }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
+    BackPage(visible = showProviders, enabled = backEnabled, onBack = { onShowProviders(false) }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
         Column(Modifier.fillMaxSize().background(p.ground)) {
             ScreenHeader {
                 Row(
@@ -421,7 +421,7 @@ fun LocalScreen(
     }
 
     // Smart playlist detail pane
-    BackPage(visible = openSmartPlaylist != null, onBack = { openSmart = null }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
+    BackPage(visible = openSmartPlaylist != null, enabled = backEnabled, onBack = { openSmart = null }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
         Column(Modifier.fillMaxSize().background(p.ground)) {
             ScreenHeader {
                 Row(
@@ -465,7 +465,7 @@ fun LocalScreen(
     }
 
     // Playlist detail pane
-    BackPage(visible = showing != null, onBack = { openSlug = null }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
+    BackPage(visible = showing != null, enabled = backEnabled, onBack = { openSlug = null }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
         Column(Modifier.fillMaxSize().background(p.ground)) {
             ScreenHeader {
                 Row(
@@ -518,7 +518,7 @@ fun LocalScreen(
     }
 
     // Song info overlay (on top of whatever pane is open)
-    BackPage(visible = infoFor != null, onBack = { infoFor = null }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
+    BackPage(visible = infoFor != null, enabled = backEnabled, onBack = { infoFor = null }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
         SongInfoView(
             s = infoFor!!,
             systemBack = false,

@@ -111,6 +111,24 @@ fun CliampRoot(
     // itself rides predictive back the way the Library panes do.
     var podsShow by remember { mutableStateOf<PodcastShow?>(null) }
     var podsPreview by remember { mutableFloatStateOf(0f) }
+    // Which page a show was opened from, if any. Shows opened from the search
+    // overlay close back into it (query intact) rather than stranding the user
+    // on the Podcasts tab's root list; shows opened from the tab itself carry
+    // no origin, so back just leaves the pane and reveals the list beneath.
+    var podsOrigin by remember { mutableStateOf<Overlay?>(null) }
+    // The search text lives above the Command overlay so it survives the
+    // overlay closing, letting a back-returned search open exactly on the
+    // query you left it on.
+    var searchQuery by remember { mutableStateOf("") }
+    // Closing a show returns you to wherever it was opened from: pop the pane
+    // and, when there was an origin page, put it back on the stack.
+    val closePodsShow: () -> Unit = {
+        podsShow = null
+        podsOrigin?.let { origin ->
+            podsOrigin = null
+            pushOverlay(origin)
+        }
+    }
 
     val playerState by player.state.collectAsState()
     val station by PlaybackBus.station.collectAsState()
@@ -246,6 +264,7 @@ fun CliampRoot(
                             onPlay = onPlay,
                             onOpenShow = { show: PodcastShow ->
                                 podcasts.openShow(show)
+                                podsOrigin = null
                                 podsShow = show
                             },
                             onAddToQueue = { player.addToQueue(it) },
@@ -264,15 +283,16 @@ fun CliampRoot(
                     )
                     BackPage(
                         visible = podsShow != null,
-                        onBack = { podsShow = null },
+                        onBack = closePodsShow,
                         onProgress = { podsPreview = it },
+                        enabled = overlay == Overlay.None,
                         modifier = Modifier.zIndex(4f),
                     ) {
                         PodcastShowScreen(
                             podcasts = podcasts,
                             current = station,
                             playing = playerState.playing,
-                            onBack = { podsShow = null },
+                            onBack = closePodsShow,
                             onPlay = onPlay,
                             onAddToQueue = { player.addToQueue(it) },
                             onPlayNext = { player.playNext(it) },
@@ -317,14 +337,14 @@ fun CliampRoot(
         if (!rail) {
             CliampTabBar(
                 current = tab,
-                onSelect = { tab = it; popOverlay(); podsShow = null },
+                onSelect = { tab = it; popOverlay(); podsShow = null; podsOrigin = null },
             )
         }
         }
         if (rail) {
             CliampTabRail(
                 current = tab,
-                onSelect = { tab = it; popOverlay(); podsShow = null },
+                onSelect = { tab = it; popOverlay(); podsShow = null; podsOrigin = null },
                 modifier = Modifier.fillMaxHeight(),
             )
         }
@@ -418,11 +438,15 @@ fun CliampRoot(
                         libSubTab = LibSubTab.Providers
                         pushOverlay(Overlay.Browse(account.id))
                     },
-                    // Lands on the Podcasts tab behind the episode list, so
-                    // backing out of the show leaves you somewhere coherent
-                    // rather than on the search results you came from.
+                    // A show opened from search is a detour, not a move-in:
+                    // closing it puts the search back so "back" lands on the
+                    // query you actually came from.
                     onOpenShow = { show: PodcastShow ->
                         podcasts.openShow(show)
+                        // Remember the search this show was opened from so
+                        // closing it returns there rather than to the Podcasts
+                        // tab's root list.
+                        podsOrigin = overlay
                         tab = Tab.Pods
                         popOverlay()
                         podsShow = show
@@ -437,6 +461,8 @@ fun CliampRoot(
                         popOverlay()
                     },
                     onBack = { popOverlay() },
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
                 )
                 Overlay.Settings -> SettingsScreen(
                     prefs = prefs,

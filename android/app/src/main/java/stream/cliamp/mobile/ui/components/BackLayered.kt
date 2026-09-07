@@ -25,12 +25,13 @@ fun BackPage(
     visible: Boolean,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     onProgress: (Float) -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     if (!visible) return
     PredictiveBackSurface(
-        enabled = true,
+        enabled = enabled,
         onBack = onBack,
         onProgress = onProgress,
         modifier = modifier.fillMaxSize(),

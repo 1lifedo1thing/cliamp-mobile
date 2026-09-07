@@ -25,29 +25,59 @@ object RadioBrowser {
     )
 
     @Volatile private var mirrors: List<String> = fallbackMirrors
-    @Volatile private var current: Int = 0
+    @Volatile private var dead: Set<String> = emptySet()
 
     private suspend fun discover() = withContext(Dispatchers.IO) {
+        var found: List<String> = emptyList()
         runCatching {
-            val found = InetAddress.getAllByName("all.api.radio-browser.info")
+            found = InetAddress.getAllByName("all.api.radio-browser.info")
                 .mapNotNull { addr ->
                     runCatching { addr.canonicalHostName }.getOrNull()
                         ?.takeIf { it.endsWith("api.radio-browser.info") }
                 }
                 .distinct()
                 .map { "https://$it" }
-            if (found.isNotEmpty()) mirrors = found.shuffled()
         }
+        // Resolution failing is usually the same network trouble, so probe the
+        // known mirrors in its place rather than trusting an offline list.
+        if (found.isEmpty()) found = fallbackMirrors
+        // A mirror that does not accept a connection in a moment is going to
+        // burn a full call timeout whenever it comes up, so keep only the ones
+        // that answer and let the first page load at the speed of the live
+        // mirror, not a dead one's timeout.
+        val alive = found.filter(::alive)
+        // Nothing answered: leave an empty list so the call fails fast and the
+        // screen can offer a manual retry, instead of silently waiting out
+        // timeouts against a mirror that cannot be reached.
+        mirrors = if (alive.isNotEmpty()) alive.shuffled() else emptyList()
+        // A fresh probe supersedes the mid-session dead list.
+        dead = emptySet()
     }
 
+    /** True when the mirror accepts a TCP connection within a moment. */
+    private fun alive(https: String): Boolean =
+        runCatching {
+            java.net.Socket().use { it.connect(java.net.InetSocketAddress(https.removePrefix("https://"), 443), 2000) }
+            true
+        }.getOrDefault(false)
+
     private suspend fun get(path: String): String {
-        if (mirrors === fallbackMirrors) discover()
+        // An emptied mirror list is a total outage from the last probe; retry
+        // re-probes rather than trusting it, so a manual "try again" after the
+        // network returns actually reaches a live mirror again.
+        if (mirrors === fallbackMirrors || mirrors.isEmpty()) discover()
         var lastError: Throwable? = null
-        repeat(mirrors.size) {
-            val base = mirrors[(current + it) % mirrors.size]
-            runCatching { return Http.text("$base$path") }
-                .onFailure { e -> lastError = e }
-            current = (current + 1) % mirrors.size
+        val remaining = mirrors.filterNot { it in dead }
+        for (base in remaining) {
+            try {
+                return Http.text("$base$path")
+            } catch (e: Exception) {
+                lastError = e
+                // Once a mirror has burned its timeout it usually stays dead
+                // for this session; skip it from here on so later pages never
+                // pay the same wait again.
+                dead = dead + base
+            }
         }
         throw lastError ?: IllegalStateException("no radio-browser mirror reachable")
     }
@@ -98,7 +128,8 @@ object RadioBrowser {
      */
     suspend fun reportClick(uuid: String) {
         if (uuid.isBlank()) return
-        val base = mirrors.getOrNull(current) ?: return
+        if (mirrors.isEmpty()) discover()
+        val base = mirrors.firstOrNull() ?: return
         Http.ping("$base/json/url/$uuid")
     }
 

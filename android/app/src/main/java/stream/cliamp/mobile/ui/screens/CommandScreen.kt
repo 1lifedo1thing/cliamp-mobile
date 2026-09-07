@@ -103,10 +103,11 @@ fun CommandScreen(
     onOpenShow: (PodcastShow) -> Unit,
     onOpenTag: (String) -> Unit,
     onBack: () -> Unit,
+    query: String,
+    onQueryChange: (String) -> Unit,
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
-    var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(Scope.All) }
     // Podcast search hits, kept local to this screen. The Podcasts tab shares
     // the same PodcastRepository, so routing search through podcasts.load()
@@ -204,10 +205,10 @@ fun CommandScreen(
             ":eq" -> scope.launch {
                 prefs.setEqPreset(arg.ifBlank { "flat" }); prefs.setEqEnabled(true)
             }
-            ":clear" -> query = ""
+            ":clear" -> onQueryChange("")
             else -> repository.loadDirectory(DirectoryQuery.Search(text), reset = true)
         }
-        if (verb != ":clear" && !verb.startsWith(":")) query = text
+        if (verb != ":clear" && !verb.startsWith(":")) onQueryChange(text)
     }
 
     fun open(hit: SearchHit, queue: List<SearchHit>) {
@@ -234,7 +235,7 @@ fun CommandScreen(
                 Spacer(Modifier.width(6.dp))
                 CliampTextField(
                     value = query,
-                    onValueChange = { query = it },
+                    onValueChange = onQueryChange,
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     placeholder = "Search",
                     imeAction = ImeAction.Go,
