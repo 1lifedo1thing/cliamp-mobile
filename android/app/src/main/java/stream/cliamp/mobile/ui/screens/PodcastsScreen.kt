@@ -136,12 +136,6 @@ fun PodcastsScreen(
                 Pane.entries.forEach { s -> Chip(s.label, pane == s, onClick = { pane = s }) }
                 Spacer(Modifier.width(4.dp))
                 val topQuery = directory.query as? PodcastQuery.Top
-                Chip(
-                    "top",
-                    topQuery != null,
-                    onClick = { podcasts.load(PodcastQuery.Top(), reset = true) },
-                )
-                Spacer(Modifier.width(4.dp))
                 ChipDropdown(
                     label = topQuery?.country?.takeIf { it.isNotEmpty() }?.let { c ->
                         countryList.firstOrNull { it.iso_3166_1.equals(c, ignoreCase = true) }?.name ?: c
@@ -225,6 +219,14 @@ fun PodcastsScreen(
                                 .padding(horizontal = Gutter, vertical = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(7.dp),
                         ) {
+                            // The order control leads the filters: the current
+                            // chart order, then the genres that narrow it.
+                            val topQuery = directory.query as? PodcastQuery.Top
+                            Chip(
+                                "top",
+                                topQuery != null,
+                                onClick = { podcasts.load(PodcastQuery.Top(), reset = true) },
+                            )
                             PodcastDirectory.genres.forEach { g ->
                                 val q = directory.query
                                 Chip(

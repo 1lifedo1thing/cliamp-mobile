@@ -155,17 +155,6 @@ fun StationsScreen(
                     Chip(s.label, source == s, onClick = { source = s })
                 }
                 Spacer(Modifier.width(4.dp))
-                Chip(
-                    "trending",
-                    directory.query == DirectoryQuery.Trending,
-                    onClick = { repository.loadDirectory(DirectoryQuery.Trending, reset = true) },
-                )
-                Chip(
-                    "top voted",
-                    directory.query == DirectoryQuery.TopVoted,
-                    onClick = { repository.loadDirectory(DirectoryQuery.TopVoted, reset = true) },
-                )
-                Spacer(Modifier.width(4.dp))
                 val countryQuery = directory.query as? DirectoryQuery.Country
                 ChipDropdown(
                     label = countryQuery?.countryName ?: "all countries",
@@ -254,13 +243,25 @@ fun StationsScreen(
                             }
                         }
                     }
-                    if (tags.isNotEmpty()) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            Row(
-                                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                                    .padding(horizontal = Gutter, vertical = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(7.dp),
-                            ) {
+                    // The directory's filters, one row: the order controls (top /
+                    // trending) lead it, then the tags that narrow the list.
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                                .padding(horizontal = Gutter, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        ) {
+                            Chip(
+                                "top",
+                                directory.query == DirectoryQuery.TopVoted,
+                                onClick = { repository.loadDirectory(DirectoryQuery.TopVoted, reset = true) },
+                            )
+                            Chip(
+                                "trending",
+                                directory.query == DirectoryQuery.Trending,
+                                onClick = { repository.loadDirectory(DirectoryQuery.Trending, reset = true) },
+                            )
+                            if (tags.isNotEmpty()) {
                                 tags.take(24).forEach { t ->
                                     val q = directory.query
                                     Chip(
@@ -271,8 +272,8 @@ fun StationsScreen(
                                 }
                             }
                         }
-                        item(span = { GridItemSpan(maxLineSpan) }) { Spacer(Modifier.height(6.dp)) }
                     }
+                    item(span = { GridItemSpan(maxLineSpan) }) { Spacer(Modifier.height(6.dp)) }
                     items(
                         directory.stations,
                         key = { "dir:${it.url}" },

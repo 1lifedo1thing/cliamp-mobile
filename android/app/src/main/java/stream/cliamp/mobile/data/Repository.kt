@@ -18,7 +18,7 @@ sealed interface DirectoryQuery {
 
     val label: String
         get() = when (this) {
-            TopVoted -> "top voted"
+            TopVoted -> "top"
             Trending -> "trending"
             is Search -> "\"$text\""
             is Tag -> "#$tag"
