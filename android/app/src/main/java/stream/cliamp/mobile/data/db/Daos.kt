@@ -175,9 +175,6 @@ interface PodcastDao {
     @Query("SELECT * FROM podcast_subscriptions ORDER BY position, title")
     fun subscriptions(): Flow<List<PodcastSubscriptionEntity>>
 
-    @Query("SELECT * FROM podcast_subscriptions ORDER BY position, title")
-    suspend fun readSubscriptions(): List<PodcastSubscriptionEntity>
-
     @Query("SELECT EXISTS(SELECT 1 FROM podcast_subscriptions WHERE feedUrl = :feedUrl)")
     suspend fun isSubscribed(feedUrl: String): Boolean
 
@@ -206,20 +203,6 @@ interface PodcastDao {
 
     @Query("UPDATE episode_progress SET completed = 1, updatedAt = :now WHERE url = :url")
     suspend fun markCompleted(url: String, now: Long = System.currentTimeMillis())
-
-    /**
-     * Started and not finished, newest first. The join is against the stations
-     * table that history already writes, so an episode appears here without
-     * being stored a second time.
-     */
-    @Query("""
-        SELECT s.* FROM stations s
-        JOIN episode_progress p ON p.url = s.url
-        WHERE p.completed = 0 AND p.positionMs > 30000
-        ORDER BY p.updatedAt DESC
-        LIMIT :limit
-    """)
-    fun continueListening(limit: Int = 30): Flow<List<StationEntity>>
 }
 
 /** An album as the index sees it: a directory of tracks, grouped. */

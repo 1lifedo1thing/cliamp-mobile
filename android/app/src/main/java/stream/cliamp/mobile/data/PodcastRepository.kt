@@ -2,15 +2,12 @@ package stream.cliamp.mobile.data
 
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import stream.cliamp.mobile.data.db.CliampDatabase
@@ -73,22 +70,11 @@ class PodcastRepository(
     private val _show = MutableStateFlow(ShowState())
     val show: StateFlow<ShowState> = _show.asStateFlow()
 
-    // Subscriptions and the continue list are mirrored in memory so a toggle or
-    // a progress write shows up on screen instantly, without waiting for the
-    // Room round-trip (write → invalidation → re-query → emit) that used to
-    // lag every change and then jump the grid.
-    private val _subscriptions = MutableStateFlow<List<PodcastShow>>(emptyList())
-    val subscriptions: StateFlow<List<PodcastShow>> = _subscriptions.asStateFlow()
-
-    /** True once the subscription mirror has been seeded from disk. The list
-     * renders skeletons until this flips, so the subscribed section does not
-     * jump between "empty" and "loaded" on first draw. */
-    private val _subscriptionsReady = MutableStateFlow(false)
-    val subscriptionsReady: StateFlow<Boolean> = _subscriptionsReady.asStateFlow()
-
-    /** Started and unfinished episodes, newest first. */
-    private val _continueListening = MutableStateFlow<List<Station>>(emptyList())
-    val continueListening: StateFlow<List<Station>> = _continueListening.asStateFlow()
+    // Subscriptions come straight from Room: a toggle or a feed add writes the
+    // row and the invalidation tracker re-emits the list, so the subscribing
+    // sections track the table without an in-memory copy to keep in sync.
+    val subscriptions: Flow<List<PodcastShow>> =
+        dao.subscriptions().map { rows -> rows.map { it.toShow() } }
 
     /** Every saved position, keyed by episode URL, for badging a list at once. */
     val progress: Flow<Map<String, EpisodeProgress>> =
@@ -103,17 +89,7 @@ class PodcastRepository(
     /** Search or category results fetched but not yet shown. */
     private var pending: List<PodcastShow> = emptyList()
 
-    fun bootstrap() {
-        // Seed the mirrors synchronously before any screen can compose, so the
-        // subscribed section is ready on the very first frame. There is then no
-        // loading window, so no placeholder is ever needed and nothing shifts.
-        runBlocking(Dispatchers.IO) {
-            _subscriptions.value = dao.readSubscriptions().map { it.toShow() }
-            _continueListening.value = dao.continueListening().first().map { it.toStation() }
-        }
-        _subscriptionsReady.value = true
-        load(PodcastQuery.Top(), reset = true)
-    }
+    fun bootstrap() = load(PodcastQuery.Top(), reset = true)
 
     fun load(query: PodcastQuery, reset: Boolean) {
         scope.launch {
@@ -221,28 +197,17 @@ class PodcastRepository(
 
     /** Returns the new state, so a row can toggle without re-reading. */
     suspend fun toggleSubscription(show: PodcastShow): Boolean {
-        val nowSubscribed = !dao.isSubscribed(show.feedUrl)
-        // Update the in-memory mirror first so the section reflects the tap on
-        // the very next frame, before the disk write lands. New shows land on
-        // top, matching the DAO's position ordering.
-        _subscriptions.value = if (nowSubscribed) {
-            listOf(show) + _subscriptions.value.filterNot { it.feedUrl == show.feedUrl }
-        } else {
-            _subscriptions.value.filterNot { it.feedUrl == show.feedUrl }
-        }
-        if (nowSubscribed) {
-            dao.subscribe(show.toEntity(dao.nextTopPosition()))
-        } else {
+        if (dao.isSubscribed(show.feedUrl)) {
             dao.unsubscribe(show.feedUrl)
+            return false
         }
-        return nowSubscribed
+        dao.subscribe(show.toEntity(dao.nextTopPosition()))
+        return true
     }
 
     /** A feed URL typed by hand, resolved through Apple where it is listed. */
     suspend fun addFeed(url: String): PodcastShow? {
         val show = PodcastDirectory.byFeedUrl(url) ?: return null
-        // Optimistic mirror update first; the disk write follows.
-        _subscriptions.value = listOf(show) + _subscriptions.value.filterNot { it.feedUrl == show.feedUrl }
         dao.subscribe(show.toEntity(dao.nextTopPosition()))
         return show
     }
@@ -266,16 +231,6 @@ class PodcastRepository(
         if (station.source != StationSource.Podcast) return
         if (positionMs <= 0) return
         val done = durationMs > 0 && positionMs >= durationMs - NEAR_END
-        // Mirror the continue-list query into memory (started, not finished,
-        // newest first) before touching disk, so the row lands on the next
-        // frame rather than waiting on the DB write.
-        _continueListening.value = if (done) {
-            _continueListening.value.filterNot { it.url == station.url }
-        } else if (positionMs > 30_000L) {
-            listOf(station) + _continueListening.value.filterNot { it.url == station.url }
-        } else {
-            _continueListening.value
-        }
         dao.saveProgress(
             EpisodeProgressEntity(
                 url = station.url,
@@ -297,12 +252,9 @@ class PodcastRepository(
                 updatedAt = System.currentTimeMillis(),
             )
         )
-        _continueListening.value = _continueListening.value.filterNot { it.url == station.url }
     }
 
-    suspend fun clearProgress(station: Station) = dao.clearProgress(station.url).also {
-        _continueListening.value = _continueListening.value.filterNot { it.url == station.url }
-    }
+    suspend fun clearProgress(station: Station) = dao.clearProgress(station.url)
 
     private companion object {
         /** Close enough to the end to call it listened. */
