@@ -21,7 +21,9 @@ data class PodcastGenre(val id: Int, val name: String)
  *     claim 200, the service returns 100.
  *  2. The charts feed gives ids, names and artwork but no feed URL, so a chart
  *     is useless on its own. [lookup] takes comma-separated ids, so one extra
- *     request resolves a whole page of them.
+ *     request resolves a whole page of them. The feed generator stops at 200,
+ *     so [CHART_LIMIT] really is the whole chart; the /api/v2 feed returns
+ *     only the first hundred and ignores an offset, so it can never page.
  *  3. `genreId` filters but does not browse: on its own it returns nothing, so
  *     a category browse is the genre's own name as the search term with the id
  *     narrowing it.
@@ -32,10 +34,12 @@ data class PodcastGenre(val id: Int, val name: String)
 object PodcastDirectory {
 
     private const val ITUNES = "https://itunes.apple.com"
-    private const val CHARTS = "https://rss.marketingtools.apple.com/api/v2"
 
     /** What a search actually returns at most, whatever limit is asked for. */
     const val SEARCH_LIMIT = 100
+
+    /** The whole top chart, in rank order. The feed generator refuses more. */
+    const val CHART_LIMIT = 200
 
     val genres: List<PodcastGenre> = listOf(
         PodcastGenre(1489, "News"),
@@ -76,17 +80,18 @@ object PodcastDirectory {
     suspend fun byGenre(genre: PodcastGenre): List<PodcastShow> = search(genre.name, genre.id)
 
     /**
-     * Apple's top shows for [country]. Returns ids in chart order - resolve
-     * them with [lookup], a page at a time, since a chart carries no feeds.
+     * Apple's top shows for [country], the full chart and no further. Returns
+     * ids in rank order - resolve them with [lookup], a page at a time, since
+     * a chart carries no feeds.
      */
-    suspend fun chartIds(country: String = "us", limit: Int = 100): List<String> =
+    suspend fun chartIds(country: String = "us"): List<String> =
         // Deliberately not caught here. Swallowing it returned an empty list,
         // which the repository could not tell from a chart that genuinely had
         // nothing in it, so a failed fetch rendered as "end of top shows" - an
         // empty directory with no hint that anything had gone wrong.
-        Http.json.decodeFromString<ChartsResponse>(
-            Http.text("$CHARTS/${country.lowercase()}/podcasts/top/$limit/podcasts.json")
-        ).feed.results.map { it.id }.filter { it.isNotBlank() }
+        Http.json.decodeFromString<LegacyChartsResponse>(
+            Http.text("$ITUNES/${country.lowercase()}/rss/toppodcasts/limit=$CHART_LIMIT/json")
+        ).feed.entry.mapNotNull { it.id.attributes.imId.ifBlank { null } }
 
     /** Resolve Apple ids to full shows, feed URL included, in one request. */
     suspend fun lookup(ids: List<String>): List<PodcastShow> {
@@ -155,19 +160,18 @@ private data class ItunesShow(
 }
 
 @Serializable
-private data class ChartsResponse(val feed: ChartsFeed = ChartsFeed())
+private data class LegacyChartsResponse(val feed: LegacyChartsFeed = LegacyChartsFeed())
 
 @Serializable
-private data class ChartsFeed(
-    val title: String = "",
-    val country: String = "",
-    val results: List<ChartEntry> = emptyList(),
-)
+private data class LegacyChartsFeed(val entry: List<LegacyChartEntry> = emptyList())
 
 @Serializable
-private data class ChartEntry(
-    val id: String = "",
-    val name: String = "",
-    @SerialName("artistName") val artistName: String = "",
-    val artworkUrl100: String = "",
+private data class LegacyChartEntry(val id: LegacyChartId = LegacyChartId())
+
+@Serializable
+private data class LegacyChartId(val attributes: LegacyChartIdAttributes = LegacyChartIdAttributes())
+
+@Serializable
+private data class LegacyChartIdAttributes(
+    @SerialName("im:id") val imId: String = "",
 )

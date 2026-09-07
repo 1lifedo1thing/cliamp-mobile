@@ -110,7 +110,10 @@ fun PodcastsScreen(
             last >= listState.layoutInfo.totalItemsCount - 8
         }
     }
-    LaunchedEffect(nearEnd, directory.shows.size) {
+    // error is in the key so a page that failed is retried: the list did not
+    // grow, so size alone would never re-trigger this and the directory would
+    // stall at the last successful page with its "directory: …" note on screen.
+    LaunchedEffect(nearEnd, directory.shows.size, directory.error) {
         if (nearEnd && pane != Pane.Subs) podcasts.nextPage()
     }
 

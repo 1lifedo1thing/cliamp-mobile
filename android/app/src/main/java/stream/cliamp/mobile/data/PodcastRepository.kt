@@ -105,7 +105,7 @@ class PodcastRepository(
                     pending = emptyList()
                     val primed = runCatching {
                         when (query) {
-                            is PodcastQuery.Top -> chartCursor = PodcastDirectory.chartIds(country = query.country.ifEmpty { "us" }, limit = 100)
+                            is PodcastQuery.Top -> chartCursor = PodcastDirectory.chartIds(country = query.country.ifEmpty { "us" })
                             is PodcastQuery.Search -> pending = PodcastDirectory.search(query.text)
                             is PodcastQuery.Category -> pending = PodcastDirectory.byGenre(query.genre)
                         }
@@ -124,8 +124,12 @@ class PodcastRepository(
                 val next = runCatching {
                     if (chartCursor.isNotEmpty()) {
                         val ids = chartCursor.take(PAGE)
+                        val shows = PodcastDirectory.lookup(ids)
+                        // Only consume the ids once they have actually resolved:
+                        // a page that fails (connection dropped, Apple rate
+                        // limit) must be retried, not silently skipped.
                         chartCursor = chartCursor.drop(ids.size)
-                        PodcastDirectory.lookup(ids)
+                        shows
                     } else {
                         val slice = pending.take(PAGE)
                         pending = pending.drop(slice.size)
