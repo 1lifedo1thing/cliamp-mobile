@@ -1,9 +1,6 @@
 package stream.cliamp.mobile.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -17,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -26,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.launch
@@ -144,16 +141,10 @@ fun CliampRoot(
     // one slides aside the tab scales back on the same progress, so the page
     // you are returning to previews itself the way the system back does.
     //
-    // The shrink is driven by its own spring that always eases toward where
-    // the gesture says: during the swipe the surface and this scale move
-    // together, and when the overlay pops the scale eases back to 1.0 instead
-    // of snapping - committing the back is seamless, never a jump.
+    // The scale is a direct 1:1 of the gesture: it tracks the finger exactly
+    // during the swipe, and the surface animates the preview through its own
+    // commit and revoke glides, so release and return are one motion.
     var backPreview by remember { mutableFloatStateOf(0f) }
-    val previewEase = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
-    val previewShrink = remember { Animatable(0f) }
-    LaunchedEffect(backPreview) {
-        previewShrink.animateTo(0.03f * backPreview.absoluteValue, previewEase)
-    }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(p.ground)) {
         // Landscape gets a right-hand rail instead of the bottom tab strip so
@@ -167,7 +158,7 @@ fun CliampRoot(
                 .weight(1f)
                 .fillMaxWidth()
                 .graphicsLayer {
-                    val s = previewShrink.value
+                    val s = 0.05f * backPreview.absoluteValue
                     scaleX = 1f - s
                     scaleY = 1f - s
                 },
@@ -245,6 +236,16 @@ fun CliampRoot(
                     onPlayNext = { player.playNext(it) },
                 )
             }
+
+            // A dim veil over the tab so the returning page reads as sitting
+            // "under" the sheet, riding with the gesture and clearing as the
+            // cover leaves.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = 0.14f * backPreview.absoluteValue }
+                    .background(Color.Black),
+            )
 
             // Overlays ride the predictive-back gesture: the whole layer slides
             // aside with the finger just like the settings app, exposing the

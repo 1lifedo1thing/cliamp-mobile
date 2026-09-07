@@ -48,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -57,14 +58,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
+import kotlin.math.absoluteValue
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -289,7 +293,20 @@ fun LocalScreen(
     }
     val openSmartPlaylist = smartPlaylists.firstOrNull { it.kind == openSmart }
     // ---- base page (always composed, previews itself beneath each overlay) ----
-    Box(Modifier.fillMaxSize().background(p.ground)) {
+    // The preview is fed 1:1 by whichever BackPage is on top: the base list
+    // shrinks and dims with the gesture and rides back up on the pane's own
+    // commit and revoke glides, so it matches the same motion everywhere.
+    var panePreview by remember { mutableFloatStateOf(0f) }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(p.ground)
+            .graphicsLayer {
+                val s = 0.05f * panePreview.absoluteValue
+                scaleX = 1f - s
+                scaleY = 1f - s
+            },
+    ) {
     Column(Modifier.fillMaxSize()) {
         ScreenHeader {
             Row(
@@ -355,12 +372,22 @@ fun LocalScreen(
             }
         }
         }
+
+        // A dim veil over the base list so it reads as sitting "under" whatever
+        // pane is on top, riding with the gesture and clearing as the pane
+        // leaves - the same cue the tab gets beneath an overlay.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = 0.14f * panePreview.absoluteValue }
+                .background(Color.Black),
+        )
     }
 
     // ---- non-main pages as overlays, each riding predictive back ----
 
     // Providers pane
-    BackPage(visible = showProviders, onBack = { onShowProviders(false) }) {
+    BackPage(visible = showProviders, onBack = { onShowProviders(false) }, onProgress = { panePreview = it }) {
         Column(Modifier.fillMaxSize().background(p.ground)) {
             ScreenHeader {
                 Row(
@@ -389,7 +416,7 @@ fun LocalScreen(
     }
 
     // Smart playlist detail pane
-    BackPage(visible = openSmartPlaylist != null, onBack = { openSmart = null }) {
+    BackPage(visible = openSmartPlaylist != null, onBack = { openSmart = null }, onProgress = { panePreview = it }) {
         Column(Modifier.fillMaxSize().background(p.ground)) {
             ScreenHeader {
                 Row(
@@ -433,7 +460,7 @@ fun LocalScreen(
     }
 
     // Playlist detail pane
-    BackPage(visible = showing != null, onBack = { openSlug = null }) {
+    BackPage(visible = showing != null, onBack = { openSlug = null }, onProgress = { panePreview = it }) {
         Column(Modifier.fillMaxSize().background(p.ground)) {
             ScreenHeader {
                 Row(
@@ -486,7 +513,7 @@ fun LocalScreen(
     }
 
     // Song info overlay (on top of whatever pane is open)
-    BackPage(visible = infoFor != null, onBack = { infoFor = null }) {
+    BackPage(visible = infoFor != null, onBack = { infoFor = null }, onProgress = { panePreview = it }) {
         SongInfoView(
             s = infoFor!!,
             systemBack = false,
