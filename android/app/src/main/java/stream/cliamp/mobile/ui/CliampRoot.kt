@@ -34,6 +34,7 @@ import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.ui.components.CliampTabBar
 import stream.cliamp.mobile.ui.components.CliampTabRail
+import stream.cliamp.mobile.ui.components.BackPage
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.PredictiveBackSurface
 import stream.cliamp.mobile.ui.components.Tab
@@ -71,13 +72,6 @@ private sealed interface Overlay {
 
     /** Browsing one provider's library. */
     data class Browse(val accountId: String) : Overlay
-
-    /**
-     * One podcast's episode list. Carries no id: the repository holds the open
-     * show, the way it holds the directory page, so the overlay is a mode
-     * rather than a payload.
-     */
-    data object Show : Overlay
 }
 
 /** Tabs within the Library screen. */
@@ -112,6 +106,12 @@ fun CliampRoot(
     // that was opened from the providers pane (add wizard or a provider's browse)
     // lands back on providers rather than the library list.
     var libSubTab by remember { mutableStateOf(LibSubTab.Library) }
+    // Which podcast show's episode list is open on the Podcasts tab, and the
+    // preview that drives its back gesture. The show is a pane of its tab, not
+    // an overlay, so the tab strip and mini bar stay up around it; the pane
+    // itself rides predictive back the way the Library panes do.
+    var podsShow by remember { mutableStateOf<PodcastShow?>(null) }
+    var podsPreview by remember { mutableFloatStateOf(0f) }
 
     val playerState by player.state.collectAsState()
     val station by PlaybackBus.station.collectAsState()
@@ -223,20 +223,58 @@ fun CliampRoot(
                     },
                     backEnabled = overlay == Overlay.None,
                 )
-                Tab.Pods -> PodcastsScreen(
-                    podcasts = podcasts,
-                    prefs = prefs,
-                    current = station,
-                    playing = playerState.playing,
-                    countries = repository.countries,
-                    onPlay = onPlay,
-                    onOpenShow = { show: PodcastShow ->
-                        podcasts.openShow(show)
-                        pushOverlay(Overlay.Show)
-                    },
-                    onAddToQueue = { player.addToQueue(it) },
-                    onPlayNext = { player.playNext(it) },
-                )
+                Tab.Pods -> {
+                    // Like the Library's panes: the tab holds the list behind
+                    // the open show, which rides predictive back across it. The
+                    // tab strip and mini bar stay composed around both, so a
+                    // show reads as a page of its tab, not a full-screen cover.
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(p.ground)
+                            .graphicsLayer {
+                                val s = 0.05f * podsPreview.absoluteValue
+                                scaleX = 1f - s
+                                scaleY = 1f - s
+                            },
+                    ) {
+                        PodcastsScreen(
+                            podcasts = podcasts,
+                            prefs = prefs,
+                            current = station,
+                            playing = playerState.playing,
+                            countries = repository.countries,
+                            onPlay = onPlay,
+                            onOpenShow = { show: PodcastShow ->
+                                podcasts.openShow(show)
+                                podsShow = show
+                            },
+                            onAddToQueue = { player.addToQueue(it) },
+                            onPlayNext = { player.playNext(it) },
+                        )
+                    }
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = 0.14f * podsPreview.absoluteValue }
+                            .background(Color.Black),
+                    )
+                    BackPage(
+                        visible = podsShow != null,
+                        onBack = { podsShow = null },
+                        onProgress = { podsPreview = it },
+                    ) {
+                        PodcastShowScreen(
+                            podcasts = podcasts,
+                            current = station,
+                            playing = playerState.playing,
+                            onBack = { podsShow = null },
+                            onPlay = onPlay,
+                            onAddToQueue = { player.addToQueue(it) },
+                            onPlayNext = { player.playNext(it) },
+                        )
+                    }
+                }
             }
 
             }
@@ -265,14 +303,14 @@ fun CliampRoot(
         if (!rail) {
             CliampTabBar(
                 current = tab,
-                onSelect = { tab = it; popOverlay() },
+                onSelect = { tab = it; popOverlay(); podsShow = null },
             )
         }
         }
         if (rail) {
             CliampTabRail(
                 current = tab,
-                onSelect = { tab = it; popOverlay() },
+                onSelect = { tab = it; popOverlay(); podsShow = null },
                 modifier = Modifier.fillMaxHeight(),
             )
         }
@@ -363,15 +401,6 @@ fun CliampRoot(
                         )
                     }
                 }
-                Overlay.Show -> PodcastShowScreen(
-                    podcasts = podcasts,
-                    current = station,
-                    playing = playerState.playing,
-                    onBack = { popOverlay() },
-                    onPlay = onPlay,
-                    onAddToQueue = { player.addToQueue(it) },
-                    onPlayNext = { player.playNext(it) },
-                )
                 Overlay.Command -> CommandScreen(
                     repository = repository,
                     podcasts = podcasts,
@@ -391,7 +420,8 @@ fun CliampRoot(
                     onOpenShow = { show: PodcastShow ->
                         podcasts.openShow(show)
                         tab = Tab.Pods
-                        pushOverlay(Overlay.Show)
+                        popOverlay()
+                        podsShow = show
                     },
                     // A tag is a directory filter: land on the Stations tab so
                     // the tapping user actually sees the tagged stations rather

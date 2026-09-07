@@ -203,7 +203,7 @@ private fun PortraitPlayer(
     actions: PlayerActions,
     modifier: Modifier = Modifier,
 ) {
-    var p = LocalPalette.current
+    val p = LocalPalette.current
     Column(modifier.fillMaxSize().background(p.ground).statusBarsPadding().navigationBarsPadding()) {
         Row(
             Modifier.fillMaxWidth().padding(start = Gutter, top = 6.dp, end = 16.dp, bottom = 2.dp),
@@ -440,7 +440,7 @@ private fun PlayerTransport(
                 onSeek = actions.onSeek,
             )
             Row(
-                Modifier.fillMaxWidth().consumeAllGestures(),
+                Modifier.fillMaxWidth().padding(bottom = 6.dp).consumeAllGestures(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
@@ -459,7 +459,7 @@ private fun PlayerTransport(
                 dim = !model.state.playing && model.reconnect == 0,
             )
             Row(
-                Modifier.fillMaxWidth().consumeAllGestures(),
+                Modifier.fillMaxWidth().padding(bottom = 6.dp).consumeAllGestures(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {

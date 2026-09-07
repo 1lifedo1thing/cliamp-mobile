@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,10 +14,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -42,6 +43,7 @@ import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.toStation
+import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.EmptyNote
 import stream.cliamp.mobile.ui.components.Gutter
@@ -95,31 +97,27 @@ fun PodcastShowScreen(
         show?.let { s -> state.episodes.map { it.toStation(s) } } ?: emptyList()
     }
 
-    Column(Modifier.fillMaxSize().background(p.ground).navigationBarsPadding()) {
+    Column(Modifier.fillMaxSize().background(p.ground)) {
         ScreenHeader {
             Row(
                 Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    Modifier.clickable(onClick = onBack),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(CliampIcons.Prev, "back", Modifier.size(width = 15.dp, height = 12.dp), tint = p.inkSecondary)
-                    Mono("back", CliampType.rowSecondary, p.inkSecondary)
-                }
-                Mono(
-                    if (subscribed) "SUBSCRIBED" else "SUBSCRIBE",
-                    CliampType.sectionLabel,
-                    if (subscribed) p.accent else p.inkTertiary,
-                    Modifier
-                        .padding(end = 56.dp)
-                        .clickable { show?.let { s -> scope.launch { podcasts.toggleSubscription(s) } } },
+                Mono(show?.title ?: "podcasts", CliampType.screenTitle, p.ink, maxLines = 1)
+            }
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                    .padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                Chip("‹ back", selected = false, onClick = onBack)
+                Chip(
+                    if (subscribed) "subscribed" else "subscribe",
+                    selected = subscribed,
+                    onClick = { show?.let { s -> scope.launch { podcasts.toggleSubscription(s) } } },
                 )
             }
-            Spacer(Modifier.height(4.dp))
         }
 
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
@@ -188,7 +186,7 @@ private fun ShowHeader(show: PodcastShow?) {
         ) {
             Box(
                 Modifier
-                    .size(86.dp)
+                    .size(140.dp)
                     .clip(RoundedCornerShape(5.dp))
                     .border(1.dp, p.frameBorder, RoundedCornerShape(5.dp)),
                 contentAlignment = Alignment.Center,
@@ -197,7 +195,7 @@ private fun ShowHeader(show: PodcastShow?) {
                 if (bmp != null) {
                     Image(bmp, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 } else {
-                    Icon(CliampIcons.PodsTab, null, Modifier.size(26.dp), tint = p.inkFaint)
+                    Icon(CliampIcons.PodsTab, null, Modifier.size(40.dp), tint = p.inkFaint)
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
