@@ -55,7 +55,10 @@ data class ShowState(
  * results, so a query is one request and a page is a slice of what came back;
  * the chart is the other way round, arriving as bare ids that need resolving,
  * so there a page is a [PodcastDirectory.lookup] of the next [PAGE] of them.
- * Either way the screen sees the same growing list and the same exhausted flag.
+ * Every single chart is capped small, so once the global one is spent the
+ * queue moves on to each genre's chart - the directory keeps loading the way
+ * the radio one does, with Apple's famous shows up front. Either way the
+ * screen sees the same growing list and the same exhausted flag.
  */
 class PodcastRepository(
     context: Context,
@@ -83,8 +86,14 @@ class PodcastRepository(
     private val pageLock = Mutex()
     private val PAGE = 30
 
-    /** Chart ids not yet resolved to shows, in chart order. */
-    private var chartCursor: List<String> = emptyList()
+/** Chart ids not yet resolved to shows, in chart order. */
+private var chartCursor: List<String> = emptyList()
+
+    /** The next charts, fetched lazily as the current one runs out. Any single
+     * chart is capped, so the directory pages past the global chart into each
+     * genre's to keep going the way the radio directory does. Each entry is a
+     * fetch of that chart's ids, resolved a page at a time on arrival. */
+    private val chartQueue = mutableListOf<suspend () -> List<String>>()
 
     /** Search or category results fetched but not yet shown. */
     private var pending: List<PodcastShow> = emptyList()
@@ -103,10 +112,18 @@ class PodcastRepository(
                 if (reset) {
                     chartCursor = emptyList()
                     pending = emptyList()
+                    chartQueue.clear()
                     val primed = runCatching {
                         retryFetch {
                             when (query) {
-                                is PodcastQuery.Top -> chartCursor = PodcastDirectory.chartIds(country = query.country.ifEmpty { "us" })
+                                is PodcastQuery.Top -> {
+                                    chartCursor = PodcastDirectory.chartIds(country = query.country.ifEmpty { "us" })
+                                    PodcastDirectory.genres.forEach { g ->
+                                        chartQueue.add {
+                                            PodcastDirectory.genreChartIds(query.country.ifEmpty { "us" }, g.id)
+                                        }
+                                    }
+                                }
                                 is PodcastQuery.Search -> pending = PodcastDirectory.search(query.text)
                                 is PodcastQuery.Category -> pending = PodcastDirectory.byGenre(query.genre)
                             }
@@ -124,7 +141,13 @@ class PodcastRepository(
 
                 val base = if (reset) emptyList() else _directory.value.shows
                 val next = runCatching {
-                    if (chartCursor.isNotEmpty()) {
+                    if (chartCursor.isNotEmpty() || chartQueue.isNotEmpty()) {
+                        if (chartCursor.isEmpty()) {
+                            // The current chart ran out; move on to the next
+                            // (a genre chart) so the directory keeps going
+                            // instead of quietly ending at Apple's cap.
+                            chartCursor = retryFetch { chartQueue.removeAt(0)() }
+                        }
                         val ids = chartCursor.take(PAGE)
                         val shows = retryFetch { PodcastDirectory.lookup(ids) }
                         // Only consume the ids once they have actually resolved:
@@ -146,7 +169,7 @@ class PodcastRepository(
                             query = query,
                             shows = base + list.filter { seen.add(it.feedUrl) },
                             loading = false,
-                            exhausted = chartCursor.isEmpty() && pending.isEmpty(),
+                            exhausted = chartCursor.isEmpty() && chartQueue.isEmpty() && pending.isEmpty(),
                         )
                     },
                     onFailure = { e ->

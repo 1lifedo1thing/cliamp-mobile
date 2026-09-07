@@ -93,6 +93,17 @@ object PodcastDirectory {
             Http.text("$ITUNES/${country.lowercase()}/rss/toppodcasts/limit=$CHART_LIMIT/json")
         ).feed.entry.mapNotNull { it.id.attributes.imId.ifBlank { null } }
 
+    /**
+     * The same top-chart feed narrowed to one [genreId], [CHART_LIMIT] ids in
+     * rank order. Any single chart is capped, so the repository feeds an
+     * endless-feeling directory by paging past the global chart into each
+     * genre's - overlapping shows are dropped by feed URL on the way in.
+     */
+    suspend fun genreChartIds(country: String = "us", genreId: Int): List<String> =
+        Http.json.decodeFromString<LegacyChartsResponse>(
+            Http.text("$ITUNES/${country.lowercase()}/rss/toppodcasts/limit=$CHART_LIMIT/genre=$genreId/json")
+        ).feed.entry.mapNotNull { it.id.attributes.imId.ifBlank { null } }
+
     /** Resolve Apple ids to full shows, feed URL included, in one request. */
     suspend fun lookup(ids: List<String>): List<PodcastShow> {
         if (ids.isEmpty()) return emptyList()
