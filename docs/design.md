@@ -152,20 +152,6 @@ count. Variety between columns comes from level and timing, never from
 randomised colour. Surfaces that cannot animate — the widget, the notification —
 get a static rule instead, not a frozen meter.
 
-## Plates
-
-Anything without cover art gets a generated plate rather than a photograph or a
-guess at what the artwork might be. Six figures - stripes, a column field,
-concentric rings, a lattice, chevrons, offset blocks - chosen by a hash of the
-item's own id, so a given album keeps its plate for good instead of reshuffling
-on every recomposition, and drawn entirely from palette roles so the plates
-re-theme with everything else.
-
-Two colours stay out of them. Amber means "this lives somewhere else" and red
-means destructive; neither is decoration. The accent lands on roughly half the
-plates and never as the whole field, because a wall of accent-coloured tiles is
-worse than a wall of grey ones.
-
 ## Icons
 
 Hand-drawn geometry only: rectangles, triangles, straight paths, on 18, 20, 24
