@@ -108,7 +108,7 @@ import stream.cliamp.mobile.ui.components.OverflowMenu
 import stream.cliamp.mobile.ui.components.BackPage
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
-import stream.cliamp.mobile.ui.components.StripedArt
+import stream.cliamp.mobile.ui.components.ArtPlate
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
@@ -874,7 +874,7 @@ private fun PlaylistRow(
                 if (art != null) {
                     Image(art!!, pl.station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 } else {
-                    StripedArt(modifier = Modifier.fillMaxSize(), radius = 5.dp, caption = null)
+                    ArtPlate(modifier = Modifier.fillMaxSize(), radius = 5.dp, initial = pl.station.name)
                 }
             }
         },
@@ -926,7 +926,7 @@ private fun PlaylistTile(
             if (art != null) {
                 Image(art!!, pl.station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             } else {
-                StripedArt(modifier = Modifier.fillMaxSize(), caption = null)
+ArtPlate(modifier = Modifier.fillMaxSize(), initial = pl.station.name)
             }
             Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
                 PlaylistMenu(pinned = pinned, onAddSongs = onAddSongs, onEdit = onEdit, onDelete = onDelete, onPin = onPin)
@@ -1088,20 +1088,26 @@ private fun SmartCollage(sp: SmartPlaylist, modifier: Modifier = Modifier) {
     }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
         Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-            CoverCell(arts.getOrNull(0), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
-            CoverCell(arts.getOrNull(1), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
+            CoverCell(arts.getOrNull(0), members.getOrNull(0)?.name, kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
+            CoverCell(arts.getOrNull(1), members.getOrNull(1)?.name, kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
         }
         Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-            CoverCell(arts.getOrNull(2), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
-            CoverCell(arts.getOrNull(3), kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
+            CoverCell(arts.getOrNull(2), members.getOrNull(2)?.name, kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
+            CoverCell(arts.getOrNull(3), members.getOrNull(3)?.name, kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
         }
     }
 }
 
-/** One quarter of a smart-playlist collage: member cover art, or a striped plate. */
+/**
+ * One quarter of a smart-playlist collage: member cover art, a plate with the
+ * member's initial when the song has no cover, and for a quarter with no member
+ * at all the smart playlist's own glyph - so an empty or half-empty playlist
+ * still reads as something rather than four bare tiles.
+ */
 @Composable
 private fun CoverCell(
     art: ImageBitmap?,
+    initial: String?,
     kindIcon: ImageVector,
     contentDescription: String?,
     modifier: Modifier = Modifier,
@@ -1110,8 +1116,10 @@ private fun CoverCell(
     Box(modifier.background(p.artB)) {
         if (art != null) {
             Image(art, contentDescription, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        } else if (initial != null) {
+            ArtPlate(modifier = Modifier.fillMaxSize(), initial = initial)
         } else {
-            StripedArt(modifier = Modifier.fillMaxSize(), caption = null) {
+            ArtPlate(modifier = Modifier.fillMaxSize()) {
                 Icon(kindIcon, null, Modifier.align(Alignment.Center).size(18.dp), tint = p.accent.copy(alpha = 0.22f))
             }
         }

@@ -141,7 +141,7 @@ Conscrypt and provider secrets still go through `AndroidKeyStore`.
 Streams carry no cover art, so the app looks for the station's own branding: the
 og:image on its homepage, then the apple-touch-icon, then the favicon the directory
 recorded. About 23 of 25 top stations yield something usable. Whatever turns up is
-letterboxed onto the striped plate rather than centre-cropped, because most og:images
+letterboxed onto the plate rather than centre-cropped, because most og:images
 are 1200x630 wordmarks and a square crop cuts them in half.
 
 cliamp's own channels are excluded on purpose. cliamp.stream has an og:image, but it is
@@ -229,7 +229,7 @@ Where the build departs from the document, and why:
 | Concept | Here | Why |
 | --- | --- | --- |
 | Scrubber with playhead | Both, chosen per source | Seekable sources get the scrubber; live streams get `--- STREAMING ---`, matching `renderSeekBar()` in the cliamp TUI. |
-| Striped art placeholder | Real art where it exists, plate as fallback | Local tags, provider `getCoverArt`, then a station's og:image. None of that is invented art; the plate still covers the misses. |
+| Monogram plate | Real art where it exists, a flat plate with the item's initial as fallback | Local tags, provider `getCoverArt`, then a station's og:image. None of that is invented art; the plate is one surface with its own first letter - no patterns that could be mistaken for a real cover - and it still covers the misses. |
 | Amber means remote host | Also means reconnecting | Red is reserved for destructive actions, so amber was the only honest choice left. |
 | Identity strip on the player | Removed | Its format readout moved into the meta line under the title. |
 | Three descending bars as the mark | The real eight-bar logo | The concept's mark was a stand-in for exactly this. |

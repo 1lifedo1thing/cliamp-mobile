@@ -7,6 +7,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -36,10 +37,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -314,16 +314,20 @@ private fun Modifier.offsetRightBorder(color: Color) = drawBehind {
 }
 
 /**
- * Album art is never invented: a 135-degree striped placeholder with a
- * monospace caption saying what belongs there.
+ * The plate that stands in for missing cover art: a flat surface, hairline
+ * bordered. It never pretends to be art - no stripes, no patterns, nothing
+ * that could be mistaken for a real cover. Pass [initial] to put the item's
+ * first letter on the plate - the Library uses it only for playlist cover
+ * previews, so the letter stays out of the mini player and the now-playing
+ * screen, where the honest caption belongs instead.
  */
 @Composable
-fun StripedArt(
+fun ArtPlate(
     modifier: Modifier = Modifier,
+    initial: String? = null,
     caption: String? = null,
     badge: String? = null,
     radius: androidx.compose.ui.unit.Dp = 5.dp,
-    stripe: androidx.compose.ui.unit.Dp = 6.dp,
     overlay: (@Composable androidx.compose.foundation.layout.BoxScope.() -> Unit)? = null,
 ) {
     val p = LocalPalette.current
@@ -331,9 +335,29 @@ fun StripedArt(
         modifier
             .clip(RoundedCornerShape(radius))
             .border(1.dp, p.artBorder, RoundedCornerShape(radius))
-            .drawBehind { drawStripes(p.artA, p.artB, stripe.toPx()) }
+            .background(p.artA)
     ) {
         overlay?.invoke(this)
+        if (initial != null) {
+            val glyph = initialOf(initial)
+            if (glyph != null) {
+                BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val size = maxWidth.coerceAtMost(maxHeight) * 0.5f
+                    with(LocalDensity.current) {
+                        Mono(
+                            glyph,
+                            CliampType.rowPrimaryMedium.copy(
+                                fontSize = size.toPx().toSp(),
+                                lineHeight = size.toPx().toSp(),
+                            ),
+                            p.inkFaint.copy(alpha = 0.75f),
+                            Modifier.align(Alignment.Center),
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+        }
         if (caption != null) {
             Mono(
                 caption,
@@ -356,24 +380,12 @@ fun StripedArt(
     }
 }
 
-private fun DrawScope.drawStripes(a: Color, b: Color, w: Float) {
-    clipRect {
-        rotate(degrees = -45f, pivot = Offset(size.width / 2f, size.height / 2f)) {
-            val diag = kotlin.math.hypot(size.width, size.height)
-            val x0 = size.width / 2f - diag
-            var x = x0
-            var i = 0
-            while (x < size.width / 2f + diag) {
-                drawRect(
-                    color = if (i % 2 == 0) a else b,
-                    topLeft = Offset(x, size.height / 2f - diag),
-                    size = Size(w, diag * 2f),
-                )
-                x += w
-                i++
-            }
-        }
-    }
+/** The first letter of an item's name, for its plate monogram. */
+private fun initialOf(name: String?): String? {
+    if (name.isNullOrBlank()) return null
+    return (name.firstOrNull { it.isLetter() }
+        ?: name.firstOrNull { !it.isWhitespace() })
+        ?.uppercaseChar()?.toString()
 }
 
 /** A hairline-separated list row. Cards are for objects with state, not lists. */

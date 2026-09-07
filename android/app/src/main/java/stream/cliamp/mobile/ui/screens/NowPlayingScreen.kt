@@ -60,7 +60,7 @@ import stream.cliamp.mobile.ui.components.MeterSize
 import stream.cliamp.mobile.ui.components.MarqueeLabel
 import stream.cliamp.mobile.ui.components.Scrubber
 import stream.cliamp.mobile.ui.components.StreamingRule
-import stream.cliamp.mobile.ui.components.StripedArt
+import stream.cliamp.mobile.ui.components.ArtPlate
 import stream.cliamp.mobile.ui.components.rememberMeter
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -616,7 +616,7 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
         station.countryCode.isNotBlank() -> "[ ${station.countryCode.lowercase()} · live stream ]"
         else -> "[ live stream ]"
     }
-    StripedArt(
+    ArtPlate(
         modifier = modifier.consumeAllGestures(),
         caption = if (art == null) caption else null,
     ) {
