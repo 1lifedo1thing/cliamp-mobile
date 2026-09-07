@@ -67,6 +67,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.window.Popup
 import kotlin.math.absoluteValue
 import kotlinx.coroutines.launch
@@ -375,19 +376,23 @@ fun LocalScreen(
 
         // A dim veil over the base list so it reads as sitting "under" whatever
         // pane is on top, riding with the gesture and clearing as the pane
-        // leaves - the same cue the tab gets beneath an overlay.
+        // leaves - the same cue the tab gets beneath an overlay. Drawn above
+        // the host's corner icons (zIndex 3) so the icons dim with the list.
         Box(
             Modifier
                 .fillMaxSize()
+                .zIndex(3f)
                 .graphicsLayer { alpha = 0.14f * panePreview.absoluteValue }
                 .background(Color.Black),
         )
     }
 
     // ---- non-main pages as overlays, each riding predictive back ----
+    // Each pane draws itself above the host's corner icons (zIndex 4): a page
+    // is on top of everything that came from it, the corner included.
 
     // Providers pane
-    BackPage(visible = showProviders, onBack = { onShowProviders(false) }, onProgress = { panePreview = it }) {
+    BackPage(visible = showProviders, onBack = { onShowProviders(false) }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
         Column(Modifier.fillMaxSize().background(p.ground)) {
             ScreenHeader {
                 Row(
@@ -416,7 +421,7 @@ fun LocalScreen(
     }
 
     // Smart playlist detail pane
-    BackPage(visible = openSmartPlaylist != null, onBack = { openSmart = null }, onProgress = { panePreview = it }) {
+    BackPage(visible = openSmartPlaylist != null, onBack = { openSmart = null }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
         Column(Modifier.fillMaxSize().background(p.ground)) {
             ScreenHeader {
                 Row(
@@ -460,7 +465,7 @@ fun LocalScreen(
     }
 
     // Playlist detail pane
-    BackPage(visible = showing != null, onBack = { openSlug = null }, onProgress = { panePreview = it }) {
+    BackPage(visible = showing != null, onBack = { openSlug = null }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
         Column(Modifier.fillMaxSize().background(p.ground)) {
             ScreenHeader {
                 Row(
@@ -513,7 +518,7 @@ fun LocalScreen(
     }
 
     // Song info overlay (on top of whatever pane is open)
-    BackPage(visible = infoFor != null, onBack = { infoFor = null }, onProgress = { panePreview = it }) {
+    BackPage(visible = infoFor != null, onBack = { infoFor = null }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
         SongInfoView(
             s = infoFor!!,
             systemBack = false,

@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
@@ -35,11 +36,9 @@ import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.ui.components.CliampTabBar
 import stream.cliamp.mobile.ui.components.CliampTabRail
 import stream.cliamp.mobile.ui.components.BackPage
-import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.PredictiveBackSurface
 import stream.cliamp.mobile.ui.components.Tab
 import stream.cliamp.mobile.ui.components.TabCorners
-import stream.cliamp.mobile.ui.components.TabRailWidth
 import stream.cliamp.mobile.ui.screens.CommandScreen
 import stream.cliamp.mobile.ui.screens.LocalScreen
 import stream.cliamp.mobile.ui.screens.MiniPlayer
@@ -253,9 +252,13 @@ fun CliampRoot(
                             onPlayNext = { player.playNext(it) },
                         )
                     }
+                    // The dim veil and the show page draw ABOVE the corner
+                    // icons (clamped zIndex below), so an episode list covers
+                    // the corner it came from instead of sharing it.
                     Box(
                         Modifier
                             .fillMaxSize()
+                            .zIndex(3f)
                             .graphicsLayer { alpha = 0.14f * podsPreview.absoluteValue }
                             .background(Color.Black),
                     )
@@ -263,6 +266,7 @@ fun CliampRoot(
                         visible = podsShow != null,
                         onBack = { podsShow = null },
                         onProgress = { podsPreview = it },
+                        modifier = Modifier.zIndex(4f),
                     ) {
                         PodcastShowScreen(
                             podcasts = podcasts,
@@ -276,6 +280,16 @@ fun CliampRoot(
                     }
                 }
             }
+
+            // The one pair of corner icons, the same for every tab: they sit
+            // over the tab's list but under any deeper page. Panes raise
+            // themselves above them with a clamped zIndex, so no page ever has
+            // to know about this - the icons just stay composed beneath it and
+            // slide back into view when it leaves.
+            TabCorners(
+                onOpenSearch = { pushOverlay(Overlay.Command) },
+                onOpenSettings = { pushOverlay(Overlay.Settings) },
+            )
 
             }
 
@@ -324,16 +338,6 @@ fun CliampRoot(
                 .graphicsLayer { alpha = 0.14f * backPreview.absoluteValue }
                 .background(Color.Black),
         )
-        }
-
-        if (overlay == Overlay.None) {
-            TabCorners(
-                onOpenSearch = { pushOverlay(Overlay.Command) },
-                onOpenSettings = { pushOverlay(Overlay.Settings) },
-                // In landscape the right-hand corner is the tab rail, so the
-                // pair clears it and sits at the corner of the content instead.
-                endInset = if (rail) TabRailWidth + Gutter else Gutter,
-            )
         }
 
         // Overlays ride the predictive-back gesture across the whole shell: the
