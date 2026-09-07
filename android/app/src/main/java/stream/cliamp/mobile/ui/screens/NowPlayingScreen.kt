@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -202,8 +203,8 @@ private fun PortraitPlayer(
     actions: PlayerActions,
     modifier: Modifier = Modifier,
 ) {
-    val p = LocalPalette.current
-    Column(modifier.fillMaxSize().background(p.ground).statusBarsPadding()) {
+    var p = LocalPalette.current
+    Column(modifier.fillMaxSize().background(p.ground).statusBarsPadding().navigationBarsPadding()) {
         Row(
             Modifier.fillMaxWidth().padding(start = Gutter, top = 6.dp, end = 16.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,

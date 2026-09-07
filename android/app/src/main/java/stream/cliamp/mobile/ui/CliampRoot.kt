@@ -1,10 +1,5 @@
 package stream.cliamp.mobile.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -151,17 +146,24 @@ fun CliampRoot(
         // the horizontal frame keeps its full height for content. Portrait is
         // untouched: the same bottom tabs, the same bottom mini player.
         val rail = maxWidth > maxHeight
-        Row(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).fillMaxHeight()) {
+        // The page behind the overlays: the whole shell (active tab, mini bar,
+        // tab strip) stays composed and is what a back gesture previews and
+        // reveals. The overlays are drawn full-screen over it.
         Box(
             Modifier
-                .weight(1f)
-                .fillMaxWidth()
+                .fillMaxSize()
                 .graphicsLayer {
                     val s = 0.05f * backPreview.absoluteValue
                     scaleX = 1f - s
                     scaleY = 1f - s
                 },
+        ) {
+        Row(Modifier.fillMaxSize()) {
+        Column(Modifier.weight(1f).fillMaxHeight()) {
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth(),
         ) {
             // The active tab stays composed regardless of which overlay is up,
             // so opening the player (or queue/scope/settings) and coming back
@@ -237,26 +239,76 @@ fun CliampRoot(
                 )
             }
 
-            // A dim veil over the tab so the returning page reads as sitting
-            // "under" the sheet, riding with the gesture and clearing as the
-            // cover leaves.
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = 0.14f * backPreview.absoluteValue }
-                    .background(Color.Black),
-            )
+            }
 
-            // Overlays ride the predictive-back gesture: the whole layer slides
-            // aside with the finger just like the settings app, exposing the
-            // tab beneath, then commits by popping one page off the stack.
-            PredictiveBackSurface(
-                enabled = overlayStack.isNotEmpty(),
-                onBack = { overlayStack = overlayStack.dropLast(1) },
-                onProgress = { backPreview = it },
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                when (overlay) {
+        // The mini bar is part of the page behind every overlay: it sits under
+        // whatever is on top (the expanded player covers it) and rides with the
+        // shell as a back gesture reveals it, so returning from any page lands
+        // on the same shell you left, mini bar included.
+        MiniPlayer(
+            station = station ?: recent.firstOrNull(),
+            streamTitle = streamTitle,
+            playing = playerState.playing,
+            buffering = playerState.buffering,
+            reconnecting = reconnect,
+            queueCount = queue.size,
+            visualizer = visualizer,
+            hasPrev = playerState.hasPrev,
+            hasNext = playerState.hasNext,
+            onPrev = { player.prev() },
+            onNext = { player.next() },
+            onOpenQueue = { pushOverlay(Overlay.Queue) },
+            onToggle = { player.toggle(station ?: recent.firstOrNull()) },
+            onOpen = { pushOverlay(Overlay.Player) },
+        )
+
+        if (!rail) {
+            CliampTabBar(
+                current = tab,
+                onSelect = { tab = it; popOverlay() },
+            )
+        }
+        }
+        if (rail) {
+            CliampTabRail(
+                current = tab,
+                onSelect = { tab = it; popOverlay() },
+                modifier = Modifier.fillMaxHeight(),
+            )
+        }
+        }
+
+        // A dim veil over the whole shell so it reads as sitting "under" the
+        // sheet, riding with the gesture and clearing as the cover leaves.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = 0.14f * backPreview.absoluteValue }
+                .background(Color.Black),
+        )
+        }
+
+        if (overlay == Overlay.None) {
+            TabCorners(
+                onOpenSearch = { pushOverlay(Overlay.Command) },
+                onOpenSettings = { pushOverlay(Overlay.Settings) },
+                // In landscape the right-hand corner is the tab rail, so the
+                // pair clears it and sits at the corner of the content instead.
+                endInset = if (rail) TabRailWidth + Gutter else Gutter,
+            )
+        }
+
+        // Overlays ride the predictive-back gesture across the whole shell: the
+        // layer (active tab, mini bar, tab strip) slides aside with the finger
+        // just like the settings app, then commits by popping one page off the
+        // stack.
+        PredictiveBackSurface(
+            enabled = overlayStack.isNotEmpty(),
+            onBack = { overlayStack = overlayStack.dropLast(1) },
+            onProgress = { backPreview = it },
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            when (overlay) {
                 Overlay.Player -> NowPlayingScreen(
                     repository = repository,
                     prefs = prefs,
@@ -358,67 +410,7 @@ fun CliampRoot(
                     onBack = { popOverlay() },
                 )
                 Overlay.None -> Unit
-                }
             }
-        }
-
-        // The mini bar stays on the tab shell and the full player: it always
-        // shows the current or last-played station, or the empty "nothing
-        // playing" state. It hides with the tabs on modal overlays (settings,
-        // queue, provider flows) so those screens don't get a stray bar.
-        // Not on Overlay.Player: the full player already shows all of this,
-        // so a mini player beneath it is the same track twice.
-        if (overlay == Overlay.None) {
-            AnimatedVisibility(
-                visible = true,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically(),
-            ) {
-                MiniPlayer(
-                    station = station ?: recent.firstOrNull(),
-                    streamTitle = streamTitle,
-                    playing = playerState.playing,
-                    buffering = playerState.buffering,
-                    reconnecting = reconnect,
-                    queueCount = queue.size,
-                    visualizer = visualizer,
-                    hasPrev = playerState.hasPrev,
-                    hasNext = playerState.hasNext,
-                    onPrev = { player.prev() },
-                    onNext = { player.next() },
-                    onOpenQueue = { pushOverlay(Overlay.Queue) },
-                    onToggle = { player.toggle(station ?: recent.firstOrNull()) },
-                    onOpen = { pushOverlay(Overlay.Player) },
-                )
-            }
-        }
-
-        // The player is an overlay, but it is a destination rather than a
-        // modal: keeping the menu means you can leave it without a back press.
-        if (!rail && (overlay == Overlay.None || overlay == Overlay.Player)) {
-            CliampTabBar(
-                current = tab,
-                onSelect = { tab = it; popOverlay() },
-            )
-        }
-        }
-        if (rail) {
-            CliampTabRail(
-                current = tab,
-                onSelect = { tab = it; popOverlay() },
-                modifier = Modifier.fillMaxHeight(),
-            )
-        }
-        }
-
-        if (overlay == Overlay.None) {
-            TabCorners(
-                onOpenSearch = { pushOverlay(Overlay.Command) },
-                onOpenSettings = { pushOverlay(Overlay.Settings) },
-                // In landscape the right-hand corner is the tab rail, so the
-                // pair clears it and sits at the corner of the content instead.
-                endInset = if (rail) TabRailWidth + Gutter else Gutter,
-            )
         }
     }
 }
