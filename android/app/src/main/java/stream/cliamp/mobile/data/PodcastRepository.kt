@@ -95,7 +95,7 @@ class PodcastRepository(
         scope.launch {
             pageLock.withLock {
                 val cur = _directory.value
-                if (!reset && (cur.loading || cur.exhausted)) return@withLock
+                if (!reset && (cur.loading || cur.exhausted || cur.error != null)) return@withLock
                 _directory.value =
                     if (reset) PodcastDirectoryState(query = query, loading = true)
                     else cur.copy(loading = true, error = null)
@@ -104,10 +104,12 @@ class PodcastRepository(
                     chartCursor = emptyList()
                     pending = emptyList()
                     val primed = runCatching {
-                        when (query) {
-                            is PodcastQuery.Top -> chartCursor = PodcastDirectory.chartIds(country = query.country.ifEmpty { "us" })
-                            is PodcastQuery.Search -> pending = PodcastDirectory.search(query.text)
-                            is PodcastQuery.Category -> pending = PodcastDirectory.byGenre(query.genre)
+                        retryFetch {
+                            when (query) {
+                                is PodcastQuery.Top -> chartCursor = PodcastDirectory.chartIds(country = query.country.ifEmpty { "us" })
+                                is PodcastQuery.Search -> pending = PodcastDirectory.search(query.text)
+                                is PodcastQuery.Category -> pending = PodcastDirectory.byGenre(query.genre)
+                            }
                         }
                     }
                     primed.exceptionOrNull()?.let { e ->
@@ -124,7 +126,7 @@ class PodcastRepository(
                 val next = runCatching {
                     if (chartCursor.isNotEmpty()) {
                         val ids = chartCursor.take(PAGE)
-                        val shows = PodcastDirectory.lookup(ids)
+                        val shows = retryFetch { PodcastDirectory.lookup(ids) }
                         // Only consume the ids once they have actually resolved:
                         // a page that fails (connection dropped, Apple rate
                         // limit) must be retried, not silently skipped.
@@ -173,23 +175,20 @@ class PodcastRepository(
         if (held.show?.feedUrl == show.feedUrl && held.episodes.isNotEmpty() && !held.loading) return
         _show.value = ShowState(show = show, loading = true)
         scope.launch {
-            PodcastFeed.load(show).fold(
-                onSuccess = { loaded ->
-                    _show.value = ShowState(show = loaded.show, episodes = loaded.episodes)
-                    // A subscription keeps whatever the feed knows that the
-                    // directory did not, so the list stops looking half-filled.
-                    if (dao.isSubscribed(loaded.show.feedUrl)) {
-                        dao.subscribe(loaded.show.toEntity(dao.nextTopPosition() + 1))
-                    }
-                },
-                onFailure = { e ->
-                    _show.value = ShowState(
-                        show = show,
-                        loading = false,
-                        error = e.message ?: "feed unreachable",
-                    )
-                },
-            )
+            val loaded = retryFetch { PodcastFeed.load(show) }.getOrElse { e ->
+                _show.value = ShowState(
+                    show = show,
+                    loading = false,
+                    error = e.message ?: "feed unreachable",
+                )
+                return@launch
+            }
+            _show.value = ShowState(show = loaded.show, episodes = loaded.episodes)
+            // A subscription keeps whatever the feed knows that the
+            // directory did not, so the list stops looking half-filled.
+            if (dao.isSubscribed(loaded.show.feedUrl)) {
+                dao.subscribe(loaded.show.toEntity(dao.nextTopPosition() + 1))
+            }
         }
     }
 

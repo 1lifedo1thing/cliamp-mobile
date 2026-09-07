@@ -433,3 +433,30 @@ fun EmptyNote(text: String) {
         HairlineDivider()
     }
 }
+
+/**
+ * A fetch that auto-retried and gave up: a centered note with a manual TRY
+ * AGAIN. [prominent] adds room above, for when the note is the whole page and
+ * read as a state rather than a footnote under existing content.
+ */
+@Composable
+fun RetryNote(
+    message: String?,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+    prominent: Boolean = false,
+) {
+    val p = LocalPalette.current
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = Gutter, vertical = if (prominent) 96.dp else 18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (!message.isNullOrBlank()) {
+            Mono(message, CliampType.rowSecondary, p.destructiveInk, maxLines = 2)
+            Spacer(Modifier.height(14.dp))
+        }
+        Chip("try again", selected = false, onClick = onRetry, accent = p.ink)
+    }
+}

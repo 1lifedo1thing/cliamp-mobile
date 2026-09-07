@@ -59,6 +59,7 @@ import stream.cliamp.mobile.ui.components.EmptyNote
 import stream.cliamp.mobile.ui.components.GridListToggle
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
+import stream.cliamp.mobile.ui.components.RetryNote
 
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
@@ -91,6 +92,7 @@ fun StationsScreen(
     val directoryGrid by prefs.directoryGrid.collectAsState(initial = prefs.directoryGrid.value)
 
     val cliamp by repository.cliamp.collectAsState()
+    val cliampError by repository.cliampError.collectAsState()
     val directory by repository.directory.collectAsState()
     val dirStats by repository.directoryStats.collectAsState()
     val tags by repository.tags.collectAsState()
@@ -103,10 +105,7 @@ fun StationsScreen(
             last >= listState.layoutInfo.totalItemsCount - 8
         }
     }
-    // error is in the key so a page that failed is retried: the list did not
-    // grow, so size alone would never re-trigger this and the directory would
-    // stall at the last successful page with its "directory: …" note on screen.
-    LaunchedEffect(nearEnd, directory.stations.size, directory.error) {
+    LaunchedEffect(nearEnd, directory.stations.size) {
         if (nearEnd && source != Source.Cliamp) repository.nextPage()
     }
 
@@ -206,11 +205,19 @@ fun StationsScreen(
                             GridListToggle(cliampGrid) { scope.launch { prefs.setCliampGrid(!cliampGrid) } }
                         }
                     }
-                    items(
-                        cliamp,
-                        key = { "cl:${it.url}" },
-                        span = { GridItemSpan(if (cliampGrid) 1 else maxLineSpan) },
-                    ) { s ->
+                    if (cliampError != null) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            RetryNote(
+                                message = "couldn't reach cliamp radio",
+                                onRetry = { repository.refreshCliamp() },
+                            )
+                        }
+                    } else {
+                        items(
+                            cliamp,
+                            key = { "cl:${it.url}" },
+                            span = { GridItemSpan(if (cliampGrid) 1 else maxLineSpan) },
+                        ) { s ->
                         if (cliampGrid) {
                             StationTile(
                                 station = s,
@@ -230,6 +237,7 @@ fun StationsScreen(
                                 onToggleFavorite = { onToggleFavorite(s) },
                             )
                         }
+                    }
                     }
                 }
 
@@ -292,7 +300,11 @@ fun StationsScreen(
                     }
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         when {
-                            directory.error != null -> EmptyNote("directory: ${directory.error}")
+                            directory.error != null -> RetryNote(
+                                message = "couldn't fetch the directory",
+                                prominent = directory.stations.isEmpty(),
+                                onRetry = { repository.loadDirectory(directory.query, reset = true) },
+                            )
                             directory.loading -> EmptyNote("loading more…")
                             directory.exhausted -> EmptyNote("end of ${directory.query.label}")
                             else -> Spacer(Modifier.height(8.dp))

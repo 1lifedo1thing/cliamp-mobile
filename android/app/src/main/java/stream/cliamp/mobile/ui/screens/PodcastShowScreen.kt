@@ -46,6 +46,7 @@ import stream.cliamp.mobile.data.toStation
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.EmptyNote
+import stream.cliamp.mobile.ui.components.RetryNote
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.ListRow
@@ -123,14 +124,13 @@ fun PodcastShowScreen(
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             item { ShowHeader(show) }
 
-            state.error?.let { msg ->
+            state.error?.let {
                 item {
-                    Column {
-                        Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 20.dp)) {
-                            Mono("feed: $msg", CliampType.rowSecondary, p.destructiveInk)
-                        }
-                        HairlineDivider()
-                    }
+                    RetryNote(
+                        message = "couldn't read the feed",
+                        prominent = true,
+                        onRetry = { podcasts.refreshShow() },
+                    )
                 }
             }
 

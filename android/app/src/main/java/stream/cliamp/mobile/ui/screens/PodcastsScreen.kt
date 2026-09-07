@@ -61,6 +61,7 @@ import stream.cliamp.mobile.ui.components.EmptyNote
 import stream.cliamp.mobile.ui.components.GridListToggle
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
+import stream.cliamp.mobile.ui.components.RetryNote
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.theme.CliampType
@@ -110,10 +111,7 @@ fun PodcastsScreen(
             last >= listState.layoutInfo.totalItemsCount - 8
         }
     }
-    // error is in the key so a page that failed is retried: the list did not
-    // grow, so size alone would never re-trigger this and the directory would
-    // stall at the last successful page with its "directory: …" note on screen.
-    LaunchedEffect(nearEnd, directory.shows.size, directory.error) {
+    LaunchedEffect(nearEnd, directory.shows.size) {
         if (nearEnd && pane != Pane.Subs) podcasts.nextPage()
     }
 
@@ -262,7 +260,11 @@ fun PodcastsScreen(
                     }
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         when {
-                            directory.error != null -> EmptyNote("directory: ${directory.error}")
+                            directory.error != null -> RetryNote(
+                                message = "couldn't fetch the directory",
+                                prominent = directory.shows.isEmpty(),
+                                onRetry = { podcasts.load(directory.query, reset = true) },
+                            )
                             directory.loading -> EmptyNote("loading more…")
                             directory.exhausted -> EmptyNote("end of ${directory.query.label}")
                             else -> Spacer(Modifier.height(8.dp))

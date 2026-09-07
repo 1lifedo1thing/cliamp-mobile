@@ -46,6 +46,9 @@ class Repository(
     private val _cliamp = MutableStateFlow(CliampRadio.builtin)
     val cliamp: StateFlow<List<Station>> = _cliamp.asStateFlow()
 
+    private val _cliampError = MutableStateFlow<String?>(null)
+    val cliampError: StateFlow<String?> = _cliampError.asStateFlow()
+
     private val _directory = MutableStateFlow(DirectoryState())
     val directory: StateFlow<DirectoryState> = _directory.asStateFlow()
 
@@ -62,30 +65,45 @@ class Repository(
     private val pageSize = 60
 
     fun bootstrap() {
-        scope.launch { _cliamp.value = CliampRadio.fetchStations() }
-        scope.launch { _directoryStats.value = RadioBrowser.stats() }
-        scope.launch { _tags.value = RadioBrowser.topTags(60) }
-        scope.launch { _countries.value = RadioBrowser.topCountries() }
+        refreshCliamp()
+        scope.launch { _directoryStats.value = retryFetch { RadioBrowser.stats() } }
+        scope.launch { _tags.value = retryFetch { RadioBrowser.topTags(60) } }
+        scope.launch { _countries.value = retryFetch { RadioBrowser.topCountries() } }
         loadDirectory(DirectoryQuery.TopVoted, reset = true)
+    }
+
+    fun refreshCliamp() {
+        scope.launch {
+            // cliamp is its own service; a silent drop used to abort this
+            // coroutine uncaught (the loop crashed the app) or fell back to
+            // builtins with no explanation. Keep the last good list on screen
+            // and let the section say what happened instead.
+            _cliampError.value = null
+            runCatching { retryFetch { CliampRadio.fetchStations() } }
+                .onSuccess { _cliamp.value = it }
+                .onFailure { _cliampError.value = it.message ?: "cliamp radio unreachable" }
+        }
     }
 
     fun loadDirectory(query: DirectoryQuery, reset: Boolean) {
         scope.launch {
             pageLock.withLock {
                 val cur = _directory.value
-                if (!reset && (cur.loading || cur.exhausted)) return@withLock
+                if (!reset && (cur.loading || cur.exhausted || cur.error != null)) return@withLock
                 val offset = if (reset) 0 else cur.stations.size
                 _directory.value =
                     if (reset) DirectoryState(query = query, loading = true)
                     else cur.copy(loading = true, error = null)
 
                 val page = runCatching {
-                    when (query) {
-                        DirectoryQuery.TopVoted -> RadioBrowser.topVoted(offset, pageSize)
-                        DirectoryQuery.Trending -> RadioBrowser.trending(offset, pageSize)
-                        is DirectoryQuery.Search -> RadioBrowser.searchByName(query.text, offset, pageSize)
-                        is DirectoryQuery.Tag -> RadioBrowser.byTag(query.tag, offset, pageSize)
-                        is DirectoryQuery.Country -> RadioBrowser.byCountryCode(query.code, offset, pageSize)
+                    retryFetch {
+                        when (query) {
+                            DirectoryQuery.TopVoted -> RadioBrowser.topVoted(offset, pageSize)
+                            DirectoryQuery.Trending -> RadioBrowser.trending(offset, pageSize)
+                            is DirectoryQuery.Search -> RadioBrowser.searchByName(query.text, offset, pageSize)
+                            is DirectoryQuery.Tag -> RadioBrowser.byTag(query.tag, offset, pageSize)
+                            is DirectoryQuery.Country -> RadioBrowser.byCountryCode(query.code, offset, pageSize)
+                        }
                     }
                 }
 
