@@ -216,6 +216,22 @@ data class SftpAlbumRow(
 
 data class SftpArtistRow(val id: String, val name: String, val albumCount: Int)
 
+/** Snapshot cache: a directory's first page or a show's feed, as one blob. */
+@Dao
+interface CacheDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun put(row: KvCacheEntity)
+
+    @Query("SELECT * FROM kv_cache WHERE `key` = :key")
+    suspend fun get(key: String): KvCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putFeed(row: PodcastFeedCacheEntity)
+
+    @Query("SELECT * FROM podcast_feed_cache WHERE feedUrl = :feedUrl")
+    suspend fun getFeed(feedUrl: String): PodcastFeedCacheEntity?
+}
+
 @Dao
 interface SftpDao {
     /**

@@ -219,7 +219,7 @@ data class SftpTrackEntity(
 /**
  * What the last scan covered. [folders] is compared against the account's
  * current folder list so that editing it rescans instead of leaving the old
- * tree indexed under a path nobody asked for any more.
+ * tree indexed under a folder nobody asked for any more.
  */
 @Entity(tableName = "sftp_index")
 data class SftpIndexEntity(
@@ -227,4 +227,30 @@ data class SftpIndexEntity(
     val folders: String,
     val scannedAt: Long,
     val tracks: Int,
+)
+
+/**
+ * A generic key-value cache for "show the last state instantly, then refresh
+ * in the background". A directory's first page and a feed both land here as a
+ * JSON blob. Blobs that used to live in DataStore moved for the same reason
+ * favourites did: it rewrites the whole file, where SQLite replaces a row.
+ */
+@Entity(tableName = "kv_cache")
+data class KvCacheEntity(
+    @PrimaryKey val key: String,
+    val json: String,
+    val savedAt: Long,
+)
+
+/**
+ * A show's last-seen feed, so reopening it renders instantly until the entry
+ * goes stale. Episodes are keyed by nothing of their own - the whole feed is
+ * the unit that is fetched, so the whole feed is the unit that is cached.
+ */
+@Entity(tableName = "podcast_feed_cache")
+data class PodcastFeedCacheEntity(
+    @PrimaryKey val feedUrl: String,
+    val showJson: String,
+    val episodesJson: String,
+    val savedAt: Long,
 )

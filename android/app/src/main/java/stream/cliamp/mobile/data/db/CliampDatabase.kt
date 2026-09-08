@@ -21,8 +21,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         EpisodeProgressEntity::class,
         SftpTrackEntity::class,
         SftpIndexEntity::class,
+        KvCacheEntity::class,
+        PodcastFeedCacheEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class CliampDatabase : RoomDatabase() {
@@ -35,6 +37,7 @@ abstract class CliampDatabase : RoomDatabase() {
     abstract fun providers(): ProviderDao
     abstract fun podcasts(): PodcastDao
     abstract fun sftp(): SftpDao
+    abstract fun cache(): CacheDao
 
     companion object {
         @Volatile private var instance: CliampDatabase? = null
@@ -121,6 +124,27 @@ abstract class CliampDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * The directory snapshots and write-through feed cache. Two new
+         * tables and nothing touched, so additive again - the same reasoning
+         * as the podcast migration, but this one rides on top of v4.
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `kv_cache` (" +
+                        "`key` TEXT NOT NULL, `json` TEXT NOT NULL, `savedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`key`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `podcast_feed_cache` (" +
+                        "`feedUrl` TEXT NOT NULL, `showJson` TEXT NOT NULL, " +
+                        "`episodesJson` TEXT NOT NULL, `savedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`feedUrl`))"
+                )
+            }
+        }
+
         fun get(context: Context): CliampDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
@@ -130,7 +154,7 @@ abstract class CliampDatabase : RoomDatabase() {
                 // playlist_members cascades from playlists, which only works
                 // with foreign keys actually switched on
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
                 .also { instance = it }
         }
