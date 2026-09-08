@@ -455,7 +455,10 @@ private fun StationTile(
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(CliampShape.medium))
                 .background(p.panel)
-                .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.medium)),
+                .then(
+                    if (active) Modifier.border(2.dp, p.accent, RoundedCornerShape(CliampShape.medium))
+                    else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.medium))
+                ),
         ) {
             if (art != null) {
                 Image(art!!, station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)

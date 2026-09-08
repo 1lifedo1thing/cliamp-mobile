@@ -76,7 +76,15 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier, trailing: (@Compos
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Mono(text.uppercase(), CliampType.sectionLabel, p.inkTertiary)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(width = 3.dp, height = 11.dp)
+                    .background(p.accent)
+            )
+            Spacer(Modifier.width(7.dp))
+            Mono(text.uppercase(), CliampType.sectionLabel, p.inkTertiary)
+        }
         trailing?.invoke()
     }
 }
