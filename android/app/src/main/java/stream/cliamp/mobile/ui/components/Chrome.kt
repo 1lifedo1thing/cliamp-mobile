@@ -2,8 +2,6 @@ package stream.cliamp.mobile.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -42,6 +40,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
@@ -88,10 +87,10 @@ fun GridListToggle(gridMode: Boolean, onToggle: () -> Unit) {
     Box(
         Modifier
             .size(34.dp)
-            .clip(RoundedCornerShape(6.dp))
+            .microPress(onClick = onToggle)
+            .clip(RoundedCornerShape(CliampShape.small))
             .background(if (p.dark) p.keyFace else p.ground)
-            .border(1.dp, p.keyBorder, RoundedCornerShape(6.dp))
-            .clickable(onClick = onToggle),
+            .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.small)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -157,14 +156,14 @@ fun BoxScope.TabCorners(
             CliampIcons.Search, "search",
             Modifier
                 .size(22.dp)
-                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onOpenSearch),
+                .microPress(enabled = true, onClick = onOpenSearch),
             tint = p.accent,
         )
         Icon(
             CliampIcons.Gear, "settings",
             Modifier
                 .size(22.dp)
-                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onOpenSettings),
+                .microPress(enabled = true, onClick = onOpenSettings),
             tint = p.accent,
         )
     }
@@ -202,7 +201,7 @@ private fun TabItem(
     val tint = if (active) p.accent else p.inkTertiary
     Column(
         modifier
-            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onClick() }
+            .microPress { onClick() }
             // 2px accent top border, pulled up 1dp so it sits on the divider
             .then(if (active) Modifier.offsetTopBorder(p.accent) else Modifier)
             .padding(top = 13.dp, bottom = 30.dp.coerceAtLeast(bottomInset + 8.dp)),
@@ -268,9 +267,9 @@ private fun RailItem(
     Column(
         modifier
             .width(70.dp)
+            .microPress { onClick() }
             .then(if (active) Modifier.offsetRightBorder(p.accent) else Modifier)
-            .clip(RoundedCornerShape(7.dp))
-            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onClick),
+            .clip(RoundedCornerShape(CliampShape.medium)),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterVertically),
     ) {
@@ -304,7 +303,7 @@ fun ArtPlate(
     modifier: Modifier = Modifier,
     initial: String? = null,
     caption: String? = null,
-    radius: Dp = 5.dp,
+    radius: Dp = CliampShape.medium,
     overlay: (@Composable androidx.compose.foundation.layout.BoxScope.() -> Unit)? = null,
 ) {
     val p = LocalPalette.current
@@ -369,7 +368,7 @@ fun ListRow(
         Row(
             Modifier
                 .fillMaxWidth()
-                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+                .then(if (onClick != null) Modifier.microPress(onClick = onClick) else Modifier)
                 .padding(horizontal = Gutter, vertical = verticalPadding),
             verticalAlignment = Alignment.CenterVertically,
         ) {

@@ -3,7 +3,6 @@ package stream.cliamp.mobile.ui.screens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,11 +58,13 @@ import stream.cliamp.mobile.ui.components.ChipOption
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.EmptyNote
 import stream.cliamp.mobile.ui.components.GridListToggle
+import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.RetryNote
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
+import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
@@ -298,7 +299,7 @@ private fun ShowRow(
                 Icon(
                     if (subscribed) CliampIcons.StarFilled else CliampIcons.Star,
                     "subscribe",
-                    Modifier.size(15.dp).clickable(onClick = onToggleSubscribe),
+                    Modifier.size(15.dp).microPress(onClick = onToggleSubscribe),
                     tint = if (subscribed) p.accent else p.inkFaint,
                 )
                 Icon(CliampIcons.CaretRight, null, Modifier.size(9.dp), tint = p.inkFaint)
@@ -331,8 +332,8 @@ private fun Artwork(url: String) {
     Box(
         Modifier
             .size(34.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
+            .clip(RoundedCornerShape(CliampShape.tiny))
+            .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny)),
         contentAlignment = Alignment.Center,
     ) {
         if (bmp != null) {
@@ -365,14 +366,14 @@ private fun ShowTile(
             art = StationArtSource.bitmapForUrl(show.artwork)?.asImageBitmap()
         }
     }
-    Column(Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
+    Column(Modifier.fillMaxWidth().microPress(onClick = onOpen)) {
         Box(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(CliampShape.medium))
                 .background(p.panel)
-                .border(1.dp, p.chipBorder, RoundedCornerShape(8.dp)),
+                .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.medium)),
         ) {
             if (art != null) {
                 Image(art!!, show.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
@@ -387,7 +388,7 @@ private fun ShowTile(
             Icon(
                 if (subscribed) CliampIcons.StarFilled else CliampIcons.Star,
                 "subscribe",
-                Modifier.align(Alignment.TopEnd).padding(10.dp).size(15.dp).clickable(onClick = onToggleSubscribe),
+                Modifier.align(Alignment.TopEnd).padding(10.dp).size(15.dp).microPress(onClick = onToggleSubscribe),
                 tint = if (subscribed) p.accent else p.inkFaint,
             )
         }

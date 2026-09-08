@@ -1,7 +1,6 @@
 package stream.cliamp.mobile.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +38,7 @@ import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.MechSliderVertical
 import stream.cliamp.mobile.ui.components.MeterSize
 import stream.cliamp.mobile.ui.components.SectionLabel
+import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.rememberMeter
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -88,7 +88,7 @@ fun ScopeScreen(
                 },
                 CliampType.sectionLabel,
                 if (spectrumLive) p.accent else p.inkTertiary,
-                Modifier.clickable {
+                Modifier.microPress {
                     scope.launch {
                         prefs.setVisualizer(if (visualizer == "off") "spectrum" else "off")
                     }

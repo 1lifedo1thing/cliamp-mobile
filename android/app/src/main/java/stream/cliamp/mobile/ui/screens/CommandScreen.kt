@@ -72,6 +72,7 @@ import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.search.Fuzzy
 import stream.cliamp.mobile.ui.search.GlobalSearch
 import stream.cliamp.mobile.ui.search.SearchHit
+import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalHapticsEnabled
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -315,10 +316,10 @@ private fun HitArt(hit: SearchHit, accent: androidx.compose.ui.graphics.Color) {
     Box(
         Modifier
             .size(36.dp)
-            .clip(RoundedCornerShape(5.dp))
+            .clip(RoundedCornerShape(CliampShape.small))
             .then(
                 if (art != null) Modifier.background(p.panel)
-                else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(5.dp))
+                else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small))
             ),
         contentAlignment = Alignment.Center,
     ) {

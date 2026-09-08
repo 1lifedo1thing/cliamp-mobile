@@ -1,8 +1,9 @@
 package stream.cliamp.mobile.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
@@ -61,7 +62,9 @@ import stream.cliamp.mobile.ui.components.MarqueeLabel
 import stream.cliamp.mobile.ui.components.Scrubber
 import stream.cliamp.mobile.ui.components.StreamingRule
 import stream.cliamp.mobile.ui.components.ArtPlate
+import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.rememberMeter
+import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
@@ -516,9 +519,9 @@ private fun BackChevron(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     Box(
         modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(CliampShape.small))
             .padding(horizontal = 8.dp, vertical = 6.dp)
-            .clickable(onClick = onClick),
+            .microPress(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(CliampIcons.Down, "back", Modifier.size(width = 16.dp, height = 10.dp), tint = p.ink)
@@ -665,8 +668,8 @@ private fun SmallAction(
     Box(
         Modifier
             .size(28.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .clickable(onClick = onClick),
+            .clip(RoundedCornerShape(CliampShape.small))
+            .microPress(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, description, Modifier.size(15.dp), tint = tint ?: p.inkSecondary)

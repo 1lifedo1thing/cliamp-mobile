@@ -2,7 +2,6 @@ package stream.cliamp.mobile.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,6 +25,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
+import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
@@ -59,13 +59,13 @@ fun OverflowMenu(
                 offset = IntOffset(0, 8),
             ) {
                 Column(
-                    Modifier.width(menuWidth.dp).clip(RoundedCornerShape(6.dp))
-                        .background(p.ground).border(1.dp, p.hairlineRegion, RoundedCornerShape(6.dp)),
+                    Modifier.width(menuWidth.dp).clip(RoundedCornerShape(CliampShape.small))
+                        .background(p.ground).border(1.dp, p.hairlineRegion, RoundedCornerShape(CliampShape.small)),
                 ) {
                     items.forEachIndexed { i, item ->
                         if (i > 0) HairlineDivider(region = true)
                         Row(
-                            Modifier.fillMaxWidth().clickable {
+                            Modifier.fillMaxWidth().microPress {
                                 open = false
                                 item.action()
                             }.padding(horizontal = 16.dp, vertical = 13.dp),
@@ -90,7 +90,7 @@ fun OverflowButton(
 ) {
     val p = LocalPalette.current
     Box(
-        Modifier.size(22.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onOpen),
+        Modifier.size(22.dp).microPress(onClick = onOpen).clip(RoundedCornerShape(CliampShape.tiny)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, "menu", Modifier.size(size.dp), tint = tint ?: p.inkTertiary)

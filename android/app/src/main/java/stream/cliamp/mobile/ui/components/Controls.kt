@@ -73,6 +73,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.window.Popup
+import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalHapticsEnabled
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -91,7 +92,7 @@ fun MechKey(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     height: Dp = 64.dp,
-    radius: Dp = 11.dp,
+    radius: Dp = CliampShape.key,
     filled: Boolean = false,
     enabled: Boolean = true,
     haptics: Boolean = true,
@@ -190,10 +191,10 @@ fun Chip(
     val onFill = if (p.dark) p.onAccent else p.ground
     Box(
         modifier
-            .clip(RoundedCornerShape(5.dp))
+            .microPress(onClick = onClick)
+            .clip(RoundedCornerShape(CliampShape.small))
             .background(if (selected) fill else Color.Transparent)
-            .then(if (selected) Modifier else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(5.dp)))
-            .clickable(onClick = onClick)
+            .then(if (selected) Modifier else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small)))
             .padding(horizontal = 11.dp, vertical = 7.dp),
     ) {
         Mono(label.uppercase(), CliampType.chip, if (selected) onFill else p.inkTertiary, maxLines = 1)
@@ -226,10 +227,10 @@ fun ChipDropdown(
     Box(modifier) {
         Row(
             Modifier
-                .clip(RoundedCornerShape(5.dp))
+                .microPress { open = !open }
+                .clip(RoundedCornerShape(CliampShape.small))
                 .background(if (selected) fill else Color.Transparent)
-                .then(if (selected) Modifier else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(5.dp)))
-                .clickable { open = !open }
+                .then(if (selected) Modifier else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small)))
                 .padding(horizontal = 11.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -249,8 +250,8 @@ fun ChipDropdown(
                 offset = IntOffset(0, 8),
             ) {
                 LazyColumn(
-                    Modifier.width(menuWidth.dp).heightIn(max = 300.dp).clip(RoundedCornerShape(6.dp))
-                        .background(p.ground).border(1.dp, p.hairlineRegion, RoundedCornerShape(6.dp)),
+                    Modifier.width(menuWidth.dp).heightIn(max = 300.dp).clip(RoundedCornerShape(CliampShape.small))
+                        .background(p.ground).border(1.dp, p.hairlineRegion, RoundedCornerShape(CliampShape.small)),
                 ) {
                     itemsIndexed(options) { i, opt ->
                         if (i > 0) HairlineDivider(region = true)
@@ -283,9 +284,9 @@ fun BackChip(
     val p = LocalPalette.current
     Box(
         modifier
-            .clip(RoundedCornerShape(6.dp))
-            .padding(horizontal = 8.dp, vertical = 6.dp)
-            .clickable(onClick = onClick),
+            .microPress(onClick = onClick)
+            .clip(RoundedCornerShape(CliampShape.small))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
         Icon(CliampIcons.Left, label, Modifier.size(width = 16.dp, height = 16.dp), tint = p.ink)
@@ -300,9 +301,9 @@ fun CliampToggle(on: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = 
     Box(
         modifier
             .size(44.dp, 26.dp)
+            .microPress { onChange(!on) }
             .clip(RoundedCornerShape(13.dp))
-            .background(if (on) p.accent else if (p.dark) Color(0xFF262A26) else p.hairlineRegion)
-            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onChange(!on) },
+            .background(if (on) p.accent else if (p.dark) Color(0xFF262A26) else p.hairlineRegion),
     ) {
         Box(
             Modifier
@@ -361,9 +362,9 @@ fun MechSlider(
                     .align(Alignment.CenterStart)
                     .offset(x = with(d) { (frac * span).toDp() })
                     .size(handle)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(CliampShape.tiny))
                     .background(if (p.dark) p.keyFace else p.ground)
-                    .border(1.dp, p.keyBorder, RoundedCornerShape(4.dp))
+                    .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.tiny))
                     .drawBehind {
                         drawRect(
                             color = if (p.dark) p.keyBevel else p.hairline,
@@ -413,9 +414,9 @@ fun MechSliderVertical(
                     .align(Alignment.TopCenter)
                     .offset(y = with(d) { ((1f - frac) * span).toDp() })
                     .size(22.dp, 18.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(CliampShape.tiny))
                     .background(if (p.dark) p.keyFace else p.ground)
-                    .border(1.dp, p.keyBorder, RoundedCornerShape(4.dp))
+                    .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.tiny))
                     .drawBehind {
                         drawRect(
                             color = if (p.dark) p.keyBevel else p.hairline,

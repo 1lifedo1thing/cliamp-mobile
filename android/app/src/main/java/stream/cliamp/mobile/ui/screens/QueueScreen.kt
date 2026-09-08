@@ -2,7 +2,6 @@ package stream.cliamp.mobile.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,8 +33,10 @@ import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.ScreenHeader
+import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.theme.CliampPalette
+import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
@@ -68,7 +69,7 @@ fun QueueScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                Mono("‹ Queue", CliampType.screenTitle, p.ink, Modifier.clickable { onBack() })
+                Mono("‹ Queue", CliampType.screenTitle, p.ink, Modifier.microPress { onBack() })
             }
         }
 
@@ -118,14 +119,14 @@ private fun NowPlayingCard(s: Station, playing: Boolean, p: CliampPalette) {
         Modifier
             .fillMaxWidth()
             .padding(horizontal = Gutter)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(CliampShape.medium))
             .background(p.panelRaised)
-            .border(1.dp, p.keyBorder, RoundedCornerShape(8.dp))
+            .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.medium))
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(
-                Modifier.size(7.dp).clip(RoundedCornerShape(4.dp)).background(if (playing) p.accent else p.inkFaint),
+                Modifier.size(7.dp).clip(RoundedCornerShape(CliampShape.tiny)).background(if (playing) p.accent else p.inkFaint),
             )
             Mono(if (playing) "playing" else "paused", CliampType.chip, if (playing) p.accent else p.inkTertiary)
             Spacer(Modifier.weight(1f))
@@ -156,10 +157,10 @@ private fun QueueRow(
         verticalPadding = 11.dp,
         leading = {
             Box(
-                Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
+                Modifier.size(28.dp).clip(RoundedCornerShape(CliampShape.tiny))
                     .then(
                         if (isNow) Modifier.background(p.accent)
-                        else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))
+                        else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny))
                     ),
                 contentAlignment = Alignment.Center,
             ) {
@@ -211,8 +212,8 @@ private fun SourceBadge(s: Station, p: CliampPalette) {
     }
     Box(
         Modifier
-            .clip(RoundedCornerShape(3.dp))
-            .border(1.dp, p.chipBorder, RoundedCornerShape(3.dp))
+            .clip(RoundedCornerShape(CliampShape.tiny))
+            .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny))
             .padding(horizontal = 5.dp, vertical = 1.dp),
     ) {
         Mono(label.uppercase(), CliampType.tabLabel, p.inkTertiary)
@@ -240,9 +241,9 @@ private fun SquareGlyph(
     Box(
         Modifier
             .size(28.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .border(1.dp, p.keyBorder, RoundedCornerShape(4.dp))
-            .clickable(onClick = onClick),
+            .clip(RoundedCornerShape(CliampShape.tiny))
+            .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.tiny))
+            .microPress(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Mono(label, CliampType.tabLabel, p.ink)

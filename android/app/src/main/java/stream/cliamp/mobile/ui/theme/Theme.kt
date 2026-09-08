@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 
 /**
  * We ride on MaterialTheme only far enough to keep m3 components (ripples,
@@ -26,6 +27,18 @@ import androidx.compose.ui.text.style.TextOverflow
  */
 /** Read by every mechanical control so one switch silences the whole app. */
 val LocalHapticsEnabled = staticCompositionLocalOf { true }
+
+/**
+ * The concept's corner radii, one scale. Small slots (covers, handles, badges)
+ * sit at [tiny]; the chip/menu/back language at [small]; plates, tiles and
+ * cards at [medium]; the transport keys keep their own harder [key] radius.
+ */
+object CliampShape {
+    val tiny = 4.dp
+    val small = 6.dp
+    val medium = 8.dp
+    val key = 11.dp
+}
 
 /**
  * Resolves the stored theme preference.

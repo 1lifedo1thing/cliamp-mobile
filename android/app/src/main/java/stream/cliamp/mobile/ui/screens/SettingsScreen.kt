@@ -5,7 +5,6 @@ import android.content.ComponentName
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,8 +45,10 @@ import stream.cliamp.mobile.ui.components.CliampToggle
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.MechSlider
+import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.theme.AmberPalette
+import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.DarkPalette
 import stream.cliamp.mobile.ui.theme.LightPalette
@@ -176,7 +177,7 @@ fun SettingsScreen(
         Row(
             Modifier
                 .fillMaxWidth()
-                .clickable {
+                .microPress {
                     val mgr = AppWidgetManager.getInstance(context)
                     val provider = ComponentName(context, CliampWidgetReceiver::class.java)
                     if (mgr.isRequestPinAppWidgetSupported) {
@@ -203,7 +204,7 @@ fun SettingsScreen(
         Row(
             Modifier
                 .fillMaxWidth()
-                .clickable { scope.launch { prefs.clearHistory() } }
+                .microPress { scope.launch { prefs.clearHistory() } }
                 .padding(horizontal = Gutter, vertical = 13.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
@@ -221,7 +222,7 @@ fun SettingsScreen(
         Row(
             Modifier
                 .fillMaxWidth()
-                .clickable {
+                .microPress {
                     runCatching {
                         context.startActivity(
                             android.content.Intent(android.content.Intent.ACTION_VIEW, "https://cliamp.stream".toUri())
@@ -283,7 +284,7 @@ private fun ThemeRow(
         Row(
             Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onSelect)
+                .microPress(onClick = onSelect)
                 .padding(horizontal = Gutter, vertical = 11.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
@@ -296,9 +297,9 @@ private fun ThemeRow(
                 // of that theme rather than of the current one
                 Row(
                     Modifier
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(RoundedCornerShape(CliampShape.tiny))
                         .background(theme.ground)
-                        .border(1.dp, theme.frameBorder, RoundedCornerShape(4.dp))
+                        .border(1.dp, theme.frameBorder, RoundedCornerShape(CliampShape.tiny))
                         .padding(4.dp),
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                 ) {

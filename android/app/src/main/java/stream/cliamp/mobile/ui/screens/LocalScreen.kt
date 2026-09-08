@@ -11,9 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -109,6 +107,8 @@ import stream.cliamp.mobile.ui.components.BackPage
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.components.ArtPlate
+import stream.cliamp.mobile.ui.components.microPress
+import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
@@ -612,10 +612,10 @@ private fun PlaylistList(
                             Box(
                                 Modifier
                                     .size(34.dp)
-                                    .clip(RoundedCornerShape(6.dp))
+                                    .clip(RoundedCornerShape(CliampShape.small))
                                     .background(if (p.dark) p.keyFace else p.ground)
-                                    .border(1.dp, p.keyBorder, RoundedCornerShape(6.dp))
-                                    .clickable(onClick = onBeginCreate),
+                                    .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.small))
+                                    .microPress(onClick = onBeginCreate),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(CliampIcons.Plus, "new playlist", Modifier.size(16.dp), tint = p.accent)
@@ -765,8 +765,8 @@ private fun ProvidersView(
                     verticalPadding = 11.dp,
                     leading = {
                         Box(
-                            Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
-                                .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
+                            Modifier.size(28.dp).clip(RoundedCornerShape(CliampShape.tiny))
+                                .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny)),
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(CliampIcons.Server, null, Modifier.size(14.dp), tint = p.amber)
@@ -817,8 +817,8 @@ private fun ProvidersView(
                     verticalPadding = 11.dp,
                     leading = {
                         Box(
-                            Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
-                                .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
+                            Modifier.size(28.dp).clip(RoundedCornerShape(CliampShape.tiny))
+                                .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny)),
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(CliampIcons.Server, null, Modifier.size(14.dp), tint = p.inkTertiary)
@@ -827,7 +827,7 @@ private fun ProvidersView(
                     trailing = {
                         Icon(
                             CliampIcons.Plus, "add",
-                            Modifier.size(11.dp).clip(RoundedCornerShape(4.dp))
+                            Modifier.size(11.dp).clip(RoundedCornerShape(CliampShape.tiny))
                                 .background(p.accent.copy(alpha = 0.14f))
                                 .padding(6.dp),
                             tint = p.accent,
@@ -867,8 +867,8 @@ private fun PlaylistRow(
         verticalPadding = 9.dp,
         leading = {
             Box(
-                Modifier.size(44.dp).clip(RoundedCornerShape(5.dp))
-                    .then(if (art == null) Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(5.dp)) else Modifier),
+                Modifier.size(44.dp).clip(RoundedCornerShape(CliampShape.small))
+                    .then(if (art == null) Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small)) else Modifier),
             ) {
                 if (art != null) {
                     Image(art!!, pl.station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
@@ -913,14 +913,14 @@ private fun PlaylistTile(
     LaunchedEffect(pl.station.slug, cover) {
         art = LocalArt.bitmapFor(cover, context.contentResolver)?.asImageBitmap()
     }
-    Column(Modifier.fillMaxWidth().clickable(onClick = { onOpen(pl) })) {
+    Column(Modifier.fillMaxWidth().microPress { onOpen(pl) }) {
         Box(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(CliampShape.medium))
                 .background(p.panel)
-                .border(1.dp, p.chipBorder, RoundedCornerShape(8.dp)),
+                .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.medium)),
         ) {
             if (art != null) {
                 Image(art!!, pl.station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
@@ -956,17 +956,17 @@ private fun SmartPlaylistTile(
         label = "shimmer",
     )
 
-    Column(Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
+    Column(Modifier.fillMaxWidth().microPress(onClick = onOpen)) {
         Box(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(CliampShape.medium))
                 .then(
                     if (scanning) Modifier.background(if (p.dark) p.ground else p.keyFace)
                     else Modifier.background(p.panel)
                 )
-                .border(1.dp, p.chipBorder, RoundedCornerShape(8.dp)),
+                .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.medium)),
         ) {
             if (scanning) {
                 Box(Modifier.fillMaxSize().background(p.inkFaint.copy(alpha = 0.35f * shimmer)),
@@ -980,8 +980,8 @@ private fun SmartPlaylistTile(
                         .align(Alignment.TopStart)
                         .padding(10.dp)
                         .size(26.dp)
-                        .background(p.ground.copy(alpha = 0.85f), RoundedCornerShape(6.dp))
-                        .border(1.dp, p.chipBorder, RoundedCornerShape(6.dp)),
+                        .background(p.ground.copy(alpha = 0.85f), RoundedCornerShape(CliampShape.small))
+                        .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(kindIcon, sp.label, Modifier.size(12.dp), tint = p.accent)
@@ -993,7 +993,7 @@ private fun SmartPlaylistTile(
             Mono(sp.label, CliampType.rowPrimaryMedium, p.ink, maxLines = 2)
             if (scanning) {
                 Box(Modifier.padding(top = 3.dp).width(110.dp).height(10.dp)
-                    .clip(RoundedCornerShape(5.dp))
+                    .clip(RoundedCornerShape(CliampShape.small))
                     .background(p.inkFaint.copy(alpha = 0.5f * shimmer)))
             } else {
                 Mono(
@@ -1025,7 +1025,7 @@ private fun SmartPlaylistRow(
         onClick = onOpen,
         verticalPadding = 8.dp,
         leading = {
-            Box(Modifier.size(44.dp).clip(RoundedCornerShape(6.dp))) {
+            Box(Modifier.size(44.dp).clip(RoundedCornerShape(CliampShape.small))) {
                 if (scanning) {
                     Box(
                         Modifier.fillMaxSize().background(p.inkFaint.copy(alpha = 0.35f * shimmer)),
@@ -1041,7 +1041,7 @@ private fun SmartPlaylistRow(
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (scanning) {
-                    Box(Modifier.width(52.dp).height(12.dp).clip(RoundedCornerShape(6.dp))
+                    Box(Modifier.width(52.dp).height(12.dp).clip(RoundedCornerShape(CliampShape.small))
                         .background(p.inkFaint.copy(alpha = 0.35f * shimmer)))
                 } else {
                     Mono(
@@ -1138,7 +1138,7 @@ private fun PlaylistMenu(
     var open by remember { mutableStateOf(false) }
     Box {
         Box(
-            Modifier.size(36.dp).clip(RoundedCornerShape(5.dp)).clickable { open = true },
+            Modifier.size(36.dp).clip(RoundedCornerShape(CliampShape.small)).microPress { open = true },
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -1154,8 +1154,8 @@ private fun PlaylistMenu(
                 offset = IntOffset(0, 8),
             ) {
                 Column(
-                    Modifier.width(170.dp).clip(RoundedCornerShape(6.dp))
-                        .background(p.ground).border(1.dp, p.hairlineRegion, RoundedCornerShape(6.dp)),
+                    Modifier.width(170.dp).clip(RoundedCornerShape(CliampShape.small))
+                        .background(p.ground).border(1.dp, p.hairlineRegion, RoundedCornerShape(CliampShape.small)),
                 ) {
                     MenuItem(if (pinned) "unpin" else "pin", p.ink, onPin) { open = false }
                     HairlineDivider(region = true)
@@ -1174,7 +1174,7 @@ private fun PlaylistMenu(
 private fun MenuItem(label: String, color: androidx.compose.ui.graphics.Color, action: () -> Unit, close: () -> Unit) {
     val p = LocalPalette.current
     Row(
-        Modifier.fillMaxWidth().clickable {
+        Modifier.fillMaxWidth().microPress {
             close()
             action()
         }.padding(horizontal = 16.dp, vertical = 13.dp),
@@ -1197,7 +1197,7 @@ private fun InlineNameField(
     val p = LocalPalette.current
     Row(
         Modifier.fillMaxWidth().padding(Gutter)
-            .clip(RoundedCornerShape(6.dp)).border(1.dp, p.chipBorder, RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(CliampShape.small)).border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small))
             .background(p.panel).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -1212,11 +1212,11 @@ private fun InlineNameField(
             autoFocus = true,
         )
         Mono("SAVE", CliampType.tabLabel, p.accent,
-            Modifier.clip(RoundedCornerShape(4.dp)).background(p.accent.copy(alpha = 0.14f))
-                .clickable { onDone(text) }.padding(horizontal = 9.dp, vertical = 7.dp))
+            Modifier.clip(RoundedCornerShape(CliampShape.tiny)).background(p.accent.copy(alpha = 0.14f))
+                .microPress { onDone(text) }.padding(horizontal = 9.dp, vertical = 7.dp))
         Mono("CANCEL", CliampType.tabLabel, p.inkTertiary,
-            Modifier.clip(RoundedCornerShape(4.dp)).border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))
-                .clickable(onClick = onCancel).padding(horizontal = 9.dp, vertical = 7.dp))
+            Modifier.clip(RoundedCornerShape(CliampShape.tiny)).border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny))
+                .microPress(onClick = onCancel).padding(horizontal = 9.dp, vertical = 7.dp))
     }
 }
 
@@ -1307,7 +1307,7 @@ private fun PlaylistDetailShown(
                     },
                     trailing = {
                         Mono("DROP", CliampType.tabLabel, p.destructiveInk,
-                            Modifier.clip(RoundedCornerShape(4.dp)).clickable { onToggle(s, false) }
+                            Modifier.clip(RoundedCornerShape(CliampShape.tiny)).microPress { onToggle(s, false) }
                                 .padding(horizontal = 8.dp, vertical = 6.dp))
                     },
                 ) {
@@ -1437,9 +1437,9 @@ private fun GroupList(
                     verticalPadding = 8.dp,
                     leading = {
                         Box(
-                            Modifier.size(24.dp).clip(RoundedCornerShape(4.dp))
+                            Modifier.size(24.dp).clip(RoundedCornerShape(CliampShape.tiny))
                                 .then(if (inPl) Modifier.background(p.accent)
-                                      else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))),
+                                      else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny))),
                             contentAlignment = Alignment.Center,
                         ) {
                             if (inPl) Icon(CliampIcons.Check, null, Modifier.size(10.dp), tint = p.onAccent)
@@ -1491,9 +1491,9 @@ private fun PodcastGroups(
                         verticalPadding = 8.dp,
                         leading = {
                             Box(
-                                Modifier.size(24.dp).clip(RoundedCornerShape(4.dp))
+                                Modifier.size(24.dp).clip(RoundedCornerShape(CliampShape.tiny))
                                     .then(if (inPl) Modifier.background(p.accent)
-                                          else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))),
+                                          else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny))),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 if (inPl) Icon(CliampIcons.Check, null, Modifier.size(10.dp), tint = p.onAccent)
@@ -1646,7 +1646,7 @@ private fun SmartPlaylistDetail(
                             Icon(
                                 if (s.url in favorites) CliampIcons.StarFilled else CliampIcons.Star,
                                 "favourite",
-                                Modifier.size(15.dp).clickable { onToggleFavorite(s) },
+                                Modifier.size(15.dp).microPress { onToggleFavorite(s) },
                                 tint = if (s.url in favorites) p.accent else p.inkFaint,
                             )
                         }
@@ -1689,10 +1689,10 @@ private fun SongCover(s: Station, current: Station?, playing: Boolean) {
     Box(
         Modifier
             .size(40.dp)
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(CliampShape.small))
             .then(
                 if (art != null) Modifier.background(p.panel)
-                else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(6.dp))
+                else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small))
             ),
         contentAlignment = Alignment.Center,
     ) {
@@ -1706,7 +1706,7 @@ private fun SongCover(s: Station, current: Station?, playing: Boolean) {
                 Modifier
                     .align(Alignment.Center)
                     .size(18.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(CliampShape.tiny))
                     .background(p.accent.copy(alpha = 0.92f)),
                 contentAlignment = Alignment.Center,
             ) {
@@ -1779,7 +1779,7 @@ private fun SongInfoView(
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
                 Box(
                     Modifier.size(260.dp).align(Alignment.CenterHorizontally).padding(top = 18.dp)
-                        .clip(RoundedCornerShape(8.dp)).background(p.artB),
+                        .clip(RoundedCornerShape(CliampShape.medium)).background(p.artB),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (art != null) {
@@ -1791,7 +1791,7 @@ private fun SongInfoView(
                         Mono(
                             "♥ favourite", CliampType.chip, p.onAccent,
                             Modifier.align(Alignment.TopStart).padding(8.dp)
-                                .clip(RoundedCornerShape(4.dp)).background(p.accent.copy(alpha = 0.92f))
+                                .clip(RoundedCornerShape(CliampShape.tiny)).background(p.accent.copy(alpha = 0.92f))
                                 .padding(horizontal = 8.dp, vertical = 4.dp),
                         )
                     }
@@ -1819,8 +1819,8 @@ private fun SongInfoView(
                 // Actions: favourite toggle and destructive remove, side by side.
                 Row(Modifier.fillMaxWidth().padding(Gutter)) {
                     Row(
-                        Modifier.padding(end = 4.dp).weight(1f).clip(RoundedCornerShape(6.dp)).background(p.panel)
-                            .clickable { onToggleFavorite(s) }
+                        Modifier.padding(end = 4.dp).weight(1f).clip(RoundedCornerShape(CliampShape.small)).background(p.panel)
+                            .microPress { onToggleFavorite(s) }
                             .padding(vertical = 12.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
@@ -1834,8 +1834,8 @@ private fun SongInfoView(
                         Mono(if (favorite) "favourited" else "favourite", CliampType.chip, p.ink)
                     }
                     Row(
-                        Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).background(p.panel)
-                            .clickable { onRemove() }
+                        Modifier.weight(1f).clip(RoundedCornerShape(CliampShape.small)).background(p.panel)
+                            .microPress { onRemove() }
                             .padding(vertical = 12.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,

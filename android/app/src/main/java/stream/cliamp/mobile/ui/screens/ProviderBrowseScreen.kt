@@ -2,7 +2,6 @@ package stream.cliamp.mobile.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,7 +48,9 @@ import stream.cliamp.mobile.ui.components.OverflowButton
 import stream.cliamp.mobile.ui.components.OverflowItem
 import stream.cliamp.mobile.ui.components.OverflowMenu
 import stream.cliamp.mobile.ui.components.PredictiveBackSurface
+import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.SectionLabel
+import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
@@ -161,7 +162,7 @@ fun ProviderBrowseScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(
-                    Modifier.clickable { pop() },
+                    Modifier.microPress { pop() },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -173,7 +174,7 @@ fun ProviderBrowseScreen(
                     "EDIT",
                     CliampType.sectionLabel,
                     p.inkTertiary,
-                    Modifier.padding(end = 56.dp).clickable(onClick = onEdit),
+                    Modifier.padding(end = 56.dp).microPress(onClick = onEdit),
                 )
             }
             Box(Modifier.padding(horizontal = Gutter, vertical = 4.dp)) {
@@ -286,8 +287,8 @@ fun ProviderBrowseScreen(
                         verticalPadding = 11.dp,
                         leading = {
                             Box(
-                                Modifier.size(28.dp).clip(RoundedCornerShape(4.dp))
-                                    .border(1.dp, p.chipBorder, RoundedCornerShape(4.dp)),
+                                Modifier.size(28.dp).clip(RoundedCornerShape(CliampShape.tiny))
+                                    .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny)),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(CliampIcons.PlayRow, null, Modifier.size(11.dp), tint = p.inkTertiary)

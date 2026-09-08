@@ -1,10 +1,8 @@
 package stream.cliamp.mobile.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,7 +41,9 @@ import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.MeterFrame
 import stream.cliamp.mobile.ui.components.MeterSize
 import stream.cliamp.mobile.ui.components.ArtPlate
+import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.rememberMeter
+import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
@@ -81,7 +81,7 @@ fun MiniPlayer(
         Row(
             Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onOpen)
+                .microPress(onClick = onOpen)
                 .padding(horizontal = Gutter, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -117,7 +117,7 @@ fun MiniPlayer(
                 "queue",
                 Modifier
                     .size(16.dp)
-                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onOpenQueue),
+                    .microPress(onClick = onOpenQueue),
                 tint = p.ink,
             )
             Row(
@@ -133,9 +133,9 @@ fun MiniPlayer(
                 Box(
                     Modifier
                         .size(38.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (p.dark) p.accent else p.ink)
-                        .clickable(onClick = onToggle),
+                        .microPress(onClick = onToggle)
+                        .clip(RoundedCornerShape(CliampShape.medium))
+                        .background(if (p.dark) p.accent else p.ink),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -168,10 +168,10 @@ private fun MiniKey(
     Row(
         Modifier
             .size(28.dp)
-            .clip(RoundedCornerShape(7.dp))
+            .clip(RoundedCornerShape(CliampShape.small))
             .background(p.keyFace)
-            .border(1.dp, p.keyBorder, RoundedCornerShape(7.dp))
-            .clickable(enabled = enabled, onClick = onClick),
+            .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.small))
+            .microPress(enabled = enabled, onClick = onClick),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -219,7 +219,7 @@ private fun MiniArt(station: Station?, frame: MeterFrame?) {
             contentDescription = station?.name,
             modifier = Modifier
                 .size(40.dp)
-                .clip(RoundedCornerShape(8.dp)),
+                .clip(RoundedCornerShape(CliampShape.medium)),
             contentScale = ContentScale.Crop,
         )
     } else if (frame != null) {
@@ -234,7 +234,7 @@ private fun MiniArt(station: Station?, frame: MeterFrame?) {
     } else {
         ArtPlate(
             modifier = Modifier.size(40.dp),
-            radius = 8.dp,
+            radius = CliampShape.medium,
         )
     }
 }

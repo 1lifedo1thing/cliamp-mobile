@@ -3,7 +3,6 @@ package stream.cliamp.mobile.ui.screens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,10 +58,12 @@ import stream.cliamp.mobile.ui.components.EmptyNote
 import stream.cliamp.mobile.ui.components.GridListToggle
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
+import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.RetryNote
 
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
+import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
@@ -344,7 +345,7 @@ private fun StationRow(
                 Icon(
                     if (favorite) CliampIcons.StarFilled else CliampIcons.Star,
                     "favourite",
-                    Modifier.size(15.dp).clickable(onClick = onToggleFavorite),
+                    Modifier.size(15.dp).microPress(onClick = onToggleFavorite),
                     tint = if (favorite) p.accent else p.inkFaint,
                 )
             }
@@ -385,13 +386,13 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
         art = StationArtSource.bitmapForSmall(station)?.asImageBitmap()
     }
     val bmp = art
-    Box(
+Box(
         Modifier
-            .size(34.dp)
-            .clip(RoundedCornerShape(4.dp))
+            .size(26.dp)
+            .clip(RoundedCornerShape(CliampShape.tiny))
             .then(
-                if (bmp != null) Modifier.background(p.panel)
-                else Modifier.border(1.dp, if (active) p.accent else p.chipBorder, RoundedCornerShape(4.dp))
+                if (art != null) Modifier.background(p.panel)
+                else Modifier.border(1.dp, if (active) p.accent else p.chipBorder, RoundedCornerShape(CliampShape.tiny))
             ),
         contentAlignment = Alignment.Center,
     ) {
@@ -408,7 +409,7 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
                 Modifier
                     .align(Alignment.Center)
                     .size(18.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(CliampShape.tiny))
                     .background(p.accent.copy(alpha = 0.92f)),
                 contentAlignment = Alignment.Center,
             ) {
@@ -446,14 +447,14 @@ private fun StationTile(
         if (station.source == StationSource.Cliamp) return@LaunchedEffect
         art = StationArtSource.bitmapFor(station)?.asImageBitmap()
     }
-    Column(Modifier.fillMaxWidth().clickable(onClick = onPlay)) {
+    Column(Modifier.fillMaxWidth().microPress(onClick = onPlay)) {
         Box(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(CliampShape.medium))
                 .background(p.panel)
-                .border(1.dp, p.chipBorder, RoundedCornerShape(8.dp)),
+                .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.medium)),
         ) {
             if (art != null) {
                 Image(art!!, station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
@@ -468,16 +469,16 @@ private fun StationTile(
             Icon(
                 if (favorite) CliampIcons.StarFilled else CliampIcons.Star,
                 "favourite",
-                Modifier.align(Alignment.TopEnd).padding(10.dp).size(15.dp).clickable(onClick = onToggleFavorite),
+                Modifier.align(Alignment.TopEnd).padding(10.dp).size(15.dp).microPress(onClick = onToggleFavorite),
                 tint = if (favorite) p.accent else p.inkFaint,
             )
             if (active) {
-                Box(
-                    Modifier
-                        .align(Alignment.Center)
-                        .size(24.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(p.accent.copy(alpha = 0.92f)),
+Box(
+                        Modifier
+                            .align(Alignment.Center)
+                            .size(24.dp)
+                            .clip(RoundedCornerShape(CliampShape.small))
+                            .background(p.accent.copy(alpha = 0.92f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
