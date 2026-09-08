@@ -238,74 +238,48 @@ private fun EpisodeRow(
         verticalPadding = 11.dp,
         leading = {
             val artUrl = episode.artwork.takeIf { it.startsWith("http") }
+            var thumb by remember(artUrl) { mutableStateOf<ImageBitmap?>(null) }
             if (artUrl != null) {
-                var thumb by remember(artUrl) { mutableStateOf<ImageBitmap?>(null) }
                 LaunchedEffect(artUrl) {
                     thumb = StationArtSource.bitmapForUrlSmall(artUrl)?.asImageBitmap()
                 }
-                Box(
-                    Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(5.dp))
-                        .then(
-                            if (active) Modifier.border(1.dp, p.accent, RoundedCornerShape(5.dp))
-                            else Modifier.border(1.dp, p.frameBorder, RoundedCornerShape(5.dp))
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    val b = thumb
-                    if (b != null) {
-                        Image(b, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                    } else {
-                        Icon(CliampIcons.PodRow, null, Modifier.size(18.dp), tint = p.inkFaint)
-                    }
-                    if (active || done) {
-                        Box(
-                            Modifier
-                                .align(Alignment.BottomEnd)
-                                .size(17.dp)
-                                .clip(CircleShape)
-                                .background(if (active) p.accent else p.chipBorder),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                when {
-                                    playing -> CliampIcons.Pause
-                                    done -> CliampIcons.Check
-                                    else -> CliampIcons.PlayRow
-                                },
-                                null,
-                                Modifier.size(9.dp),
-                                tint = if (active) p.onAccent else p.inkFaint,
-                            )
-                        }
-                    }
+            }
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .then(
+                        if (active) Modifier.border(1.dp, p.accent, RoundedCornerShape(5.dp))
+                        else Modifier.border(1.dp, p.frameBorder, RoundedCornerShape(5.dp))
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                val b = thumb
+                if (b != null) {
+                    Image(b, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                } else {
+                    Icon(CliampIcons.PodRow, null, Modifier.size(18.dp), tint = p.inkFaint)
                 }
-            } else {
-                Box(
-                    Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .then(
-                            if (active) Modifier.background(p.accent)
-                            else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(4.dp))
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        when {
-                            playing -> CliampIcons.Pause
-                            done -> CliampIcons.Check
-                            else -> CliampIcons.PlayRow
-                        },
-                        null,
-                        Modifier.size(if (playing) 9.dp else 11.dp),
-                        tint = when {
-                            active -> p.onAccent
-                            done -> p.inkFaint
-                            else -> p.inkTertiary
-                        },
-                    )
+                if (active || done) {
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(17.dp)
+                            .clip(CircleShape)
+                            .background(if (active) p.accent else p.chipBorder),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            when {
+                                playing -> CliampIcons.Pause
+                                done -> CliampIcons.Check
+                                else -> CliampIcons.PlayRow
+                            },
+                            null,
+                            Modifier.size(9.dp),
+                            tint = if (active) p.onAccent else p.inkFaint,
+                        )
+                    }
                 }
             }
         },
