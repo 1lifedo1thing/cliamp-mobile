@@ -1,5 +1,6 @@
 package stream.cliamp.mobile.data
 
+import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -7,6 +8,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import stream.cliamp.mobile.data.db.CliampDatabase
+import stream.cliamp.mobile.data.db.CacheDao
+import stream.cliamp.mobile.data.db.KvCacheEntity
+import stream.cliamp.mobile.net.Http
 
 /** How the directory list is currently ordered or filtered. */
 sealed interface DirectoryQuery {
@@ -40,9 +45,12 @@ data class DirectoryState(
  * time and never fully materialised.
  */
 class Repository(
+    context: Context,
     private val prefs: Prefs,
     private val scope: CoroutineScope,
 ) {
+    private val cache: CacheDao = CliampDatabase.get(context).cache()
+
     private val _cliamp = MutableStateFlow(CliampRadio.builtin)
     val cliamp: StateFlow<List<Station>> = _cliamp.asStateFlow()
 
@@ -95,6 +103,11 @@ class Repository(
                     if (reset) DirectoryState(query = query, loading = true)
                     else cur.copy(loading = true, error = null)
 
+                // A reset empties nothing the user already has on screen: fill
+                // the list from the last snapshot of this query before the
+                // network answers, then let the live page replace it.
+                if (reset) restore(query)
+
                 val page = runCatching {
                     retryFetch {
                         when (query) {
@@ -121,7 +134,12 @@ class Repository(
                             // last of the catalogue, and calling it exhausted
                             // froze the directory mid-list.
                             exhausted = list.isEmpty(),
-                        )
+                        ).also { state ->
+                            _directory.value = state
+                            // A first page is the whole "open the tab" moment;
+                            // remember it so a cold start can render it instantly.
+                            if (reset) snapshot(query, merged)
+                        }
                     },
                     onFailure = { e ->
                         _directory.value.copy(
@@ -132,6 +150,41 @@ class Repository(
                 )
             }
         }
+    }
+
+    /** The last first-page snapshot of [query], or nothing the first time. */
+    private suspend fun restore(query: DirectoryQuery) {
+        val row = cache.get(keyOf(query)) ?: return
+        val cached = runCatching { Http.json.decodeFromString<List<Station>>(row.json) }.getOrNull() ?: return
+        val cur = _directory.value
+        // Only a page that is still waiting counts. When a fetch already
+        // landed (or the user moved on), the live list wins over a snapshot;
+        // loading stays true so the footer still says "loading more…".
+        if (cur.query == query && cur.stations.isEmpty()) {
+            _directory.value = cur.copy(stations = cached)
+        }
+    }
+
+    private fun snapshot(query: DirectoryQuery, stations: List<Station>) {
+        scope.launch {
+            runCatching {
+                cache.put(
+                    KvCacheEntity(
+                        key = keyOf(query),
+                        json = Http.json.encodeToString(stations),
+                        savedAt = System.currentTimeMillis(),
+                    )
+                )
+            }
+        }
+    }
+
+    private fun keyOf(query: DirectoryQuery): String = when (query) {
+        DirectoryQuery.TopVoted -> "stations:top"
+        DirectoryQuery.Trending -> "stations:trending"
+        is DirectoryQuery.Search -> "stations:search:${query.text.trim().lowercase()}"
+        is DirectoryQuery.Tag -> "stations:tag:${query.tag.trim().lowercase()}"
+        is DirectoryQuery.Country -> "stations:country:${query.code.trim().lowercase()}"
     }
 
     fun nextPage() = loadDirectory(_directory.value.query, reset = false)

@@ -39,7 +39,7 @@ class CliampApp : Application() {
 
     val prefs: Prefs by lazy { Prefs(this) }
     val providers: ProviderStore by lazy { ProviderStore(this) }
-    val repository: Repository by lazy { Repository(prefs, appScope) }
+    val repository: Repository by lazy { Repository(this, prefs, appScope) }
     val podcasts: PodcastRepository by lazy { PodcastRepository(this, appScope) }
     val localLibrary: LocalLibrary by lazy { LocalLibrary(this) }
     val playlists: PlaylistStore by lazy { PlaylistStore(this) }
