@@ -12,12 +12,12 @@ import java.net.URI
 
 /**
  * Cover work - reading files, MediaMetadataRetriever, decoding - all funnelled
- * through one thread pool capped at two workers. A fast-scrolled list otherwise
+ * through one thread pool capped at four workers. A fast-scrolled list otherwise
  * fires a dozen concurrent decodes that allocate many megabytes of bitmaps and
  * saturate the disk, spiking memory pressure so hard that the whole app stalls
  * and ANRs. One shared, narrow pool keeps that bounded and predictable.
  */
-val CoverIo = Dispatchers.IO.limitedParallelism(2)
+val CoverIo = Dispatchers.IO.limitedParallelism(4)
 
 /**
  * Radio streams carry no cover art, so the next best thing is the station's own

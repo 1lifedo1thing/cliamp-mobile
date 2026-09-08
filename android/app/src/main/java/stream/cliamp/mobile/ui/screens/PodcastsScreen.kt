@@ -108,7 +108,7 @@ fun PodcastsScreen(
     val nearEnd by remember {
         derivedStateOf {
             val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            last >= listState.layoutInfo.totalItemsCount - 8
+            last >= listState.layoutInfo.totalItemsCount - 16
         }
     }
     LaunchedEffect(nearEnd, directory.shows.size) {

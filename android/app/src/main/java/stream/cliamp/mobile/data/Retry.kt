@@ -17,7 +17,7 @@ suspend fun <T> retryFetch(attempts: Int = 3, block: suspend () -> T): T {
             return block()
         } catch (e: Exception) {
             if (tryNo >= attempts) throw e
-            delay(700L * tryNo)
+            delay(300L * tryNo)
         }
     }
 }
