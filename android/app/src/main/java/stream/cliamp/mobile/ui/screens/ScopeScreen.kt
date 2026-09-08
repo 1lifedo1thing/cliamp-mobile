@@ -1,5 +1,11 @@
 package stream.cliamp.mobile.ui.screens
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -110,9 +116,22 @@ fun ScopeScreen(
             val peakDb = spectrum.value.maxOrNull()?.let { -48f + it * 48f } ?: -48f
 
             Column(Modifier.fillMaxWidth().padding(horizontal = Gutter)) {
+                // The peak datum breathes with the meter while the spectrum is
+                // live, quieting to a solid value the moment it is not.
+                val peakTransition = rememberInfiniteTransition(label = "peak")
+                val peakAlpha by peakTransition.animateFloat(
+                    initialValue = 0.4f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(tween(800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+                    label = "peakAlpha",
+                )
                 Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     Mono("PEAK", CliampType.sectionLabel, p.inkFaint)
-                    Mono("%.0f dB".format(peakDb.coerceIn(-48f, 0f)), CliampType.datum, p.accent)
+                    Mono(
+                        "%.0f dB".format(peakDb.coerceIn(-48f, 0f)),
+                        CliampType.datum,
+                        p.accent.copy(alpha = if (spectrumLive) peakAlpha else 1f),
+                    )
                 }
                 BrickMeter(
                     frame = frame,

@@ -1,5 +1,11 @@
 package stream.cliamp.mobile.ui.screens
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -343,12 +350,26 @@ private fun PlayerStatusRow(
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
+    // LIVE: the little signal mark breathes in and out while the stream runs.
+    val onAir = model.state.playing && model.reconnect == 0 && model.error == null
+    val onAirTransition = rememberInfiniteTransition(label = "onAir")
+    val onAirAlpha by onAirTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(650, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "onAirAlpha",
+    )
     Row(
         modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(CliampIcons.PlayTiny, null, Modifier.size(width = 9.dp, height = 10.dp), tint = p.accent)
+        Icon(
+            CliampIcons.PlayTiny,
+            null,
+            Modifier.size(width = 9.dp, height = 10.dp),
+            tint = p.accent.copy(alpha = if (onAir) onAirAlpha else 1f),
+        )
         Mono(
             statusLabel(model),
             CliampType.nowPlayingLabel,
@@ -619,8 +640,22 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
         station.countryCode.isNotBlank() -> "[ ${station.countryCode.lowercase()} · live stream ]"
         else -> "[ live stream ]"
     }
+    // The plate breathes very slowly while it is up - a 1% swell over several
+    // seconds, in place, so the artwork feels alive rather than printed.
+    val breathTransition = rememberInfiniteTransition(label = "artBreath")
+    val breath by breathTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.015f,
+        animationSpec = infiniteRepeatable(tween(7000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "artBreathScale",
+    )
     ArtPlate(
-        modifier = modifier.consumeAllGestures(),
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = breath
+                scaleY = breath
+            }
+            .consumeAllGestures(),
         caption = if (art == null) caption else null,
     ) {
         art?.let { bmp ->

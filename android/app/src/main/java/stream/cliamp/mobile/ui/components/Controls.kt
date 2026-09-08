@@ -491,6 +491,20 @@ fun Scrubber(
                 .fillMaxHeight()
                 .background(p.peak)
         )
+        // The thumb is invisible until the finger lands - a small key that
+        // floats over the playhead so a drag reads as grabbing the timeline.
+        if (dragging) {
+            Box(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .offset(x = (maxWidth * shown - 5.dp).coerceIn(0.dp, maxWidth - 10.dp))
+                    .width(10.dp)
+                    .clip(RoundedCornerShape(CliampShape.tiny))
+                    .background(p.keyFace)
+                    .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.tiny))
+                    .fillMaxHeight()
+            )
+        }
     }
 }
 

@@ -42,7 +42,11 @@ fun BrickMeter(
     unlitColor: Color = LocalPalette.current.unlit,
     peakColor: Color = LocalPalette.current.peak,
     showPeaks: Boolean = true,
+    afterglow: Boolean = true,
 ) {
+    val glowDecay = 0.94f
+    val glow = remember(frame.columns) { FloatArray(frame.columns) }
+    val glowCol = litColor.copy(alpha = 0.22f)
     Canvas(modifier) {
         // reading the counter inside draw is what re-runs this on each frame
         @Suppress("UNUSED_EXPRESSION") frame.frame
@@ -59,11 +63,22 @@ fun BrickMeter(
 
         for (c in 0 until n) {
             val x = c * (colW + colGapPx)
-            val litRows = (frame.levels[c].coerceIn(0f, 1f) * rows).toInt()
+            val level = frame.levels[c].coerceIn(0f, 1f)
+            val litRows = (level * rows).toInt()
+            if (afterglow) {
+                // Bricks never vanish the instant the level drops: the recently
+                // lit cells linger as a faint trail that decays frame by frame.
+                if (level >= glow[c]) glow[c] = level else glow[c] *= glowDecay
+            }
+            val glowRows = if (afterglow) (glow[c] * rows).toInt() else litRows
             for (r in 0 until rows) {
                 val y = size.height - (r + 1) * step + gapPx
                 drawRect(
-                    color = if (r < litRows) litColor else unlitColor,
+                    color = when {
+                        r < litRows -> litColor
+                        r < glowRows -> glowCol
+                        else -> unlitColor
+                    },
                     topLeft = Offset(x, y),
                     size = Size(colW, brickPx),
                 )
