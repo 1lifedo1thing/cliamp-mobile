@@ -38,13 +38,25 @@ object StationArtSource {
     /** Thumbnails (row icons, the mini player) never need full detail. */
     private const val TARGET_SMALL = 96
 
-    /** Formats BitmapFactory cannot decode, however cheerfully they are served. */
-    private val undecodable = setOf("image/x-icon", "image/vnd.microsoft.icon", "image/svg+xml")
+    /** Formats BitmapFactory cannot decode, however cheerfully they are served.
+     * ICO is served as image/x-icon or image/vnd.microsoft.icon and decodes
+     * fine, so only SVG stays on the block list. */
+    private val undecodable = setOf("image/svg+xml")
 
     private val resolved = LruCache<String, String>(128)
     private val bitmaps = LruCache<String, Bitmap>(128)
     private val smallBitmaps = LruCache<String, Bitmap>(192)
-    private val misses = LruCache<String, Boolean>(256)
+    // Key -> when its art last failed. A failure is not permanent: a cover
+    // that times out on a cold-start stampede still gets another try once the
+    // backoff passes, so a station that does have art ends up showing it.
+    private val missedAt = LruCache<String, Long>(256)
+
+    /** How long a failed cover is left alone before it is tried again. */
+    private const val MISS_RETRY_MS = 60_000L
+
+    private fun noteMiss(key: String) = missedAt.put(key, System.currentTimeMillis())
+    private fun isOut(key: String): Boolean =
+        missedAt.get(key)?.let { System.currentTimeMillis() - it < MISS_RETRY_MS } ?: false
 
     /** Directory holding decoded embedded-art bytes, keyed by audio path hash. */
     private var cacheDir: java.io.File? = null
@@ -92,28 +104,23 @@ object StationArtSource {
     suspend fun bitmapFor(station: Station): Bitmap? {
         if (station.source == StationSource.Cliamp) return null
         bitmaps.get(station.id)?.let { return it }
-        if (misses.get(station.id) == true) return null
+        if (isOut(station.id)) return null
 
         val bmp = if (station.source == StationSource.Local) {
-            // A local file's cover is usually embedded in the audio track
-            // itself; there is no homepage to scrape. Draw that first.
             embeddedArt(station.url, TARGET)
         } else {
-            val url = imageUrl(station)
-            if (url == null) {
-                misses.put(station.id, true)
-                return null
-            }
-            download(url)
+            cover(station, ::download)
         }
-        if (bmp == null) misses.put(station.id, true) else bitmaps.put(station.id, bmp)
+        if (bmp == null) noteMiss(station.id) else bitmaps.put(station.id, bmp)
         return bmp
     }
 
     /**
      * Low-quality art for tiny surfaces (row thumbnails, the mini player).
      * Decodes at [TARGET_SMALL] and serves its own cache so a 100-row list
-     * doesn't hold a dozen full-size bitmaps in memory.
+     * doesn't hold a dozen full-size bitmaps in memory. Unlike [bitmapFor] it
+     * keeps retrying a failed cover on every look, which is how the same
+     * station can end up with art in the list while the grid still misses it.
      */
     suspend fun bitmapForSmall(station: Station): Bitmap? {
         if (station.source == StationSource.Cliamp) return null
@@ -121,12 +128,25 @@ object StationArtSource {
         val bmp = if (station.source == StationSource.Local) {
             embeddedArt(station.url, TARGET_SMALL)
         } else {
-            val url = imageUrl(station)
-            if (url == null) return null
-            downloadSmall(url)
+            cover(station, ::downloadSmall)
         }
         if (bmp != null) smallBitmaps.put(station.id, bmp)
         return bmp
+    }
+
+    /**
+     * The station's cover: the og:image on its homepage first, then the
+     * favicon the directory recorded. A discovered URL that refuses to decode
+     * is forgotten, so the next attempt is never pinned to a dead link and
+     * the fallback to the favicon happens on the spot.
+     */
+    private suspend fun cover(station: Station, fetch: suspend (String) -> Bitmap?): Bitmap? {
+        val url = imageUrl(station) ?: return null
+        val bmp = fetch(url)
+        if (bmp != null) return bmp
+        resolved.remove(station.id)
+        val fav = station.favicon
+        return if (fav.startsWith("http") && fav != url) fetch(fav) else null
     }
 
     /**
@@ -137,9 +157,9 @@ object StationArtSource {
     suspend fun bitmapForUrl(url: String): Bitmap? {
         if (url.isBlank()) return null
         bitmaps.get(url)?.let { return it }
-        if (misses.get(url) == true) return null
+        if (isOut(url)) return null
         val bmp = download(url)
-        if (bmp == null) misses.put(url, true) else bitmaps.put(url, bmp)
+        if (bmp == null) noteMiss(url) else bitmaps.put(url, bmp)
         return bmp
     }
 
@@ -149,9 +169,9 @@ object StationArtSource {
     suspend fun bitmapForUrlSmall(url: String): Bitmap? {
         if (url.isBlank()) return null
         smallBitmaps.get(url)?.let { return it }
-        if (misses.get(url) == true) return null
+        if (isOut(url)) return null
         val bmp = downloadSmall(url)
-        if (bmp == null) misses.put(url, true) else smallBitmaps.put(url, bmp)
+        if (bmp == null) noteMiss(url) else smallBitmaps.put(url, bmp)
         return bmp
     }
 
@@ -277,4 +297,5 @@ class LruCache<K, V>(private val max: Int) {
     }
     @Synchronized fun get(key: K): V? = map[key]
     @Synchronized fun put(key: K, value: V) { map[key] = value }
+    @Synchronized fun remove(key: K): V? = map.remove(key)
 }
