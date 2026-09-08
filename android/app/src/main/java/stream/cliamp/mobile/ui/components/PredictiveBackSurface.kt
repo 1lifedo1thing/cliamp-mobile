@@ -65,13 +65,6 @@ fun PredictiveBackSurface(
                     val frac = ((1f - a) / (1f - start.absoluteValue)).coerceIn(0f, 1f)
                     onProgress(start * frac)
                 }
-            } else {
-                // No gesture progress to lean on: three-button back, or a
-                // device/OS without predictive back (Android < 13). The page
-                // still glides off over the one behind it on the same spring,
-                // so the transition is cinematic everywhere, not just where
-                // the system reports finger progress.
-                offset.animateTo(1f, ease) { onProgress(value) }
             }
             onBack()
             offset.snapTo(0f)
