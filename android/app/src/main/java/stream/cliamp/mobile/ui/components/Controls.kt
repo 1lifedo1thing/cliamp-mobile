@@ -62,7 +62,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -173,43 +172,6 @@ fun MechKey(
             contentAlignment = Alignment.Center,
         ) {
             CompositionLocalProvider(LocalContentColor provides fg) { content() }
-        }
-    }
-}
-
-/** Secondary key row: SHUF / RPT / FAV - shorter, flatter, icon plus label. */
-@Composable
-fun ToggleKey(
-    icon: ImageVector,
-    label: String,
-    on: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    accentWhenOn: Color? = null,
-) {
-    val p = LocalPalette.current
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val alpha by animateFloatAsState(if (pressed) 0.55f else 1f, label = "togglePress")
-    val fg = (if (on) (accentWhenOn ?: p.accent) else p.inkTertiary).copy(alpha = alpha)
-    val hf = LocalHapticFeedback.current
-    val hapticsOn = LocalHapticsEnabled.current
-
-    Box(
-        modifier
-            .height(46.dp)
-            .clip(RoundedCornerShape(9.dp))
-            .background(if (p.dark) p.panelRaised else p.panel)
-            .border(1.dp, p.chipBorder, RoundedCornerShape(9.dp))
-            .clickable(interactionSource = interaction, indication = null) {
-                if (hapticsOn) hf.performHapticFeedback(HapticFeedbackType.VirtualKey)
-                onClick()
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(icon, null, Modifier.size(15.dp), tint = fg)
-            Mono(label, CliampType.chip, fg)
         }
     }
 }

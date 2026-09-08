@@ -84,9 +84,6 @@ class Prefs(private val context: Context) {
         val eqEnabled = booleanPreferencesKey("eq_enabled")
         val eqPreset = stringPreferencesKey("eq_preset")
         val eqBands = stringPreferencesKey("eq_bands")
-        val favorites = stringPreferencesKey("favorites")
-        val history = stringPreferencesKey("history")
-        val custom = stringPreferencesKey("custom")
         val lastStation = stringPreferencesKey("last_station")
         val volume = floatPreferencesKey("volume")
         val autoResume = booleanPreferencesKey("auto_resume")
@@ -214,9 +211,6 @@ class Prefs(private val context: Context) {
     val lastStation: Flow<Station?> = context.settingsStore.data.map { p ->
         p[K.lastStation]?.let { raw -> runCatching { Http.json.decodeFromString<Station>(raw) }.getOrNull() }
     }
-
-    private fun decodeStations(raw: String?): List<Station> =
-        raw?.let { runCatching { Http.json.decodeFromString<List<Station>>(it) }.getOrNull() } ?: emptyList()
 
     suspend fun setPalette(v: String) = put(K.palette, v)
     suspend fun setHaptics(v: Boolean) = put(K.haptics, v)

@@ -11,6 +11,7 @@ import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
@@ -37,6 +38,7 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import stream.cliamp.mobile.CliampApp
 import stream.cliamp.mobile.R
+import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.ui.theme.CliampPalette
@@ -73,10 +75,10 @@ class CliampWidget : GlanceAppWidget() {
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 internal fun CliampWidgetContent(
     context: Context,
-    prefs: stream.cliamp.mobile.data.Prefs,
+    prefs: Prefs,
 ) {
     val station by prefs.lastStation.collectAsState(initial = null)
     val playing by prefs.widgetPlaying.collectAsState(initial = false)
@@ -96,7 +98,7 @@ internal fun CliampWidgetContent(
     WidgetBody(station, track, playing, palette)
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun WidgetBody(
     station: Station?,
     track: String,
@@ -143,7 +145,7 @@ private fun WidgetBody(
  * to put a play triangle in a Text, but Android's emoji font claims U+23F8 and
  * friends, so the key comes out as an orange emoji instead of tinted ink.
  */
-@androidx.compose.runtime.Composable
+@Composable
 private fun Key(
     @DrawableRes icon: Int,
     iconWidth: androidx.compose.ui.unit.Dp,

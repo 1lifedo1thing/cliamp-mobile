@@ -59,9 +59,6 @@ object CliampIcons {
      * of centre. The same geometry the launcher icon is drawn from, so app
      * chrome and home screen carry one mark. Square, unlike the three-bar mark
      * it replaces - give it a square size or it distorts.
-     *
-     * Tinted with the accent in app chrome; [MarkColour] carries the oxide tile
-     * for places where the mark stands on its own.
      */
     val Mark = solid(
         48f, 48f,
@@ -73,29 +70,9 @@ object CliampIcons {
         rect(40f, 22f, 3f, 4f),
     )
 
-    /** The mark on its tile, in the icon's own colours. */
-    val MarkColour: ImageVector = ImageVector.Builder(
-        defaultWidth = 48f.dp, defaultHeight = 48f.dp,
-        viewportWidth = 48f, viewportHeight = 48f,
-    ).apply {
-        addPath(
-            addPathNodes(rrect(0f, 0f, 48f, 48f, 7.2f)),
-            fill = SolidColor(Color(0xFF7F2117)),
-        )
-        listOf(
-            rect(5f, 20f, 5f, 8f),
-            rect(12f, 12f, 5f, 24f),
-            rect(19f, 4f, 5f, 40f),
-            rect(26f, 14f, 5f, 20f),
-            rect(33f, 18f, 5f, 12f),
-            rect(40f, 22f, 3f, 4f),
-        ).forEach { addPath(addPathNodes(it), fill = SolidColor(Color(0xFFF8E4D4))) }
-    }.build()
-
     val PlayTiny = solid(9f, 10f, "M0 0l9 5-9 5z")
     val PlayRow = solid(14f, 14f, "M1 1l12 6-12 6z")
     val PlayTab = solid(18f, 18f, "M2 1l14 8-14 8z")
-    val PlayWide = solid(12f, 13f, "M0 0l12 6.5L0 13z")
     val MusicNote = solid(
         16f, 16f,
         circle(4f, 12f, 2.1f),
@@ -108,7 +85,6 @@ object CliampIcons {
     val Prev = solid(22f, 18f, "M12 9L22 1v16z", "M2 9L12 1v16z", rect(0f, 1f, 2.4f, 16f))
     val Next = solid(22f, 18f, "M10 9L0 17V1z", "M20 9L10 17V1z", rect(19.6f, 1f, 2.4f, 16f))
     val Pause = solid(20f, 22f, rrect(1f, 0f, 6.5f, 22f, 1f), rrect(12.5f, 0f, 6.5f, 22f, 1f))
-    val Stop = solid(20f, 20f, rect(1f, 1f, 18f, 18f))
 
     val Shuffle = stroked(
         18f, 14f, 1.8f,
@@ -117,7 +93,6 @@ object CliampIcons {
         "M1 11h4l8-8h3",
         "M14.5 2.5l1.5 1.5-1.5 1.5",
     )
-    val Repeat = stroked(18f, 14f, 1.8f, "M2 5V3h14v8H4", "M6 8l-3 3 3 3")
     val Star = stroked(16f, 16f, 1.8f, "M8 1.5l1.9 4.2 4.6.5-3.4 3.1.9 4.5L8 11.6 4 13.8l.9-4.5L1.5 6.2l4.6-.5z")
     val StarFilled = solid(16f, 16f, "M8 1.5l1.9 4.2 4.6.5-3.4 3.1.9 4.5L8 11.6 4 13.8l.9-4.5L1.5 6.2l4.6-.5z")
 

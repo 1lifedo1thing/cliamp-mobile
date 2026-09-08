@@ -2,6 +2,7 @@ package stream.cliamp.mobile.ui.screens
 
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -231,7 +232,7 @@ fun SettingsScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            androidx.compose.foundation.Image(
+            Image(
                 painter = painterResource(R.drawable.ic_cliamp_logo),
                 contentDescription = null,
                 modifier = Modifier.size(34.dp),

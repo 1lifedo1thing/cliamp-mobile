@@ -393,7 +393,7 @@ fun CliampRoot(
                     onBack = { popOverlay() },
                 )
                 is Overlay.Browse -> {
-                    val id = (overlay as Overlay.Browse).accountId
+                    val id = overlay.accountId
                     val account = providerAccounts.firstOrNull { it.id == id }
                     if (account == null) {
                         popOverlay()
@@ -410,13 +410,13 @@ fun CliampRoot(
                     }
                 }
                 is Overlay.Wizard -> {
-                    val spec = ProviderCatalog.byKey((overlay as Overlay.Wizard).providerKey)
+                    val spec = ProviderCatalog.byKey(overlay.providerKey)
                     if (spec == null) {
                         popOverlay()
                     } else {
                         ProviderWizard(
                             spec = spec,
-                            existing = (overlay as Overlay.Wizard).account,
+                            existing = overlay.account,
                             onCancel = { popOverlay() },
                             onSave = { account ->
                                 scope.launch { providers.save(account) }

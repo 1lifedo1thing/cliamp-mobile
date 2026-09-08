@@ -174,7 +174,6 @@ class LyrionClient(
                 }
                 is JsonArray -> e.forEach { walk(it, depth + 1) }
                 is JsonObject -> e.values.forEach { walk(it, depth + 1) }
-                else -> {}
             }
         }
         walk(this, 0)

@@ -15,7 +15,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 
 /**
  * We ride on MaterialTheme only far enough to keep m3 components (ripples,
@@ -95,10 +97,10 @@ fun CliampTheme(
 fun Mono(
     text: String,
     style: TextStyle,
-    color: androidx.compose.ui.graphics.Color = LocalContentColor.current,
+    color: Color = LocalContentColor.current,
     modifier: Modifier = Modifier,
     maxLines: Int = Int.MAX_VALUE,
-    overflow: androidx.compose.ui.text.style.TextOverflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+    overflow: TextOverflow = TextOverflow.Ellipsis,
 ) = Text(
     text = text,
     style = style,

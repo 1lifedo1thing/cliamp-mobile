@@ -231,7 +231,6 @@ fun LocalScreen(
     val showing = allPlaylists.firstOrNull { it.station.slug == openSlug }
     // Playing starts minimized; the full player only opens when the mini-player
     // bar at the bottom is tapped.
-    val justPlay: (Station, List<Station>) -> Unit = { s, list -> onPlay(s, list) }
 
     // The favourites sub-tab is chosen while browsing the list; the favourite's
     // pinned tile collage follows it, so the covers preview the filtered scope.
@@ -337,7 +336,7 @@ fun LocalScreen(
                     songs = songs,
                     current = current,
                     playing = playing,
-                    onPlay = justPlay,
+                    onPlay = onPlay,
                     onToggleFavorite = onToggleFavorite,
                     favorites = favorites.map { it.url }.toSet(),
                     creating = creatingName,
@@ -447,7 +446,7 @@ fun LocalScreen(
                         pl = pl,
                         current = current,
                         playing = playing,
-                        onPlay = justPlay,
+                        onPlay = onPlay,
                         onToggleFavorite = onToggleFavorite,
                         favorites = favorites.map { it.url }.toSet(),
                         loading = loading,
@@ -502,7 +501,7 @@ fun LocalScreen(
                         subscribedShows = subscriptions,
                         current = current,
                         playing = playing,
-                        onPlay = justPlay,
+                        onPlay = onPlay,
                         onToggle = { s, add ->
                             scope.launch {
                                 if (add) playlists.addStation(pl.station.slug, s)
@@ -1415,8 +1414,8 @@ private fun AddSongsPicker(
 }
 
 @Composable
-private fun <T : Station> GroupList(
-    items: List<T>,
+private fun GroupList(
+    items: List<Station>,
     picked: Set<String>,
     subtitle: (Station) -> String,
     onToggle: (Station) -> Unit,
