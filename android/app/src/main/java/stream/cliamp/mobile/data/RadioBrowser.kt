@@ -1,6 +1,12 @@
 package stream.cliamp.mobile.data
 
+import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -14,7 +20,9 @@ import java.net.URLEncoder
  * The API has no single endpoint - it is a pool of mirrors behind
  * `all.api.radio-browser.info`. We resolve that name once, keep the reachable
  * mirror, and fail over to the next one on error, which is what their client
- * guidelines ask for.
+ * guidelines ask for. The last mirror that answered is pinned to disk, so a
+ * cold start skips name resolution and probing altogether and talks to the
+ * mirror that worked last time.
  */
 object RadioBrowser {
 
@@ -24,8 +32,29 @@ object RadioBrowser {
         "https://fi1.api.radio-browser.info",
     )
 
-    @Volatile private var mirrors: List<String> = fallbackMirrors
+    @Volatile private var mirrors: List<String> = emptyList()
     @Volatile private var dead: Set<String> = emptySet()
+
+    private val mirrorLock = Mutex()
+
+    /** Where the last live mirror is remembered for the next launch. */
+    @Volatile private var cacheFile: java.io.File? = null
+
+    fun init(context: Context) {
+        cacheFile = java.io.File(context.cacheDir, "rbmirror.txt")
+        // A pinned mirror replaces discovery for the whole first page: start
+        // from it and only re-probe the field when it turns out to be gone.
+        mirrors = loadPinned()?.let { listOf(it) } ?: emptyList()
+    }
+
+    private fun loadPinned(): String? =
+        cacheFile?.takeIf { it.isFile }?.readText()?.trim()
+            ?.takeIf { it.startsWith("https://") && "api.radio-browser.info" in it }
+
+    private fun remember(base: String) {
+        val f = cacheFile ?: return
+        runCatching { f.parentFile?.mkdirs(); f.writeText(base) }
+    }
 
     private suspend fun discover() = withContext(Dispatchers.IO) {
         var found: List<String> = emptyList()
@@ -41,15 +70,32 @@ object RadioBrowser {
         // Resolution failing is usually the same network trouble, so probe the
         // known mirrors in its place rather than trusting an offline list.
         if (found.isEmpty()) found = fallbackMirrors
-        // A mirror that does not accept a connection in a moment is going to
-        // burn a full call timeout whenever it comes up, so keep only the ones
-        // that answer and let the first page load at the speed of the live
-        // mirror, not a dead one's timeout.
-        val alive = found.filter(::alive)
+        // Probe everything at once: three mirrors probed one after another
+        // would wait out two dead ones' timeouts before the first page could
+        // even start. Each probe is capped at two seconds, so the whole sweep
+        // is two seconds, never six.
+        val pinned = loadPinned()
+        val reachable = coroutineScope {
+            buildList {
+                pinned?.let { add(it) }
+                addAll(found)
+            }.distinct().map { c -> async { c to alive(c) } }.awaitAll()
+                .filter { (_, ok) -> ok }
+                .map { (c, _) -> c }
+        }
         // Nothing answered: leave an empty list so the call fails fast and the
         // screen can offer a manual retry, instead of silently waiting out
         // timeouts against a mirror that cannot be reached.
-        mirrors = if (alive.isNotEmpty()) alive.shuffled() else emptyList()
+        if (reachable.isEmpty()) {
+            mirrors = emptyList()
+        } else {
+            // The pinned mirror leads so requests keep going where they were
+            // until it actually stops answering.
+            mirrors = buildList {
+                pinned?.takeIf { it in reachable }?.let { add(it) }
+                addAll(reachable.shuffled())
+            }.distinct()
+        }
         // A fresh probe supersedes the mid-session dead list.
         dead = emptySet()
     }
@@ -65,19 +111,29 @@ object RadioBrowser {
         // An emptied mirror list is a total outage from the last probe; retry
         // re-probes rather than trusting it, so a manual "try again" after the
         // network returns actually reaches a live mirror again.
-        if (mirrors === fallbackMirrors || mirrors.isEmpty()) discover()
+        mirrorLock.withLock { if (mirrors.isEmpty()) discover() }
         var lastError: Throwable? = null
-        val remaining = mirrors.filterNot { it in dead }
-        for (base in remaining) {
-            try {
-                return Http.text("$base$path")
-            } catch (e: Exception) {
-                lastError = e
-                // Once a mirror has burned its timeout it usually stays dead
-                // for this session; skip it from here on so later pages never
-                // pay the same wait again.
-                dead = dead + base
+        repeat(2) { pass ->
+            val remaining = mirrors.filterNot { it in dead }
+            for (base in remaining) {
+                try {
+                    val body = Http.text("$base$path")
+                    // The mirror that actually answered is the one worth
+                    // remembering for next launch.
+                    remember(base)
+                    return body
+                } catch (e: Exception) {
+                    lastError = e
+                    // Once a mirror has burned its timeout it usually stays dead
+                    // for this session; skip it from here on so later pages never
+                    // pay the same wait again.
+                    dead = dead + base
+                }
             }
+            // The first pass may have been a single pinned mirror that went
+            // stale since the last session; probe the field live and trail the
+            // fresh mirror list once before giving up.
+            if (pass == 0) mirrorLock.withLock { discover() }
         }
         throw lastError ?: IllegalStateException("no radio-browser mirror reachable")
     }

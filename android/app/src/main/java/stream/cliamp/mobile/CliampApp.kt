@@ -24,6 +24,7 @@ import stream.cliamp.mobile.data.LocalLibrary
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.PlaylistStore
 import stream.cliamp.mobile.data.PodcastRepository
+import stream.cliamp.mobile.data.RadioBrowser
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.widget.CliampWidgetReceiver
@@ -48,6 +49,7 @@ class CliampApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Http.init(this)
+        RadioBrowser.init(this)
 
         StationArtSource.init(this)
         SftpLibrary.init(this, providers, appScope)
