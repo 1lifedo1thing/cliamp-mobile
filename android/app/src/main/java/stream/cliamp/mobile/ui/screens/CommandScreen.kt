@@ -97,6 +97,7 @@ fun CommandScreen(
     prefs: Prefs,
     localLibrary: LocalLibrary,
     providers: ProviderStore,
+    current: Station? = null,
     onPlay: (Station, List<Station>) -> Unit,
     onOpenScope: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -267,6 +268,7 @@ fun CommandScreen(
                 items(shown, key = { it.key }) { hit ->
                     HitRow(
                         hit = hit,
+                        current = current,
                         term = term,
                         onClick = { open(hit, shown) },
                         accent = p.accent,
@@ -334,6 +336,7 @@ private fun HitArt(hit: SearchHit, accent: androidx.compose.ui.graphics.Color) {
 @Composable
 private fun HitRow(
     hit: SearchHit,
+    current: Station?,
     term: String,
     onClick: () -> Unit,
     accent: androidx.compose.ui.graphics.Color,
@@ -342,8 +345,15 @@ private fun HitRow(
     val haptics = LocalHapticFeedback.current
     val enabled = LocalHapticsEnabled.current
     val fuzzTerm = if (term.startsWith(":")) "" else term
+    val currentUrl = when (hit) {
+        is SearchHit.Song -> hit.station.url
+        is SearchHit.Favorite -> hit.station.url
+        is SearchHit.StationHit -> hit.station.url
+        else -> null
+    }
 
     ListRow(
+        rail = currentUrl != null && current?.url == currentUrl,
         onClick = {
             if (enabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             onClick()

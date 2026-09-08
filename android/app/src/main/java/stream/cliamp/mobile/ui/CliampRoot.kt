@@ -431,6 +431,7 @@ fun CliampRoot(
                     prefs = prefs,
                     localLibrary = localLibrary,
                     providers = providers,
+                    current = station,
                     onPlay = onPlay,
                     onOpenScope = { pushOverlay(Overlay.Scope) },
                     onOpenSettings = { pushOverlay(Overlay.Settings) },
