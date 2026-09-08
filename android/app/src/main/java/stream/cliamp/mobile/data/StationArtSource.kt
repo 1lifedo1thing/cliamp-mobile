@@ -131,7 +131,7 @@ object StationArtSource {
         val bmp = if (station.source == StationSource.Local) {
             embeddedArt(station.url, TARGET_SMALL)
         } else {
-            disk(station.id, TARGET_SMALL) ?: cover(station) { url, save -> downloadSmall(url, save) }
+            disk(station.id, TARGET_SMALL) ?: cover(station) { url, save -> download(url, save, TARGET_SMALL) }
         }
         if (bmp != null) smallBitmaps.put(station.id, bmp)
         return bmp
@@ -175,7 +175,7 @@ object StationArtSource {
         if (url.isBlank()) return null
         smallBitmaps.get(url)?.let { return it }
         if (isOut(url)) return null
-        val bmp = disk(url, TARGET_SMALL) ?: downloadSmall(url, save = url)
+        val bmp = disk(url, TARGET_SMALL) ?: download(url, save = url, target = TARGET_SMALL)
         if (bmp == null) noteMiss(url) else smallBitmaps.put(url, bmp)
         return bmp
     }
@@ -227,7 +227,7 @@ object StationArtSource {
         URI(base).resolve(ref.trim()).toString().takeIf { it.startsWith("http") }
     }.getOrNull()
 
-    private suspend fun download(url: String, save: String? = null): Bitmap? = withContext(Dispatchers.IO) {
+    private suspend fun download(url: String, save: String? = null, target: Int = TARGET): Bitmap? = withContext(Dispatchers.IO) {
         runCatching {
             val req = Request.Builder().url(url).header("User-Agent", Http.USER_AGENT).build()
             Http.client.newCall(req).execute().use { r ->
@@ -237,22 +237,7 @@ object StationArtSource {
                 val bytes = r.body.byteStream().readAtMost(MAX_IMAGE) ?: return@use null
                 if (bytes.size < 64) return@use null
                 save?.let { runCatching { coverFile(it).writeBytes(bytes) } }
-                decodeScaled(bytes, TARGET)
-            }
-        }.getOrNull()
-    }
-
-    private suspend fun downloadSmall(url: String, save: String? = null): Bitmap? = withContext(Dispatchers.IO) {
-        runCatching {
-            val req = Request.Builder().url(url).header("User-Agent", Http.USER_AGENT).build()
-            Http.client.newCall(req).execute().use { r ->
-                if (!r.isSuccessful) return@use null
-                val ct = r.header("Content-Type").orEmpty().substringBefore(';').trim().lowercase()
-                if (ct.isNotEmpty() && (!ct.startsWith("image/") || ct in undecodable)) return@use null
-                val bytes = r.body.byteStream().readAtMost(MAX_IMAGE) ?: return@use null
-                if (bytes.size < 64) return@use null
-                save?.let { runCatching { coverFile(it).writeBytes(bytes) } }
-                decodeScaled(bytes, TARGET_SMALL)
+                decodeScaled(bytes, target)
             }
         }.getOrNull()
     }
@@ -289,11 +274,9 @@ object StationArtSource {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        var sample = 1
-        while (bounds.outWidth / (sample * 2) >= target && bounds.outHeight / (sample * 2) >= target) {
-            sample *= 2
+        val opts = BitmapFactory.Options().apply {
+            inSampleSize = LocalArt.sampleFor(bounds.outWidth, bounds.outHeight, target)
         }
-        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
     }
 
@@ -302,11 +285,9 @@ object StationArtSource {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(path, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        var sample = 1
-        while (bounds.outWidth / (sample * 2) >= target && bounds.outHeight / (sample * 2) >= target) {
-            sample *= 2
-        }
-        return BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+        return BitmapFactory.decodeFile(path, BitmapFactory.Options().apply {
+            inSampleSize = LocalArt.sampleFor(bounds.outWidth, bounds.outHeight, target)
+        })
     }
 }
 

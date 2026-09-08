@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationSource
+import stream.cliamp.mobile.data.durationLabel
 import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
@@ -132,15 +133,7 @@ private fun NowPlayingCard(s: Station, playing: Boolean, p: CliampPalette) {
         }
         Spacer(Modifier.height(9.dp))
         Mono(if (s.name.isBlank()) "unknown" else s.name, CliampType.trackTitleCompact, p.ink, maxLines = 1)
-        val parts = mutableListOf<String>()
-        // An episode's show belongs on this line as much as a song's artist
-        if ((s.source == StationSource.Local || s.source == StationSource.Podcast) &&
-            s.artist.isNotBlank()
-        ) parts.add(s.artist)
-        else if (s.meta.isNotBlank()) parts.add(s.meta)
-        if (s.isTrack && s.durationMs > 0) parts.add(formatDuration(s.durationMs))
-        if (parts.isEmpty()) parts.add(if (s.isTrack) "–:––" else "live stream")
-        Mono(parts.joinToString(" · "), CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+        Mono(sourceSubtitle(s), CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
     }
 }
 
@@ -233,17 +226,9 @@ private fun sourceSubtitle(s: Station): String {
         s.artist.isNotBlank()
     ) parts.add(s.artist)
     else if (s.meta.isNotBlank()) parts.add(s.meta)
-    if (s.isTrack && s.durationMs > 0) parts.add(formatDuration(s.durationMs))
+    if (s.isTrack && s.durationMs > 0) parts.add(durationLabel(s.durationMs))
     if (parts.isEmpty()) parts.add(if (s.isTrack) "–:––" else "live stream")
     return parts.joinToString(" · ")
-}
-
-private fun formatDuration(ms: Long): String {
-    if (ms <= 0) return "–:––"
-    val totalSec = ms / 1000
-    val m = totalSec / 60
-    val sec = totalSec % 60
-    return "%d:%02d".format(m, sec)
 }
 
 @Composable

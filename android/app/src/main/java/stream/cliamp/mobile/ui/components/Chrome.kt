@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -37,8 +36,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -123,25 +122,6 @@ fun ScreenHeader(
     }
 }
 
-/** The identity strip that sits under the status bar on the player screen. */
-@Composable
-fun IdentityBar(left: String, right: String, modifier: Modifier = Modifier) {
-    val p = LocalPalette.current
-    Row(
-        modifier
-            .fillMaxWidth()
-            .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(CliampIcons.Mark, null, Modifier.size(15.dp), tint = p.accent)
-            Mono(left, CliampType.rowSecondary, p.accent)
-        }
-        Mono(right, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
-    }
-}
-
 enum class Tab(val label: String) {
     // Play is gone: the full player opens from the mini-player bar. Servers is
     // gone too, folded into Library beside the other sources. Search is gone
@@ -214,7 +194,7 @@ fun CliampTabBar(current: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = Mod
 private fun TabItem(
     tab: Tab,
     active: Boolean,
-    bottomInset: androidx.compose.ui.unit.Dp,
+    bottomInset: Dp,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -230,11 +210,7 @@ private fun TabItem(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(Modifier.height(17.dp), contentAlignment = Alignment.Center) {
-            when (tab) {
-                Tab.Lib -> Icon(CliampIcons.LibTab, null, Modifier.size(17.dp), tint = tint)
-                Tab.Stations -> Icon(CliampIcons.StationsTab, null, Modifier.size(17.dp), tint = tint)
-                Tab.Pods -> Icon(CliampIcons.PodsTab, null, Modifier.size(17.dp), tint = tint)
-            }
+            Icon(tabIcon(tab), null, Modifier.size(17.dp), tint = tint)
         }
         Mono(tab.label, CliampType.tabLabel, tint)
     }
@@ -299,14 +275,16 @@ private fun RailItem(
         verticalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterVertically),
     ) {
         Box(Modifier.height(17.dp), contentAlignment = Alignment.Center) {
-            when (tab) {
-                Tab.Lib -> Icon(CliampIcons.LibTab, null, Modifier.size(17.dp), tint = tint)
-                Tab.Stations -> Icon(CliampIcons.StationsTab, null, Modifier.size(17.dp), tint = tint)
-                Tab.Pods -> Icon(CliampIcons.PodsTab, null, Modifier.size(17.dp), tint = tint)
-            }
+            Icon(tabIcon(tab), null, Modifier.size(17.dp), tint = tint)
         }
         Mono(tab.label, CliampType.tabLabel, tint, maxLines = 1)
     }
+}
+
+private fun tabIcon(tab: Tab): ImageVector = when (tab) {
+    Tab.Lib -> CliampIcons.LibTab
+    Tab.Stations -> CliampIcons.StationsTab
+    Tab.Pods -> CliampIcons.PodsTab
 }
 
 private fun Modifier.offsetRightBorder(color: Color) = drawBehind {
@@ -326,8 +304,7 @@ fun ArtPlate(
     modifier: Modifier = Modifier,
     initial: String? = null,
     caption: String? = null,
-    badge: String? = null,
-    radius: androidx.compose.ui.unit.Dp = 5.dp,
+    radius: Dp = 5.dp,
     overlay: (@Composable androidx.compose.foundation.layout.BoxScope.() -> Unit)? = null,
 ) {
     val p = LocalPalette.current
@@ -366,17 +343,6 @@ fun ArtPlate(
                 Modifier.align(Alignment.BottomStart).padding(14.dp),
             )
         }
-        if (badge != null) {
-            Box(
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(12.dp)
-                    .border(1.dp, p.frameBorder, RoundedCornerShape(3.dp))
-                    .padding(horizontal = 7.dp, vertical = 4.dp)
-            ) {
-                Mono(badge, CliampType.tabLabel, p.inkSecondary)
-            }
-        }
     }
 }
 
@@ -396,7 +362,7 @@ fun ListRow(
     leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null,
     divider: Boolean = true,
-    verticalPadding: androidx.compose.ui.unit.Dp = 12.dp,
+    verticalPadding: Dp = 12.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(modifier.fillMaxWidth()) {
@@ -417,39 +383,6 @@ fun ListRow(
         if (divider) Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
     }
 }
-
-@Composable
-fun IconLabelButton(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    tint: Color? = null,
-) {
-    val p = LocalPalette.current
-    val c = tint ?: p.accent
-    Row(
-        modifier
-            .clip(RoundedCornerShape(6.dp))
-            .border(1.dp, p.chipBorder, RoundedCornerShape(6.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 11.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-    ) {
-        Icon(icon, null, Modifier.size(12.dp), tint = c)
-        Mono(label.uppercase(), CliampType.chip, c)
-    }
-}
-
-/** Scroll content that must clear the fixed tab bar. */
-val ContentBottomPadding = PaddingValues(bottom = 24.dp)
-
-@Composable
-fun ScreenColumn(
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit,
-) = Column(modifier.fillMaxSize()) { content() }
 
 /** A full-width muted note + divider, used for empty states and transient notices. */
 @Composable

@@ -77,7 +77,7 @@ object LocalArt {
         return BitmapFactory.decodeFile(path, opts)
     }
 
-    private fun sampleFor(width: Int, height: Int, target: Int): Int {
+    internal fun sampleFor(width: Int, height: Int, target: Int): Int {
         var sample = 1
         while (width / (sample * 2) >= target && height / (sample * 2) >= target) {
             sample *= 2

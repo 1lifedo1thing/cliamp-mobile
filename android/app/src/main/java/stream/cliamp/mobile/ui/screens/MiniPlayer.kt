@@ -35,6 +35,7 @@ import stream.cliamp.mobile.data.LocalArt
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.StationSource
+import stream.cliamp.mobile.data.sourceLine
 import stream.cliamp.mobile.ui.components.BrickMeter
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
@@ -96,18 +97,13 @@ fun MiniPlayer(
                 }
             } else {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Mono(station!!.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+                    Mono(station.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
                     Mono(
                         when {
                             reconnecting > 0 -> "reconnecting · $reconnecting"
                             buffering -> "buffering…"
                             streamTitle.isNotBlank() -> streamTitle
-                            station!!.source == StationSource.Cliamp -> "cliamp radio"
-                            station!!.source == StationSource.Local ->
-                                station!!.artistAlbum.ifBlank { "local audio" }
-                            station!!.source == StationSource.Podcast ->
-                                station!!.artist.ifBlank { "podcast" }
-                            else -> station!!.meta.ifBlank { "live stream" }
+                            else -> station.sourceLine
                         },
                         CliampType.rowSecondary,
                         if (buffering || reconnecting > 0) p.amber else p.inkTertiary,
@@ -214,11 +210,12 @@ private fun MiniArt(station: Station?, frame: MeterFrame?) {
             else -> StationArtSource.bitmapForSmall(s)
         }?.asImageBitmap()
     }
-    if (art != null) {
+    val a = art
+    if (a != null) {
         // Real cover art gets a square thumbnail so the plate reads as a little
         // album square; the brick meter fallback below stays squat instead.
         Image(
-            bitmap = art!!,
+            bitmap = a,
             contentDescription = station?.name,
             modifier = Modifier
                 .size(40.dp)

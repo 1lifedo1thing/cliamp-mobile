@@ -47,6 +47,7 @@ import stream.cliamp.mobile.R
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.StationSource
+import stream.cliamp.mobile.data.wrapNext
 import stream.cliamp.mobile.net.Http
 import stream.cliamp.mobile.widget.CliampWidgetReceiver
 
@@ -312,7 +313,7 @@ class PlaybackService : MediaSessionService() {
         if (source.isEmpty() || station == null) return emptyList()
         val i = source.indexOfFirst { it.url == station.url }
         if (i < 0) return emptyList()
-        return (1..4).mapNotNull { k -> source[(i + k) % source.size] }
+        return source.wrapNext(i)
     }
 
     /**

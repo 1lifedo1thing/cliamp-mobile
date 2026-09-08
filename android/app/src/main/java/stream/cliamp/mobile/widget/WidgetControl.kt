@@ -15,6 +15,7 @@ import kotlinx.coroutines.withContext
 import stream.cliamp.mobile.CliampApp
 import stream.cliamp.mobile.data.CliampRadio
 import stream.cliamp.mobile.data.Station
+import stream.cliamp.mobile.data.wrapNext
 import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.playback.PlaybackService
 import stream.cliamp.mobile.playback.StreamResolver
@@ -119,7 +120,7 @@ object WidgetControl {
         if (win.isNotEmpty()) {
             val j = win.indexOfFirst { it.url == station.url }
             if (j >= 0) {
-                val up = (1..4).mapNotNull { k -> win[(j + k) % win.size] }
+                val up = win.wrapNext(j)
                 app.prefs.setWidgetNext(up)
             }
         }

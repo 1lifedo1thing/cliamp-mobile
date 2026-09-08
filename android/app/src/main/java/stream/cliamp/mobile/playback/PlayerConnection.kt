@@ -24,6 +24,7 @@ import kotlinx.coroutines.withContext
 import stream.cliamp.mobile.CliampApp
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationSource
+import stream.cliamp.mobile.data.wrapNext
 import stream.cliamp.mobile.widget.CliampWidgetReceiver
 
 /**
@@ -403,7 +404,7 @@ class PlayerConnection(
         fun wrap(k: Int) = ((i + k) % n + n) % n
         val win = mutableListOf<Station>()
         for (k in -before..after) win.add(src[wrap(k)])
-        val next = (1..4).mapNotNull { k -> src[(i + k) % n] }
+        val next = src.wrapNext(i)
         scope.launch {
             prefs.setWidgetSource(win)
             prefs.setWidgetNext(next)
@@ -620,7 +621,7 @@ class PlayerConnection(
         _shuffle.value = newOn
         if (newOn) {
             if (_source.size < 2) { sync(); return }
-            val abs = base.indexOfFirst { it.url == current.url }.let { if (it < 0) 0 else it }
+            val abs = base.indexOfFirst { it.url == current.url }.coerceAtLeast(0)
             val rest = base.filterIndexed { i, s -> i != abs }.shuffled()
             val reordered = ArrayList<Station>(base.size)
             var ri = 0
@@ -651,7 +652,7 @@ class PlayerConnection(
             try {
                 ensureActive()
                 val src = _source
-                val absJ = src.indexOfFirst { it.url == current.url }.let { if (it < 0) 0 else it }
+                val absJ = src.indexOfFirst { it.url == current.url }.coerceAtLeast(0)
                 windowBase = if (src.size > WINDOW) absJ else 0
                 val slice = sliceAt(src, absJ)
                 _queue.value = slice

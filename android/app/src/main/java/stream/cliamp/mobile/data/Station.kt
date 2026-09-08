@@ -62,6 +62,28 @@ data class Station(
             .distinct()
 }
 
+/**
+ * The one-line fallback under a station's name, per source. The mini player
+ * shows this as its artist line when there is no live stream title.
+ */
+internal val Station.sourceLine: String
+    get() = when (source) {
+        StationSource.Cliamp -> "cliamp radio"
+        StationSource.Local -> artistAlbum.ifBlank { "local audio" }
+        StationSource.Podcast -> artist.ifBlank { "podcast" }
+        else -> meta.ifBlank { "live stream" }
+    }
+
+/**
+ * The [count] stations after index [i] of this list, wrapping around the end.
+ * Radio-style lists play as a ring, and the widget's up-next row is exactly
+ * this: the four stations that come next in the list being played. Kotlin's
+ * `%` keeps the dividend's sign, so this positive-modulo form stays in range
+ * for any [i].
+ */
+internal fun List<Station>.wrapNext(i: Int, count: Int = 4): List<Station> =
+    (1..count).mapNotNull { k -> this[(i + k) % size] }
+
 /** What the player is currently doing, projected out of Media3. */
 data class NowPlaying(
     val station: Station? = null,
