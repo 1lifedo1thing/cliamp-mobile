@@ -334,6 +334,7 @@ private fun StationRow(
 ) {
     val p = LocalPalette.current
     ListRow(
+        rail = active,
         onClick = onPlay,
         verticalPadding = 11.dp,
         leading = { StationThumb(station, active, playing) },

@@ -1300,6 +1300,7 @@ private fun PlaylistDetailShown(
             item { SectionLabel("songs — ${members.size}") }
             items(visible, key = { it.id }) { s ->
                 ListRow(
+                    rail = current?.url == s.url,
                     onClick = { onPlay(s, visible) },
                     verticalPadding = 9.dp,
                     leading = {
@@ -1624,6 +1625,7 @@ private fun SmartPlaylistDetail(
             item { SectionLabel("${pl.label} — ${visible.size}") }
             items(visible, key = { it.url }, contentType = { "local-song" }) { s ->
                 ListRow(
+                    rail = current?.url == s.url,
                     onClick = { onPlay(s, visible) },
                     verticalPadding = 9.dp,
                     leading = {

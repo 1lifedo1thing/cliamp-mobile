@@ -30,6 +30,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -353,7 +355,9 @@ private fun initialOf(name: String?): String? {
         ?.uppercaseChar()?.toString()
 }
 
-/** A hairline-separated list row. Cards are for objects with state, not lists. */
+/** A hairline-separated list row. Cards are for objects with state, not lists.
+ * [rail] paints a thin accent line down the leading edge - the shared marker
+ * for "this is the row that is playing right now". */
 @Composable
 fun ListRow(
     modifier: Modifier = Modifier,
@@ -362,9 +366,17 @@ fun ListRow(
     trailing: (@Composable RowScope.() -> Unit)? = null,
     divider: Boolean = true,
     verticalPadding: Dp = 12.dp,
+    rail: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(modifier.fillMaxWidth()) {
+    val p = LocalPalette.current
+    val railMod = if (rail)
+        Modifier.drawWithContent {
+            drawContent()
+            drawRect(p.accent, topLeft = Offset(0f, 0f), size = Size(2.dp.toPx(), size.height))
+        }
+    else Modifier
+    Column(modifier.then(railMod).fillMaxWidth()) {
         Row(
             Modifier
                 .fillMaxWidth()

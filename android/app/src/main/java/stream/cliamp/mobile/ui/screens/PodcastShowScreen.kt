@@ -235,6 +235,7 @@ private fun EpisodeRow(
     val p = LocalPalette.current
     val done = progress?.completed == true
     ListRow(
+        rail = active,
         onClick = onPlay,
         verticalPadding = 11.dp,
         leading = {

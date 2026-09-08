@@ -23,9 +23,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import stream.cliamp.mobile.data.Station
@@ -155,16 +152,8 @@ private fun QueueRow(
     val p = LocalPalette.current
     val title = if (s.name.isBlank()) "unknown" else s.name
     val subtitle = sourceSubtitle(s)
-    // The playing row wears the accent rail down its leading edge so the ear
-    // knows exactly which one is live before it reads any text.
-    val rail = if (isNow)
-        Modifier.drawWithContent {
-            drawContent()
-            drawRect(p.accent, topLeft = Offset(0f, 0f), size = Size(2.dp.toPx(), size.height))
-        }
-    else Modifier
     ListRow(
-        modifier = rail,
+        rail = isNow,
         onClick = onPlay,
         verticalPadding = 11.dp,
         leading = {
