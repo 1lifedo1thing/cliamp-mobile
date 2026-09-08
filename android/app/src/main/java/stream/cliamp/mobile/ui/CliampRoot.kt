@@ -149,13 +149,11 @@ fun CliampRoot(
         repository.reportPlay(s)
     }
 
-    // The overlays ride the back gesture to reveal this tab beneath them; as
-    // one slides aside the tab scales back on the same progress, so the page
-    // you are returning to previews itself the way the system back does.
-    //
-    // The scale is a direct 1:1 of the gesture: it tracks the finger exactly
-    // during the swipe, and the surface animates the preview through its own
-    // commit and revoke glides, so release and return are one motion.
+    // The overlays ride the back gesture to reveal this tab beneath them. As
+    // the sheet slides aside a full-screen scrim dims the shell behind it on
+    // the same progress - a system-like dim with no visible edge - so the page
+    // you are returning to is exactly where it was, sitting under a scrim,
+    // the way the platform's own predictive back reads.
     var backPreview by remember { mutableFloatStateOf(0f) }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(p.ground)) {
@@ -168,12 +166,7 @@ fun CliampRoot(
         // reveals. The overlays are drawn full-screen over it.
         Box(
             Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    val s = 0.05f * backPreview.absoluteValue
-                    scaleX = 1f - s
-                    scaleY = 1f - s
-                },
+                .fillMaxSize(),
         ) {
         Row(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).fillMaxHeight()) {
@@ -248,12 +241,7 @@ fun CliampRoot(
                     Box(
                         Modifier
                             .fillMaxSize()
-                            .background(p.ground)
-                            .graphicsLayer {
-                                val s = 0.05f * podsPreview.absoluteValue
-                                scaleX = 1f - s
-                                scaleY = 1f - s
-                            },
+                            .background(p.ground),
                     ) {
                         PodcastsScreen(
                             podcasts = podcasts,
@@ -278,7 +266,7 @@ fun CliampRoot(
                         Modifier
                             .fillMaxSize()
                             .zIndex(3f)
-                            .graphicsLayer { alpha = 0.14f * podsPreview.absoluteValue }
+                            .graphicsLayer { alpha = 0.32f * podsPreview.absoluteValue }
                             .background(Color.Black),
                     )
                     BackPage(
@@ -355,7 +343,7 @@ fun CliampRoot(
         Box(
             Modifier
                 .fillMaxSize()
-                .graphicsLayer { alpha = 0.14f * backPreview.absoluteValue }
+                .graphicsLayer { alpha = 0.32f * backPreview.absoluteValue }
                 .background(Color.Black),
         )
         }

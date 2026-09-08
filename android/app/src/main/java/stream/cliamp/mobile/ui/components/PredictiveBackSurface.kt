@@ -10,9 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
@@ -83,10 +81,6 @@ fun PredictiveBackSurface(
     }
     Box(modifier.graphicsLayer {
         translationX = offset.value * size.width
-        // A sheet in motion casts a shadow, like the system back does. Eased in
-        // with the progress and gone at rest (zero elevation = no blur cost).
-        shadowElevation = 14.dp.toPx() * offset.value.absoluteValue
-        shape = RectangleShape
     }) {
         content()
     }
