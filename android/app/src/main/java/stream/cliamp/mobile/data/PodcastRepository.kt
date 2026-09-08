@@ -10,9 +10,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import stream.cliamp.mobile.data.db.CacheDao
 import stream.cliamp.mobile.data.db.CliampDatabase
 import stream.cliamp.mobile.data.db.EpisodeProgressEntity
+import stream.cliamp.mobile.data.db.KvCacheEntity
+import stream.cliamp.mobile.data.db.PodcastFeedCacheEntity
 import stream.cliamp.mobile.data.db.toEntity
+import stream.cliamp.mobile.net.Http
 
 /** How the podcast directory is currently ordered or filtered. */
 sealed interface PodcastQuery {
@@ -66,6 +70,7 @@ class PodcastRepository(
 ) {
     private val db = CliampDatabase.get(context)
     private val dao = db.podcasts()
+    private val cache: CacheDao = db.cache()
 
     private val _directory = MutableStateFlow(PodcastDirectoryState())
     val directory: StateFlow<PodcastDirectoryState> = _directory.asStateFlow()
@@ -113,6 +118,10 @@ private var chartCursor: List<String> = emptyList()
                     chartCursor = emptyList()
                     pending = emptyList()
                     chartQueue.clear()
+                    _directory.value = PodcastDirectoryState(query = query, loading = true)
+                    // Fill the screen from the last snapshot of this query while
+                    // the network answers; the first live page replaces it.
+                    restore(query)
                     val primed = runCatching {
                         retryFetch {
                             when (query) {
@@ -130,7 +139,11 @@ private var chartCursor: List<String> = emptyList()
                         }
                     }
                     primed.exceptionOrNull()?.let { e ->
-                        _directory.value = PodcastDirectoryState(
+                        val cur = _directory.value
+                        // A snapshot already on screen is better than an error;
+                        // the failure can retry silently next visit.
+                        _directory.value = if (cur.shows.isNotEmpty()) cur.copy(loading = false)
+                        else PodcastDirectoryState(
                             query = query,
                             loading = false,
                             error = e.message ?: "directory unreachable",
@@ -165,12 +178,16 @@ private var chartCursor: List<String> = emptyList()
                 _directory.value = next.fold(
                     onSuccess = { list ->
                         val seen = base.mapTo(HashSet()) { it.feedUrl }
+                        val merged = base + list.filter { seen.add(it.feedUrl) }
                         PodcastDirectoryState(
                             query = query,
-                            shows = base + list.filter { seen.add(it.feedUrl) },
+                            shows = merged,
                             loading = false,
                             exhausted = chartCursor.isEmpty() && chartQueue.isEmpty() && pending.isEmpty(),
-                        )
+                        ).also { state ->
+                            _directory.value = state
+                            if (reset) snapshot(query, merged)
+                        }
                     },
                     onFailure = { e ->
                         _directory.value.copy(
@@ -185,10 +202,45 @@ private var chartCursor: List<String> = emptyList()
 
     fun nextPage() = load(_directory.value.query, reset = false)
 
+    /** The last first-page snapshot of [query], or nothing the first time. */
+    private suspend fun restore(query: PodcastQuery) {
+        val row = cache.get(keyOf(query)) ?: return
+        val cached = runCatching { Http.json.decodeFromString<List<PodcastShow>>(row.json) }.getOrNull() ?: return
+        val cur = _directory.value
+        // Only a page that is still waiting counts; a live list already
+        // fetched (or another query) wins. Loading stays true so the footer
+        // keeps saying "loading more…" until the fresh page lands.
+        if (cur.query == query && cur.shows.isEmpty()) {
+            _directory.value = cur.copy(shows = cached)
+        }
+    }
+
+    private fun snapshot(query: PodcastQuery, shows: List<PodcastShow>) {
+        scope.launch {
+            runCatching {
+                cache.put(
+                    KvCacheEntity(
+                        key = keyOf(query),
+                        json = Http.json.encodeToString(shows),
+                        savedAt = System.currentTimeMillis(),
+                    )
+                )
+            }
+        }
+    }
+
+    private fun keyOf(query: PodcastQuery): String = when (query) {
+        is PodcastQuery.Top -> "podcasts:top:${query.country.ifEmpty { "all" }.trim().lowercase()}"
+        is PodcastQuery.Search -> "podcasts:search:${query.text.trim().lowercase()}"
+        is PodcastQuery.Category -> "podcasts:cat:${query.genre.id}"
+    }
+
     /**
      * Loads [show]'s feed. The show is published before the fetch so the
      * episode screen can draw its header and artwork immediately, the same way
-     * a tapped station is published before its stream resolves.
+     * a tapped station is published before its stream resolves. A feed
+     * snapshot from the last visit fills the list while the network answers, so
+     * re-opening a show is instant instead of another multi-megabyte download.
      */
     fun openShow(show: PodcastShow) {
         val held = _show.value
@@ -198,19 +250,59 @@ private var chartCursor: List<String> = emptyList()
         if (held.show?.feedUrl == show.feedUrl && held.episodes.isNotEmpty() && !held.loading) return
         _show.value = ShowState(show = show, loading = true)
         scope.launch {
+            // Fill the screen from this feed's last snapshot while the fresh
+            // one downloads. Loading stays true so "reading the feed…" shows
+            // until the new list lands.
+            restoreFeed(show.feedUrl)
             val loaded = retryFetch { PodcastFeed.load(show) }.getOrElse { e ->
-                _show.value = ShowState(
-                    show = show,
-                    loading = false,
-                    error = e.message ?: "feed unreachable",
-                )
+                val cur = _show.value
+                // A snapshot already on screen is better than an error; the
+                // failure can retry silently next visit.
+                _show.value = if (cur.episodes.isNotEmpty()) cur.copy(loading = false)
+                else ShowState(show = show, loading = false, error = e.message ?: "feed unreachable")
                 return@launch
             }
             _show.value = ShowState(show = loaded.show, episodes = loaded.episodes)
+            snapshotFeed(loaded.show, loaded.episodes)
             // A subscription keeps whatever the feed knows that the
             // directory did not, so the list stops looking half-filled.
             if (dao.isSubscribed(loaded.show.feedUrl)) {
                 dao.subscribe(loaded.show.toEntity(dao.nextTopPosition() + 1))
+            }
+        }
+    }
+
+    /** The last snapshot of [feedUrl]'s feed, or nothing when it has gone stale.
+     * The caller refreshes regardless, so freshness only decides whether the
+     * cached list is worth a first paint (a feed a month old still beats a
+     * spinner, but why re-fetch it every open). */
+    private suspend fun restoreFeed(feedUrl: String) {
+        val row = cache.getFeed(feedUrl) ?: return
+        if (System.currentTimeMillis() - row.savedAt > FEED_TTL) return
+        val cached = runCatching {
+            val show = Http.json.decodeFromString<PodcastShow>(row.showJson)
+            val episodes = Http.json.decodeFromString<List<PodcastEpisode>>(row.episodesJson)
+            show to episodes
+        }.getOrNull() ?: return
+        val cur = _show.value
+        // Only a feed that is still waiting counts; an already-live list
+        // (or another show) wins.
+        if (cur.show?.feedUrl == feedUrl && cur.episodes.isEmpty()) {
+            _show.value = cur.copy(show = cached.first, episodes = cached.second)
+        }
+    }
+
+    private fun snapshotFeed(show: PodcastShow, episodes: List<PodcastEpisode>) {
+        scope.launch {
+            runCatching {
+                cache.putFeed(
+                    PodcastFeedCacheEntity(
+                        feedUrl = show.feedUrl,
+                        showJson = Http.json.encodeToString(show),
+                        episodesJson = Http.json.encodeToString(episodes),
+                        savedAt = System.currentTimeMillis(),
+                    )
+                )
             }
         }
     }
@@ -285,5 +377,8 @@ private var chartCursor: List<String> = emptyList()
     private companion object {
         /** Close enough to the end to call it listened. */
         const val NEAR_END = 30_000L
+
+        /** How long a cached feed is worth showing while it refreshes. */
+        const val FEED_TTL = 12L * 60 * 60 * 1000
     }
 }

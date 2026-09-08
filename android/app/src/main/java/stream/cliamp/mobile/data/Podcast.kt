@@ -43,6 +43,7 @@ data class PodcastShow(
  * the episode list is the only screen that shows them, and it holds the real
  * episodes anyway.
  */
+@Serializable
 data class PodcastEpisode(
     val guid: String,
     val title: String,
