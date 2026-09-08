@@ -38,6 +38,9 @@ object StationArtSource {
     /** Thumbnails (row icons, the mini player) never need full detail. */
     private const val TARGET_SMALL = 96
 
+    /** A stored cover is trusted this long before the network is asked again. */
+    private const val DISK_TTL_MS = 7L * 24 * 60 * 60 * 1000
+
     /** Formats BitmapFactory cannot decode, however cheerfully they are served.
      * ICO is served as image/x-icon or image/vnd.microsoft.icon and decodes
      * fine, so only SVG stays on the block list. */
@@ -109,7 +112,7 @@ object StationArtSource {
         val bmp = if (station.source == StationSource.Local) {
             embeddedArt(station.url, TARGET)
         } else {
-            cover(station, ::download)
+            disk(station.id, TARGET) ?: cover(station) { url, save -> download(url, save) }
         }
         if (bmp == null) noteMiss(station.id) else bitmaps.put(station.id, bmp)
         return bmp
@@ -128,7 +131,7 @@ object StationArtSource {
         val bmp = if (station.source == StationSource.Local) {
             embeddedArt(station.url, TARGET_SMALL)
         } else {
-            cover(station, ::downloadSmall)
+            disk(station.id, TARGET_SMALL) ?: cover(station) { url, save -> downloadSmall(url, save) }
         }
         if (bmp != null) smallBitmaps.put(station.id, bmp)
         return bmp
@@ -138,15 +141,17 @@ object StationArtSource {
      * The station's cover: the og:image on its homepage first, then the
      * favicon the directory recorded. A discovered URL that refuses to decode
      * is forgotten, so the next attempt is never pinned to a dead link and
-     * the fallback to the favicon happens on the spot.
+     * the fallback to the favicon happens on the spot. Anything that decodes
+     * is written to disk under [station]'s id, so a later launch reads it
+     * back without the network.
      */
-    private suspend fun cover(station: Station, fetch: suspend (String) -> Bitmap?): Bitmap? {
+    private suspend fun cover(station: Station, fetch: suspend (String, String?) -> Bitmap?): Bitmap? {
         val url = imageUrl(station) ?: return null
-        val bmp = fetch(url)
+        val bmp = fetch(url, station.id)
         if (bmp != null) return bmp
         resolved.remove(station.id)
         val fav = station.favicon
-        return if (fav.startsWith("http") && fav != url) fetch(fav) else null
+        return if (fav.startsWith("http") && fav != url) fetch(fav, station.id) else null
     }
 
     /**
@@ -158,7 +163,7 @@ object StationArtSource {
         if (url.isBlank()) return null
         bitmaps.get(url)?.let { return it }
         if (isOut(url)) return null
-        val bmp = download(url)
+        val bmp = disk(url, TARGET) ?: download(url, save = url)
         if (bmp == null) noteMiss(url) else bitmaps.put(url, bmp)
         return bmp
     }
@@ -170,7 +175,7 @@ object StationArtSource {
         if (url.isBlank()) return null
         smallBitmaps.get(url)?.let { return it }
         if (isOut(url)) return null
-        val bmp = downloadSmall(url)
+        val bmp = disk(url, TARGET_SMALL) ?: downloadSmall(url, save = url)
         if (bmp == null) noteMiss(url) else smallBitmaps.put(url, bmp)
         return bmp
     }
@@ -222,7 +227,7 @@ object StationArtSource {
         URI(base).resolve(ref.trim()).toString().takeIf { it.startsWith("http") }
     }.getOrNull()
 
-    private suspend fun download(url: String): Bitmap? = withContext(Dispatchers.IO) {
+    private suspend fun download(url: String, save: String? = null): Bitmap? = withContext(Dispatchers.IO) {
         runCatching {
             val req = Request.Builder().url(url).header("User-Agent", Http.USER_AGENT).build()
             Http.client.newCall(req).execute().use { r ->
@@ -231,12 +236,13 @@ object StationArtSource {
                 if (ct.isNotEmpty() && (!ct.startsWith("image/") || ct in undecodable)) return@use null
                 val bytes = r.body.byteStream().readAtMost(MAX_IMAGE) ?: return@use null
                 if (bytes.size < 64) return@use null
+                save?.let { runCatching { coverFile(it).writeBytes(bytes) } }
                 decodeScaled(bytes, TARGET)
             }
         }.getOrNull()
     }
 
-    private suspend fun downloadSmall(url: String): Bitmap? = withContext(Dispatchers.IO) {
+    private suspend fun downloadSmall(url: String, save: String? = null): Bitmap? = withContext(Dispatchers.IO) {
         runCatching {
             val req = Request.Builder().url(url).header("User-Agent", Http.USER_AGENT).build()
             Http.client.newCall(req).execute().use { r ->
@@ -245,9 +251,23 @@ object StationArtSource {
                 if (ct.isNotEmpty() && (!ct.startsWith("image/") || ct in undecodable)) return@use null
                 val bytes = r.body.byteStream().readAtMost(MAX_IMAGE) ?: return@use null
                 if (bytes.size < 64) return@use null
+                save?.let { runCatching { coverFile(it).writeBytes(bytes) } }
                 decodeScaled(bytes, TARGET_SMALL)
             }
         }.getOrNull()
+    }
+
+    /**
+     * A cover stored on a previous launch, decoded at [target]. Returns null
+     * when there is nothing on disk or it is older than [DISK_TTL_MS], in
+     * which case the caller refetches; a stale station's icon changing should
+     * eventually win over an ever-fresher copy of the old one.
+     */
+    private fun disk(key: String, target: Int): Bitmap? {
+        val f = coverFile(key)
+        if (!f.isFile) return null
+        if (System.currentTimeMillis() - f.lastModified() > DISK_TTL_MS) return null
+        return runCatching { decodeFile(f.absolutePath, target) }.getOrNull()
     }
 
     /** Reads up to [limit], and gives up rather than buffering something huge. */
