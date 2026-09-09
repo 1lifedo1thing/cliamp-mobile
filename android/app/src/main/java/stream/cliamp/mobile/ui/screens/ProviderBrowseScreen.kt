@@ -40,13 +40,11 @@ import stream.cliamp.mobile.data.provider.ProviderArtist
 import stream.cliamp.mobile.data.provider.ProviderTrack
 import stream.cliamp.mobile.data.provider.browseClient
 import stream.cliamp.mobile.data.provider.toStation
+import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
-import stream.cliamp.mobile.ui.components.OverflowButton
-import stream.cliamp.mobile.ui.components.OverflowItem
-import stream.cliamp.mobile.ui.components.OverflowMenu
 import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.theme.CliampShape
@@ -83,8 +81,6 @@ fun ProviderBrowseScreen(
     onEdit: () -> Unit,
     onPlay: (Station, List<Station>) -> Unit,
     onOpenPlayer: () -> Unit,
-    onAddToQueue: (Station) -> Unit = {},
-    onPlayNext: (Station) -> Unit = {},
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -156,14 +152,7 @@ fun ProviderBrowseScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    Modifier.microPress { pop() },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(CliampIcons.Prev, "back", Modifier.size(width = 15.dp, height = 12.dp), tint = p.inkSecondary)
-                    Mono("back", CliampType.rowSecondary, p.inkSecondary)
-                }
+                BackChip(onClick = { pop() })
                 // clear of QueueBar
                 Mono(
                     "EDIT",

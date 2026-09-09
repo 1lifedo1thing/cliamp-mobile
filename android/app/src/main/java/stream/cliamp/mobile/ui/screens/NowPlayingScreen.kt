@@ -8,8 +8,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
@@ -51,7 +49,6 @@ import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.Prefs
-import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.StationSource
@@ -61,6 +58,7 @@ import stream.cliamp.mobile.playback.PlayerState
 import stream.cliamp.mobile.ui.clock
 import stream.cliamp.mobile.ui.compact
 import stream.cliamp.mobile.ui.components.BrickMeter
+import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
@@ -135,7 +133,6 @@ private data class PlayerActions(
 @UnstableApi
 @Composable
 fun NowPlayingScreen(
-    repository: Repository,
     prefs: Prefs,
     player: PlayerConnection,
     onOpenScope: () -> Unit,
@@ -221,7 +218,7 @@ private fun PortraitPlayer(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Chip("‹ back", selected = false, onClick = actions.onBack)
+            BackChip(onClick = actions.onBack)
         }
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
         // it is the first thing to give way. Compose has no shrink factor, so
@@ -327,7 +324,7 @@ private fun LandscapePlayer(
                 Modifier.fillMaxWidth().padding(end = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Chip("‹ back", selected = false, onClick = actions.onBack)
+                BackChip(onClick = actions.onBack)
                 Spacer(Modifier.width(10.dp))
                 PlayerStatusRow(
                     model = model,

@@ -82,8 +82,6 @@ fun StationsScreen(
     favorites: List<Station>,
     onPlay: (Station, List<Station>) -> Unit,
     onToggleFavorite: (Station) -> Unit,
-    onAddToQueue: (Station) -> Unit = {},
-    onPlayNext: (Station) -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     focusDirectory: Boolean = false,
@@ -319,9 +317,6 @@ private fun StationRow(
     favorite: Boolean,
     onPlay: () -> Unit,
     onToggleFavorite: () -> Unit,
-    onAddToQueue: () -> Unit = {},
-    onPlayNext: () -> Unit = {},
-    onReplaceQueue: () -> Unit = onPlay,
 ) {
     val p = LocalPalette.current
     ListRow(

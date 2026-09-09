@@ -37,7 +37,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -60,7 +59,7 @@ import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.data.provider.ProviderStore
 import stream.cliamp.mobile.playback.PlaybackBus
-import stream.cliamp.mobile.ui.components.BackChip
+import stream.cliamp.mobile.ui.components.BackIconChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampTextField
@@ -234,7 +233,7 @@ fun CommandScreen(
                     .padding(top = 10.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                BackChip(onClick = onBack)
+                BackIconChip(onClick = onBack)
                 Spacer(Modifier.width(6.dp))
                 CliampTextField(
                     value = query,

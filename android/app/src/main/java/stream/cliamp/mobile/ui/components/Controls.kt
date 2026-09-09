@@ -2,7 +2,6 @@ package stream.cliamp.mobile.ui.components
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -26,9 +25,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -272,14 +269,25 @@ fun ChipDropdown(
 }
 
 /**
- * The shared back control: a rounded chip with a left arrow, matching the
- * Now Playing collapse chip so every screen's back affordance looks the same.
+ * The back chip every secondary page wears: podcast shows, playlist panes,
+ * provider pages, the player, settings and search all return through this.
  */
 @Composable
 fun BackChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    label: String = "back",
+) {
+    Chip("‹ back", selected = false, onClick = onClick, modifier = modifier)
+}
+
+/**
+ * The icon-only back chip: a left arrow with no label. Search keeps this
+ * denser variant; every other secondary page wears [BackChip].
+ */
+@Composable
+fun BackIconChip(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
     Box(
@@ -289,7 +297,7 @@ fun BackChip(
             .padding(horizontal = 8.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(CliampIcons.Left, label, Modifier.size(width = 16.dp, height = 16.dp), tint = p.ink)
+        Icon(CliampIcons.Left, "back", Modifier.size(width = 16.dp, height = 16.dp), tint = p.ink)
     }
 }
 

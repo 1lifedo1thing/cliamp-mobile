@@ -127,7 +127,6 @@ fun CliampRoot(
     val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
     val reconnect by PlaybackBus.reconnectAttempt.collectAsState()
     val providerAccounts by providers.accounts.collectAsState(initial = emptyList())
-    val queue by player.queue.collectAsState(initial = emptyList())
 
     player.setFallbackSource(recent)
 
@@ -236,9 +235,8 @@ fun CliampRoot(
                 streamTitle = streamTitle,
                 playing = playerState.playing,
                 buffering = playerState.buffering,
-                reconnecting = reconnect,
-                queueCount = queue.size,
-                visualizer = visualizer,
+                    reconnecting = reconnect,
+                    visualizer = visualizer,
                 hasPrev = playerState.hasPrev,
                 hasNext = playerState.hasNext,
                 onPrev = { player.prev() },
@@ -294,8 +292,6 @@ fun CliampRoot(
                             favorites = favorites,
                             onPlay = onPlay,
                             onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
-                            onAddToQueue = { player.addToQueue(it) },
-                            onPlayNext = { player.playNext(it) },
                             onOpenSearch = {
                                 navController.navigate(Command)
                             },
@@ -319,16 +315,11 @@ fun CliampRoot(
                         PodcastsScreen(
                             podcasts = podcasts,
                             prefs = prefs,
-                            current = station,
-                            playing = playerState.playing,
                             countries = repository.countries,
-                            onPlay = onPlay,
                             onOpenShow = { show: PodcastShow ->
                                 podcasts.openShow(show)
                                 navController.navigate(PodcastShowRoute(show.id))
                             },
-                            onAddToQueue = { player.addToQueue(it) },
-                            onPlayNext = { player.playNext(it) },
                             onOpenSearch = { navController.navigate(Command) },
                             onOpenSettings = { navController.navigate(Settings) },
                         )
@@ -361,24 +352,14 @@ fun CliampRoot(
                         LocalScreen(
                             localLibrary = localLibrary,
                             playlists = playlists,
-                            repository = repository,
-                            podcasts = podcasts,
-                            current = station,
-                            playing = playerState.playing,
                             favorites = favorites,
                             recent = recent,
-                            onPlay = onPlay,
-                            onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
-                            onAddToQueue = { player.addToQueue(it) },
-                            onPlayNext = { player.playNext(it) },
-                            onReplaceQueue = { s, from -> player.replaceQueue(s, from) },
                             onOpenProviders = { navController.navigate(LibraryProviders) },
                             onOpenSmart = { kind -> navController.navigate(LibrarySmartPlaylist(kind)) },
                             onOpenPlaylist = { slug -> navController.navigate(LibraryPlaylist(slug)) },
                             onOpenSearch = { navController.navigate(Command) },
                             onOpenSettings = { navController.navigate(Settings) },
                             favScope = favScope,
-                            onFavScopeChange = { favScope = it },
                         )
                     }
                 }
@@ -410,17 +391,12 @@ fun CliampRoot(
                         LibrarySmartPlaylistPane(
                             kindName = kind,
                             localLibrary = localLibrary,
-                            repository = repository,
-                            podcasts = podcasts,
                             current = station,
                             playing = playerState.playing,
                             favorites = favorites,
                             recent = recent,
                             onPlay = onPlay,
                             onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
-                            onAddToQueue = { player.addToQueue(it) },
-                            onPlayNext = { player.playNext(it) },
-                            onReplaceQueue = { s, from -> player.replaceQueue(s, from) },
                             favScope = favScope,
                             onFavScopeChange = { favScope = it },
                             onOpenSongInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
@@ -469,7 +445,6 @@ fun CliampRoot(
             composable<Player> {
                 OverlayCover {
                 NowPlayingScreen(
-                    repository = repository,
                     prefs = prefs,
                     player = player,
                     onOpenScope = { navController.navigate(Scope) },
@@ -561,8 +536,6 @@ fun CliampRoot(
                         },
                         onPlay = onPlay,
                         onOpenPlayer = openPlayer,
-                        onAddToQueue = { player.addToQueue(it) },
-                        onPlayNext = { player.playNext(it) },
                     )
                     }
                 }

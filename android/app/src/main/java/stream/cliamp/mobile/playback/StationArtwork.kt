@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.Typeface
 import androidx.core.content.res.ResourcesCompat
 import stream.cliamp.mobile.R
@@ -224,7 +223,4 @@ object StationArtwork {
     private const val MARK = "#D15D4D"
     private const val CAPTION = "#867E79"
     private const val FRAME = "#3A2A27"
-
-    @Suppress("unused")
-    private val unusedPath = Path()
 }

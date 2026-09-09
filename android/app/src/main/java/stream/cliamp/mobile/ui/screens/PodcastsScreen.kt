@@ -51,7 +51,6 @@ import stream.cliamp.mobile.data.PodcastQuery
 import stream.cliamp.mobile.data.PodcastRepository
 import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.Prefs
-import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.ChipDropdown
@@ -87,13 +86,8 @@ private enum class Pane(val label: String) {
 fun PodcastsScreen(
     podcasts: PodcastRepository,
     prefs: Prefs,
-    current: Station?,
-    playing: Boolean,
     countries: StateFlow<List<CountryCount>>,
-    onPlay: (Station, List<Station>) -> Unit,
     onOpenShow: (PodcastShow) -> Unit,
-    onAddToQueue: (Station) -> Unit = {},
-    onPlayNext: (Station) -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
 ) {

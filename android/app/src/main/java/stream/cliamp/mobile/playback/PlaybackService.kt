@@ -147,9 +147,9 @@ class PlaybackService : MediaSessionService() {
         // favouriting on the lockscreen where they belong.
         scope.launch {
             val conn = (application as CliampApp).player
-            combine(prefs0.favorites, conn.shuffle) { favs, shf ->
+            combine(prefs0.favorites, conn.shuffle) { favs, _ ->
                 val url = PlaybackBus.station.value?.url
-                session?.setMediaButtonPreferences(buttons(favs.any { it.url == url }, shf))
+                session?.setMediaButtonPreferences(buttons(favs.any { it.url == url }))
             }.collect { }
         }
 
@@ -188,7 +188,6 @@ class PlaybackService : MediaSessionService() {
 
     private fun buttons(
         isFavourite: Boolean,
-        isShuffling: Boolean,
     ): ImmutableList<CommandButton> = ImmutableList.of(
         CommandButton.Builder(CommandButton.ICON_PREVIOUS)
             .setDisplayName("Previous")
@@ -227,7 +226,7 @@ class PlaybackService : MediaSessionService() {
                 .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(commands)
-                .setMediaButtonPreferences(buttons(false, false))
+                .setMediaButtonPreferences(buttons(false))
                 .build()
         }
 
@@ -340,7 +339,6 @@ class PlaybackService : MediaSessionService() {
             session?.setMediaButtonPreferences(
                 buttons(
                     favs.any { it.url == station?.url },
-                    (application as CliampApp).player.shuffle.value,
                 )
             )
             val upNext = widgetUpNext(source, station)

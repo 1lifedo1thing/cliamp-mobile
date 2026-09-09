@@ -75,7 +75,6 @@ import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.LocalLibrary
 import stream.cliamp.mobile.data.PlaylistStore
 import stream.cliamp.mobile.data.PodcastRepository
-import stream.cliamp.mobile.data.PodcastEpisode
 import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.data.ShowState
@@ -89,6 +88,7 @@ import stream.cliamp.mobile.data.sortedStations
 import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.data.provider.ProviderCatalog
 import stream.cliamp.mobile.data.provider.ProviderSpec
+import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampTextField
@@ -144,24 +144,14 @@ class SmartPlaylist(val kind: SmartKind, val stations: List<Station>) {
 fun LocalScreen(
     localLibrary: LocalLibrary,
     playlists: PlaylistStore,
-    repository: Repository,
-    podcasts: PodcastRepository,
-    current: Station?,
-    playing: Boolean,
     favorites: List<Station>,
     recent: List<Station>,
-    onPlay: (Station, List<Station>) -> Unit,
-    onToggleFavorite: (Station) -> Unit,
-    onAddToQueue: (Station) -> Unit,
-    onPlayNext: (Station) -> Unit,
-    onReplaceQueue: (Station, List<Station>) -> Unit = { s, _ -> onPlay(s, emptyList()) },
     onOpenProviders: () -> Unit = {},
     onOpenSmart: (String) -> Unit = {},
     onOpenPlaylist: (String) -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     favScope: FavScope = FavScope.All,
-    onFavScopeChange: (FavScope) -> Unit = {},
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
@@ -178,18 +168,6 @@ fun LocalScreen(
     val pinnedSlugs by playlists.pinnedSlugs.collectAsState(initial = emptySet())
     val pinnedPlaylists = allPlaylists.filter { it.station.slug in pinnedSlugs }
     val unpinnedPlaylists = allPlaylists.filterNot { it.station.slug in pinnedSlugs }
-
-    val cliamp by repository.cliamp.collectAsState(initial = emptyList())
-    val directory by repository.directory.collectAsState(initial = DirectoryState())
-    val subscriptions by podcasts.subscriptions.collectAsState(initial = emptyList())
-    // Everything the "stations" add-tab offers at once: cliamp's channels, the
-    // loaded directory page and radio favourites, keyed by station id.
-    val radioStations = remember(cliamp, directory.stations, favorites) {
-        val favRadio = favorites.filterNot {
-            it.source == StationSource.Local || it.source == StationSource.Podcast
-        }
-        (cliamp + directory.stations + favRadio).distinctBy { it.id }
-    }
 
     val audioPerm = if (Build.VERSION.SDK_INT >= 33)
         Manifest.permission.READ_MEDIA_AUDIO
@@ -269,11 +247,6 @@ fun LocalScreen(
                     pinnedPlaylists = pinnedPlaylists,
                     playlists = unpinnedPlaylists,
                     songs = songs,
-                    current = current,
-                    playing = playing,
-                    onPlay = onPlay,
-                    onToggleFavorite = onToggleFavorite,
-                    favorites = favorites.map { it.url }.toSet(),
                     creating = creatingName,
                     renamingSlug = renamingSlug,
                     editText = nameText,
@@ -370,7 +343,7 @@ fun LibraryProvidersPane(
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             chips = {
-                Chip("‹ back", selected = false, onClick = onBack)
+                BackChip(onClick = onBack)
             },
         ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -394,17 +367,12 @@ fun LibraryProvidersPane(
 fun LibrarySmartPlaylistPane(
     kindName: String,
     localLibrary: LocalLibrary,
-    repository: Repository,
-    podcasts: PodcastRepository,
     current: Station?,
     playing: Boolean,
     favorites: List<Station>,
     recent: List<Station>,
     onPlay: (Station, List<Station>) -> Unit,
     onToggleFavorite: (Station) -> Unit,
-    onAddToQueue: (Station) -> Unit,
-    onPlayNext: (Station) -> Unit,
-    onReplaceQueue: (Station, List<Station>) -> Unit = { s, _ -> onPlay(s, emptyList()) },
     favScope: FavScope = FavScope.All,
     onFavScopeChange: (FavScope) -> Unit = {},
     onOpenSongInfo: (Station) -> Unit = {},
@@ -447,7 +415,7 @@ fun LibrarySmartPlaylistPane(
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             chips = {
-                Chip("‹ back", selected = false, onClick = onBack)
+                BackChip(onClick = onBack)
             },
         ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -462,9 +430,6 @@ fun LibrarySmartPlaylistPane(
                         onToggleFavorite = onToggleFavorite,
                         favorites = favorites.map { it.url }.toSet(),
                         loading = loading,
-                        onPlayNext = onPlayNext,
-                        onAddToQueue = onAddToQueue,
-                        onReplaceQueue = onReplaceQueue,
                         favScope = favScope,
                         onFavScopeChange = onFavScopeChange,
                         onInfo = onOpenSongInfo,
@@ -519,7 +484,7 @@ fun LibraryPlaylistPane(
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             chips = {
-                Chip("‹ back", selected = false, onClick = onBack)
+                BackChip(onClick = onBack)
                 if (pl != null) {
                     Chip("add", selected = false, onClick = { adding = true })
                     Chip("set cover", selected = false, onClick = { coverLauncher.launch("image/*") })
@@ -623,11 +588,6 @@ private fun PlaylistList(
     pinnedPlaylists: List<PlaylistStore.Playlist>,
     playlists: List<PlaylistStore.Playlist>,
     songs: List<Station>,
-    current: Station?,
-    playing: Boolean,
-    onPlay: (Station, List<Station>) -> Unit,
-    onToggleFavorite: (Station) -> Unit,
-    favorites: Set<String>,
     creating: Boolean,
     renamingSlug: String?,
     editText: String,
@@ -719,7 +679,6 @@ private fun PlaylistList(
                 } else if (pinnedGrid) {
                     PlaylistTile(
                         pl = pl,
-                        songs = songs,
                         pinned = true,
                         onOpen = onOpen,
                         onEdit = { onBeginRename(pl.station.slug) },
@@ -765,7 +724,6 @@ private fun PlaylistList(
                 } else if (playlistsGrid) {
                     PlaylistTile(
                         pl = pl,
-                        songs = songs,
                         pinned = false,
                         onOpen = onOpen,
                         onEdit = { onBeginRename(pl.station.slug) },
@@ -958,7 +916,6 @@ private fun PlaylistRow(
 @Composable
 private fun PlaylistTile(
     pl: PlaylistStore.Playlist,
-    songs: List<Station>,
     pinned: Boolean,
     onOpen: (PlaylistStore.Playlist) -> Unit,
     onEdit: () -> Unit,
@@ -1603,9 +1560,6 @@ private fun SmartPlaylistDetail(
     onToggleFavorite: (Station) -> Unit,
     favorites: Set<String>,
     loading: Boolean = false,
-    onPlayNext: (Station) -> Unit = {},
-    onAddToQueue: (Station) -> Unit = {},
-    onReplaceQueue: (Station, List<Station>) -> Unit = { s, _ -> onPlay(s, emptyList()) },
     favScope: FavScope = FavScope.All,
     onFavScopeChange: (FavScope) -> Unit = {},
     onInfo: (Station) -> Unit = {},
@@ -1835,7 +1789,7 @@ private fun SongInfoView(
                         .padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
-                    Chip("‹ back", selected = false, onClick = onDismiss)
+                    BackChip(onClick = onDismiss)
                 }
             }
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {

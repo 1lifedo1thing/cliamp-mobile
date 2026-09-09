@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,8 +38,8 @@ import stream.cliamp.mobile.R
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.widget.CliampWidgetReceiver
+import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
-import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampToggle
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
@@ -93,7 +92,7 @@ fun SettingsScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Chip("‹ back", selected = false, onClick = onBack)
+            BackChip(onClick = onBack)
         }
         Box(Modifier.padding(horizontal = Gutter, vertical = 4.dp)) {
             Mono("Settings", CliampType.screenTitle, p.ink)

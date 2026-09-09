@@ -98,11 +98,6 @@ class PlayerConnection(
     private val _shuffle = MutableStateFlow(false)
     val shuffle: StateFlow<Boolean> = _shuffle.asStateFlow()
 
-    /**
-     * The (re)shuffled copy of [_baseSource] currently being played so toggling
-     * shuffle off can restore the original order; null when shuffle is off.
-     */
-    private var _shuffledSource: List<Station>? = null
 
     /**
      * Logical index (into [_source]) of the first item held in [_queue]. When
@@ -434,7 +429,6 @@ class PlayerConnection(
             // must leave that bookkeeping untouched.
             if (!preserveOrder) {
                 _baseSource = from
-                _shuffledSource = if (_shuffle.value && from.size > 1) order else null
             }
             _source = order
             val srcIdxO = order.indexOfFirst { it.url == station.url }.coerceAtLeast(0)
@@ -628,11 +622,9 @@ class PlayerConnection(
             for (i in base.indices) {
                 if (i == abs) reordered.add(current) else reordered.add(rest[ri++])
             }
-            _shuffledSource = reordered
             _baseSource = base
             _source = reordered
         } else {
-            _shuffledSource = null
             _baseSource = base
             _source = base
         }
@@ -953,7 +945,6 @@ class PlayerConnection(
         _queue.value = emptyList()
         _queueIndex.value = -1
         _baseSource = emptyList()
-        _shuffledSource = null
         _source = emptyList()
         sync()
     }

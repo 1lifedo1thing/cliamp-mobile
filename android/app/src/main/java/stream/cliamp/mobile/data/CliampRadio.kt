@@ -1,7 +1,5 @@
 package stream.cliamp.mobile.data
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import stream.cliamp.mobile.net.Http
 
 /**
