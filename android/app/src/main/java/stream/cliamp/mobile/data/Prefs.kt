@@ -176,6 +176,10 @@ class Prefs(private val context: Context) {
     private val sortOverrides = MutableStateFlow<Map<String, Int>>(emptyMap())
     private var sortPersist: Job? = null
 
+    /** The saved theme, read synchronously at startup (see init) so the very
+     * first frame already wears it instead of flashing the default. */
+    val initialPalette: String
+
     init {
         // Read the whole preferences file once, on construction (Application
         // startup, before any UI exists) rather than arriving at the values
@@ -186,6 +190,7 @@ class Prefs(private val context: Context) {
         // The settings file is a few bytes - this blocking read is
         // milliseconds, and it happens before the activity exists.
         val p = runBlocking { context.settingsStore.data.first() }
+        initialPalette = p[K.palette] ?: "system"
         sortOverrides.value = p[K.playlistSorts]?.let { raw ->
             runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
         } ?: emptyMap()
