@@ -599,6 +599,9 @@ private fun sourceLine(shownStation: Station?): String {
 @Composable
 private fun ArtGlow(modifier: Modifier = Modifier) {
     val p = LocalPalette.current
+    // A light ground washes the wash out, so the halo runs stronger there.
+    val coreAlpha = if (p.dark) 0.16f else 0.30f
+    val midAlpha = if (p.dark) 0.05f else 0.10f
     Box(
         modifier
             .graphicsLayer {
@@ -607,8 +610,8 @@ private fun ArtGlow(modifier: Modifier = Modifier) {
             }
             .background(
                 Brush.radialGradient(
-                    0f to p.accent.copy(alpha = 0.16f),
-                    0.7f to p.accent.copy(alpha = 0.05f),
+                    0f to p.accent.copy(alpha = coreAlpha),
+                    0.7f to p.accent.copy(alpha = midAlpha),
                     1f to androidx.compose.ui.graphics.Color.Transparent,
                 ),
                 CircleShape,
