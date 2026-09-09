@@ -34,6 +34,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -98,7 +99,7 @@ fun PodcastsScreen(
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
-    var pane by remember { mutableStateOf(Pane.All) }
+    var pane by rememberSaveable { mutableStateOf(Pane.All) }
     val subsGrid by prefs.subsGrid.collectAsState(initial = prefs.subsGrid.value)
     val podDirectoryGrid by prefs.podDirectoryGrid.collectAsState(initial = prefs.podDirectoryGrid.value)
 

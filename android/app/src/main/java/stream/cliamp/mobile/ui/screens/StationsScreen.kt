@@ -34,6 +34,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,7 +91,7 @@ fun StationsScreen(
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
-    var source by remember { mutableStateOf(Source.All) }
+    var source by rememberSaveable { mutableStateOf(Source.All) }
     val cliampGrid by prefs.cliampGrid.collectAsState(initial = prefs.cliampGrid.value)
     val directoryGrid by prefs.directoryGrid.collectAsState(initial = prefs.directoryGrid.value)
 

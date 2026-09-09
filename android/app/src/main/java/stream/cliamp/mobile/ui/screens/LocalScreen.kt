@@ -46,28 +46,24 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.window.Popup
-import kotlin.math.absoluteValue
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -103,7 +99,6 @@ import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.OverflowButton
 import stream.cliamp.mobile.ui.components.OverflowItem
 import stream.cliamp.mobile.ui.components.OverflowMenu
-import stream.cliamp.mobile.ui.components.BackPage
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.components.ArtPlate
@@ -115,7 +110,7 @@ import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
 
 /** The pinned, auto-populated smart playlists on the library tab. */
-private enum class SmartKind(val label: String) {
+enum class SmartKind(val label: String) {
     LocalSongs("local songs"),
     Favorites("favorites"),
     RecentlyPlayed("recently played");
@@ -124,12 +119,12 @@ private enum class SmartKind(val label: String) {
 }
 
 /** The favourites playlist's type sub-tabs. */
-private enum class FavScope(val label: String) {
+enum class FavScope(val label: String) {
     All("all"), Local("local"), Stations("stations"), Pods("podcasts")
 }
 
 /** A derived smart playlist: a label plus its current member stations. */
-private class SmartPlaylist(val kind: SmartKind, val stations: List<Station>) {
+class SmartPlaylist(val kind: SmartKind, val stations: List<Station>) {
     val label: String get() = kind.label
     val key: String get() = kind.key
 }
@@ -138,6 +133,12 @@ private class SmartPlaylist(val kind: SmartKind, val stations: List<Station>) {
  * The LIB tab's local half. Reads the phone's audio library via [LocalLibrary]
  * and lets the user play any song (through the normal Station pipeline, so
  * queue/prev/next/artwork all just work) and build playlists with covers.
+ *
+ * This renders the list only. Detail pages (providers, smart playlist,
+ * playlist, song info) are separate navigation destinations
+ * ([LibraryProvidersPane], [LibrarySmartPlaylistPane], [LibraryPlaylistPane],
+ * [LibrarySongInfoPane]) so the back gesture animates them with the native
+ * slide+scale transition while the mini player stays visible beneath.
  */
 @Composable
 fun LocalScreen(
@@ -154,35 +155,21 @@ fun LocalScreen(
     onAddToQueue: (Station) -> Unit,
     onPlayNext: (Station) -> Unit,
     onReplaceQueue: (Station, List<Station>) -> Unit = { s, _ -> onPlay(s, emptyList()) },
-    onOpenPlayer: () -> Unit,
-    providers: List<ProviderAccount> = emptyList(),
-    showProviders: Boolean = false,
-    onShowProviders: (Boolean) -> Unit = {},
-    onOpenProvider: (ProviderAccount) -> Unit = {},
-    onAddProvider: (ProviderSpec) -> Unit = {},
-    onRemoveProvider: (ProviderAccount) -> Unit = {},
+    onOpenProviders: () -> Unit = {},
+    onOpenSmart: (String) -> Unit = {},
+    onOpenPlaylist: (String) -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
-    // False while an overlay (player, queue, settings…) is on top of this tab.
-    // The tab stays composed underneath so its navigation state survives, but
-    // its own back handling must stand down or it would steal the back press
-    // from the overlay.
-    backEnabled: Boolean = true,
+    favScope: FavScope = FavScope.All,
+    onFavScopeChange: (FavScope) -> Unit = {},
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var openSlug by remember { mutableStateOf<String?>(null) }
-    var openSmart by remember { mutableStateOf<SmartKind?>(null) }
-    var addingTo by remember { mutableStateOf<String?>(null) }
-    var creatingName by remember { mutableStateOf(false) }
-    var renamingSlug by remember { mutableStateOf<String?>(null) }
-    var nameText by remember { mutableStateOf("") }
-    // The per-song ⋮ menu: "info" opens the full song detail, "remove" hands
-    // the file to the OS delete sheet (or drops it directly on old Android).
-    var infoFor by remember { mutableStateOf<Station?>(null) }
-    var pendingDelete by remember { mutableStateOf<Station?>(null) }
+    var creatingName by rememberSaveable { mutableStateOf(false) }
+    var renamingSlug by rememberSaveable { mutableStateOf<String?>(null) }
+    var nameText by rememberSaveable { mutableStateOf("") }
 
     val songs by localLibrary.songs.collectAsState()
     val loading by localLibrary.loading.collectAsState()
@@ -217,61 +204,24 @@ fun LocalScreen(
         onPauseOrDispose { }
     }
 
-    val coverLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        openSlug?.let { slug ->
-            val cover = uri?.toString().orEmpty()
-            if (cover.isNotBlank()) scope.launch { playlists.setCover(slug, cover) }
-        }
-    }
-
     LaunchedEffect(haveAudio) {
         if (haveAudio) localLibrary.refresh()
     }
 
     val filtered = songs
-    val showing = allPlaylists.firstOrNull { it.station.slug == openSlug }
     // Playing starts minimized; the full player only opens when the mini-player
     // bar at the bottom is tapped.
 
     // The favourites sub-tab is chosen while browsing the list; the favourite's
     // pinned tile collage follows it, so the covers preview the filtered scope.
+    // Hoisted to the navigation owner so the list and the smart detail pane
+    // stay on the same scope.
     val prefs = (context.applicationContext as CliampApp).prefs
     val localSort by prefs.playlistSort("local-songs")
         .collectAsState(initial = prefs.playlistSortValue("local-songs"))
     // Grid/list layout for each playlist section, remembered on disk.
     val pinnedGrid by prefs.pinnedGrid.collectAsState(initial = prefs.pinnedGrid.value)
     val playlistsGrid by prefs.playlistsGrid.collectAsState(initial = prefs.playlistsGrid.value)
-    var favScope by remember { mutableStateOf(FavScope.All) }
-
-    // Result of the OS "delete these files from the device?" sheet. Only the
-    // confirmed case drops the song; a cancel leaves the file untouched.
-    val favoriteUrls = remember(favorites) { favorites.mapTo(HashSet()) { it.url } }
-    val dropLocal: (Station) -> Unit = { s ->
-        scope.launch {
-            localLibrary.removeLocal(s)
-            if (s.url in favoriteUrls) prefs.removeFavorite(s)
-            if (infoFor?.url == s.url) infoFor = null
-        }
-    }
-    val deleteLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartIntentSenderForResult()
-    ) { res ->
-        pendingDelete?.let { s ->
-            if (res.resultCode == Activity.RESULT_OK) dropLocal(s)
-            pendingDelete = null
-        }
-    }
-    val removeLocalSong: (Station) -> Unit = { s ->
-        val start = localLibrary.deleteRequest(s)
-        if (start != null) {
-            pendingDelete = s
-            deleteLauncher.launch(IntentSenderRequest.Builder(start).build())
-        } else {
-            dropLocal(s)
-        }
-    }
 
     // Pinned smart playlists — auto-populated from global state, non-removable.
     // "local songs" is always at the very top. Their tile collages preview the
@@ -294,29 +244,19 @@ fun LocalScreen(
             SmartPlaylist(SmartKind.RecentlyPlayed, recent),
         )
     }
-    val openSmartPlaylist = smartPlaylists.firstOrNull { it.kind == openSmart }
-    // ---- base page (always composed, previews itself beneath each overlay) ----
-    // The preview is fed 1:1 by whichever BackPage is on top: the base list
-    // shrinks and dims with the gesture and rides back up on the pane's own
-    // commit and revoke glides, so it matches the same motion everywhere.
-    var panePreview by remember { mutableFloatStateOf(0f) }
+    // ---- base page (always composed) ----
     Box(
         Modifier
             .fillMaxSize()
-            .background(p.ground)
-            .graphicsLayer {
-                val s = 0.05f * panePreview.absoluteValue
-                scaleX = 1f - s
-                scaleY = 1f - s
-            },
+            .background(p.ground),
     ) {
     MainLayout(
             title = "Library",
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             chips = {
-                Chip("playlists", selected = !showProviders, onClick = { onShowProviders(false) })
-                Chip("providers", selected = showProviders, onClick = { onShowProviders(true) })
+                Chip("playlists", selected = true, onClick = {})
+                Chip("providers", selected = false, onClick = onOpenProviders)
             },
         ) {
 
@@ -352,12 +292,11 @@ fun LocalScreen(
                     onDelete = { slug ->
                         scope.launch { playlists.delete(slug) }
                         if (renamingSlug == slug) renamingSlug = null
-                        if (openSlug == slug) openSlug = null
                     },
-                    onAddSongs = { slug -> openSlug = slug; addingTo = slug },
+                    onAddSongs = { slug -> onOpenPlaylist(slug) },
                     onPin = { slug, pinned -> scope.launch { playlists.setPinned(slug, pinned) } },
-                    onOpen = { openSlug = it.station.slug },
-                    onOpenSmart = { openSmart = it.kind },
+                    onOpen = { onOpenPlaylist(it.station.slug) },
+                    onOpenSmart = { onOpenSmart(it.kind.name) },
                     pinnedGrid = pinnedGrid,
                     onTogglePinnedGrid = { scope.launch { prefs.setPinnedGrid(!pinnedGrid) } },
                     playlistsGrid = playlistsGrid,
@@ -367,32 +306,71 @@ fun LocalScreen(
             }
         }
         }
-
-        // A dim veil over the base list so it reads as sitting "under" whatever
-        // pane is on top, riding with the gesture and clearing as the pane
-        // leaves - the same cue the tab gets beneath an overlay. Drawn above
-        // the host's corner icons (zIndex 3) so the icons dim with the list.
-        Box(
-            Modifier
-                .fillMaxSize()
-                .zIndex(3f)
-                .graphicsLayer { alpha = 0.14f * panePreview.absoluteValue }
-                .background(Color.Black),
-        )
     }
+}
 
-    // ---- non-main pages as overlays, each riding predictive back ----
-    // Each pane draws itself above the host's corner icons (zIndex 4): a page
-    // is on top of everything that came from it, the corner included.
+/**
+ * Shared delete helper: hands the file to the OS delete sheet (or drops it
+ * directly on old Android). Only the confirmed case drops the song.
+ */
+@Composable
+private fun rememberRemoveLocalSong(
+    localLibrary: LocalLibrary,
+    onGone: (Station) -> Unit = {},
+): (Station) -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val prefs = (context.applicationContext as CliampApp).prefs
+    val favorites by prefs.favorites.collectAsState(initial = emptyList())
+    val favoriteUrls = remember(favorites) { favorites.mapTo(HashSet()) { it.url } }
+    var pendingDelete by remember { mutableStateOf<Station?>(null) }
+    val dropLocal: (Station) -> Unit = { s ->
+        scope.launch {
+            localLibrary.removeLocal(s)
+            if (s.url in favoriteUrls) prefs.removeFavorite(s)
+            onGone(s)
+        }
+    }
+    val deleteLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { res ->
+        pendingDelete?.let { s ->
+            if (res.resultCode == Activity.RESULT_OK) dropLocal(s)
+            pendingDelete = null
+        }
+    }
+    return remember(localLibrary) {
+        { s: Station ->
+            val start = localLibrary.deleteRequest(s)
+            if (start != null) {
+                pendingDelete = s
+                deleteLauncher.launch(IntentSenderRequest.Builder(start).build())
+            } else {
+                dropLocal(s)
+            }
+        }
+    }
+}
 
-    // Providers pane
-    BackPage(visible = showProviders, enabled = backEnabled, onBack = { onShowProviders(false) }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
+/** Providers as a navigation pane: connected accounts, then every addable type. */
+@Composable
+fun LibraryProvidersPane(
+    providers: List<ProviderAccount>,
+    onBack: () -> Unit,
+    onOpenProvider: (ProviderAccount) -> Unit,
+    onAddProvider: (ProviderSpec) -> Unit,
+    onRemoveProvider: (ProviderAccount) -> Unit,
+    onOpenSearch: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+) {
+    val p = LocalPalette.current
+    Box(Modifier.fillMaxSize().background(p.ground)) {
         MainLayout(
             title = "providers",
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             chips = {
-                Chip("‹ back", selected = false, onClick = { onShowProviders(false) })
+                Chip("‹ back", selected = false, onClick = onBack)
             },
         ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -405,19 +383,77 @@ fun LocalScreen(
             }
         }
     }
+}
 
-    // Smart playlist detail pane
-    BackPage(visible = openSmartPlaylist != null, enabled = backEnabled, onBack = { openSmart = null }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
-MainLayout(
-                    title = openSmartPlaylist?.label ?: "playlist",
-                    onOpenSearch = onOpenSearch,
-                    onOpenSettings = onOpenSettings,
-                    chips = {
-                        Chip("‹ back", selected = false, onClick = { openSmart = null })
-                    },
-                ) {
+/**
+ * One pinned smart playlist as a navigation pane. Derives its members from
+ * the same sources as the library list so the tile collage and the detail
+ * agree exactly.
+ */
+@Composable
+fun LibrarySmartPlaylistPane(
+    kindName: String,
+    localLibrary: LocalLibrary,
+    repository: Repository,
+    podcasts: PodcastRepository,
+    current: Station?,
+    playing: Boolean,
+    favorites: List<Station>,
+    recent: List<Station>,
+    onPlay: (Station, List<Station>) -> Unit,
+    onToggleFavorite: (Station) -> Unit,
+    onAddToQueue: (Station) -> Unit,
+    onPlayNext: (Station) -> Unit,
+    onReplaceQueue: (Station, List<Station>) -> Unit = { s, _ -> onPlay(s, emptyList()) },
+    favScope: FavScope = FavScope.All,
+    onFavScopeChange: (FavScope) -> Unit = {},
+    onOpenSongInfo: (Station) -> Unit = {},
+    onBack: () -> Unit,
+    onOpenSearch: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+) {
+    val p = LocalPalette.current
+    val context = LocalContext.current
+    val kind = remember(kindName) {
+        SmartKind.entries.firstOrNull { it.name == kindName }
+    }
+    val songs by localLibrary.songs.collectAsState()
+    val loading by localLibrary.loading.collectAsState()
+    val appPrefs = (context.applicationContext as CliampApp).prefs
+    val localSort by appPrefs.playlistSort("local-songs")
+        .collectAsState(initial = appPrefs.playlistSortValue("local-songs"))
+    val removeLocalSong = rememberRemoveLocalSong(localLibrary)
+    val smartPlaylists = remember(songs, favorites, recent, localSort, favScope) {
+        val local = sortedStations(songs, localSort)
+        val favs = if (favScope == FavScope.All) favorites
+        else favorites.filter { s ->
+            when (favScope) {
+                FavScope.Local -> s.source == StationSource.Local
+                FavScope.Stations -> s.source != StationSource.Local && s.source != StationSource.Podcast
+                FavScope.Pods -> s.source == StationSource.Podcast
+                FavScope.All -> true
+            }
+        }
+        listOf(
+            SmartPlaylist(SmartKind.LocalSongs, local),
+            SmartPlaylist(SmartKind.Favorites, favs),
+            SmartPlaylist(SmartKind.RecentlyPlayed, recent),
+        )
+    }
+    val pl = smartPlaylists.firstOrNull { it.kind == kind }
+    Box(Modifier.fillMaxSize().background(p.ground)) {
+        MainLayout(
+            title = pl?.label ?: "playlist",
+            onOpenSearch = onOpenSearch,
+            onOpenSettings = onOpenSettings,
+            chips = {
+                Chip("‹ back", selected = false, onClick = onBack)
+            },
+        ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                openSmartPlaylist?.let { pl ->
+                if (pl == null) {
+                    CenterNote("no such playlist", p.inkTertiary)
+                } else {
                     SmartPlaylistDetail(
                         pl = pl,
                         current = current,
@@ -430,36 +466,75 @@ MainLayout(
                         onAddToQueue = onAddToQueue,
                         onReplaceQueue = onReplaceQueue,
                         favScope = favScope,
-                        onFavScopeChange = { favScope = it },
-                        onInfo = { infoFor = it },
+                        onFavScopeChange = onFavScopeChange,
+                        onInfo = onOpenSongInfo,
                         onRemove = removeLocalSong,
                     )
                 }
             }
         }
     }
+}
 
-    // Playlist detail pane
-    BackPage(visible = showing != null, enabled = backEnabled, onBack = { openSlug = null }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
+/** One user playlist as a navigation pane, with add-songs and cover editing. */
+@Composable
+fun LibraryPlaylistPane(
+    slug: String,
+    localLibrary: LocalLibrary,
+    playlists: PlaylistStore,
+    repository: Repository,
+    podcasts: PodcastRepository,
+    current: Station?,
+    playing: Boolean,
+    favorites: List<Station>,
+    onPlay: (Station, List<Station>) -> Unit,
+    onBack: () -> Unit,
+    onOpenSearch: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+) {
+    val p = LocalPalette.current
+    val scope = rememberCoroutineScope()
+    var adding by rememberSaveable(slug) { mutableStateOf(false) }
+    val songs by localLibrary.songs.collectAsState()
+    val allPlaylists by playlists.playlists.collectAsState(initial = emptyList())
+    val subscriptions by podcasts.subscriptions.collectAsState(initial = emptyList())
+    val cliamp by repository.cliamp.collectAsState(initial = emptyList())
+    val directory by repository.directory.collectAsState(initial = DirectoryState())
+    val radioStations = remember(cliamp, directory.stations, favorites) {
+        val favRadio = favorites.filterNot {
+            it.source == StationSource.Local || it.source == StationSource.Podcast
+        }
+        (cliamp + directory.stations + favRadio).distinctBy { it.id }
+    }
+    val pl = allPlaylists.firstOrNull { it.station.slug == slug }
+    val coverLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        val cover = uri?.toString().orEmpty()
+        if (cover.isNotBlank()) scope.launch { playlists.setCover(slug, cover) }
+    }
+    Box(Modifier.fillMaxSize().background(p.ground)) {
         MainLayout(
-                    title = showing?.station?.name ?: "playlist",
-                    onOpenSearch = onOpenSearch,
-                    onOpenSettings = onOpenSettings,
-                    chips = {
-                        Chip("‹ back", selected = false, onClick = { openSlug = null })
-                        showing?.let { pl ->
-                            Chip("add", selected = false, onClick = { addingTo = pl.station.slug })
-                            Chip("set cover", selected = false, onClick = { coverLauncher.launch("image/*") })
-                        }
-                    },
-                ) {
+            title = pl?.station?.name ?: "playlist",
+            onOpenSearch = onOpenSearch,
+            onOpenSettings = onOpenSettings,
+            chips = {
+                Chip("‹ back", selected = false, onClick = onBack)
+                if (pl != null) {
+                    Chip("add", selected = false, onClick = { adding = true })
+                    Chip("set cover", selected = false, onClick = { coverLauncher.launch("image/*") })
+                }
+            },
+        ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                showing?.let { pl ->
+                if (pl == null) {
+                    CenterNote("playlist gone", p.inkTertiary)
+                } else {
                     PlaylistDetailShown(
                         playlist = pl,
                         songIds = pl.songIds,
                         playlists = playlists,
-                        localSongs = filtered,
+                        localSongs = songs,
                         radioStations = radioStations,
                         podcasts = podcasts,
                         subscribedShows = subscriptions,
@@ -472,28 +547,49 @@ MainLayout(
                                 else playlists.removeSong(pl.station.slug, s.id)
                             }
                         },
-                        adding = addingTo != null,
-                        doneAdding = { addingTo = null },
+                        adding = adding,
+                        doneAdding = { adding = false },
                     )
                 }
+            }
         }
     }
-    }
+}
 
-    // Song info overlay (on top of whatever pane is open)
-    BackPage(visible = infoFor != null, enabled = backEnabled, onBack = { infoFor = null }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
-        SongInfoView(
-            s = infoFor!!,
-            systemBack = false,
-            onDismiss = { infoFor = null },
-            onToggleFavorite = onToggleFavorite,
-            favorite = infoFor!!.url in favoriteUrls,
-            onRemove = {
-                val s = infoFor!!
-                infoFor = null
-                removeLocalSong(s)
-            },
-        )
+/** One song's full detail as a navigation pane. */
+@Composable
+fun LibrarySongInfoPane(
+    stationUrl: String,
+    localLibrary: LocalLibrary,
+    repository: Repository,
+    favorites: List<Station>,
+    recent: List<Station>,
+    onToggleFavorite: (Station) -> Unit,
+    onBack: () -> Unit,
+) {
+    val p = LocalPalette.current
+    val songs by localLibrary.songs.collectAsState()
+    val cliamp by repository.cliamp.collectAsState(initial = emptyList())
+    val directory by repository.directory.collectAsState(initial = DirectoryState())
+    val station = remember(stationUrl, songs, favorites, recent, cliamp, directory) {
+        (songs + favorites + recent + cliamp + directory.stations)
+            .distinctBy { it.url }
+            .firstOrNull { it.url == stationUrl }
+    }
+    val removeLocalSong = rememberRemoveLocalSong(localLibrary) { onBack() }
+    Box(Modifier.fillMaxSize().background(p.ground)) {
+        if (station == null) {
+            CenterNote("song gone", p.inkTertiary)
+        } else {
+            SongInfoView(
+                s = station,
+                systemBack = false,
+                onDismiss = onBack,
+                onToggleFavorite = onToggleFavorite,
+                favorite = station.url in favorites.map { it.url }.toSet(),
+                onRemove = { removeLocalSong(station) },
+            )
+        }
     }
 }
 

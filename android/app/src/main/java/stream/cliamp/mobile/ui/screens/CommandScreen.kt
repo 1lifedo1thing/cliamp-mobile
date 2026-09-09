@@ -98,6 +98,7 @@ fun CommandScreen(
     localLibrary: LocalLibrary,
     providers: ProviderStore,
     current: Station? = null,
+    playing: Boolean = false,
     onPlay: (Station, List<Station>) -> Unit,
     onOpenScope: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -269,6 +270,7 @@ fun CommandScreen(
                     HitRow(
                         hit = hit,
                         current = current,
+                        playing = playing,
                         term = term,
                         onClick = { open(hit, shown) },
                         accent = p.accent,
@@ -293,7 +295,12 @@ private fun sectionOf(hit: SearchHit): String {
 }
 
 @Composable
-private fun HitArt(hit: SearchHit, accent: androidx.compose.ui.graphics.Color) {
+private fun HitArt(
+    hit: SearchHit,
+    accent: androidx.compose.ui.graphics.Color,
+    active: Boolean = false,
+    playing: Boolean = false,
+) {
     val p = LocalPalette.current
     // Commands, tags and provider rows carry no art; the type glyph is right.
     val station = when (hit) {
@@ -321,7 +328,11 @@ private fun HitArt(hit: SearchHit, accent: androidx.compose.ui.graphics.Color) {
             .clip(RoundedCornerShape(CliampShape.small))
             .then(
                 if (art != null) Modifier.background(p.panel)
-                else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small))
+                else Modifier.border(
+                    1.dp,
+                    if (active) accent else p.chipBorder,
+                    RoundedCornerShape(CliampShape.small),
+                )
             ),
         contentAlignment = Alignment.Center,
     ) {
@@ -330,6 +341,25 @@ private fun HitArt(hit: SearchHit, accent: androidx.compose.ui.graphics.Color) {
         } else {
             Icon(iconOf(hit), null, Modifier.size(15.dp), tint = p.inkTertiary)
         }
+        // The playing station gets the same play/pause badge the station
+        // rows wear, so a hit for what is on now reads as playing here too.
+        if (active) {
+            Box(
+                Modifier
+                    .align(Alignment.Center)
+                    .size(22.dp)
+                    .clip(RoundedCornerShape(CliampShape.tiny))
+                    .background(accent.copy(alpha = 0.92f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (playing) CliampIcons.Pause else CliampIcons.PlayRow,
+                    null,
+                    Modifier.size(11.dp),
+                    tint = p.onAccent,
+                )
+            }
+        }
     }
 }
 
@@ -337,6 +367,7 @@ private fun HitArt(hit: SearchHit, accent: androidx.compose.ui.graphics.Color) {
 private fun HitRow(
     hit: SearchHit,
     current: Station?,
+    playing: Boolean = false,
     term: String,
     onClick: () -> Unit,
     accent: androidx.compose.ui.graphics.Color,
@@ -351,15 +382,16 @@ private fun HitRow(
         is SearchHit.StationHit -> hit.station.url
         else -> null
     }
+    val active = currentUrl != null && current?.url == currentUrl
 
     ListRow(
-        rail = currentUrl != null && current?.url == currentUrl,
+        rail = active,
         onClick = {
             if (enabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             onClick()
         },
         verticalPadding = 10.dp,
-        leading = { HitArt(hit, accent) },
+        leading = { HitArt(hit, accent, active, playing && active) },
         trailing = { Mono(hit.origin, CliampType.meta, p.inkFaint) },
     ) {
         val title = when (hit) {
@@ -382,7 +414,7 @@ private fun HitRow(
         }
         androidx.compose.material3.Text(
             text = highlight(title, fuzzTerm, accent),
-            style = CliampType.rowPrimary.copy(color = p.ink),
+            style = CliampType.rowPrimary.copy(color = if (active) accent else p.ink),
             maxLines = 1,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )

@@ -1,28 +1,43 @@
 package stream.cliamp.mobile.ui
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.zIndex
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navigation
+import androidx.navigation.toRoute
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.absoluteValue
 import stream.cliamp.mobile.data.DirectoryQuery
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.LocalLibrary
@@ -35,11 +50,13 @@ import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.ui.components.CliampTabBar
 import stream.cliamp.mobile.ui.components.CliampTabRail
-import stream.cliamp.mobile.ui.components.BackPage
-import stream.cliamp.mobile.ui.components.PredictiveBackSurface
 import stream.cliamp.mobile.ui.components.Tab
-
 import stream.cliamp.mobile.ui.screens.CommandScreen
+import stream.cliamp.mobile.ui.screens.FavScope
+import stream.cliamp.mobile.ui.screens.LibraryPlaylistPane
+import stream.cliamp.mobile.ui.screens.LibraryProvidersPane
+import stream.cliamp.mobile.ui.screens.LibrarySmartPlaylistPane
+import stream.cliamp.mobile.ui.screens.LibrarySongInfoPane
 import stream.cliamp.mobile.ui.screens.LocalScreen
 import stream.cliamp.mobile.ui.screens.MiniPlayer
 import stream.cliamp.mobile.ui.screens.NowPlayingScreen
@@ -47,34 +64,32 @@ import stream.cliamp.mobile.ui.screens.PodcastShowScreen
 import stream.cliamp.mobile.ui.screens.PodcastsScreen
 import stream.cliamp.mobile.ui.screens.QueueScreen
 import stream.cliamp.mobile.ui.screens.ScopeScreen
-import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.data.provider.ProviderCatalog
 import stream.cliamp.mobile.data.provider.ProviderStore
 import stream.cliamp.mobile.ui.screens.ProviderBrowseScreen
-import stream.cliamp.mobile.ui.screens.ProviderWizard
-
+import stream.cliamp.mobile.ui.screens.ProviderWizard as ProviderWizardScreen
 import stream.cliamp.mobile.ui.screens.SettingsScreen
 import stream.cliamp.mobile.ui.screens.StationsScreen
 import stream.cliamp.mobile.ui.theme.LocalPalette
 
-/** Screens that stack on top of a tab rather than replacing it. */
-private sealed interface Overlay {
-    data object None : Overlay
-    data object Scope : Overlay
-    data object Settings : Overlay
-    data object Queue : Overlay
-    data object Player : Overlay
-    data object Command : Overlay
+/**
+ * Forward push: instant, no transition. Only the way back animates.
+ */
+private val NoPush = EnterTransition.None
 
-    /** The add-provider wizard. [account] non-null means edit rather than add. */
-    data class Wizard(val providerKey: String, val account: ProviderAccount?) : Overlay
+/**
+ * Back pop: the front page slides back out to the right (finger-driven on a
+ * predictive gesture, animated on a button press) while the page beneath
+ * scales back up from slightly small - the native slide+scale return.
+ */
+private val PagePopExit =
+    slideOutHorizontally(tween(280)) { it }
+private val PagePopEnter =
+    scaleIn(tween(280), initialScale = 0.92f)
 
-    /** Browsing one provider's library. */
-    data class Browse(val accountId: String) : Overlay
-}
-
-/** Tabs within the Library screen. */
-private enum class LibSubTab { Library, Providers }
+/** Tab roots switch instantly and never slide away; they only scale back in. */
+private fun rootEnter(): EnterTransition = EnterTransition.None
+private fun rootExit(): ExitTransition = ExitTransition.None
 
 @UnstableApi
 @Composable
@@ -90,45 +105,19 @@ fun CliampRoot(
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
+    val navController = rememberNavController()
+
     var tab by remember { mutableStateOf(Tab.Stations) }
-    // Overlays stack like Android pages: opening one from another (a scope
-    // from the player, an edit from a browse) pushes it, and back pops to the
-    // one it came from. The top is what is drawn over the tab.
-    var overlayStack by remember { mutableStateOf<List<Overlay>>(emptyList()) }
-    val overlay = overlayStack.lastOrNull() ?: Overlay.None
-    val pushOverlay: (Overlay) -> Unit = { overlayStack = overlayStack + it }
-    val popOverlay: () -> Unit = { overlayStack = overlayStack.dropLast(1) }
-    // A one-shot "scroll the Stations tab down to the directory section"
-    // request, raised by tapping a tag in search. Cleared once consumed.
     var focusDirectory by remember { mutableStateOf(false) }
-    // Which Library sub-tab is showing. Lifted here so that closing an overlay
-    // that was opened from the providers pane (add wizard or a provider's browse)
-    // lands back on providers rather than the library list.
-    var libSubTab by remember { mutableStateOf(LibSubTab.Library) }
-    // Which podcast show's episode list is open on the Podcasts tab, and the
-    // preview that drives its back gesture. The show is a pane of its tab, not
-    // an overlay, so the tab strip and mini bar stay up around it; the pane
-    // itself rides predictive back the way the Library panes do.
-    var podsShow by remember { mutableStateOf<PodcastShow?>(null) }
-    var podsPreview by remember { mutableFloatStateOf(0f) }
-    // Which page a show was opened from, if any. Shows opened from the search
-    // overlay close back into it (query intact) rather than stranding the user
-    // on the Podcasts tab's root list; shows opened from the tab itself carry
-    // no origin, so back just leaves the pane and reveals the list beneath.
-    var podsOrigin by remember { mutableStateOf<Overlay?>(null) }
-    // The search text lives above the Command overlay so it survives the
-    // overlay closing, letting a back-returned search open exactly on the
-    // query you left it on.
     var searchQuery by remember { mutableStateOf("") }
-    // Closing a show returns you to wherever it was opened from: pop the pane
-    // and, when there was an origin page, put it back on the stack.
-    val closePodsShow: () -> Unit = {
-        podsShow = null
-        podsOrigin?.let { origin ->
-            podsOrigin = null
-            pushOverlay(origin)
-        }
-    }
+    // True for a beat after any tab-bar tap: pop transitions go flat so a
+    // switch never flashes the intermediate page's slide+scale. Tab-bar
+    // travel is always instant; only a real back animates.
+    var calmNav by remember { mutableStateOf(false) }
+    var calmJob by remember { mutableStateOf<Job?>(null) }
+    // The favourites type filter, shared by the library list and the
+    // favourites smart detail pane so both agree.
+    var favScope by rememberSaveable { mutableStateOf(FavScope.All) }
 
     val playerState by player.state.collectAsState()
     val station by PlaybackBus.station.collectAsState()
@@ -140,8 +129,6 @@ fun CliampRoot(
     val providerAccounts by providers.accounts.collectAsState(initial = emptyList())
     val queue by player.queue.collectAsState(initial = emptyList())
 
-    // Seed prev/next with recent history so they work from the song the mini
-    // bar shows at launch, before anything has actually played this session.
     player.setFallbackSource(recent)
 
     val onPlay: (Station, List<Station>) -> Unit = { s, from ->
@@ -149,104 +136,186 @@ fun CliampRoot(
         repository.reportPlay(s)
     }
 
-    // The overlays ride the back gesture to reveal this tab beneath them. As
-    // the sheet slides aside a full-screen scrim dims the shell behind it on
-    // the same progress - a system-like dim with no visible edge - so the page
-    // you are returning to is exactly where it was, sitting under a scrim,
-    // the way the platform's own predictive back reads.
-    var backPreview by remember { mutableFloatStateOf(0f) }
+    // Switch tabs, clearing any overlay destinations from the back stack.
+    // Always instant: the calm window flattens pop transitions so going to
+    // a tab from the tabs never plays the intermediate page's animation.
+    val switchTab: (Tab) -> Unit = { newTab ->
+        calmJob?.cancel()
+        calmNav = true
+        calmJob = scope.launch {
+            delay(350)
+            calmNav = false
+        }
+        if (newTab == tab) {
+            // Tapping the current tab: pop to its root if drilled down.
+            val root = when (newTab) {
+                Tab.Stations -> StationsRoot
+                Tab.Pods -> PodcastsRoot
+                Tab.Lib -> LibraryRoot
+            }
+            navController.popBackStack(root, false)
+        } else {
+            // Switching tabs: pop to the current tab's root (clearing overlays
+            // and panes), then leave the whole current tab graph behind -
+            // popped inclusive with its state saved - so the new tab is the
+            // only graph on the stack. Back on any tab root then has nothing
+            // to pop and exits natively, the way the start tab always did.
+            val currentRoot = when (tab) {
+                Tab.Stations -> StationsRoot
+                Tab.Pods -> PodcastsRoot
+                Tab.Lib -> LibraryRoot
+            }
+            val currentGraphRoute = when (tab) {
+                Tab.Stations -> StationsTab::class.qualifiedName!!
+                Tab.Pods -> PodcastsTab::class.qualifiedName!!
+                Tab.Lib -> LibraryTab::class.qualifiedName!!
+            }
+            navController.popBackStack(currentRoot, false)
+            tab = newTab
+            val dest = when (newTab) {
+                Tab.Stations -> StationsTab
+                Tab.Pods -> PodcastsTab
+                Tab.Lib -> LibraryTab
+            }
+            navController.navigate(dest) {
+                popUpTo(currentGraphRoute) {
+                    inclusive = true
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
+
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    // The chrome (mini player + tab strip) lives under every page for the
+    // whole session: it is never removed, so there is no flash of it
+    // disappearing when an overlay opens. Full overlays cover it at rest and
+    // a back just slides them away to show it - tabs, mini player and all.
+    // Guarded opens: tapping the mini player while already on that page is a
+    // no-op instead of stacking a duplicate destination.
+    val openPlayer: () -> Unit = {
+        if (currentRoute?.startsWith(Player::class.qualifiedName!!) != true) {
+            navController.navigate(Player)
+        }
+    }
+    val openQueue: () -> Unit = {
+        if (currentRoute?.startsWith(Queue::class.qualifiedName!!) != true) {
+            navController.navigate(Queue)
+        }
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(p.ground)) {
-        // Landscape gets a right-hand rail instead of the bottom tab strip so
-        // the horizontal frame keeps its full height for content. Portrait is
-        // untouched: the same bottom tabs, the same bottom mini player.
         val rail = maxWidth > maxHeight
-        // The page behind the overlays: the whole shell (active tab, mini bar,
-        // tab strip) stays composed and is what a back gesture previews and
-        // reveals. The overlays are drawn full-screen over it.
-        Box(
+        val density = LocalDensity.current
+
+        // Measured chrome size, so tab pages, panes and Settings end above
+        // the mini player + tab strip instead of sliding underneath them.
+        var chromeBottom by remember { mutableStateOf(0.dp) }
+        var chromeEnd by remember { mutableStateOf(0.dp) }
+        val contentEnd = if (rail) chromeEnd else 0.dp
+        val contentModifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = chromeBottom, end = contentEnd)
+
+        // Permanent chrome, bottom z: always composed underneath, never
+        // removed. Tab pages, panes and Settings leave its zone empty (they
+        // end above it) so it shows; full overlays below paint the whole
+        // frame opaque so the chrome is fully under them. A back just slides
+        // the page away to reveal it - tabs, mini player and all, instantly.
+        Column(
             Modifier
-                .fillMaxSize(),
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .padding(end = contentEnd)
+                .onSizeChanged { chromeBottom = with(density) { it.height.toDp() } },
         ) {
-        Row(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).fillMaxHeight()) {
-        Box(
-            Modifier
-                .weight(1f)
-                .fillMaxWidth(),
+            MiniPlayer(
+                station = station ?: recent.firstOrNull(),
+                streamTitle = streamTitle,
+                playing = playerState.playing,
+                buffering = playerState.buffering,
+                reconnecting = reconnect,
+                queueCount = queue.size,
+                visualizer = visualizer,
+                hasPrev = playerState.hasPrev,
+                hasNext = playerState.hasNext,
+                onPrev = { player.prev() },
+                onNext = { player.next() },
+                onOpenQueue = openQueue,
+                onToggle = { player.toggle(station ?: recent.firstOrNull()) },
+                onOpen = openPlayer,
+            )
+
+            if (!rail) {
+                CliampTabBar(
+                    current = tab,
+                    onSelect = switchTab,
+                )
+            }
+        }
+        if (rail) {
+            CliampTabRail(
+                current = tab,
+                onSelect = switchTab,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                    .onSizeChanged { chromeEnd = with(density) { it.width.toDp() } },
+            )
+        }
+
+        // Single navigation owner: tab roots, tab panes and full overlays all
+        // live in this host, so every back - overlay or pane - plays the same
+        // slide-out + scale-in transition, finger-driven on a gesture.
+        NavHost(
+            navController = navController,
+            startDestination = StationsTab,
+            // Transparent: the chrome underneath shows through the padded
+            // zone; every overlay paints its own opaque cover instead.
+            modifier = Modifier.fillMaxSize(),
+            enterTransition = { NoPush },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { if (calmNav) EnterTransition.None else PagePopEnter },
+            popExitTransition = { if (calmNav) ExitTransition.None else PagePopExit },
         ) {
-            // The active tab stays composed regardless of which overlay is up,
-            // so opening the player (or queue/scope/settings) and coming back
-            // lands on the exact page you left: the Library detail, provider
-            // pane, scroll and search all survive. Overlays are drawn on top;
-            // each paints its own opaque surface, so they occlude cleanly.
-            when (tab) {
-                Tab.Stations -> StationsScreen(
-                    repository = repository,
-                    prefs = prefs,
-                    current = station,
-                    playing = playerState.playing,
-                    favorites = favorites,
-                    onPlay = onPlay,
-                    onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
-                    onAddToQueue = { player.addToQueue(it) },
-                    onPlayNext = { player.playNext(it) },
-                    onOpenSearch = { pushOverlay(Overlay.Command) },
-                    onOpenSettings = { pushOverlay(Overlay.Settings) },
-                    focusDirectory = focusDirectory,
-                    onDirectoryFocusConsumed = { focusDirectory = false },
-                )
-                Tab.Lib -> LocalScreen(
-                    localLibrary = localLibrary,
-                    playlists = playlists,
-                    repository = repository,
-                    podcasts = podcasts,
-                    current = station,
-                    playing = playerState.playing,
-                    favorites = favorites,
-                    recent = recent,
-                    onPlay = onPlay,
-                    onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
-                    onAddToQueue = { player.addToQueue(it) },
-                    onPlayNext = { player.playNext(it) },
-                    onReplaceQueue = { s, from -> player.replaceQueue(s, from) },
-                    onOpenPlayer = { pushOverlay(Overlay.Player) },
-                    providers = providerAccounts,
-                    showProviders = libSubTab == LibSubTab.Providers,
-                    onShowProviders = { v -> libSubTab = if (v) LibSubTab.Providers else LibSubTab.Library },
-                    onOpenSearch = { pushOverlay(Overlay.Command) },
-                    onOpenSettings = { pushOverlay(Overlay.Settings) },
-                    onOpenProvider = { a ->
-                        libSubTab = LibSubTab.Providers
-                        pushOverlay(Overlay.Browse(a.id))
-                    },
-                    onAddProvider = { spec ->
-                        libSubTab = LibSubTab.Providers
-                        pushOverlay(Overlay.Wizard(spec.key, null))
-                    },
-                    onRemoveProvider = { account ->
-                        // Removal takes the account's cached library and its
-                        // open connections with it; ProviderStore.remove owns
-                        // that. Anything already playing keeps its open handle
-                        // and stops at the end of the track.
-                        scope.launch { providers.remove(account.id) }
-                        val open = overlay
-                        if (open is Overlay.Browse && open.accountId == account.id) {
-                            popOverlay()
-                        }
-                    },
-                    backEnabled = overlay == Overlay.None,
-                )
-                Tab.Pods -> {
-                    // Like the Library's panes: the tab holds the list behind
-                    // the open show, which rides predictive back across it. The
-                    // tab strip and mini bar stay composed around both, so a
-                    // show reads as a page of its tab, not a full-screen cover.
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .background(p.ground),
-                    ) {
+            navigation<StationsTab>(startDestination = StationsRoot) {
+                composable<StationsRoot>(
+                    enterTransition = { rootEnter() },
+                    exitTransition = { rootExit() },
+                    popEnterTransition = { if (calmNav) EnterTransition.None else PagePopEnter },
+                    popExitTransition = { ExitTransition.None },
+                ) {
+                    Box(contentModifier) {
+                        StationsScreen(
+                            repository = repository,
+                            prefs = prefs,
+                            current = station,
+                            playing = playerState.playing,
+                            favorites = favorites,
+                            onPlay = onPlay,
+                            onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
+                            onAddToQueue = { player.addToQueue(it) },
+                            onPlayNext = { player.playNext(it) },
+                            onOpenSearch = {
+                                navController.navigate(Command)
+                            },
+                            onOpenSettings = {
+                                navController.navigate(Settings)
+                            },
+                            focusDirectory = focusDirectory,
+                            onDirectoryFocusConsumed = { focusDirectory = false },
+                        )
+                    }
+                }
+            }
+            navigation<PodcastsTab>(startDestination = PodcastsRoot) {
+                composable<PodcastsRoot>(
+                    enterTransition = { rootEnter() },
+                    exitTransition = { rootExit() },
+                    popEnterTransition = { if (calmNav) EnterTransition.None else PagePopEnter },
+                    popExitTransition = { ExitTransition.None },
+                ) {
+                    Box(contentModifier) {
                         PodcastsScreen(
                             podcasts = podcasts,
                             prefs = prefs,
@@ -256,207 +325,294 @@ fun CliampRoot(
                             onPlay = onPlay,
                             onOpenShow = { show: PodcastShow ->
                                 podcasts.openShow(show)
-                                podsOrigin = null
-                                podsShow = show
+                                navController.navigate(PodcastShowRoute(show.id))
                             },
                             onAddToQueue = { player.addToQueue(it) },
                             onPlayNext = { player.playNext(it) },
-                            onOpenSearch = { pushOverlay(Overlay.Command) },
-                            onOpenSettings = { pushOverlay(Overlay.Settings) },
+                            onOpenSearch = { navController.navigate(Command) },
+                            onOpenSettings = { navController.navigate(Settings) },
                         )
                     }
-                    // The dim veil draws beneath the show page, so opening a show
-                    // dims the list it came from without touching the page itself.
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .zIndex(3f)
-                            .graphicsLayer { alpha = 0.32f * podsPreview.absoluteValue }
-                            .background(Color.Black),
-                    )
-                    BackPage(
-                        visible = podsShow != null,
-                        onBack = closePodsShow,
-                        onProgress = { podsPreview = it },
-                        enabled = overlay == Overlay.None,
-                        modifier = Modifier.zIndex(4f),
-                    ) {
+                }
+                composable<PodcastShowRoute> {
+                    Box(contentModifier) {
                         PodcastShowScreen(
                             podcasts = podcasts,
                             current = station,
                             playing = playerState.playing,
-                            onBack = closePodsShow,
+                            onBack = { navController.popBackStack() },
                             onPlay = onPlay,
                             onAddToQueue = { player.addToQueue(it) },
                             onPlayNext = { player.playNext(it) },
-                            onOpenSearch = { pushOverlay(Overlay.Command) },
-                            onOpenSettings = { pushOverlay(Overlay.Settings) },
+                            onOpenSearch = { navController.navigate(Command) },
+                            onOpenSettings = { navController.navigate(Settings) },
+                        )
+                    }
+                }
+            }
+            navigation<LibraryTab>(startDestination = LibraryRoot) {
+                composable<LibraryRoot>(
+                    enterTransition = { rootEnter() },
+                    exitTransition = { rootExit() },
+                    popEnterTransition = { if (calmNav) EnterTransition.None else PagePopEnter },
+                    popExitTransition = { ExitTransition.None },
+                ) {
+                    Box(contentModifier) {
+                        LocalScreen(
+                            localLibrary = localLibrary,
+                            playlists = playlists,
+                            repository = repository,
+                            podcasts = podcasts,
+                            current = station,
+                            playing = playerState.playing,
+                            favorites = favorites,
+                            recent = recent,
+                            onPlay = onPlay,
+                            onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
+                            onAddToQueue = { player.addToQueue(it) },
+                            onPlayNext = { player.playNext(it) },
+                            onReplaceQueue = { s, from -> player.replaceQueue(s, from) },
+                            onOpenProviders = { navController.navigate(LibraryProviders) },
+                            onOpenSmart = { kind -> navController.navigate(LibrarySmartPlaylist(kind)) },
+                            onOpenPlaylist = { slug -> navController.navigate(LibraryPlaylist(slug)) },
+                            onOpenSearch = { navController.navigate(Command) },
+                            onOpenSettings = { navController.navigate(Settings) },
+                            favScope = favScope,
+                            onFavScopeChange = { favScope = it },
+                        )
+                    }
+                }
+                composable<LibraryProviders> {
+                    Box(contentModifier) {
+                        LibraryProvidersPane(
+                            providers = providerAccounts,
+                            onBack = { navController.popBackStack() },
+                            onOpenProvider = { a -> navController.navigate(ProviderBrowse(a.id)) },
+                            onAddProvider = { spec ->
+                                navController.navigate(ProviderWizardRoute(spec.key))
+                            },
+                            onRemoveProvider = { account ->
+                                scope.launch { providers.remove(account.id) }
+                                val current = currentRoute
+                                if (current != null && current.contains("ProviderBrowse") &&
+                                    current.contains(account.id)) {
+                                    navController.popBackStack()
+                                }
+                            },
+                            onOpenSearch = { navController.navigate(Command) },
+                            onOpenSettings = { navController.navigate(Settings) },
+                        )
+                    }
+                }
+                composable<LibrarySmartPlaylist> { entry ->
+                    val kind = entry.toRoute<LibrarySmartPlaylist>().kind
+                    Box(contentModifier) {
+                        LibrarySmartPlaylistPane(
+                            kindName = kind,
+                            localLibrary = localLibrary,
+                            repository = repository,
+                            podcasts = podcasts,
+                            current = station,
+                            playing = playerState.playing,
+                            favorites = favorites,
+                            recent = recent,
+                            onPlay = onPlay,
+                            onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
+                            onAddToQueue = { player.addToQueue(it) },
+                            onPlayNext = { player.playNext(it) },
+                            onReplaceQueue = { s, from -> player.replaceQueue(s, from) },
+                            favScope = favScope,
+                            onFavScopeChange = { favScope = it },
+                            onOpenSongInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
+                            onBack = { navController.popBackStack() },
+                            onOpenSearch = { navController.navigate(Command) },
+                            onOpenSettings = { navController.navigate(Settings) },
+                        )
+                    }
+                }
+                composable<LibraryPlaylist> { entry ->
+                    val slug = entry.toRoute<LibraryPlaylist>().slug
+                    Box(contentModifier) {
+                        LibraryPlaylistPane(
+                            slug = slug,
+                            localLibrary = localLibrary,
+                            playlists = playlists,
+                            repository = repository,
+                            podcasts = podcasts,
+                            current = station,
+                            playing = playerState.playing,
+                            favorites = favorites,
+                            onPlay = onPlay,
+                            onBack = { navController.popBackStack() },
+                            onOpenSearch = { navController.navigate(Command) },
+                            onOpenSettings = { navController.navigate(Settings) },
+                        )
+                    }
+                }
+                composable<LibrarySongInfo> { entry ->
+                    val stationUrl = entry.toRoute<LibrarySongInfo>().stationUrl
+                    Box(contentModifier) {
+                        LibrarySongInfoPane(
+                            stationUrl = stationUrl,
+                            localLibrary = localLibrary,
+                            repository = repository,
+                            favorites = favorites,
+                            recent = recent,
+                            onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
+                            onBack = { navController.popBackStack() },
                         )
                     }
                 }
             }
 
-            }
-
-        // The mini bar is part of the page behind every overlay: it sits under
-        // whatever is on top (the expanded player covers it) and rides with the
-        // shell as a back gesture reveals it, so returning from any page lands
-        // on the same shell you left, mini bar included.
-        MiniPlayer(
-            station = station ?: recent.firstOrNull(),
-            streamTitle = streamTitle,
-            playing = playerState.playing,
-            buffering = playerState.buffering,
-            reconnecting = reconnect,
-            queueCount = queue.size,
-            visualizer = visualizer,
-            hasPrev = playerState.hasPrev,
-            hasNext = playerState.hasNext,
-            onPrev = { player.prev() },
-            onNext = { player.next() },
-            onOpenQueue = { pushOverlay(Overlay.Queue) },
-            onToggle = { player.toggle(station ?: recent.firstOrNull()) },
-            onOpen = { pushOverlay(Overlay.Player) },
-        )
-
-        if (!rail) {
-            CliampTabBar(
-                current = tab,
-                onSelect = { tab = it; popOverlay(); podsShow = null; podsOrigin = null },
-            )
-        }
-        }
-        if (rail) {
-            CliampTabRail(
-                current = tab,
-                onSelect = { tab = it; popOverlay(); podsShow = null; podsOrigin = null },
-                modifier = Modifier.fillMaxHeight(),
-            )
-        }
-        }
-
-        // A dim veil over the whole shell so it reads as sitting "under" the
-        // sheet, riding with the gesture and clearing as the cover leaves.
-        Box(
-            Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = 0.32f * backPreview.absoluteValue }
-                .background(Color.Black),
-        )
-        }
-
-        // Overlays ride the predictive-back gesture across the whole shell: the
-        // layer (active tab, mini bar, tab strip) slides aside with the finger
-        // just like the settings app, then commits by popping one page off the
-        // stack.
-        PredictiveBackSurface(
-            enabled = overlayStack.isNotEmpty(),
-            onBack = { overlayStack = overlayStack.dropLast(1) },
-            onProgress = { backPreview = it },
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            when (overlay) {
-                Overlay.Player -> NowPlayingScreen(
+            // -- Full overlay destinations (cover the chrome) --
+            composable<Player> {
+                OverlayCover {
+                NowPlayingScreen(
                     repository = repository,
                     prefs = prefs,
                     player = player,
-                    onOpenScope = { pushOverlay(Overlay.Scope) },
-                    onBack = { popOverlay() },
+                    onOpenScope = { navController.navigate(Scope) },
+                    onBack = { navController.popBackStack() },
                 )
-                Overlay.Queue -> QueueScreen(
+                }
+            }
+            composable<Queue> {
+                OverlayCover {
+                QueueScreen(
                     player = player,
                     current = station,
                     playing = playerState.playing,
                     onPlay = onPlay,
-                    onBack = { popOverlay() },
+                    onBack = { navController.popBackStack() },
                 )
-                Overlay.Scope -> ScopeScreen(
+                }
+            }
+            composable<Scope> {
+                OverlayCover {
+                ScopeScreen(
                     prefs = prefs,
                     station = station,
                     streamTitle = streamTitle,
                     playing = playerState.playing,
-                    onBack = { popOverlay() },
+                    onBack = { navController.popBackStack() },
                 )
-                is Overlay.Browse -> {
-                    val id = overlay.accountId
-                    val account = providerAccounts.firstOrNull { it.id == id }
-                    if (account == null) {
-                        popOverlay()
-                    } else {
-                        ProviderBrowseScreen(
-                            account = account,
-                            onBack = { popOverlay() },
-                            onEdit = { pushOverlay(Overlay.Wizard(account.providerKey, account)) },
-                            onPlay = onPlay,
-                            onOpenPlayer = { pushOverlay(Overlay.Player) },
-                            onAddToQueue = { player.addToQueue(it) },
-                            onPlayNext = { player.playNext(it) },
-                        )
-                    }
                 }
-                is Overlay.Wizard -> {
-                    val spec = ProviderCatalog.byKey(overlay.providerKey)
-                    if (spec == null) {
-                        popOverlay()
-                    } else {
-                        ProviderWizard(
-                            spec = spec,
-                            existing = overlay.account,
-                            onCancel = { popOverlay() },
-                            onSave = { account ->
-                                scope.launch { providers.save(account) }
-                                popOverlay()
-                            },
-                        )
-                    }
+            }
+            composable<Settings> {
+                Box(contentModifier) {
+                    SettingsScreen(
+                        prefs = prefs,
+                        repository = repository,
+                        onBack = { navController.popBackStack() },
+                    )
                 }
-                Overlay.Command -> CommandScreen(
+            }
+            composable<Command> {
+                Box(contentModifier) {
+                    CommandScreen(
                     repository = repository,
                     podcasts = podcasts,
                     prefs = prefs,
                     localLibrary = localLibrary,
                     providers = providers,
                     current = station,
+                    playing = playerState.playing,
                     onPlay = onPlay,
-                    onOpenScope = { pushOverlay(Overlay.Scope) },
-                    onOpenSettings = { pushOverlay(Overlay.Settings) },
+                    onOpenScope = { navController.navigate(Scope) },
+                    onOpenSettings = { navController.navigate(Settings) },
                     onOpenProvider = { account ->
-                        libSubTab = LibSubTab.Providers
-                        pushOverlay(Overlay.Browse(account.id))
+                        navController.navigate(ProviderBrowse(account.id))
                     },
-                    // A show opened from search is a detour, not a move-in:
-                    // closing it puts the search back so "back" lands on the
-                    // query you actually came from.
                     onOpenShow = { show: PodcastShow ->
                         podcasts.openShow(show)
-                        // Remember the search this show was opened from so
-                        // closing it returns there rather than to the Podcasts
-                        // tab's root list.
-                        podsOrigin = overlay
-                        tab = Tab.Pods
-                        popOverlay()
-                        podsShow = show
+                        // Pop the search overlay, switch to podcasts tab,
+                        // and navigate to the show.
+                        navController.popBackStack()
+                        switchTab(Tab.Pods)
+                        navController.navigate(PodcastShowRoute(show.id))
                     },
-                    // A tag is a directory filter: land on the Stations tab so
-                    // the tapping user actually sees the tagged stations rather
-                    // than silently priming a list they are not looking at.
                     onOpenTag = { name ->
                         repository.loadDirectory(DirectoryQuery.Tag(name), reset = true)
                         focusDirectory = true
-                        tab = Tab.Stations
-                        popOverlay()
+                        navController.popBackStack()
+                        switchTab(Tab.Stations)
                     },
-                    onBack = { popOverlay() },
+                    onBack = { navController.popBackStack() },
                     query = searchQuery,
                     onQueryChange = { searchQuery = it },
                 )
-                Overlay.Settings -> SettingsScreen(
-                    prefs = prefs,
-                    repository = repository,
-                    onBack = { popOverlay() },
-                )
-                Overlay.None -> Unit
+                }
+            }
+            composable<ProviderBrowse> { entry ->
+                val accountId = entry.toRoute<ProviderBrowse>().accountId
+                val account = providerAccounts.firstOrNull { it.id == accountId }
+                if (account == null) {
+                    navController.popBackStack()
+                } else {
+                    OverlayCover {
+                    ProviderBrowseScreen(
+                        account = account,
+                        onBack = { navController.popBackStack() },
+                        onEdit = {
+                            navController.navigate(
+                                ProviderWizardRoute(account.providerKey, account.id)
+                            )
+                        },
+                        onPlay = onPlay,
+                        onOpenPlayer = openPlayer,
+                        onAddToQueue = { player.addToQueue(it) },
+                        onPlayNext = { player.playNext(it) },
+                    )
+                    }
+                }
+            }
+            composable<ProviderWizardRoute> { entry ->
+                val route = entry.toRoute<ProviderWizardRoute>()
+                val spec = ProviderCatalog.byKey(route.providerKey)
+                if (spec == null) {
+                    navController.popBackStack()
+                } else {
+                    val existing = if (route.accountId.isNotEmpty()) {
+                        providerAccounts.firstOrNull { it.id == route.accountId }
+                    } else null
+                    OverlayCover {
+                    ProviderWizardScreen(
+                        spec = spec,
+                        existing = existing,
+                        onCancel = { navController.popBackStack() },
+                        onSave = { account ->
+                            scope.launch { providers.save(account) }
+                            navController.popBackStack()
+                        },
+                    )
+                    }
+                }
             }
         }
+
+    }
+}
+
+/**
+ * Full-screen cover for overlay destinations. The chrome lives underneath
+ * for the whole session, so this paints the frame opaque (keeping tabs and
+ * mini player fully under the overlay) and swallows taps on empty areas so
+ * they cannot fall through to the chrome. Taps give no visual: null.
+ */
+@Composable
+private fun OverlayCover(content: @Composable () -> Unit) {
+    val p = LocalPalette.current
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(p.ground)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {},
+            )
+    ) {
+        content()
     }
 }

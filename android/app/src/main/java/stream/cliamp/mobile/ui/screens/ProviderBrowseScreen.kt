@@ -47,7 +47,6 @@ import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.OverflowButton
 import stream.cliamp.mobile.ui.components.OverflowItem
 import stream.cliamp.mobile.ui.components.OverflowMenu
-import stream.cliamp.mobile.ui.components.PredictiveBackSurface
 import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.theme.CliampShape
@@ -146,14 +145,10 @@ fun ProviderBrowseScreen(
 
     fun pop() { if (stack.size > 1) stack = stack.dropLast(1) else onBack() }
 
-    // Drilling into an album is a page over the folder above it: each folder
-    // back rides the predictive gesture and pops the stack, so backing out of
-    // an album returns through the artist instead of the provider closing.
-    PredictiveBackSurface(
-        enabled = stack.size > 1,
-        onBack = { stack = stack.dropLast(1) },
-        modifier = Modifier.fillMaxSize(),
-    ) {
+    androidx.activity.compose.BackHandler(enabled = stack.size > 1) {
+        stack = stack.dropLast(1)
+    }
+
     Column(Modifier.fillMaxSize().background(p.ground).navigationBarsPadding()) {
         stream.cliamp.mobile.ui.components.ScreenHeader {
             Row(
@@ -323,7 +318,6 @@ fun ProviderBrowseScreen(
             }
             item { Spacer(Modifier.height(24.dp)) }
         }
-    }
     }
 }
 
