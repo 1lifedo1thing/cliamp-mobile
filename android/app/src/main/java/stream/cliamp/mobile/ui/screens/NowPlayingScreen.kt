@@ -40,9 +40,11 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
@@ -589,7 +591,31 @@ private fun sourceLine(shownStation: Station?): String {
  *
  * The logo is contained, not cropped: most og:images are 1200x630 wordmarks and
  * a square centre crop cuts them in half.
+ *
+ * Ambient glow behind the hero plate: a soft radial wash of the accent that
+ * lifts the artwork off the page. Static while the plate itself breathes, so
+ * the two never fight. Pure backdrop - never intercepts gestures.
  */
+@Composable
+private fun ArtGlow(modifier: Modifier = Modifier) {
+    val p = LocalPalette.current
+    Box(
+        modifier
+            .graphicsLayer {
+                scaleX = 1.45f
+                scaleY = 1.45f
+            }
+            .background(
+                Brush.radialGradient(
+                    0f to p.accent.copy(alpha = 0.16f),
+                    0.7f to p.accent.copy(alpha = 0.05f),
+                    1f to androidx.compose.ui.graphics.Color.Transparent,
+                ),
+                CircleShape,
+            ),
+    )
+}
+
 @Composable
 private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
@@ -632,8 +658,11 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
         animationSpec = infiniteRepeatable(tween(7000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "artBreathScale",
     )
+    Box(modifier, contentAlignment = Alignment.Center) {
+        ArtGlow(Modifier.fillMaxSize())
     ArtPlate(
-        modifier = modifier
+        modifier = Modifier
+            .fillMaxSize()
             // Soft drop shadow so the plate floats over the page - the
             // premium read. Same large radius as the plate itself.
             .shadow(26.dp, RoundedCornerShape(CliampShape.large))
@@ -675,6 +704,7 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
                 tint = p.accent.copy(alpha = 0.16f),
             )
         }
+    }
     }
 }
 
