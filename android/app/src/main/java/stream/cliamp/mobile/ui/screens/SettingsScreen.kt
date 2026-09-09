@@ -103,13 +103,11 @@ fun SettingsScreen(
         SectionLabel("playback")
         ToggleRow(
             title = "Auto-resume",
-            subtitle = if (autoResume) "on — retune the last station at launch" else "off",
             checked = autoResume,
             onChange = { scope.launch { prefs.setAutoResume(it) } },
         )
         ToggleRow(
             title = "Stream over cellular",
-            subtitle = if (cellular) "on — full bitrate away from wifi" else "off — wifi only",
             checked = cellular,
             onChange = { scope.launch { prefs.setCellular(it) } },
         )
@@ -131,7 +129,6 @@ fun SettingsScreen(
         SectionLabel("feel")
         ToggleRow(
             title = "Key haptics",
-            subtitle = if (haptics) "on" else "off",
             checked = haptics,
             onChange = { scope.launch { prefs.setHaptics(it) } },
         )
@@ -141,7 +138,6 @@ fun SettingsScreen(
             selected = visualizer,
             onSelect = { scope.launch { prefs.setVisualizer(it) } },
         )
-        HairlineDivider()
 
         SectionLabel("themes — ${OmarchyThemeKeys.size + 6}")
         listOf(
@@ -162,15 +158,17 @@ fun SettingsScreen(
                 onSelect = { scope.launch { prefs.setPalette(key) } },
             )
         }
-        OmarchyThemeKeys.forEach { key ->
+        OmarchyThemeKeys.forEachIndexed { index, key ->
             ThemeRow(
                 key = key,
                 theme = OmarchyPalettes.getValue(key),
                 selected = palette == key,
+                // Last row before the next section: its divider runs full
+                // width instead of stacking a second inset line under it.
+                trailDivider = index != OmarchyThemeKeys.lastIndex,
                 onSelect = { scope.launch { prefs.setPalette(key) } },
             )
         }
-        HairlineDivider()
 
         SectionLabel("home screen")
         Row(
@@ -187,14 +185,9 @@ fun SettingsScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Mono("Add widget", CliampType.rowPrimary, p.ink)
-                Mono("station, transport and quick tune", CliampType.rowSecondary, p.inkTertiary)
-            }
+            Mono("Add widget", CliampType.rowPrimaryMedium, p.ink)
             Mono("+", CliampType.rowPrimary, p.accent)
         }
-        Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
-        InfoRow("Quick settings tile", "add from the shade editor")
         HairlineDivider()
 
         SectionLabel("storage")
@@ -247,7 +240,7 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun ToggleRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     val p = LocalPalette.current
     Column {
         Row(
@@ -255,10 +248,7 @@ private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChang
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Mono(title, CliampType.rowPrimary, p.ink)
-                Mono(subtitle, CliampType.rowSecondary, p.inkTertiary)
-            }
+            Mono(title, CliampType.rowPrimaryMedium, p.ink, Modifier.weight(1f))
             CliampToggle(checked, onChange)
         }
         Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
@@ -276,6 +266,9 @@ private fun ThemeRow(
     theme: stream.cliamp.mobile.ui.theme.CliampPalette,
     selected: Boolean,
     subtitle: String? = null,
+    // False on the last row before a section break: the divider runs full
+    // width instead of stacking a second inset line under it.
+    trailDivider: Boolean = true,
     onSelect: () -> Unit,
 ) {
     val p = LocalPalette.current
@@ -318,7 +311,11 @@ private fun ThemeRow(
             }
             if (selected) Mono("ACTIVE", CliampType.tabLabel, p.accent)
         }
-        Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
+        if (trailDivider) {
+            Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
+        } else {
+            HairlineDivider()
+        }
     }
 }
 
@@ -339,7 +336,9 @@ private fun ChoiceRow(title: String, options: List<String>, selected: String, on
                 options.forEach { o -> Chip(o, selected == o, onClick = { onSelect(o) }) }
             }
         }
-        Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
+        // Last row before the themes section: full width instead of stacking
+        // a second inset line under it.
+        HairlineDivider()
     }
 }
 
