@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Pin-dialog preview. Mirrors the real Glance widget (WidgetBody): station
+    title and subtitle on the left, prev / play / next transport keys right.
+    Static stand-ins only: tinted vector marks instead of live art. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/ground_dark"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:padding="14dp">
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="12dp">
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -17,7 +23,7 @@
             android:fontFamily="monospace"
             android:text="Lofi"
             android:textColor="@color/ink"
-            android:textSize="16sp"
+            android:textSize="15sp"
             android:textStyle="bold" />
         <TextView
             android:layout_width="wrap_content"
@@ -27,13 +33,29 @@
             android:textColor="@color/ink_tertiary"
             android:textSize="11sp" />
     </LinearLayout>
-    <TextView
+    <ImageView
+        android:layout_width="19dp"
+        android:layout_height="15dp"
+        android:layout_marginStart="10dp"
+        android:src="@drawable/ic_w_prev"
+        android:tint="@color/ink" />
+    <LinearLayout
         android:layout_width="52dp"
         android:layout_height="38dp"
-        android:background="@color/accent"
-        android:fontFamily="monospace"
+        android:layout_marginStart="6dp"
+        android:background="@drawable/widget_key_filled"
         android:gravity="center"
-        android:text="&#9654;"
-        android:textColor="@color/ground_dark"
-        android:textSize="14sp" />
+        android:orientation="vertical">
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_w_play"
+            android:tint="@color/ground_dark" />
+    </LinearLayout>
+    <ImageView
+        android:layout_width="19dp"
+        android:layout_height="15dp"
+        android:layout_marginStart="6dp"
+        android:src="@drawable/ic_w_next"
+        android:tint="@color/ink" />
 </LinearLayout>
