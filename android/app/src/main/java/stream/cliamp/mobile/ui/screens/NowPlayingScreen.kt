@@ -61,6 +61,7 @@ import stream.cliamp.mobile.playback.PlayerState
 import stream.cliamp.mobile.ui.clock
 import stream.cliamp.mobile.ui.compact
 import stream.cliamp.mobile.ui.components.BrickMeter
+import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.MechKey
@@ -220,7 +221,7 @@ private fun PortraitPlayer(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            BackChevron(onClick = actions.onBack)
+            Chip("‹ back", selected = false, onClick = actions.onBack)
         }
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
         // it is the first thing to give way. Compose has no shrink factor, so
@@ -326,7 +327,7 @@ private fun LandscapePlayer(
                 Modifier.fillMaxWidth().padding(end = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                BackChevron(onClick = actions.onBack)
+                Chip("‹ back", selected = false, onClick = actions.onBack)
                 Spacer(Modifier.width(10.dp))
                 PlayerStatusRow(
                     model = model,
@@ -533,22 +534,6 @@ private fun TransportKeys(
         ) { Icon(CliampIcons.Next, "next station", Modifier.size(width = 21.dp, height = 17.dp)) }
     }
 }
-
-/** The collapse chip at the top-left, shared by both layouts. */
-@Composable
-private fun BackChevron(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val p = LocalPalette.current
-    Box(
-        modifier
-            .clip(RoundedCornerShape(CliampShape.small))
-            .padding(horizontal = 8.dp, vertical = 6.dp)
-            .microPress(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(CliampIcons.Down, "back", Modifier.size(width = 16.dp, height = 10.dp), tint = p.ink)
-    }
-}
-
 private fun statusLabel(model: PlayerModel): String = when {
     model.reconnect > 0 -> "RECONNECTING · ${model.reconnect}"
     model.error != null -> "STREAM ERROR"
