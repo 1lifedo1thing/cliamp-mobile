@@ -61,7 +61,7 @@ import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.RetryNote
 
-import stream.cliamp.mobile.ui.components.ScreenHeader
+import stream.cliamp.mobile.ui.components.MainLayout
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
@@ -83,6 +83,8 @@ fun StationsScreen(
     onToggleFavorite: (Station) -> Unit,
     onAddToQueue: (Station) -> Unit = {},
     onPlayNext: (Station) -> Unit = {},
+    onOpenSearch: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     focusDirectory: Boolean = false,
     onDirectoryFocusConsumed: () -> Unit = {},
 ) {
@@ -135,43 +137,31 @@ fun StationsScreen(
         onDirectoryFocusConsumed()
     }
 
-    Column(Modifier.fillMaxSize().background(p.ground)) {
-        ScreenHeader {
-            Row(
-                Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Mono("Stations", CliampType.screenTitle, p.ink)
-                // Settings and queue float in the top-right corner on every
-                // tab via the QueueBar, so nothing else sits over it here.
-                Spacer(Modifier.width(56.dp))
+    MainLayout(
+        title = "Stations",
+        onOpenSearch = onOpenSearch,
+        onOpenSettings = onOpenSettings,
+        chips = {
+            Source.entries.forEach { s ->
+                Chip(s.label, source == s, onClick = { source = s })
             }
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                    .padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-            ) {
-                Source.entries.forEach { s ->
-                    Chip(s.label, source == s, onClick = { source = s })
-                }
-                Spacer(Modifier.width(4.dp))
-                val countryQuery = directory.query as? DirectoryQuery.Country
-                ChipDropdown(
-                    label = countryQuery?.countryName ?: "all countries",
-                    selected = countryQuery != null,
-                    options = listOf(
-                        ChipOption("all countries") {
-                            repository.loadDirectory(DirectoryQuery.TopVoted, reset = true)
-                        },
-                    ) + countries.map { c ->
-                        ChipOption(c.name) {
-                            repository.loadDirectory(DirectoryQuery.Country(c.iso_3166_1, c.name), reset = true)
-                        }
+            Spacer(Modifier.width(4.dp))
+            val countryQuery = directory.query as? DirectoryQuery.Country
+            ChipDropdown(
+                label = countryQuery?.countryName ?: "all countries",
+                selected = countryQuery != null,
+                options = listOf(
+                    ChipOption("all countries") {
+                        repository.loadDirectory(DirectoryQuery.TopVoted, reset = true)
                     },
-                )
-            }
-        }
+                ) + countries.map { c ->
+                    ChipOption(c.name) {
+                        repository.loadDirectory(DirectoryQuery.Country(c.iso_3166_1, c.name), reset = true)
+                    }
+                },
+            )
+        },
+    ) {
 
         // android LazyGrid keeps measured item spans in a per-item cache, so
         // flipping a span in place (grid/list toggle) while the directory is

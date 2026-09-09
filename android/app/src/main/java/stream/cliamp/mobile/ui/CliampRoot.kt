@@ -38,7 +38,7 @@ import stream.cliamp.mobile.ui.components.CliampTabRail
 import stream.cliamp.mobile.ui.components.BackPage
 import stream.cliamp.mobile.ui.components.PredictiveBackSurface
 import stream.cliamp.mobile.ui.components.Tab
-import stream.cliamp.mobile.ui.components.TabCorners
+
 import stream.cliamp.mobile.ui.screens.CommandScreen
 import stream.cliamp.mobile.ui.screens.LocalScreen
 import stream.cliamp.mobile.ui.screens.MiniPlayer
@@ -191,6 +191,8 @@ fun CliampRoot(
                     onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
                     onAddToQueue = { player.addToQueue(it) },
                     onPlayNext = { player.playNext(it) },
+                    onOpenSearch = { pushOverlay(Overlay.Command) },
+                    onOpenSettings = { pushOverlay(Overlay.Settings) },
                     focusDirectory = focusDirectory,
                     onDirectoryFocusConsumed = { focusDirectory = false },
                 )
@@ -259,11 +261,12 @@ fun CliampRoot(
                             },
                             onAddToQueue = { player.addToQueue(it) },
                             onPlayNext = { player.playNext(it) },
+                            onOpenSearch = { pushOverlay(Overlay.Command) },
+                            onOpenSettings = { pushOverlay(Overlay.Settings) },
                         )
                     }
-                    // The dim veil and the show page draw ABOVE the corner
-                    // icons (clamped zIndex below), so an episode list covers
-                    // the corner it came from instead of sharing it.
+                    // The dim veil draws beneath the show page, so opening a show
+                    // dims the list it came from without touching the page itself.
                     Box(
                         Modifier
                             .fillMaxSize()
@@ -286,24 +289,12 @@ fun CliampRoot(
                             onPlay = onPlay,
                             onAddToQueue = { player.addToQueue(it) },
                             onPlayNext = { player.playNext(it) },
-                        )
-                        TabCorners(
                             onOpenSearch = { pushOverlay(Overlay.Command) },
                             onOpenSettings = { pushOverlay(Overlay.Settings) },
                         )
                     }
                 }
             }
-
-            // The one pair of corner icons, the same for every tab: they sit
-            // over the tab's list but under any deeper page. Panes raise
-            // themselves above them with a clamped zIndex, so no page ever has
-            // to know about this - the icons just stay composed beneath it and
-            // slide back into view when it leaves.
-            TabCorners(
-                onOpenSearch = { pushOverlay(Overlay.Command) },
-                onOpenSettings = { pushOverlay(Overlay.Settings) },
-            )
 
             }
 

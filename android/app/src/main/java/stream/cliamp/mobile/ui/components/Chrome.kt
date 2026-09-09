@@ -2,6 +2,7 @@ package stream.cliamp.mobile.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -131,52 +133,74 @@ fun ScreenHeader(
     }
 }
 
+/** The one layout of the main app body, shared by every main-stream page.
+ * It owns the whole fixed chrome - the status bar inset, the title row with
+ * the search/settings corners wired in, the chip row, the divider - and hands
+ * the page body below it to [content]. Each page passes in only its own
+ * [title] (and any [chips]), so the chrome pixels are identical everywhere
+ * while the title stays dynamic per page. The extended player and the finder
+ * are separate surfaces and host their own layouts instead of this one. */
+@Composable
+fun MainLayout(
+    title: String,
+    onOpenSearch: () -> Unit,
+    onOpenSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+    chips: (@Composable RowScope.() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val p = LocalPalette.current
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(p.ground)
+            .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Mono(title, CliampType.screenTitle, p.ink, maxLines = 1)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    CliampIcons.Search, "search",
+                    Modifier
+                        .size(22.dp)
+                        .microPress(enabled = true, onClick = onOpenSearch),
+                    tint = p.accent,
+                )
+                Icon(
+                    CliampIcons.Gear, "settings",
+                    Modifier
+                        .size(22.dp)
+                        .microPress(enabled = true, onClick = onOpenSettings),
+                    tint = p.accent,
+                )
+            }
+        }
+        if (chips != null) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                    .padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                chips()
+            }
+        }
+        HairlineDivider(region = true)
+        content()
+    }
+}
+
 enum class Tab(val label: String) {
     // Play is gone: the full player opens from the mini-player bar. Servers is
     // gone too, folded into Library beside the other sources. Search is gone
     // too: it is a floating corner icon rather than a destination.
     Stations("STATIONS"), Pods("PODCASTS"), Lib("Library")
-}
-
-/**
- * The two bare icons floating in the top-right corner of every tab: the
- * magnifier opens the app-wide finder, the gear opens settings. They take no
- * layout space — they overlay the screen via [Modifier.offset] and [align],
- * so the tabs keep their own full bleed. (The queue moved into the mini
- * player bar.) In landscape the corner belongs to the tab rail, so the pair
- * slides in to sit just clear of it via [endInset].
- */
-@Composable
-fun BoxScope.TabCorners(
-    onOpenSearch: () -> Unit,
-    onOpenSettings: () -> Unit,
-    modifier: Modifier = Modifier,
-    endInset: Dp = Gutter,
-) {
-    val p = LocalPalette.current
-    Row(
-        modifier
-            .align(Alignment.TopEnd)
-            .offset(y = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
-            .padding(top = 12.dp, end = endInset),
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            CliampIcons.Search, "search",
-            Modifier
-                .size(22.dp)
-                .microPress(enabled = true, onClick = onOpenSearch),
-            tint = p.accent,
-        )
-        Icon(
-            CliampIcons.Gear, "settings",
-            Modifier
-                .size(22.dp)
-                .microPress(enabled = true, onClick = onOpenSettings),
-            tint = p.accent,
-        )
-    }
 }
 
 @Composable

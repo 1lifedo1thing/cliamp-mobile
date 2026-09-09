@@ -62,7 +62,7 @@ import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.RetryNote
-import stream.cliamp.mobile.ui.components.ScreenHeader
+import stream.cliamp.mobile.ui.components.MainLayout
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
@@ -93,6 +93,8 @@ fun PodcastsScreen(
     onOpenShow: (PodcastShow) -> Unit,
     onAddToQueue: (Station) -> Unit = {},
     onPlayNext: (Station) -> Unit = {},
+    onOpenSearch: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -118,42 +120,31 @@ fun PodcastsScreen(
 
     val subscribedFeeds = remember(subscriptions) { subscriptions.mapTo(HashSet()) { it.feedUrl } }
 
-    Column(Modifier.fillMaxSize().background(p.ground)) {
-        ScreenHeader {
-            Row(
-                Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Mono("Podcasts", CliampType.screenTitle, p.ink)
-                // clear of the settings arm and queue button
-                Spacer(Modifier.width(56.dp))
-            }
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                    .padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-            ) {
-                Pane.entries.forEach { s -> Chip(s.label, pane == s, onClick = { pane = s }) }
-                Spacer(Modifier.width(4.dp))
-                val topQuery = directory.query as? PodcastQuery.Top
-                ChipDropdown(
-                    label = topQuery?.country?.takeIf { it.isNotEmpty() }?.let { c ->
-                        countryList.firstOrNull { it.iso_3166_1.equals(c, ignoreCase = true) }?.name ?: c
-                    } ?: "all countries",
-                    selected = topQuery != null && topQuery.country.isNotEmpty(),
-                    options = listOf(
-                        ChipOption("all countries") {
-                            podcasts.load(PodcastQuery.Top(), reset = true)
-                        },
-                    ) + countryList.map { c ->
-                        ChipOption(c.name) {
-                            podcasts.load(PodcastQuery.Top(c.iso_3166_1), reset = true)
-                        }
+    MainLayout(
+        title = "Podcasts",
+        onOpenSearch = onOpenSearch,
+        onOpenSettings = onOpenSettings,
+        chips = {
+            Pane.entries.forEach { s -> Chip(s.label, pane == s, onClick = { pane = s }) }
+            Spacer(Modifier.width(4.dp))
+            val topQuery = directory.query as? PodcastQuery.Top
+            ChipDropdown(
+                label = topQuery?.country?.takeIf { it.isNotEmpty() }?.let { c ->
+                    countryList.firstOrNull { it.iso_3166_1.equals(c, ignoreCase = true) }?.name ?: c
+                } ?: "all countries",
+                selected = topQuery != null && topQuery.country.isNotEmpty(),
+                options = listOf(
+                    ChipOption("all countries") {
+                        podcasts.load(PodcastQuery.Top(), reset = true)
                     },
-                )
-            }
-        }
+                ) + countryList.map { c ->
+                    ChipOption(c.name) {
+                        podcasts.load(PodcastQuery.Top(c.iso_3166_1), reset = true)
+                    }
+                },
+            )
+        },
+    ) {
 
         // Same known androidx LazyGrid span-flip crash guard as Stations:
         // remount the grid when either mode toggle changes so measured item

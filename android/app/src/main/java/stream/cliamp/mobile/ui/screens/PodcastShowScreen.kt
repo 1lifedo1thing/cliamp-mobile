@@ -3,7 +3,6 @@ package stream.cliamp.mobile.ui.screens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -54,7 +52,7 @@ import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.OverflowButton
 import stream.cliamp.mobile.ui.components.OverflowItem
 import stream.cliamp.mobile.ui.components.OverflowMenu
-import stream.cliamp.mobile.ui.components.ScreenHeader
+import stream.cliamp.mobile.ui.components.MainLayout
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
@@ -82,6 +80,8 @@ fun PodcastShowScreen(
     onPlay: (Station, List<Station>) -> Unit,
     onAddToQueue: (Station) -> Unit = {},
     onPlayNext: (Station) -> Unit = {},
+    onOpenSearch: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -100,28 +100,19 @@ fun PodcastShowScreen(
         show?.let { s -> state.episodes.map { it.toStation(s) } } ?: emptyList()
     }
 
-    Column(Modifier.fillMaxSize().background(p.ground)) {
-        ScreenHeader {
-            Row(
-                Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Mono(show?.title ?: "podcasts", CliampType.screenTitle, p.ink, maxLines = 1)
-            }
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                    .padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-            ) {
-                Chip("‹ back", selected = false, onClick = onBack)
-                Chip(
-                    if (subscribed) "subscribed" else "subscribe",
-                    selected = subscribed,
-                    onClick = { show?.let { s -> scope.launch { podcasts.toggleSubscription(s) } } },
-                )
-            }
-        }
+    MainLayout(
+        title = show?.title ?: "podcasts",
+        onOpenSearch = onOpenSearch,
+        onOpenSettings = onOpenSettings,
+        chips = {
+            Chip("‹ back", selected = false, onClick = onBack)
+            Chip(
+                if (subscribed) "subscribed" else "subscribe",
+                selected = subscribed,
+                onClick = { show?.let { s -> scope.launch { podcasts.toggleSubscription(s) } } },
+            )
+        },
+    ) {
 
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             item { ShowHeader(show) }

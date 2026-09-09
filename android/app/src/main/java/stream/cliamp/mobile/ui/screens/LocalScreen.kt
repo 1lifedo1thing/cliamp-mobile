@@ -106,8 +106,8 @@ import stream.cliamp.mobile.ui.components.OverflowMenu
 import stream.cliamp.mobile.ui.components.BackPage
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
-import stream.cliamp.mobile.ui.components.TabCorners
 import stream.cliamp.mobile.ui.components.ArtPlate
+import stream.cliamp.mobile.ui.components.MainLayout
 import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
@@ -310,23 +310,15 @@ fun LocalScreen(
                 scaleY = 1f - s
             },
     ) {
-    Column(Modifier.fillMaxSize()) {
-        ScreenHeader {
-            Row(
-                Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Mono("Library", CliampType.screenTitle, p.ink, maxLines = 1)
-            }
-            Row(
-                Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-            ) {
+    MainLayout(
+            title = "Library",
+            onOpenSearch = onOpenSearch,
+            onOpenSettings = onOpenSettings,
+            chips = {
                 Chip("playlists", selected = !showProviders, onClick = { onShowProviders(false) })
                 Chip("providers", selected = showProviders, onClick = { onShowProviders(true) })
-            }
-        }
+            },
+        ) {
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
@@ -395,22 +387,14 @@ fun LocalScreen(
 
     // Providers pane
     BackPage(visible = showProviders, enabled = backEnabled, onBack = { onShowProviders(false) }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
-        Column(Modifier.fillMaxSize().background(p.ground)) {
-            ScreenHeader {
-                Row(
-                    Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Mono("providers", CliampType.screenTitle, p.ink, maxLines = 1)
-                }
-                Row(
-                    Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    Chip("‹ back", selected = false, onClick = { onShowProviders(false) })
-                }
-            }
+        MainLayout(
+            title = "providers",
+            onOpenSearch = onOpenSearch,
+            onOpenSettings = onOpenSettings,
+            chips = {
+                Chip("‹ back", selected = false, onClick = { onShowProviders(false) })
+            },
+        ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 ProvidersView(
                     providers = providers,
@@ -424,25 +408,14 @@ fun LocalScreen(
 
     // Smart playlist detail pane
     BackPage(visible = openSmartPlaylist != null, enabled = backEnabled, onBack = { openSmart = null }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
-        Column(Modifier.fillMaxSize().background(p.ground)) {
-            ScreenHeader {
-                Row(
-                    Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+MainLayout(
+                    title = openSmartPlaylist?.label ?: "playlist",
+                    onOpenSearch = onOpenSearch,
+                    onOpenSettings = onOpenSettings,
+                    chips = {
+                        Chip("‹ back", selected = false, onClick = { openSmart = null })
+                    },
                 ) {
-                    Mono(
-                        openSmartPlaylist?.label ?: "playlist",
-                        CliampType.screenTitle, p.ink, maxLines = 1,
-                    )
-                }
-                Row(
-                    Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    Chip("‹ back", selected = false, onClick = { openSmart = null })
-                }
-            }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 openSmartPlaylist?.let { pl ->
                     SmartPlaylistDetail(
@@ -464,35 +437,22 @@ fun LocalScreen(
                 }
             }
         }
-        TabCorners(onOpenSearch = onOpenSearch, onOpenSettings = onOpenSettings)
     }
 
     // Playlist detail pane
     BackPage(visible = showing != null, enabled = backEnabled, onBack = { openSlug = null }, onProgress = { panePreview = it }, modifier = Modifier.zIndex(4f)) {
-        Column(Modifier.fillMaxSize().background(p.ground)) {
-            ScreenHeader {
-                Row(
-                    Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+        MainLayout(
+                    title = showing?.station?.name ?: "playlist",
+                    onOpenSearch = onOpenSearch,
+                    onOpenSettings = onOpenSettings,
+                    chips = {
+                        Chip("‹ back", selected = false, onClick = { openSlug = null })
+                        showing?.let { pl ->
+                            Chip("add", selected = false, onClick = { addingTo = pl.station.slug })
+                            Chip("set cover", selected = false, onClick = { coverLauncher.launch("image/*") })
+                        }
+                    },
                 ) {
-                    Mono(
-                        showing?.station?.name ?: "playlist",
-                        CliampType.screenTitle, p.ink, maxLines = 1,
-                    )
-                }
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                        .padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    Chip("‹ back", selected = false, onClick = { openSlug = null })
-                    showing?.let { pl ->
-                        Chip("add", selected = false, onClick = { addingTo = pl.station.slug })
-                        Chip("set cover", selected = false, onClick = { coverLauncher.launch("image/*") })
-                    }
-                }
-            }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 showing?.let { pl ->
                     PlaylistDetailShown(
@@ -516,9 +476,8 @@ fun LocalScreen(
                         doneAdding = { addingTo = null },
                     )
                 }
-            }
         }
-        TabCorners(onOpenSearch = onOpenSearch, onOpenSettings = onOpenSettings)
+    }
     }
 
     // Song info overlay (on top of whatever pane is open)
