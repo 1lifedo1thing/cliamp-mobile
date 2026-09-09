@@ -42,7 +42,6 @@ import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.MechSliderVertical
 import stream.cliamp.mobile.ui.components.MeterSize
 import stream.cliamp.mobile.ui.components.SectionLabel
-import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.rememberMeter
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -92,12 +91,29 @@ fun ScopeScreen(
                 },
                 CliampType.sectionLabel,
                 if (spectrumLive) p.accent else p.inkTertiary,
-                Modifier.microPress {
-                    scope.launch {
-                        prefs.setVisualizer(if (visualizer == "off") "spectrum" else "off")
-                    }
-                },
             )
+        }
+
+        // Explicit visualizer switch: spectrum or off, same setting the
+        // player and mini player read. Sits above the meter it controls.
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Mono("Visualizer", CliampType.rowPrimaryMedium, p.ink)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(
+                    "spectrum",
+                    visualizer == "spectrum",
+                    onClick = { scope.launch { prefs.setVisualizer("spectrum") } },
+                )
+                Chip(
+                    "off",
+                    visualizer == "off",
+                    onClick = { scope.launch { prefs.setVisualizer("off") } },
+                )
+            }
         }
 
         // The meter is the visualizer: when the setting is off it is removed
