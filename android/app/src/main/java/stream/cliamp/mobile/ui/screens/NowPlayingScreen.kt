@@ -679,22 +679,32 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
     ) {
         art?.let { bmp ->
             // Real album art is square and fills the plate edge to edge. Radio
-            // art does not: og:images are typically 1200x630 wordmarks, and
-            // cropping one to a square cuts it in half, so those stay inset
-            // and contained.
+            // art does not have to be: og:images are typically 1200x630
+            // wordmarks, and cropping one to a square cuts it in half, so
+            // those stay inset and contained - unless the bitmap itself is
+            // square enough (a station logo rather than a wordmark) and big
+            // enough not to turn to mush, in which case it fills like album
+            // art instead of floating small in the middle of the plate.
             // Podcast artwork is square by Apple's own requirement, so it
             // belongs with the album art that fills the plate, not with the
             // 1200x630 radio wordmarks that have to stay inset.
             val albumArt = station?.source == StationSource.Local ||
                 station?.source == StationSource.Provider ||
                 station?.source == StationSource.Podcast
+            val squarish = run {
+                val w = bmp.width.coerceAtLeast(1)
+                val h = bmp.height.coerceAtLeast(1)
+                val aspect = w.toFloat() / h
+                aspect in 0.85f..1.18f && minOf(w, h) >= 96
+            }
+            val fills = albumArt || squarish
             Image(
                 bitmap = bmp,
                 contentDescription = station?.name,
                 modifier =
-                    if (albumArt) Modifier.fillMaxSize()
+                    if (fills) Modifier.fillMaxSize()
                     else Modifier.fillMaxSize().padding(14.dp),
-                contentScale = if (albumArt) ContentScale.Crop else ContentScale.Fit,
+                contentScale = if (fills) ContentScale.Crop else ContentScale.Fit,
             )
         }
         if (art == null && station?.source == StationSource.Cliamp) {
