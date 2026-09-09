@@ -106,6 +106,7 @@ import stream.cliamp.mobile.ui.components.OverflowMenu
 import stream.cliamp.mobile.ui.components.BackPage
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
+import stream.cliamp.mobile.ui.components.TabCorners
 import stream.cliamp.mobile.ui.components.ArtPlate
 import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.theme.CliampShape
@@ -160,6 +161,8 @@ fun LocalScreen(
     onOpenProvider: (ProviderAccount) -> Unit = {},
     onAddProvider: (ProviderSpec) -> Unit = {},
     onRemoveProvider: (ProviderAccount) -> Unit = {},
+    onOpenSearch: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     // False while an overlay (player, queue, settings…) is on top of this tab.
     // The tab stays composed underneath so its navigation state survives, but
     // its own back handling must stand down or it would steal the back press
@@ -461,6 +464,7 @@ fun LocalScreen(
                 }
             }
         }
+        TabCorners(onOpenSearch = onOpenSearch, onOpenSettings = onOpenSettings)
     }
 
     // Playlist detail pane
@@ -514,6 +518,7 @@ fun LocalScreen(
                 }
             }
         }
+        TabCorners(onOpenSearch = onOpenSearch, onOpenSettings = onOpenSettings)
     }
 
     // Song info overlay (on top of whatever pane is open)

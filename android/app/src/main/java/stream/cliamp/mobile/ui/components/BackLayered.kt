@@ -2,6 +2,7 @@ package stream.cliamp.mobile.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -27,7 +28,7 @@ fun BackPage(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     onProgress: (Float) -> Unit = {},
-    content: @Composable () -> Unit,
+    content: @Composable BoxScope.() -> Unit,
 ) {
     if (!visible) return
     PredictiveBackSurface(

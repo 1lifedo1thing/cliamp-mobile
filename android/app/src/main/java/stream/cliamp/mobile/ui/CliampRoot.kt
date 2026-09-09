@@ -212,6 +212,8 @@ fun CliampRoot(
                     providers = providerAccounts,
                     showProviders = libSubTab == LibSubTab.Providers,
                     onShowProviders = { v -> libSubTab = if (v) LibSubTab.Providers else LibSubTab.Library },
+                    onOpenSearch = { pushOverlay(Overlay.Command) },
+                    onOpenSettings = { pushOverlay(Overlay.Settings) },
                     onOpenProvider = { a ->
                         libSubTab = LibSubTab.Providers
                         pushOverlay(Overlay.Browse(a.id))
@@ -284,6 +286,10 @@ fun CliampRoot(
                             onPlay = onPlay,
                             onAddToQueue = { player.addToQueue(it) },
                             onPlayNext = { player.playNext(it) },
+                        )
+                        TabCorners(
+                            onOpenSearch = { pushOverlay(Overlay.Command) },
+                            onOpenSettings = { pushOverlay(Overlay.Settings) },
                         )
                     }
                 }
