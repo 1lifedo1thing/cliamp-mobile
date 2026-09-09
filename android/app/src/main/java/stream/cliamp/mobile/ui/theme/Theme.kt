@@ -31,12 +31,14 @@ val LocalHapticsEnabled = staticCompositionLocalOf { true }
 /**
  * The concept's corner radii, one scale. Small slots (covers, handles, badges)
  * sit at [tiny]; the chip/menu/back language at [small]; plates, tiles and
- * cards at [medium]; the transport keys keep their own harder [key] radius.
+ * cards at [medium]; the hero player plate at [large]; the transport keys
+ * keep their own harder [key] radius.
  */
 object CliampShape {
     val tiny = 4.dp
     val small = 6.dp
     val medium = 8.dp
+    val large = 20.dp
     val key = 11.dp
 }
 

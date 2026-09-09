@@ -42,6 +42,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
@@ -230,7 +231,7 @@ private fun PortraitPlayer(
                 .fillMaxWidth(),
         ) {
             val reserved = 356.dp
-            val artSide = minOf(maxWidth - Gutter * 2, (maxHeight - reserved)).coerceIn(96.dp, 284.dp)
+            val artSide = minOf(maxWidth - Gutter * 2, (maxHeight - reserved)).coerceIn(96.dp, 340.dp)
 
             Column(
                 Modifier
@@ -301,7 +302,7 @@ private fun LandscapePlayer(
             .padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val side = minOf(frameHeight - 24.dp, (frameWidth - Gutter * 2) * 0.44f).coerceIn(96.dp, 284.dp)
+        val side = minOf(frameHeight - 24.dp, (frameWidth - Gutter * 2) * 0.44f).coerceIn(96.dp, 340.dp)
         Box(
             Modifier
                 .weight(0.95f)
@@ -633,11 +634,15 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
     )
     ArtPlate(
         modifier = modifier
+            // Soft drop shadow so the plate floats over the page - the
+            // premium read. Same large radius as the plate itself.
+            .shadow(26.dp, RoundedCornerShape(CliampShape.large))
             .graphicsLayer {
                 scaleX = breath
                 scaleY = breath
             }
             .consumeAllGestures(),
+        radius = CliampShape.large,
         caption = if (art == null) caption else null,
     ) {
         art?.let { bmp ->
