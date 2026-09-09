@@ -156,6 +156,15 @@ class PlayerConnection(
     /** The list prev/next walks. Set whenever the user plays from a list. */
     val queue: StateFlow<List<Station>> = _queue.asStateFlow()
 
+    /**
+     * The station behind a Media3 item id (item ids are station ids), or null.
+     * Lets observers that fire mid-transition - before the published station
+     * has caught up - resolve what is actually audible right now instead of
+     * reading a stale bus value.
+     */
+    fun stationForMediaId(id: String): Station? =
+        _queue.value.firstOrNull { it.id == id } ?: _source.firstOrNull { it.id == id }
+
     /** Index of the currently-playing station in [queue], or -1. */
     val queueIndex: StateFlow<Int> = _queueIndex.asStateFlow()
 

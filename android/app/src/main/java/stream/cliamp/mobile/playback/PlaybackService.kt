@@ -270,14 +270,20 @@ class PlaybackService : MediaSessionService() {
                 ?.let { StationArtSource.bitmapForUrl(it) }
                 ?: StationArtSource.bitmapFor(station)
                 ?: return@launch
-            if (PlaybackBus.station.value?.url != station.url) return@launch
+            // The bus may still name the previous track this early, so the
+            // freshness check below reads the player, not the bus: only stamp
+            // art onto the item it was decoded for.
             val item = player.currentMediaItem ?: return@launch
+            if (item.mediaId != station.id) return@launch
             val bytes = StationArtwork.withArt(this@PlaybackService, station, art)
+            val fresh = player.currentMediaItem
+                ?.takeIf { it.mediaId == station.id } ?: return@launch
+            if (fresh.mediaMetadata.artworkData?.contentEquals(bytes) == true) return@launch
             player.replaceMediaItem(
                 player.currentMediaItemIndex,
-                item.buildUpon()
+                fresh.buildUpon()
                     .setMediaMetadata(
-                        item.mediaMetadata.buildUpon()
+                        fresh.mediaMetadata.buildUpon()
                             .setArtworkData(bytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
                             .build()
                     )
@@ -454,7 +460,15 @@ class PlaybackService : MediaSessionService() {
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) {
-                PlaybackBus.station.value?.let(::loadArtwork)
+                // Resolve what is audible from the event's own item: on an
+                // auto-advance the published station still names the finished
+                // track here, and loading art for that would stamp the old
+                // cover onto the new item (or be thrown away by the guard).
+                // Unresolvable ids are skipped - the item keeps the plate it
+                // was built with rather than risking a wrong cover.
+                val station = mediaItem?.mediaId
+                    ?.let { (application as CliampApp).player.stationForMediaId(it) }
+                if (station != null) loadArtwork(station)
             }
             // replaceMediaItem (how the ICY title reaches the notification)
             // surfaces here too; clearing the title on that would fight the
