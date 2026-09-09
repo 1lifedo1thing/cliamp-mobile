@@ -56,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -101,6 +102,7 @@ import stream.cliamp.mobile.ui.components.OverflowItem
 import stream.cliamp.mobile.ui.components.OverflowMenu
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
+import stream.cliamp.mobile.ui.components.ArtGlow
 import stream.cliamp.mobile.ui.components.ArtPlate
 import stream.cliamp.mobile.ui.components.MainLayout
 import stream.cliamp.mobile.ui.components.microPress
@@ -1794,27 +1796,34 @@ private fun SongInfoView(
             }
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
                 Box(
-                    Modifier.size(260.dp).align(Alignment.CenterHorizontally).padding(top = 18.dp)
-                        .clip(RoundedCornerShape(CliampShape.medium)).background(p.artB),
+                    Modifier.fillMaxWidth().padding(top = 18.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (art != null) {
-                        Image(art!!, s.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                    } else {
-                        Icon(CliampIcons.MusicNote, null, Modifier.size(40.dp), tint = p.inkTertiary)
-                    }
-                    if (favorite) {
-                        Mono(
-                            "♥ favourite", CliampType.chip, p.onAccent,
-                            Modifier.align(Alignment.TopStart).padding(8.dp)
-                                .clip(RoundedCornerShape(CliampShape.tiny)).background(p.accent.copy(alpha = 0.92f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                        )
+                    ArtGlow(Modifier.size(280.dp))
+                    Box(
+                        Modifier.size(280.dp)
+                            .shadow(26.dp, RoundedCornerShape(CliampShape.large))
+                            .clip(RoundedCornerShape(CliampShape.large)).background(p.artB),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (art != null) {
+                            Image(art!!, s.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        } else {
+                            Icon(CliampIcons.MusicNote, null, Modifier.size(40.dp), tint = p.inkTertiary)
+                        }
+                        if (favorite) {
+                            Mono(
+                                "♥ favourite", CliampType.chip, p.onAccent,
+                                Modifier.align(Alignment.TopStart).padding(8.dp)
+                                    .clip(RoundedCornerShape(CliampShape.tiny)).background(p.accent.copy(alpha = 0.92f))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                            )
+                        }
                     }
                 }
 
                 Column(Modifier.padding(horizontal = Gutter, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Mono(s.name, CliampType.trackTitleSmall, p.ink, maxLines = 2)
+                    Mono(s.name, CliampType.trackTitleCompact, p.ink, maxLines = 2)
                     Mono(s.artist.ifBlank { "unknown artist" }, CliampType.rowSecondary, p.inkTertiary)
                     if (s.album.isNotBlank()) Mono(s.album, CliampType.body, p.inkTertiary)
                 }
@@ -1869,8 +1878,11 @@ private fun SongInfoView(
 @Composable
 private fun SongInfoRow(label: String, value: String) {
     val p = LocalPalette.current
-    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Mono(label, CliampType.meta, p.inkFaint, Modifier.width(80.dp))
-        Mono(value, CliampType.rowSecondary, p.ink, maxLines = 2)
+    Column {
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Mono(label, CliampType.meta, p.inkFaint, Modifier.width(80.dp))
+            Mono(value, CliampType.rowSecondary, p.ink, maxLines = 2)
+        }
+        HairlineDivider()
     }
 }

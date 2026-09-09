@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -36,6 +37,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -319,6 +322,34 @@ private fun tabIcon(tab: Tab): ImageVector = when (tab) {
 
 private fun Modifier.offsetRightBorder(color: Color) = drawBehind {
     drawRect(color = color, topLeft = Offset(size.width - 2.dp.toPx(), 0f), size = Size(2.dp.toPx(), size.height))
+}
+
+/**
+ * Ambient glow behind a hero art plate: a soft radial wash of the accent
+ * that lifts the artwork off the page. Static while a plate breathes, so
+ * the two never fight. Pure backdrop - never intercepts gestures.
+ */
+@Composable
+fun ArtGlow(modifier: Modifier = Modifier) {
+    val p = LocalPalette.current
+    // A light ground washes the wash out, so the halo runs stronger there.
+    val coreAlpha = if (p.dark) 0.16f else 0.30f
+    val midAlpha = if (p.dark) 0.05f else 0.10f
+    Box(
+        modifier
+            .graphicsLayer {
+                scaleX = 1.45f
+                scaleY = 1.45f
+            }
+            .background(
+                Brush.radialGradient(
+                    0f to p.accent.copy(alpha = coreAlpha),
+                    0.7f to p.accent.copy(alpha = midAlpha),
+                    1f to Color.Transparent,
+                ),
+                CircleShape,
+            ),
+    )
 }
 
 /**
