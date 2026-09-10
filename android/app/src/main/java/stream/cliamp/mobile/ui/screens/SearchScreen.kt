@@ -271,7 +271,15 @@ private fun HitArt(
         is SearchHit.StationHit -> hit.station
         else -> null
     }
-    if (station == null) {
+    // A known cover URL wins outright, wherever it lives: a show hands its
+    // own artwork (episodes without one fall back to it upstream), an
+    // episode or track carries its own. Local files never carry one, so
+    // their embedded-art path is intact.
+    val directUrl = when (hit) {
+        is SearchHit.Show -> hit.show.artwork.takeIf { it.startsWith("http") }
+        else -> station?.cover?.takeIf { it.startsWith("http") }
+    }
+    if (station == null && directUrl == null) {
         Icon(
             iconOf(hit), null, Modifier.size(15.dp),
             tint = p.inkTertiary,
@@ -279,10 +287,11 @@ private fun HitArt(
         return
     }
 
-    var art by remember(station.id) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(station.id) {
+    var art by remember(station?.id ?: directUrl) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(station?.id ?: directUrl) {
         delay(90)
-        art = StationArtSource.bitmapForSmall(station)?.asImageBitmap()
+        art = if (directUrl != null) StationArtSource.bitmapForUrlSmall(directUrl)?.asImageBitmap()
+        else station?.let { StationArtSource.bitmapForSmall(it)?.asImageBitmap() }
     }
     Box(
         Modifier
@@ -299,7 +308,7 @@ private fun HitArt(
         contentAlignment = Alignment.Center,
     ) {
         if (art != null) {
-            Image(art!!, station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            Image(art!!, station?.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
             Icon(iconOf(hit), null, Modifier.size(15.dp), tint = p.inkTertiary)
         }
