@@ -151,9 +151,10 @@ fun PodcastsScreen(
                 columns = GridCells.Adaptive(150.dp),
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 state = listState,
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                // Same split as Stations: rows bring their own gutter and
+                // hairlines, tiles pad themselves - grid mode keeps the old
+                // page padding and gaps untouched.
+                contentPadding = PaddingValues(0.dp),
             ) {
 
                 if (pane == Pane.Subs) {
@@ -354,7 +355,12 @@ private fun ShowTile(
             art = StationArtSource.bitmapForUrl(show.artwork)?.asImageBitmap()
         }
     }
-    Column(Modifier.fillMaxWidth().microPress(onClick = onOpen)) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 7.dp, vertical = 5.dp)
+            .microPress(onClick = onOpen)
+    ) {
         Box(
             Modifier
                 .fillMaxWidth()
