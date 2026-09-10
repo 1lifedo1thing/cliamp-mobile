@@ -77,12 +77,18 @@ object WidgetRenderer {
     private const val COMPACT_MAX_WIDTH_DP = 200
     private const val COMPACT_MAX_HEIGHT_DP = 84
 
-    /** Scope flipbook: two frames a second of this bitmap over binder. */
+    /** Scope flipbook: two frames a second of this bitmap over binder.
+     * Painted at 2x and downscaled by the host for smooth edges. */
     private const val SCOPE_COLS = 32
-    private const val SCOPE_WIDTH_PX = 254
-    private const val SCOPE_HEIGHT_PX = 112
-    private const val SCOPE_BRICK_PX = 5f
-    private const val SCOPE_GAP_PX = 3f
+    private const val SCOPE_WIDTH_PX = 508
+    private const val SCOPE_HEIGHT_PX = 128
+    private const val SCOPE_BRICK_PX = 8f
+    private const val SCOPE_GAP_PX = 4f
+    private const val SCOPE_COL_GAP_PX = 4f
+    private const val SCOPE_RADIUS_PX = 2.5f
+    /** Per-tick lerp toward the measured level: kills the 2Hz steppiness. */
+    private const val SCOPE_SMOOTHING = 0.55f
+    private const val SCOPE_PEAK_DECAY = 0.06f
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Any()
@@ -93,6 +99,7 @@ object WidgetRenderer {
     private var scopeBitmap: Bitmap? = null
     private var scopeCanvas: Canvas? = null
     private val scopePeaks = FloatArray(SCOPE_COLS)
+    private val scopeLevels = FloatArray(SCOPE_COLS)
 
     /** Palette of the last full render, for ticks that carry no theme. */
     @Volatile private var lastPalette: CliampPalette? = null
@@ -180,6 +187,7 @@ object WidgetRenderer {
         scopeSettled = true
         val frame: Bitmap = synchronized(scopeDrawLock) {
             scopePeaks.fill(0f)
+            scopeLevels.fill(0f)
             drawScope(FloatArray(0), p)
         }
         val ctx = context.applicationContext
@@ -226,43 +234,61 @@ object WidgetRenderer {
 
     /**
      * The in-app brick meter as a bitmap: 32 columns folded from the 64 FFT
-     * bands, bottom-anchored bricks, unlit grid behind, accent above the
-     * level, peak cap with decay. Reuses one bitmap + canvas across ticks.
+     * bands, bottom-anchored rounded bricks, unlit grid behind, a bright to
+     * accent vertical sheen above the level, peak cap with decay. Levels are
+     * lerped toward the measurement so the 2Hz flipbook glides instead of
+     * stepping. Reuses one bitmap + canvas across ticks.
      */
     private fun drawScope(spectrum: FloatArray, p: CliampPalette): Bitmap {
         var bmp = scopeBitmap
         var canvas = scopeCanvas
-        if (bmp == null || canvas == null) {
+        if (bmp == null || canvas == null || bmp.width != SCOPE_WIDTH_PX || bmp.height != SCOPE_HEIGHT_PX) {
             bmp = Bitmap.createBitmap(SCOPE_WIDTH_PX, SCOPE_HEIGHT_PX, Bitmap.Config.ARGB_8888)
             canvas = Canvas(bmp)
             scopeBitmap = bmp
             scopeCanvas = canvas
         }
-        val unlit = Paint().apply { color = p.unlit.toArgb() }
-        val lit = Paint().apply { color = p.accent.toArgb() }
-        val peak = Paint().apply { color = p.peak.toArgb() }
+        val unlit = Paint().apply { color = p.unlit.toArgb(); isAntiAlias = true }
+        val lit = Paint().apply {
+            isAntiAlias = true
+            shader = android.graphics.LinearGradient(
+                0f, 0f, 0f, SCOPE_HEIGHT_PX.toFloat(),
+                p.accentBright.toArgb(), p.accent.toArgb(),
+                android.graphics.Shader.TileMode.CLAMP,
+            )
+        }
+        val peak = Paint().apply { color = p.peak.toArgb(); isAntiAlias = true }
         canvas.drawColor(0, android.graphics.PorterDuff.Mode.CLEAR)
 
         val step = SCOPE_BRICK_PX + SCOPE_GAP_PX
         val rows = ((SCOPE_HEIGHT_PX + SCOPE_GAP_PX) / step).toInt().coerceAtLeast(1)
-        val colW = (SCOPE_WIDTH_PX - 2f * (SCOPE_COLS - 1)) / SCOPE_COLS
+        val colW = (SCOPE_WIDTH_PX - SCOPE_COL_GAP_PX * (SCOPE_COLS - 1)) / SCOPE_COLS
         val bandsPerCol = (spectrum.size / SCOPE_COLS).coerceAtLeast(1)
         for (c in 0 until SCOPE_COLS) {
-            var level = 0f
+            var measured = 0f
             for (b in 0 until bandsPerCol) {
-                level += spectrum.getOrElse(c * bandsPerCol + b) { 0f }
+                measured += spectrum.getOrElse(c * bandsPerCol + b) { 0f }
             }
-            level = (level / bandsPerCol).coerceIn(0f, 1f)
-            scopePeaks[c] = maxOf(level, scopePeaks[c] - 0.08f)
-            val x = c * (colW + 2f)
+            measured = (measured / bandsPerCol).coerceIn(0f, 1f)
+            val level = scopeLevels[c] + (measured - scopeLevels[c]) * SCOPE_SMOOTHING
+            scopeLevels[c] = level
+            scopePeaks[c] = maxOf(level, scopePeaks[c] - SCOPE_PEAK_DECAY)
+            val x = c * (colW + SCOPE_COL_GAP_PX)
             val litRows = (level * rows).toInt()
             for (r in 0 until rows) {
                 val y = SCOPE_HEIGHT_PX - (r + 1) * step + SCOPE_GAP_PX
-                canvas.drawRect(x, y, x + colW, y + SCOPE_BRICK_PX, if (r < litRows) lit else unlit)
+                canvas.drawRoundRect(
+                    x, y, x + colW, y + SCOPE_BRICK_PX,
+                    SCOPE_RADIUS_PX, SCOPE_RADIUS_PX,
+                    if (r < litRows) lit else unlit,
+                )
             }
             val pkRow = (scopePeaks[c].coerceIn(0f, 1f) * rows).toInt().coerceIn(0, rows - 1)
             val py = SCOPE_HEIGHT_PX - (pkRow + 1) * step + SCOPE_GAP_PX
-            canvas.drawRect(x, py, x + colW, py + SCOPE_BRICK_PX, peak)
+            canvas.drawRoundRect(
+                x, py, x + colW, py + SCOPE_BRICK_PX,
+                SCOPE_RADIUS_PX, SCOPE_RADIUS_PX, peak,
+            )
         }
         return bmp
     }
@@ -440,7 +466,10 @@ object WidgetRenderer {
             rv.setViewVisibility(R.id.w_scope, if (showScope) View.VISIBLE else View.GONE)
             if (showScope) {
                 val frame = synchronized(scopeDrawLock) {
-                    if (!row.playing) scopePeaks.fill(0f)
+                    if (!row.playing) {
+                        scopePeaks.fill(0f)
+                        scopeLevels.fill(0f)
+                    }
                     drawScope(if (row.playing) PlaybackBus.spectrum.value else FloatArray(0), p)
                 }
                 scopeSettled = !row.playing
