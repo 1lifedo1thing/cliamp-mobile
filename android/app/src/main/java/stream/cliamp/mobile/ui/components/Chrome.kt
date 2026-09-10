@@ -212,17 +212,25 @@ fun MainLayout(
 }
 
 /**
- * Smooth-scroll tickets for a title tap: glide to the very top, and no-op
- * when already there so an accidental tap never visibly moves the list.
+ * Smooth-scroll tickets for a title tap, and no-ops when already at the very
+ * top so an accidental tap never visibly moves the list.
+ *
+ * Near the top the list glides home, which the eye can follow. Further out
+ * it jumps straight there instead: the lazy glide animates at a stately
+ * row-by-row pace, so a deep list would crawl all the way up.
  */
+private const val TOP_GLIDE_ITEMS = 8
+
 fun CoroutineScope.scrollToTop(list: LazyListState) = launch {
-    if (list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0) {
+    if (list.firstVisibleItemIndex > TOP_GLIDE_ITEMS) list.scrollToItem(0)
+    else if (list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0) {
         list.animateScrollToItem(0)
     }
 }
 
 fun CoroutineScope.scrollToTop(grid: LazyGridState) = launch {
-    if (grid.firstVisibleItemIndex > 0 || grid.firstVisibleItemScrollOffset > 0) {
+    if (grid.firstVisibleItemIndex > TOP_GLIDE_ITEMS) grid.scrollToItem(0)
+    else if (grid.firstVisibleItemIndex > 0 || grid.firstVisibleItemScrollOffset > 0) {
         grid.animateScrollToItem(0)
     }
 }
