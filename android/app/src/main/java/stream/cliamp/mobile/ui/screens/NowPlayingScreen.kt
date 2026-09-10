@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -220,7 +221,7 @@ private fun PortraitPlayer(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            BackIconChip(onClick = actions.onBack)
+            BackIconChip(onClick = actions.onBack, modifier = Modifier.offset(x = -8.dp))
         }
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
         // it is the first thing to give way. Compose has no shrink factor, so
@@ -326,7 +327,7 @@ private fun LandscapePlayer(
                 Modifier.fillMaxWidth().padding(end = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                BackIconChip(onClick = actions.onBack)
+                BackIconChip(onClick = actions.onBack, modifier = Modifier.offset(x = -8.dp))
                 Spacer(Modifier.width(10.dp))
                 PlayerStatusRow(
                     model = model,
