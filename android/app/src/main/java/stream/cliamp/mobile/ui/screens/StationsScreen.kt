@@ -176,9 +176,11 @@ fun StationsScreen(
                 columns = GridCells.Adaptive(150.dp),
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 state = listState,
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                // No page padding or gaps here: list rows bring their own
+                // 22dp gutter and hairlines, exactly like playlist rows, and
+                // tiles pad themselves. Grid-level insets would double up on
+                // the rows (36dp text inset, floating hairlines).
+                contentPadding = PaddingValues(0.dp),
             ) {
 
                 if (source == Source.All || source == Source.Cliamp) {
@@ -438,7 +440,14 @@ private fun StationTile(
         if (station.source == StationSource.Cliamp) return@LaunchedEffect
         art = StationArtSource.bitmapFor(station)?.asImageBitmap()
     }
-    Column(Modifier.fillMaxWidth().microPress(onClick = onPlay)) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            // The grid carries no gaps itself (list rows must sit hairline
+            // to hairline), so tiles bring their own margins instead.
+            .padding(horizontal = 7.dp, vertical = 5.dp)
+            .microPress(onClick = onPlay)
+    ) {
         Box(
             Modifier
                 .fillMaxWidth()
