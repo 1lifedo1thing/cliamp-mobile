@@ -30,12 +30,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,7 +44,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -97,7 +91,6 @@ import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampTextField
-import stream.cliamp.mobile.ui.components.GridListToggle
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.ListRow
@@ -108,7 +101,6 @@ import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.components.scrollToTop
 import stream.cliamp.mobile.ui.components.ArtGlow
-import stream.cliamp.mobile.ui.components.ArtPlate
 import stream.cliamp.mobile.ui.components.MainLayout
 import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.theme.CliampShape
@@ -204,14 +196,9 @@ fun LocalScreen(
     val prefs = (context.applicationContext as CliampApp).prefs
     val localSort by prefs.playlistSort("local-songs")
         .collectAsState(initial = prefs.playlistSortValue("local-songs"))
-    // Grid/list layout for each playlist section, remembered on disk.
-    val pinnedGrid by prefs.pinnedGrid.collectAsState(initial = prefs.pinnedGrid.value)
-    val playlistsGrid by prefs.playlistsGrid.collectAsState(initial = prefs.playlistsGrid.value)
 
     // Pinned smart playlists — auto-populated from global state, non-removable.
-    // "local songs" is always at the very top. Their tile collages preview the
-    // first four members *exactly as the detail pane lists them*, i.e. under
-    // the same sort (local songs) and type filter (favourites) the user chose.
+    // "local songs" is always at the very top.
     val smartPlaylists = remember(filtered, favorites, recent, localSort, favScope) {
         val local = sortedStations(filtered, localSort)
         val favs = if (favScope == FavScope.All) favorites
@@ -235,13 +222,12 @@ fun LocalScreen(
             .fillMaxSize()
             .background(p.ground),
     ) {
-    // Hoisted above the remounting grid so a grid/list toggle keeps position.
-    val libraryGridState = rememberLazyGridState()
+    val listState = rememberLazyListState()
     MainLayout(
             title = "Library",
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
-            onTitleClick = { scope.scrollToTop(libraryGridState) },
+            onTitleClick = { scope.scrollToTop(listState) },
             chips = {
                 Chip("playlists", selected = true, onClick = {})
                 Chip("providers", selected = false, onClick = onOpenProviders)
@@ -253,7 +239,7 @@ fun LocalScreen(
                 !haveAudio -> PermissionNote()
                 libError != null && songs.isEmpty() -> CenterNote(libError!!, p.destructiveInk)
                 else -> PlaylistList(
-                    gridState = libraryGridState,
+                    listState = listState,
                     smart = smartPlaylists,
                     pinnedPlaylists = pinnedPlaylists,
                     playlists = unpinnedPlaylists,
@@ -281,10 +267,6 @@ fun LocalScreen(
                     onPin = { slug, pinned -> scope.launch { playlists.setPinned(slug, pinned) } },
                     onOpen = { onOpenPlaylist(it.station.slug) },
                     onOpenSmart = { onOpenSmart(it.kind.name) },
-                    pinnedGrid = pinnedGrid,
-                    onTogglePinnedGrid = { scope.launch { prefs.setPinnedGrid(!pinnedGrid) } },
-                    playlistsGrid = playlistsGrid,
-                    onTogglePlaylistsGrid = { scope.launch { prefs.setPlaylistsGrid(!playlistsGrid) } },
                     loading = loading,
                 )
             }
@@ -606,7 +588,7 @@ private fun PermissionNote() {
 
 @Composable
 private fun PlaylistList(
-    gridState: LazyGridState,
+    listState: LazyListState,
     smart: List<SmartPlaylist>,
     pinnedPlaylists: List<PlaylistStore.Playlist>,
     playlists: List<PlaylistStore.Playlist>,
@@ -625,51 +607,34 @@ private fun PlaylistList(
     onPin: (String, Boolean) -> Unit,
     onOpen: (PlaylistStore.Playlist) -> Unit,
     onOpenSmart: (SmartPlaylist) -> Unit,
-    pinnedGrid: Boolean = true,
-    onTogglePinnedGrid: () -> Unit = {},
-    playlistsGrid: Boolean = false,
-    onTogglePlaylistsGrid: () -> Unit = {},
     loading: Boolean = false,
 ) {
     val p = LocalPalette.current
-    val context = LocalContext.current
     Column(Modifier.fillMaxSize()) {
-        // Remount the grid whenever a section flips grid/list: LazyGrid caches
-        // measured item spans, so mutating them in place (toggle + long list)
-        // hits the known androidx "Place was called on a node which was placed
-        // already" crash. A fresh grid keeps spans constant for its lifetime.
-        key(pinnedGrid, playlistsGrid) {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(150.dp),
+        LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
-            state = gridState,
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            state = listState,
         ) {
             val pinnedCount = smart.size + pinnedPlaylists.size
-            item(span = { GridItemSpan(maxLineSpan) }) {
+            item {
                 SectionLabel("pinned — $pinnedCount") {
                     if (!creating) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                            GridListToggle(gridMode = pinnedGrid, onToggle = onTogglePinnedGrid)
-                            Box(
-                                Modifier
-                                    .size(34.dp)
-                                    .clip(RoundedCornerShape(CliampShape.small))
-                                    .background(if (p.dark) p.keyFace else p.ground)
-                                    .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.small))
-                                    .microPress(onClick = onBeginCreate),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(CliampIcons.Plus, "new playlist", Modifier.size(16.dp), tint = p.accent)
-                            }
+                        Box(
+                            Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(CliampShape.small))
+                                .background(if (p.dark) p.keyFace else p.ground)
+                                .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.small))
+                                .microPress(onClick = onBeginCreate),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(CliampIcons.Plus, "new playlist", Modifier.size(16.dp), tint = p.accent)
                         }
                     }
                 }
             }
             if (creating) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
+                item {
                     InlineNameField(
                         text = editText,
                         onTextChange = onEditTextChange,
@@ -679,18 +644,13 @@ private fun PlaylistList(
                     )
                 }
             }
-            items(smart, key = { it.key }, span = { GridItemSpan(if (pinnedGrid) 1 else maxLineSpan) }) { sp ->
-                if (pinnedGrid) {
-                    SmartPlaylistTile(sp = sp, onOpen = { onOpenSmart(sp) }, loading = loading)
-                } else {
-                    SmartPlaylistRow(sp = sp, onOpen = { onOpenSmart(sp) }, loading = loading)
-                }
+            items(smart, key = { it.key }) { sp ->
+                SmartPlaylistRow(sp = sp, onOpen = { onOpenSmart(sp) }, loading = loading)
             }
 
             items(
                 pinnedPlaylists,
                 key = { it.station.slug },
-                span = { GridItemSpan(if (pinnedGrid) 1 else maxLineSpan) },
             ) { pl ->
                 if (pl.station.slug == renamingSlug) {
                     InlineNameField(
@@ -699,17 +659,6 @@ private fun PlaylistList(
                         placeholder = "rename playlist",
                         onDone = { onRename(pl.station.slug, it) },
                         onCancel = onCancel,
-                    )
-                } else if (pinnedGrid) {
-                    PlaylistTile(
-                        pl = pl,
-                        pinned = true,
-                        onOpen = onOpen,
-                        onEdit = { onBeginRename(pl.station.slug) },
-                        onDelete = { onDelete(pl.station.slug) },
-                        onAddSongs = { onAddSongs(pl.station.slug) },
-                        onPin = { onPin(pl.station.slug, false) },
-                        context = context,
                     )
                 } else {
                     PlaylistRow(
@@ -721,21 +670,17 @@ private fun PlaylistList(
                         onDelete = { onDelete(pl.station.slug) },
                         onAddSongs = { onAddSongs(pl.station.slug) },
                         onPin = { onPin(pl.station.slug, false) },
-                        context = context,
                     )
                 }
             }
             if (playlists.isNotEmpty()) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    SectionLabel("playlists — ${playlists.size}") {
-                        GridListToggle(gridMode = playlistsGrid, onToggle = onTogglePlaylistsGrid)
-                    }
+                item {
+                    SectionLabel("playlists — ${playlists.size}")
                 }
             }
             items(
                 playlists,
                 key = { it.station.slug },
-                span = { GridItemSpan(if (playlistsGrid) 1 else maxLineSpan) },
             ) { pl ->
                 if (pl.station.slug == renamingSlug) {
                     InlineNameField(
@@ -744,17 +689,6 @@ private fun PlaylistList(
                         placeholder = "rename playlist",
                         onDone = { onRename(pl.station.slug, it) },
                         onCancel = onCancel,
-                    )
-                } else if (playlistsGrid) {
-                    PlaylistTile(
-                        pl = pl,
-                        pinned = false,
-                        onOpen = onOpen,
-                        onEdit = { onBeginRename(pl.station.slug) },
-                        onDelete = { onDelete(pl.station.slug) },
-                        onAddSongs = { onAddSongs(pl.station.slug) },
-                        onPin = { onPin(pl.station.slug, true) },
-                        context = context,
                     )
                 } else {
                     PlaylistRow(
@@ -766,12 +700,10 @@ private fun PlaylistList(
                         onDelete = { onDelete(pl.station.slug) },
                         onAddSongs = { onAddSongs(pl.station.slug) },
                         onPin = { onPin(pl.station.slug, true) },
-                        context = context,
                     )
                 }
             }
-            item(span = { GridItemSpan(maxLineSpan) }) { Spacer(Modifier.height(20.dp)) }
-        }
+            item { Spacer(Modifier.height(20.dp)) }
         }
         Spacer(Modifier.height(8.dp))
     }
@@ -896,29 +828,14 @@ private fun PlaylistRow(
     onDelete: () -> Unit,
     onAddSongs: () -> Unit,
     onPin: () -> Unit,
-    context: android.content.Context,
 ) {
     val p = LocalPalette.current
     val byId = remember(songs) { songs.associate { it.id to it.name } }
-    val cover = pl.station.cover
-    var art by remember(pl.station.slug) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(pl.station.slug, cover) {
-        art = LocalArt.bitmapFor(cover, context.contentResolver)?.asImageBitmap()
-    }
     ListRow(
         onClick = { onOpen(pl) },
         verticalPadding = 9.dp,
         leading = {
-            Box(
-                Modifier.size(44.dp).clip(RoundedCornerShape(CliampShape.small))
-                    .then(if (art == null) Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small)) else Modifier),
-            ) {
-                if (art != null) {
-                    Image(art!!, pl.station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                } else {
-                    ArtPlate(modifier = Modifier.fillMaxSize(), radius = 5.dp, initial = pl.station.name)
-                }
-            }
+            PlaylistGlyph(CliampIcons.ListShort, pl.station.name)
         },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -936,118 +853,7 @@ private fun PlaylistRow(
     }
 }
 
-/** A user playlist as a square tile: cover art, name, size, and the ⁝ menu.
- * The tile body opens the playlist; the ⁝ in the corner is the row's menu. */
-@Composable
-private fun PlaylistTile(
-    pl: PlaylistStore.Playlist,
-    pinned: Boolean,
-    onOpen: (PlaylistStore.Playlist) -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onAddSongs: () -> Unit,
-    onPin: () -> Unit,
-    context: android.content.Context,
-) {
-    val p = LocalPalette.current
-    val cover = pl.station.cover
-    var art by remember(pl.station.slug) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(pl.station.slug, cover) {
-        art = LocalArt.bitmapFor(cover, context.contentResolver)?.asImageBitmap()
-    }
-    Column(Modifier.fillMaxWidth().microPress { onOpen(pl) }) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(CliampShape.medium))
-                .background(p.panel)
-                .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.medium)),
-        ) {
-            if (art != null) {
-                Image(art!!, pl.station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            } else {
-ArtPlate(modifier = Modifier.fillMaxSize(), initial = pl.station.name)
-            }
-            Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
-                PlaylistMenu(pinned = pinned, onAddSongs = onAddSongs, onEdit = onEdit, onDelete = onDelete, onPin = onPin)
-            }
-        }
-        Spacer(Modifier.height(7.dp))
-        Column(Modifier.padding(horizontal = 2.dp)) {
-            Mono(pl.station.name, CliampType.rowPrimaryMedium, p.ink, maxLines = 2)
-            Mono("${pl.songIds.size} songs", CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
-        }
-    }
-}
-
-/** A pinned, auto-populated smart playlist as a cover-collage tile. */
-@Composable
-private fun SmartPlaylistTile(
-    sp: SmartPlaylist,
-    onOpen: () -> Unit,
-    loading: Boolean = false,
-) {
-    val p = LocalPalette.current
-    val scanning = loading && sp.kind == SmartKind.LocalSongs && sp.stations.isEmpty()
-    val kindIcon = smartKindIcon(sp.kind)
-    val pulse = rememberInfiniteTransition(label = "scan")
-    val shimmer by pulse.animateFloat(
-        initialValue = 1f, targetValue = 0.35f,
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-        label = "shimmer",
-    )
-
-    Column(Modifier.fillMaxWidth().microPress(onClick = onOpen)) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(CliampShape.medium))
-                .then(
-                    if (scanning) Modifier.background(if (p.dark) p.ground else p.keyFace)
-                    else Modifier.background(p.panel)
-                )
-                .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.medium)),
-        ) {
-            if (scanning) {
-                Box(Modifier.fillMaxSize().background(p.inkFaint.copy(alpha = 0.35f * shimmer)),
-                    contentAlignment = Alignment.Center) {
-                    Icon(kindIcon, sp.label, Modifier.size(22.dp), tint = p.inkFaint.copy(alpha = 0.7f * shimmer))
-                }
-            } else {
-                SmartCollage(sp, Modifier.fillMaxSize())
-                Box(
-                    Modifier
-                        .align(Alignment.TopStart)
-                        .padding(10.dp)
-                        .size(26.dp)
-                        .background(p.ground.copy(alpha = 0.85f), RoundedCornerShape(CliampShape.small))
-                        .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(kindIcon, sp.label, Modifier.size(12.dp), tint = p.accent)
-                }
-            }
-        }
-        Spacer(Modifier.height(7.dp))
-        Column(Modifier.padding(horizontal = 2.dp)) {
-            Mono(sp.label, CliampType.rowPrimaryMedium, p.ink, maxLines = 2)
-            if (scanning) {
-                Box(Modifier.padding(top = 3.dp).width(110.dp).height(10.dp)
-                    .clip(RoundedCornerShape(CliampShape.small))
-                    .background(p.inkFaint.copy(alpha = 0.5f * shimmer)))
-            } else {
-                Mono(
-                    if (sp.stations.isEmpty()) "nothing here yet" else "${sp.stations.size} items",
-                    CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
-                )
-            }
-        }
-    }
-}
-
-/** A pinned, auto-populated smart playlist as a list row (list layout). */
+/** A pinned, auto-populated smart playlist as a list row. */
 @Composable
 private fun SmartPlaylistRow(
     sp: SmartPlaylist,
@@ -1076,7 +882,7 @@ private fun SmartPlaylistRow(
                         Icon(kindIcon, sp.label, Modifier.size(16.dp), tint = p.inkFaint.copy(alpha = 0.7f * shimmer))
                     }
                 } else {
-                    SmartCollage(sp, Modifier.fillMaxSize())
+                    PlaylistGlyph(kindIcon, sp.label)
                 }
             }
         },
@@ -1102,69 +908,27 @@ private fun SmartPlaylistRow(
     }
 }
 
+/** A playlist's identifying mark: static themed glyph on a plate, identical
+ * in every theme. Deliberately not cover art - rows stay instant, with
+ * nothing to load, decode or shimmer. */
+@Composable
+private fun PlaylistGlyph(icon: ImageVector, contentDescription: String?) {
+    val p = LocalPalette.current
+    Box(
+        Modifier.size(44.dp).clip(RoundedCornerShape(CliampShape.small))
+            .background(p.panel)
+            .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription, Modifier.size(18.dp), tint = p.accent)
+    }
+}
+
 /** The smart playlist's identifying glyph. */
 private fun smartKindIcon(kind: SmartKind): ImageVector = when (kind) {
     SmartKind.LocalSongs -> CliampIcons.MusicNote
     SmartKind.Favorites -> CliampIcons.Star
     SmartKind.RecentlyPlayed -> CliampIcons.Clock
-}
-
-/** The 2x2 member-cover mosaic shared by the smart-playlist tile and row. */
-@Composable
-private fun SmartCollage(sp: SmartPlaylist, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val kindIcon = smartKindIcon(sp.kind)
-    val members = remember(sp.stations) { sp.stations.take(4) }
-    var arts by remember(members) { mutableStateOf<List<ImageBitmap?>>(members.map { null }) }
-    LaunchedEffect(members) {
-        arts = members.map { s ->
-            val bmp = when (s.source) {
-                StationSource.Local ->
-                    LocalArt.bitmapForSmall(s.cover, context.contentResolver)
-                        ?: StationArtSource.bitmapForSmall(s)
-                else -> StationArtSource.bitmapForSmall(s)
-            }
-            bmp?.asImageBitmap()
-        }
-    }
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-            CoverCell(arts.getOrNull(0), members.getOrNull(0)?.name, kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
-            CoverCell(arts.getOrNull(1), members.getOrNull(1)?.name, kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
-        }
-        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-            CoverCell(arts.getOrNull(2), members.getOrNull(2)?.name, kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
-            CoverCell(arts.getOrNull(3), members.getOrNull(3)?.name, kindIcon, sp.label, Modifier.weight(1f).fillMaxHeight())
-        }
-    }
-}
-
-/**
- * One quarter of a smart-playlist collage: member cover art, a plate with the
- * member's initial when the song has no cover, and for a quarter with no member
- * at all the smart playlist's own glyph - so an empty or half-empty playlist
- * still reads as something rather than four bare tiles.
- */
-@Composable
-private fun CoverCell(
-    art: ImageBitmap?,
-    initial: String?,
-    kindIcon: ImageVector,
-    contentDescription: String?,
-    modifier: Modifier = Modifier,
-) {
-    val p = LocalPalette.current
-    Box(modifier.background(p.artB)) {
-        if (art != null) {
-            Image(art, contentDescription, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        } else if (initial != null) {
-            ArtPlate(modifier = Modifier.fillMaxSize(), initial = initial)
-        } else {
-            ArtPlate(modifier = Modifier.fillMaxSize()) {
-                Icon(kindIcon, null, Modifier.align(Alignment.Center).size(18.dp), tint = p.accent.copy(alpha = 0.22f))
-            }
-        }
-    }
 }
 
 /** The ⋮ overflow menu on a playlist row: pin/unpin, edit the name, or remove the playlist. */

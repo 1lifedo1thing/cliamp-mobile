@@ -68,8 +68,6 @@ class Prefs(private val context: Context) {
     // Grid/list layout flags live in memory first (so a toggle is instant on
     // the frame it is tapped) and only settle onto the DataStore file for the
     // restore-after-boot source, like the per-playlist sorts below.
-    private val pinnedGridFlag = MutableStateFlow(true)
-    private val playlistsGridFlag = MutableStateFlow(false)
     private val cliampGridFlag = MutableStateFlow(false)
     private val directoryGridFlag = MutableStateFlow(false)
     private val subsGridFlag = MutableStateFlow(true)
@@ -94,8 +92,6 @@ class Prefs(private val context: Context) {
         val wNext = stringPreferencesKey("w_next")
         val wSource = stringPreferencesKey("w_source")
         val playlistSorts = stringPreferencesKey("playlist_sorts")  // slug -> PlaylistSort.ordinal
-        val pinnedGrid = booleanPreferencesKey("pinned_grid")       // library: pinned pinned playlists as tiles
-        val playlistsGrid = booleanPreferencesKey("playlists_grid") // library: user playlists as tiles
         val cliampGrid = booleanPreferencesKey("cliamp_grid")       // stations: cliamp channel tiles
         val directoryGrid = booleanPreferencesKey("directory_grid") // stations: directory tiles
         val subsGrid = booleanPreferencesKey("subs_grid")           // podcasts: subscribed shows as tiles
@@ -112,10 +108,6 @@ class Prefs(private val context: Context) {
     val autoResume: Flow<Boolean> = context.settingsStore.data.map { it[K.autoResume] ?: false }
     val volume: Flow<Float> = context.settingsStore.data.map { it[K.volume] ?: 1f }
 
-    /** Library pinned section (smart playlists + pinned user playlists) as a grid. */
-    val pinnedGrid: StateFlow<Boolean> = pinnedGridFlag.asStateFlow()
-    /** Library user-playlists section as a grid. */
-    val playlistsGrid: StateFlow<Boolean> = playlistsGridFlag.asStateFlow()
     /** Stations cliamp channel section as a grid. */
     val cliampGrid: StateFlow<Boolean> = cliampGridFlag.asStateFlow()
     /** Stations directory section as a grid. */
@@ -199,8 +191,6 @@ class Prefs(private val context: Context) {
         sortOverrides.value = p[K.playlistSorts]?.let { raw ->
             runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
         } ?: emptyMap()
-        pinnedGridFlag.value = p[K.pinnedGrid] ?: true
-        playlistsGridFlag.value = p[K.playlistsGrid] ?: false
         cliampGridFlag.value = p[K.cliampGrid] ?: false
         directoryGridFlag.value = p[K.directoryGrid] ?: false
         subsGridFlag.value = p[K.subsGrid] ?: true
@@ -230,14 +220,6 @@ class Prefs(private val context: Context) {
     suspend fun setEqPreset(v: String) = put(K.eqPreset, v)
     suspend fun setAutoResume(v: Boolean) = put(K.autoResume, v)
     suspend fun setVolume(v: Float) = put(K.volume, v)
-    suspend fun setPinnedGrid(v: Boolean) {
-        pinnedGridFlag.value = v
-        put(K.pinnedGrid, v)
-    }
-    suspend fun setPlaylistsGrid(v: Boolean) {
-        playlistsGridFlag.value = v
-        put(K.playlistsGrid, v)
-    }
     suspend fun setCliampGrid(v: Boolean) {
         cliampGridFlag.value = v
         put(K.cliampGrid, v)
