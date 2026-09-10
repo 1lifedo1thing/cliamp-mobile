@@ -31,7 +31,7 @@ val CoverIo = Dispatchers.IO.limitedParallelism(4)
  */
 object StationArtSource {
 
-    private const val MAX_HTML = 192 * 1024
+    private const val MAX_HTML = 64 * 1024
     private const val MAX_IMAGE = 4 * 1024 * 1024
     private const val TARGET = 512
 
@@ -208,7 +208,7 @@ object StationArtSource {
                 .header("User-Agent", Http.USER_AGENT)
                 .header("Accept", "text/html")
                 .build()
-            Http.client.newCall(req).execute().use { r ->
+            Http.artClient.newCall(req).execute().use { r ->
                 if (!r.isSuccessful) return@use null
                 val ct = r.header("Content-Type").orEmpty()
                 if (!ct.contains("html", ignoreCase = true)) return@use null
@@ -230,7 +230,7 @@ object StationArtSource {
     private suspend fun download(url: String, save: String? = null, target: Int = TARGET): Bitmap? = withContext(Dispatchers.IO) {
         runCatching {
             val req = Request.Builder().url(url).header("User-Agent", Http.USER_AGENT).build()
-            Http.client.newCall(req).execute().use { r ->
+            Http.artClient.newCall(req).execute().use { r ->
                 if (!r.isSuccessful) return@use null
                 val ct = r.header("Content-Type").orEmpty().substringBefore(';').trim().lowercase()
                 if (ct.isNotEmpty() && (!ct.startsWith("image/") || ct in undecodable)) return@use null

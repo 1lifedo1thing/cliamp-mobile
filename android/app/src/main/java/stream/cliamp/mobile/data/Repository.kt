@@ -2,6 +2,8 @@ package stream.cliamp.mobile.data
 
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -100,7 +102,10 @@ class Repository(
             // and let the section say what happened instead.
             _cliampError.value = null
             runCatching { retryFetch { CliampRadio.fetchStations() } }
-                .onSuccess { _cliamp.value = it }
+                .onSuccess {
+                    _cliamp.value = it
+                    prefetchCovers(it)
+                }
                 .onFailure { _cliampError.value = it.message ?: "cliamp radio unreachable" }
         }
     }
@@ -151,6 +156,10 @@ class Repository(
                             // A first page is the whole "open the tab" moment;
                             // remember it so a cold start can render it instantly.
                             if (reset) snapshot(query, merged)
+                            // Warm art for the first screenful while it is on
+                            // screen: rows then hit memory/disk instead of
+                            // queueing fresh fetches behind each other.
+                            if (reset) prefetchCovers(merged)
                         }
                     },
                     onFailure = { e ->
@@ -174,6 +183,22 @@ class Repository(
         // loading stays true so the footer still says "loading more…".
         if (cur.query == query && cur.stations.isEmpty()) {
             _directory.value = cur.copy(stations = cached)
+        }
+    }
+
+    /**
+     * Warms small art for the first screenful once a list lands, so rows hit
+     * memory/disk instead of queueing fresh fetches behind each other on a
+     * cold list. Fire-and-forget on the shared pool; a row that beats its
+     * prefetch just does the same fetch it would have anyway.
+     */
+    private fun prefetchCovers(stations: List<Station>) {
+        val head = stations.take(24)
+        if (head.isEmpty()) return
+        scope.launch {
+            runCatching {
+                head.map { async { StationArtSource.bitmapForSmall(it) } }.awaitAll()
+            }
         }
     }
 
