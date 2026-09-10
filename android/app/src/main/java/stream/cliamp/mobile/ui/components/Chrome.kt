@@ -153,8 +153,8 @@ fun ScreenHeader(
 @Composable
 fun MainLayout(
     title: String,
-    onOpenSearch: () -> Unit,
-    onOpenSettings: () -> Unit,
+    onOpenSearch: (() -> Unit)?,
+    onOpenSettings: (() -> Unit)?,
     modifier: Modifier = Modifier,
     chips: (@Composable RowScope.() -> Unit)? = null,
     onTitleClick: (() -> Unit)? = null,
@@ -181,20 +181,26 @@ fun MainLayout(
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    CliampIcons.Search, "search",
-                    Modifier
-                        .size(22.dp)
-                        .microPress(enabled = true, onClick = onOpenSearch),
-                    tint = p.accent,
-                )
-                Icon(
-                    CliampIcons.Gear, "settings",
-                    Modifier
-                        .size(22.dp)
-                        .microPress(enabled = true, onClick = onOpenSettings),
-                    tint = p.accent,
-                )
+                // Null hides the corner: the settings page wears this same
+                // header but must not offer a gear that opens itself.
+                if (onOpenSearch != null) {
+                    Icon(
+                        CliampIcons.Search, "search",
+                        Modifier
+                            .size(22.dp)
+                            .microPress(enabled = true, onClick = onOpenSearch),
+                        tint = p.accent,
+                    )
+                }
+                if (onOpenSettings != null) {
+                    Icon(
+                        CliampIcons.Gear, "settings",
+                        Modifier
+                            .size(22.dp)
+                            .microPress(enabled = true, onClick = onOpenSettings),
+                        tint = p.accent,
+                    )
+                }
             }
         }
         if (chips != null) {

@@ -44,6 +44,7 @@ import stream.cliamp.mobile.ui.components.CliampToggle
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.scrollToTop
 import stream.cliamp.mobile.ui.components.HairlineDivider
+import stream.cliamp.mobile.ui.components.MainLayout
 import stream.cliamp.mobile.ui.components.MechSlider
 import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.SectionLabel
@@ -65,6 +66,7 @@ fun SettingsScreen(
     prefs: Prefs,
     repository: Repository,
     onBack: () -> Unit,
+    onOpenSearch: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -81,31 +83,23 @@ fun SettingsScreen(
     val dirStats by repository.directoryStats.collectAsState()
 
     val scrollState = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(p.ground)
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .verticalScroll(scrollState)
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+    MainLayout(
+        title = "Settings",
+        onOpenSearch = onOpenSearch,
+        onOpenSettings = null,
+        chips = {
             BackChip(onClick = onBack)
-        }
-        Box(Modifier.padding(horizontal = Gutter, vertical = 4.dp)) {
-            Mono(
-                "Settings", CliampType.screenTitle, p.ink,
-                modifier = Modifier.microPress { scope.scrollToTop(scrollState) },
-            )
-        }
-        Spacer(Modifier.height(12.dp))
-        HairlineDivider(region = true)
-
-        SectionLabel("playback")
+        },
+        onTitleClick = { scope.scrollToTop(scrollState) },
+    ) {
+        Column(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .verticalScroll(scrollState)
+        ) {
+            SectionLabel("playback")
         ToggleRow(
             title = "Auto-resume",
             checked = autoResume,
@@ -241,6 +235,7 @@ fun SettingsScreen(
             }
         }
         Spacer(Modifier.height(40.dp))
+        }
     }
 }
 

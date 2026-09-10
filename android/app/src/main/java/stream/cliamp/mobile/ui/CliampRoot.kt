@@ -480,6 +480,7 @@ fun CliampRoot(
                         prefs = prefs,
                         repository = repository,
                         onBack = { navController.popBackStack() },
+                        onOpenSearch = { navController.navigate(Search) },
                     )
                 }
             }
