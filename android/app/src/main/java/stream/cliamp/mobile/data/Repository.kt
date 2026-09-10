@@ -74,9 +74,21 @@ class Repository(
 
     fun bootstrap() {
         refreshCliamp()
-        scope.launch { _directoryStats.value = retryFetch { RadioBrowser.stats() } }
-        scope.launch { _tags.value = retryFetch { RadioBrowser.topTags(60) } }
-        scope.launch { _countries.value = retryFetch { RadioBrowser.topCountries() } }
+        // Meta first: instant chips and stats from the last snapshot, then the
+        // live fetches replace them. Same snapshot pattern as the directories.
+        scope.launch { restoreMeta() }
+        scope.launch {
+            _directoryStats.value = retryFetch { RadioBrowser.stats() }
+            _directoryStats.value?.let { snapshotMeta("meta:stats", it) }
+        }
+        scope.launch {
+            _tags.value = retryFetch { RadioBrowser.topTags(60) }
+            _tags.value.takeIf { it.isNotEmpty() }?.let { snapshotMeta("meta:tags", it) }
+        }
+        scope.launch {
+            _countries.value = retryFetch { RadioBrowser.topCountries() }
+            _countries.value.takeIf { it.isNotEmpty() }?.let { snapshotMeta("meta:countries", it) }
+        }
         loadDirectory(DirectoryQuery.TopVoted, reset = true)
     }
 
@@ -172,6 +184,38 @@ class Repository(
                     KvCacheEntity(
                         key = keyOf(query),
                         json = Http.json.encodeToString(stations),
+                        savedAt = System.currentTimeMillis(),
+                    )
+                )
+            }
+        }
+    }
+
+    /** Last-good chips and stats, so cold tabs render before the network. */
+    private suspend fun restoreMeta() {
+        cache.get("meta:stats")?.let { row ->
+            runCatching { Http.json.decodeFromString<DirectoryStats>(row.json) }.getOrNull()
+                ?.let { if (_directoryStats.value == null) _directoryStats.value = it }
+        }
+        cache.get("meta:tags")?.let { row ->
+            runCatching { Http.json.decodeFromString<List<NameCount>>(row.json) }.getOrNull()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { if (_tags.value.isEmpty()) _tags.value = it }
+        }
+        cache.get("meta:countries")?.let { row ->
+            runCatching { Http.json.decodeFromString<List<CountryCount>>(row.json) }.getOrNull()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { if (_countries.value.isEmpty()) _countries.value = it }
+        }
+    }
+
+    private inline fun <reified T> snapshotMeta(key: String, value: T) {
+        scope.launch {
+            runCatching {
+                cache.put(
+                    KvCacheEntity(
+                        key = key,
+                        json = Http.json.encodeToString(value),
                         savedAt = System.currentTimeMillis(),
                     )
                 )
