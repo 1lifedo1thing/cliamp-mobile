@@ -411,42 +411,50 @@ class PlaybackService : MediaSessionService() {
     )
 
     /**
-     * Ticks the widget's seek row once a second while a seekable source plays.
-     * Partial updates only (a few views merged, no re-inflation), so the
-     * cadence costs nothing noticeable. Anything else - paused, live radio,
-     * unknown duration - stops the ticker; the last partial already shows the
-     * resting position.
+     * Ticks the widget twice a second while anything plays: the seek row
+     * (elapsed/bar, partial update, skips ticks where the clock second did
+     * not move) and the slim scope flipbook (one small bitmap, skipped when
+     * there is no spectrum). Paused, empty or failed playback stops the
+     * ticker; the last frame already shows the resting state.
      */
     private var progressJob: Job? = null
 
     private fun syncProgressTicker() {
-        val duration = player.duration.takeIf { it > 0 } ?: 0L
-        val want = player.playWhenReady && player.isCurrentMediaItemSeekable && duration > 0
+        val want = player.playWhenReady && player.mediaItemCount > 0
         if (want && progressJob?.isActive == true) return
         progressJob?.cancel()
         progressJob = if (want) scope.launch {
             while (true) {
-                WidgetRenderer.pushProgress(
-                    this@PlaybackService,
-                    player.currentPosition.coerceAtLeast(0),
-                    player.duration.takeIf { it > 0 } ?: duration,
-                )
-                delay(1_000)
+                val dur = player.duration.takeIf { it > 0 } ?: 0L
+                if (player.isCurrentMediaItemSeekable && dur > 0) {
+                    WidgetRenderer.pushProgress(
+                        this@PlaybackService,
+                        player.currentPosition.coerceAtLeast(0),
+                        dur,
+                    )
+                }
+                if (prefs0.visualizer.first() != "off") {
+                    WidgetRenderer.pushSpectrum(this@PlaybackService)
+                }
+                delay(500)
             }
         } else null
-        if (!want && player.isCurrentMediaItemSeekable && duration > 0) {
-            WidgetRenderer.pushProgress(
-                this,
-                player.currentPosition.coerceAtLeast(0),
-                duration,
-            )
+        if (!want) {
+            val duration = player.duration.takeIf { it > 0 } ?: 0L
+            if (player.isCurrentMediaItemSeekable && duration > 0) {
+                WidgetRenderer.pushProgress(
+                    this,
+                    player.currentPosition.coerceAtLeast(0),
+                    duration,
+                )
+            }
         }
     }
 
     /**
      * Shared spectrum sink used by every fx.attach (onCreate and the playing
-     * re-attach). Only the in-app meter and the oscilloscope read it now: the
-     * widget is deliberately static, so nothing is persisted per frame.
+     * re-attach). The in-app meter and the oscilloscope read it live; the
+     * widget samples it twice a second for its slim scope.
      */
     private fun handleSpectrum(it: FloatArray) {
         PlaybackBus.publishSpectrum(it)

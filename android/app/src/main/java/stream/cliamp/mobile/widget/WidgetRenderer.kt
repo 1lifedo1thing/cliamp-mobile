@@ -7,6 +7,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.os.Build
 import android.os.SystemClock
 import android.util.Log
@@ -24,6 +27,7 @@ import stream.cliamp.mobile.MainActivity
 import stream.cliamp.mobile.R
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationSource
+import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.ui.clock
 import stream.cliamp.mobile.ui.theme.CliampPalette
 import stream.cliamp.mobile.ui.theme.paletteFor
@@ -69,8 +73,34 @@ object WidgetRenderer {
     @Volatile var lastKnown: Row? = null
         private set
 
+    /** Below this width/height the centered compact card takes over. */
+    private const val COMPACT_MAX_WIDTH_DP = 200
+    private const val COMPACT_MAX_HEIGHT_DP = 84
+
+    /** Scope flipbook: two frames a second of this bitmap over binder. */
+    private const val SCOPE_COLS = 32
+    private const val SCOPE_WIDTH_PX = 254
+    private const val SCOPE_HEIGHT_PX = 112
+    private const val SCOPE_BRICK_PX = 5f
+    private const val SCOPE_GAP_PX = 3f
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Any()
+
+    /** Guards the scope bitmap, its canvas and the peak memory: ticks and
+     * full renders share one reusable bitmap. */
+    private val scopeDrawLock = Any()
+    private var scopeBitmap: Bitmap? = null
+    private var scopeCanvas: Canvas? = null
+    private val scopePeaks = FloatArray(SCOPE_COLS)
+
+    /** Palette of the last full render, for ticks that carry no theme. */
+    @Volatile private var lastPalette: CliampPalette? = null
+
+    /** Last tick's clock second + duration: identical ticks are skipped. */
+    @Volatile private var lastTickSecond = -1L
+    @Volatile private var lastTickDuration = 0L
+
     private var appContext: Context? = null
     private var pending: Row? = null
     private var pendingCold = false
@@ -108,6 +138,11 @@ object WidgetRenderer {
     fun pushProgress(context: Context, positionMs: Long, durationMs: Long) {
         val prev = lastKnown ?: return
         if (!prev.seekable || durationMs <= 0) return
+        // The bar only moves once a second; identical ticks are skipped.
+        val second = positionMs / 1000
+        if (second == lastTickSecond && durationMs == lastTickDuration) return
+        lastTickSecond = second
+        lastTickDuration = durationMs
         lastKnown = prev.copy(positionMs = positionMs, durationMs = durationMs)
         val ctx = context.applicationContext
         scope.launch {
@@ -129,6 +164,76 @@ object WidgetRenderer {
     /** Cold path: re-read everything from DataStore. */
     fun refresh(context: Context) {
         enqueue(context, row = null, cold = true)
+    }
+
+    /**
+     * One scope frame: paints the latest FFT into the shared bitmap and
+     * partially updates standard instances. No-ops without a rendered
+     * palette or without spectrum - so the service can fire it on a dumb
+     * cadence while playing and it costs nothing otherwise.
+     */
+    fun pushSpectrum(context: Context) {
+        val spectrum = PlaybackBus.spectrum.value
+        if (spectrum.isEmpty()) return
+        val p = lastPalette ?: return
+        val frame: Bitmap = synchronized(scopeDrawLock) {
+            drawScope(spectrum, p)
+        }
+        val ctx = context.applicationContext
+        scope.launch {
+            val mgr = AppWidgetManager.getInstance(ctx)
+            val ids = mgr.getAppWidgetIds(ComponentName(ctx, CliampWidgetProvider::class.java))
+                .filterNot { isCompact(mgr, it) }
+            if (ids.isEmpty()) return@launch
+            val rv = RemoteViews(ctx.packageName, R.layout.widget_cliamp)
+            rv.setImageViewBitmap(R.id.w_scope, frame)
+            runCatching {
+                for (id in ids) mgr.partiallyUpdateAppWidget(id, rv)
+            }
+        }
+    }
+
+    /**
+     * The in-app brick meter as a bitmap: 32 columns folded from the 64 FFT
+     * bands, bottom-anchored bricks, unlit grid behind, accent above the
+     * level, peak cap with decay. Reuses one bitmap + canvas across ticks.
+     */
+    private fun drawScope(spectrum: FloatArray, p: CliampPalette): Bitmap {
+        var bmp = scopeBitmap
+        var canvas = scopeCanvas
+        if (bmp == null || canvas == null) {
+            bmp = Bitmap.createBitmap(SCOPE_WIDTH_PX, SCOPE_HEIGHT_PX, Bitmap.Config.ARGB_8888)
+            canvas = Canvas(bmp)
+            scopeBitmap = bmp
+            scopeCanvas = canvas
+        }
+        val unlit = Paint().apply { color = p.unlit.toArgb() }
+        val lit = Paint().apply { color = p.accent.toArgb() }
+        val peak = Paint().apply { color = p.peak.toArgb() }
+        canvas.drawColor(0, android.graphics.PorterDuff.Mode.CLEAR)
+
+        val step = SCOPE_BRICK_PX + SCOPE_GAP_PX
+        val rows = ((SCOPE_HEIGHT_PX + SCOPE_GAP_PX) / step).toInt().coerceAtLeast(1)
+        val colW = (SCOPE_WIDTH_PX - 2f * (SCOPE_COLS - 1)) / SCOPE_COLS
+        val bandsPerCol = (spectrum.size / SCOPE_COLS).coerceAtLeast(1)
+        for (c in 0 until SCOPE_COLS) {
+            var level = 0f
+            for (b in 0 until bandsPerCol) {
+                level += spectrum.getOrElse(c * bandsPerCol + b) { 0f }
+            }
+            level = (level / bandsPerCol).coerceIn(0f, 1f)
+            scopePeaks[c] = maxOf(level, scopePeaks[c] - 0.08f)
+            val x = c * (colW + 2f)
+            val litRows = (level * rows).toInt()
+            for (r in 0 until rows) {
+                val y = SCOPE_HEIGHT_PX - (r + 1) * step + SCOPE_GAP_PX
+                canvas.drawRect(x, y, x + colW, y + SCOPE_BRICK_PX, if (r < litRows) lit else unlit)
+            }
+            val pkRow = (scopePeaks[c].coerceIn(0f, 1f) * rows).toInt().coerceIn(0, rows - 1)
+            val py = SCOPE_HEIGHT_PX - (pkRow + 1) * step + SCOPE_GAP_PX
+            canvas.drawRect(x, py, x + colW, py + SCOPE_BRICK_PX, peak)
+        }
+        return bmp
     }
 
     private data class Req(val row: Row?, val cold: Boolean)
@@ -189,11 +294,15 @@ object WidgetRenderer {
 
         val mgr = AppWidgetManager.getInstance(ctx)
         val ids = mgr.getAppWidgetIds(ComponentName(ctx, CliampWidgetProvider::class.java))
-        // Per instance: a tiny cell gets the centered compact row, anything
-        // roomier the full transport + seek layout.
+        // Per instance: a tiny cell gets the centered compact card, anything
+        // roomier the transport row with the flexing scope and seek.
         for (id in ids) {
-            mgr.updateAppWidget(id, buildViews(ctx, row, p, compact = isCompact(mgr, id)))
+            val (w, h) = cellSize(mgr, id)
+            val compact = w < COMPACT_MAX_WIDTH_DP || h < COMPACT_MAX_HEIGHT_DP
+            Log.d("cliamp/wid", "widget layout id=$id cell=${w}x${h} compact=$compact")
+            mgr.updateAppWidget(id, buildViews(ctx, row, p, compact))
         }
+        lastPalette = p
     }
 
     /**
@@ -203,6 +312,11 @@ object WidgetRenderer {
      * layout fits however the phone is held.
      */
     private fun isCompact(mgr: AppWidgetManager, id: Int): Boolean {
+        val (w, h) = cellSize(mgr, id)
+        return w < COMPACT_MAX_WIDTH_DP || h < COMPACT_MAX_HEIGHT_DP
+    }
+
+    private fun cellSize(mgr: AppWidgetManager, id: Int): Pair<Int, Int> {
         val o = mgr.getAppWidgetOptions(id)
         val w = minOf(
             o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 999),
@@ -212,10 +326,15 @@ object WidgetRenderer {
             o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 999),
             o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 999),
         )
-        return w < 200 || h < 84
+        return w to h
     }
 
-    internal fun buildViews(ctx: Context, row: Row, p: CliampPalette, compact: Boolean = false): RemoteViews {
+    internal fun buildViews(
+        ctx: Context,
+        row: Row,
+        p: CliampPalette,
+        compact: Boolean = false,
+    ): RemoteViews {
         val rv = RemoteViews(
             ctx.packageName,
             if (compact) R.layout.widget_cliamp_compact else R.layout.widget_cliamp,
@@ -279,6 +398,21 @@ object WidgetRenderer {
             }
         }
 
+        // The scope lives in the standard layout only and shows whenever
+        // something is tuned, flexing to the leftover height: a slim strip
+        // in a one-row cell, tall bricks in a two-row one. Its bitmap
+        // arrives separately (pushSpectrum flipbook); the current frame is
+        // painted inline here so a full re-render never blanks it.
+        val showScope = !compact && row.station != null
+        if (!compact) {
+            rv.setViewVisibility(R.id.w_scope, if (showScope) View.VISIBLE else View.GONE)
+            if (showScope) {
+                val frame = synchronized(scopeDrawLock) {
+                    drawScope(PlaybackBus.spectrum.value, p)
+                }
+                rv.setImageViewBitmap(R.id.w_scope, frame)
+            }
+        }
         rv.setOnClickPendingIntent(R.id.w_toggle, actionIntent(ctx, WIDGET_ACTION_TOGGLE, 1))
         rv.setOnClickPendingIntent(R.id.w_prev, actionIntent(ctx, WIDGET_ACTION_PREV, 2))
         rv.setOnClickPendingIntent(R.id.w_next, actionIntent(ctx, WIDGET_ACTION_NEXT, 3))
@@ -291,6 +425,7 @@ object WidgetRenderer {
                 PendingIntent.FLAG_IMMUTABLE,
             ),
         )
+
         return rv
     }
 
