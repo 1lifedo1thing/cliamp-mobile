@@ -56,6 +56,7 @@ import stream.cliamp.mobile.ui.components.ChipDropdown
 import stream.cliamp.mobile.ui.components.ChipOption
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.EmptyNote
+import stream.cliamp.mobile.ui.components.GlyphPlate
 import stream.cliamp.mobile.ui.components.GridListToggle
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
@@ -375,46 +376,47 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
         art = StationArtSource.bitmapForSmall(station)?.asImageBitmap()
     }
     val bmp = art
-Box(
-        Modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(CliampShape.small))
-            .then(
-                if (art != null) Modifier.background(p.panel)
-                else Modifier.border(1.dp, if (active) p.accent else p.chipBorder, RoundedCornerShape(CliampShape.small))
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (bmp != null) {
-            Image(
-                bitmap = bmp,
-                contentDescription = station.name,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-            )
-        }
-        if (active) {
-            Box(
-                Modifier
-                    .align(Alignment.Center)
-                    .size(18.dp)
-                    .clip(RoundedCornerShape(CliampShape.tiny))
-                    .background(p.accent.copy(alpha = 0.92f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    if (playing) CliampIcons.Pause else CliampIcons.PlayRow,
-                    null,
-                    Modifier.size(9.dp),
-                    tint = p.onAccent,
+    // No art to show, so the plate carries the broadcast mark in accent on
+    // panel - the same static themed plate playlist rows wear, recognisably
+    // a radio station in every theme. The play state keeps its badge below.
+    if (bmp == null && !active) {
+        GlyphPlate(CliampIcons.StationsTab, station.name, Modifier.size(40.dp))
+    } else {
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(CliampShape.small))
+                .then(
+                    if (art != null) Modifier.background(p.panel)
+                    else Modifier.border(1.dp, p.accent, RoundedCornerShape(CliampShape.small))
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (bmp != null) {
+                Image(
+                    bitmap = bmp,
+                    contentDescription = station.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
                 )
             }
-        } else if (bmp == null) {
-            // No art to show, so the plate carries the broadcast-signal mark
-            // the way a podcast row carries its feed glyph - still recognisably
-            // a radio station, not just an empty play affordance. The real play
-            // state still gets its accent badge below.
-            Icon(CliampIcons.StationsTab, null, Modifier.size(15.dp), tint = p.inkTertiary)
+            if (active) {
+                Box(
+                    Modifier
+                        .align(Alignment.Center)
+                        .size(18.dp)
+                        .clip(RoundedCornerShape(CliampShape.tiny))
+                        .background(p.accent.copy(alpha = 0.92f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (playing) CliampIcons.Pause else CliampIcons.PlayRow,
+                        null,
+                        Modifier.size(9.dp),
+                        tint = p.onAccent,
+                    )
+                }
+            }
         }
     }
 }
@@ -452,10 +454,10 @@ private fun StationTile(
                 Image(art!!, station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             } else {
                 Box(
-                    Modifier.fillMaxSize().background(if (p.dark) p.ground else p.keyFace),
+                    Modifier.fillMaxSize().background(p.panel),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(CliampIcons.StationsTab, null, Modifier.size(26.dp), tint = p.chipBorder)
+                    Icon(CliampIcons.StationsTab, station.name, Modifier.size(26.dp), tint = p.accent)
                 }
             }
             Icon(

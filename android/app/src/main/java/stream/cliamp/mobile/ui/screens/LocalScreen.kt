@@ -91,6 +91,7 @@ import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampTextField
+import stream.cliamp.mobile.ui.components.GlyphPlate
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.ListRow
@@ -913,15 +914,7 @@ private fun SmartPlaylistRow(
  * nothing to load, decode or shimmer. */
 @Composable
 private fun PlaylistGlyph(icon: ImageVector, contentDescription: String?) {
-    val p = LocalPalette.current
-    Box(
-        Modifier.size(44.dp).clip(RoundedCornerShape(CliampShape.small))
-            .background(p.panel)
-            .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, contentDescription, Modifier.size(18.dp), tint = p.accent)
-    }
+    GlyphPlate(icon, contentDescription, Modifier.size(44.dp))
 }
 
 /** The smart playlist's identifying glyph. */

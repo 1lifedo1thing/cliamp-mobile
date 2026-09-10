@@ -640,8 +640,9 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
         modifier = Modifier
             .fillMaxSize()
             // Soft drop shadow so the plate floats over the page - the
-            // premium read. Same large radius as the plate itself.
-            .shadow(26.dp, RoundedCornerShape(CliampShape.large))
+            // premium read. Same large radius as the plate itself. A touch
+            // lighter on light grounds, where deep shadows read dirty.
+            .shadow(if (p.dark) 26.dp else 20.dp, RoundedCornerShape(CliampShape.large))
             .graphicsLayer {
                 scaleX = breath
                 scaleY = breath
@@ -680,26 +681,17 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
                 contentScale = if (fills) ContentScale.Crop else ContentScale.Fit,
             )
         }
-        if (art == null && station?.source == StationSource.Cliamp) {
-            Icon(
-                CliampIcons.Mark,
-                null,
-                Modifier
-                    .align(Alignment.Center)
-                    .size(118.dp),
-                tint = p.accent.copy(alpha = 0.16f),
-            )
-        }
-        // No cover at all: the station's broadcast glyph, the same mark its
-        // list rows wear, instead of an empty plate with only a caption.
-        if (art == null && station?.source != StationSource.Cliamp) {
+        // No cover at all: the broadcast glyph in accent, the same themed
+        // mark the station's list rows wear - one identity in both places,
+        // for cliamp channels and directory stations alike.
+        if (art == null && station != null) {
             Icon(
                 CliampIcons.StationsTab,
                 null,
                 Modifier
                     .align(Alignment.Center)
                     .size(96.dp),
-                tint = p.inkTertiary,
+                tint = p.accent,
             )
         }
     }

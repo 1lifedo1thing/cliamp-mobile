@@ -510,6 +510,30 @@ private fun initialOf(name: String?): String? {
         ?.uppercaseChar()?.toString()
 }
 
+/**
+ * A static themed glyph plate: panel ground, hairline border, accent mark.
+ * For rows that identify by icon rather than cover art - playlist kinds,
+ * coverless stations - identical in every theme, with nothing to load.
+ */
+@Composable
+fun GlyphPlate(
+    icon: ImageVector,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    iconSize: Dp = 18.dp,
+) {
+    val p = LocalPalette.current
+    Box(
+        modifier
+            .clip(RoundedCornerShape(CliampShape.small))
+            .background(p.panel)
+            .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription, Modifier.size(iconSize), tint = p.accent)
+    }
+}
+
 /** A hairline-separated list row. Cards are for objects with state, not lists.
  * [rail] paints a thin accent line down the leading edge - the shared marker
  * for "this is the row that is playing right now". */
