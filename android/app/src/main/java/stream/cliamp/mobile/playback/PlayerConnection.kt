@@ -390,6 +390,9 @@ class PlayerConnection(
             station,
             PlaybackBus.streamTitle.value,
             true,
+            seekable = station.isTrack,
+            durationMs = station.durationMs,
+            positionMs = 0L,
         )
         scope.launch {
             prefs.setLastStation(station)

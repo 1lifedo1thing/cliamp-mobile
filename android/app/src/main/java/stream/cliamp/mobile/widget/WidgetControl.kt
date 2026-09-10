@@ -142,7 +142,12 @@ object WidgetControl {
         // tune. publish() after play() confirms it; the service is the final
         // writer via onPlayWhenReadyChanged.
         app.prefs.setWidgetPlaying(true)
-        WidgetRenderer.push(context, station, station.meta.orEmpty(), true)
+        WidgetRenderer.push(
+            context, station, station.meta.orEmpty(), true,
+            seekable = station.isTrack,
+            durationMs = station.durationMs,
+            positionMs = 0L,
+        )
 
         val resolved = StreamResolver.resolve(station.url)
         android.util.Log.d("cliamp/wid", "tune resolve ms=${System.currentTimeMillis() - t0}")
@@ -162,7 +167,11 @@ object WidgetControl {
         // the play glyph until first audio. playWhenReady is true from the tap.
         val playing = withController(context) { it.playWhenReady && it.mediaItemCount > 0 } ?: false
         app.prefs.setWidgetPlaying(playing)
-        WidgetRenderer.push(context, station, station.meta.orEmpty(), playing)
+        WidgetRenderer.push(
+            context, station, station.meta.orEmpty(), playing,
+            seekable = station.isTrack,
+            durationMs = station.durationMs,
+        )
     }
 
     @Suppress("unused")

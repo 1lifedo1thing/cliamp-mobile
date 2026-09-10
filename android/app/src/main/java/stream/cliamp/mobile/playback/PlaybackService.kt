@@ -35,8 +35,10 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -303,7 +305,7 @@ class PlaybackService : MediaSessionService() {
      * deduped: without the guard it wrote two preferences and woke every
      * widget several times a second for state that had not changed.
      */
-    private var lastWidgetState: Triple<Boolean, String, String>? = null
+    private var lastWidgetState: WidgetSig? = null
 
     /** Identity of the last list published, so next-up rewrites when the list or current song moves. */
     private var lastWidgetSourceKey: String? = null
@@ -334,12 +336,21 @@ class PlaybackService : MediaSessionService() {
         // stall and right after tune (before READY). playWhenReady flips on
         // the tap itself, which is what the toggle icon must mirror.
         val playing = player.playWhenReady && player.mediaItemCount > 0
-        val next = Triple(
-            playing,
-            PlaybackBus.streamTitle.value,
-            station?.url.orEmpty(),
+        val seekable = player.isCurrentMediaItemSeekable
+        val duration = player.duration.takeIf { it > 0 } ?: station?.durationMs ?: 0L
+        // Seekability and duration are part of the identity: they arrive
+        // later than the tap (duration is only known at READY), and without
+        // them here the "same triple" early return would swallow the very
+        // publish that flips the widget from the streaming rule to the seek
+        // row. Position stays out - the one-second ticker owns it.
+        val next = WidgetSig(
+            playing = playing,
+            track = PlaybackBus.streamTitle.value,
+            url = station?.url.orEmpty(),
+            seekable = seekable,
+            durationMs = duration,
         )
-        Log.d("cliamp/wid", "publishWidgetState playing=${next.first} streamTitle=${next.second} url=${next.third} station=${station?.name}")
+        Log.d("cliamp/wid", "publishWidgetState playing=${next.playing} streamTitle=${next.track} url=${next.url} station=${station?.name} seekable=${next.seekable} duration=${next.durationMs}")
         // Both halves of the cache update synchronously. lastWidgetSourceKey
         // used to be assigned inside the launch below (and only when upNext
         // was non-empty), so after a cold start it stayed null forever, the
@@ -355,7 +366,12 @@ class PlaybackService : MediaSessionService() {
         // Pixels first: the widget renders this exact row with no disk read
         // on the path. The writes below are persistence for cold boot (and
         // the tile fallback) and never gate what is on screen.
-        WidgetRenderer.push(this, station, next.second, next.first)
+        WidgetRenderer.push(
+            this, station, next.track, next.playing,
+            seekable = next.seekable,
+            durationMs = next.durationMs,
+            positionMs = player.currentPosition.coerceAtLeast(0),
+        )
         scope.launch {
             val favs = prefs0.favorites.first()
             session?.setMediaButtonPreferences(
@@ -375,7 +391,55 @@ class PlaybackService : MediaSessionService() {
             }
             // One transaction for the whole widget row, so cold-boot readers
             // see a consistent snapshot.
-            prefs0.writeWidgetSnapshot(playing = next.first, track = next.second)
+            prefs0.writeWidgetSnapshot(
+                playing = next.playing,
+                track = next.track,
+                seekable = next.seekable,
+                durationMs = next.durationMs,
+            )
+        }
+    }
+
+    /** Identity of one widget publish; duration/seekability included because
+     * they arrive after the tap that the other three fields describe. */
+    private data class WidgetSig(
+        val playing: Boolean,
+        val track: String,
+        val url: String,
+        val seekable: Boolean,
+        val durationMs: Long,
+    )
+
+    /**
+     * Ticks the widget's seek row once a second while a seekable source plays.
+     * Partial updates only (a few views merged, no re-inflation), so the
+     * cadence costs nothing noticeable. Anything else - paused, live radio,
+     * unknown duration - stops the ticker; the last partial already shows the
+     * resting position.
+     */
+    private var progressJob: Job? = null
+
+    private fun syncProgressTicker() {
+        val duration = player.duration.takeIf { it > 0 } ?: 0L
+        val want = player.playWhenReady && player.isCurrentMediaItemSeekable && duration > 0
+        if (want && progressJob?.isActive == true) return
+        progressJob?.cancel()
+        progressJob = if (want) scope.launch {
+            while (true) {
+                WidgetRenderer.pushProgress(
+                    this@PlaybackService,
+                    player.currentPosition.coerceAtLeast(0),
+                    player.duration.takeIf { it > 0 } ?: duration,
+                )
+                delay(1_000)
+            }
+        } else null
+        if (!want && player.isCurrentMediaItemSeekable && duration > 0) {
+            WidgetRenderer.pushProgress(
+                this,
+                player.currentPosition.coerceAtLeast(0),
+                duration,
+            )
         }
     }
 
@@ -459,6 +523,7 @@ class PlaybackService : MediaSessionService() {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (isPlaying) PlaybackBus.publishError(null)
             publishWidgetState()
+            syncProgressTicker()
             // the session id only becomes valid once the audio renderer is up,
             // so this is the attach that usually wins - it must still respect
             // the user's setting rather than force the visualizer back on
@@ -475,6 +540,32 @@ class PlaybackService : MediaSessionService() {
             // flips on the tap. Without this, resume sits on the play glyph
             // through the whole buffering stall until first audio.
             publishWidgetState()
+            syncProgressTicker()
+        }
+
+        override fun onPlaybackStateChanged(state: Int) {
+            // Duration is only known once the source is ready; without this
+            // the seek row would wait for the next tap to learn it.
+            if (state == Player.STATE_READY) {
+                publishWidgetState()
+                syncProgressTicker()
+            }
+        }
+
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int,
+        ) {
+            // A seek from the app lands here; mirror it now rather than at
+            // the next one-second tick.
+            if (player.isCurrentMediaItemSeekable && player.duration > 0) {
+                WidgetRenderer.pushProgress(
+                    this@PlaybackService,
+                    player.currentPosition.coerceAtLeast(0),
+                    player.duration,
+                )
+            }
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -496,6 +587,7 @@ class PlaybackService : MediaSessionService() {
                 PlaybackBus.publishStreamTitle("")
             }
             publishWidgetState()
+            syncProgressTicker()
         }
     }
 

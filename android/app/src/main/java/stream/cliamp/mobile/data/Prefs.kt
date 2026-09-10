@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.CoroutineScope
@@ -88,6 +89,8 @@ class Prefs(private val context: Context) {
         val autoResume = booleanPreferencesKey("auto_resume")
         val wPlaying = booleanPreferencesKey("w_playing")
         val wTrack = stringPreferencesKey("w_track")
+        val wSeekable = booleanPreferencesKey("w_seekable")
+        val wDuration = longPreferencesKey("w_duration")
         val wNext = stringPreferencesKey("w_next")
         val wSource = stringPreferencesKey("w_source")
         val playlistSorts = stringPreferencesKey("playlist_sorts")  // slug -> PlaylistSort.ordinal
@@ -137,6 +140,8 @@ class Prefs(private val context: Context) {
      */
     val widgetPlaying: Flow<Boolean> = context.settingsStore.data.map { it[K.wPlaying] ?: false }
     val widgetTrack: Flow<String> = context.settingsStore.data.map { it[K.wTrack] ?: "" }
+    val widgetSeekable: Flow<Boolean> = context.settingsStore.data.map { it[K.wSeekable] ?: false }
+    val widgetDuration: Flow<Long> = context.settingsStore.data.map { it[K.wDuration] ?: 0L }
 
     /**
      * The up-next stations (4 after the current one in the list being played)
@@ -270,13 +275,15 @@ class Prefs(private val context: Context) {
     suspend fun setWidgetSource(v: List<Station>) = put(K.wSource, Http.json.encodeToString(v))
 
     /**
-     * Write the widget's whole row (title + play state) in a single DataStore
-     * transaction so the Flow emits once and Glance recomposes once.
+     * Write the widget's whole row (state + seekability) in a single
+     * DataStore transaction so cold-boot readers see a consistent snapshot.
      */
-    suspend fun writeWidgetSnapshot(playing: Boolean, track: String) {
+    suspend fun writeWidgetSnapshot(playing: Boolean, track: String, seekable: Boolean, durationMs: Long) {
         context.settingsStore.edit {
             it[K.wPlaying] = playing
             it[K.wTrack] = track
+            it[K.wSeekable] = seekable
+            it[K.wDuration] = durationMs
         }
     }
 
