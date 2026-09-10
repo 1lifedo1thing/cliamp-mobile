@@ -151,15 +151,16 @@ fun PodcastsScreen(
                 columns = GridCells.Adaptive(150.dp),
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 state = listState,
-                // Same split as Stations: rows bring their own gutter and
-                // hairlines, tiles pad themselves - grid mode keeps the old
-                // page padding and gaps untouched.
-                contentPadding = PaddingValues(0.dp),
+                // Same split as Stations: page padding and column gaps from
+                // the grid itself, row rhythm from the rows, tile rhythm
+                // from the tiles - grid mode pixel-identical to before.
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
 
                 if (pane == Pane.Subs) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        SectionLabel("subscribed — ${subscriptions.size}") {
+                        SectionLabel("subscribed — ${subscriptions.size}", gutter = 8.dp) {
                             GridListToggle(subsGrid) { scope.launch { prefs.setSubsGrid(!subsGrid) } }
                         }
                     }
@@ -194,7 +195,7 @@ fun PodcastsScreen(
 
                 if (pane != Pane.Subs) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        SectionLabel("directory") {
+                        SectionLabel("directory", gutter = 8.dp) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Mono(directory.query.label, CliampType.meta, p.inkTertiary)
                                 GridListToggle(podDirectoryGrid) {
@@ -206,7 +207,7 @@ fun PodcastsScreen(
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Row(
                             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                                .padding(horizontal = Gutter, vertical = 4.dp),
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(7.dp),
                         ) {
                             // The order control leads the filters: the current
@@ -282,6 +283,7 @@ private fun ShowRow(
     ListRow(
         onClick = onOpen,
         verticalPadding = 9.dp,
+        gutter = 8.dp,
         leading = { Artwork(show.artwork) },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -358,7 +360,7 @@ private fun ShowTile(
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 7.dp, vertical = 5.dp)
+            .padding(vertical = 5.dp)
             .microPress(onClick = onOpen)
     ) {
         Box(

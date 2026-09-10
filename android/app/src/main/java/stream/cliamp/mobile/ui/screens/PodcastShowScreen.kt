@@ -304,7 +304,7 @@ private fun EpisodeRow(
     ) {
         Mono(
             station.name,
-            if (active) CliampType.rowPrimaryMedium else CliampType.rowPrimary,
+            CliampType.rowPrimary,
             when {
                 active -> p.accent
                 done -> p.inkTertiary

@@ -176,16 +176,17 @@ fun StationsScreen(
                 columns = GridCells.Adaptive(150.dp),
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 state = listState,
-                // No page padding or gaps here: list rows bring their own
-                // 22dp gutter and hairlines, exactly like playlist rows, and
-                // tiles pad themselves. Grid-level insets would double up on
-                // the rows (36dp text inset, floating hairlines).
-                contentPadding = PaddingValues(0.dp),
+                // Page padding and column gaps exactly as they always were;
+                // rows compensate inside themselves (8dp gutter lands on the
+                // 22dp standard) and tiles pad their own rows, because any
+                // grid-level vertical gap would float the row hairlines.
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
 
                 if (source == Source.All || source == Source.Cliamp) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        SectionLabel("cliamp radio — ${cliamp.size}") {
+                        SectionLabel("cliamp radio — ${cliamp.size}", gutter = 8.dp) {
                             GridListToggle(cliampGrid) { scope.launch { prefs.setCliampGrid(!cliampGrid) } }
                         }
                     }
@@ -228,7 +229,8 @@ fun StationsScreen(
                 if (source == Source.All || source == Source.Directory) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         SectionLabel(
-                            "directory — " + (dirStats?.playable?.let { "%,d".format(it) } ?: "loading")
+                            "directory — " + (dirStats?.playable?.let { "%,d".format(it) } ?: "loading"),
+                            gutter = 8.dp,
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Mono(directory.query.label, CliampType.meta, p.inkTertiary)
@@ -240,10 +242,12 @@ fun StationsScreen(
                     }
                     // The directory's filters, one row: the order controls (top /
                     // trending) lead it, then the tags that narrow the list.
+                    // Gutter-compensated like rows and labels: grid padding
+                    // plus this lands exactly on the shared gutter.
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Row(
                             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                                .padding(horizontal = Gutter, vertical = 4.dp),
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(7.dp),
                         ) {
                             Chip(
@@ -328,6 +332,8 @@ private fun StationRow(
         rail = active,
         onClick = onPlay,
         verticalPadding = 9.dp,
+        gutter = 8.dp,
+        railOffset = 14.dp,
         leading = { StationThumb(station, active, playing) },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -345,7 +351,7 @@ private fun StationRow(
     ) {
         Mono(
             station.name,
-            if (active) CliampType.rowPrimaryMedium else CliampType.rowPrimary,
+            CliampType.rowPrimary,
             if (active) p.accent else p.ink,
             maxLines = 1,
         )
@@ -443,9 +449,9 @@ private fun StationTile(
     Column(
         Modifier
             .fillMaxWidth()
-            // The grid carries no gaps itself (list rows must sit hairline
-            // to hairline), so tiles bring their own margins instead.
-            .padding(horizontal = 7.dp, vertical = 5.dp)
+            // Vertical rhythm only: columns and page padding come from the
+            // grid itself, exactly as before.
+            .padding(vertical = 5.dp)
             .microPress(onClick = onPlay)
     ) {
         Box(

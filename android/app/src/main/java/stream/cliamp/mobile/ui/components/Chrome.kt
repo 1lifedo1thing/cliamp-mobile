@@ -82,10 +82,15 @@ fun HairlineDivider(modifier: Modifier = Modifier, region: Boolean = false) {
 }
 
 @Composable
-fun SectionLabel(text: String, modifier: Modifier = Modifier, trailing: (@Composable () -> Unit)? = null) {
+fun SectionLabel(
+    text: String,
+    modifier: Modifier = Modifier,
+    gutter: Dp = Gutter,
+    trailing: (@Composable () -> Unit)? = null,
+) {
     val p = LocalPalette.current
     Row(
-        modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 10.dp),
+        modifier.fillMaxWidth().padding(horizontal = gutter, vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -536,7 +541,10 @@ fun GlyphPlate(
 
 /** A hairline-separated list row. Cards are for objects with state, not lists.
  * [rail] paints a thin accent line down the leading edge - the shared marker
- * for "this is the row that is playing right now". */
+ * for "this is the row that is playing right now". [gutter] is the horizontal
+ * inset: rows hosted in a padded grid pass a smaller one so grid padding plus
+ * row gutter lands exactly on [Gutter]. [railOffset] shifts the rail left by
+ * the same outer inset, so it still starts at the true screen edge. */
 @Composable
 fun ListRow(
     modifier: Modifier = Modifier,
@@ -545,14 +553,17 @@ fun ListRow(
     trailing: (@Composable RowScope.() -> Unit)? = null,
     divider: Boolean = true,
     verticalPadding: Dp = 12.dp,
+    gutter: Dp = Gutter,
     rail: Boolean = false,
+    railOffset: Dp = 0.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val p = LocalPalette.current
+    val railShift = with(LocalDensity.current) { railOffset.toPx() }
     val railMod = if (rail)
         Modifier.drawWithContent {
             drawContent()
-            drawRect(p.accent, topLeft = Offset(0f, 0f), size = Size(2.dp.toPx(), size.height))
+            drawRect(p.accent, topLeft = Offset(-railShift, 0f), size = Size(2.dp.toPx(), size.height))
         }
     else Modifier
     Column(modifier.then(railMod).fillMaxWidth()) {
@@ -560,7 +571,7 @@ fun ListRow(
             Modifier
                 .fillMaxWidth()
                 .then(if (onClick != null) Modifier.microPress(onClick = onClick) else Modifier)
-                .padding(horizontal = Gutter, vertical = verticalPadding),
+                .padding(horizontal = gutter, vertical = verticalPadding),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (leading != null) {
@@ -570,7 +581,7 @@ fun ListRow(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) { content() }
             trailing?.invoke(this)
         }
-        if (divider) Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
+        if (divider) Box(Modifier.padding(start = gutter)) { HairlineDivider() }
     }
 }
 
