@@ -231,7 +231,11 @@ private fun EpisodeRow(
         onClick = onPlay,
         verticalPadding = 11.dp,
         leading = {
-            val artUrl = episode.artwork.takeIf { it.startsWith("http") }
+            // The resolved station cover already falls back to the show's own
+            // artwork when the episode has none (see toStation), so only a
+            // show without any cover at all lands on the icon plate.
+            val artUrl = station.cover.takeIf { it.startsWith("http") }
+                ?: episode.artwork.takeIf { it.startsWith("http") }
             var thumb by remember(artUrl) { mutableStateOf<ImageBitmap?>(null) }
             if (artUrl != null) {
                 LaunchedEffect(artUrl) {
