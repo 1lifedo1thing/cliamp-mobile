@@ -286,7 +286,7 @@ private fun HitArt(
     }
     Box(
         Modifier
-            .size(36.dp)
+            .size(40.dp)
             .clip(RoundedCornerShape(CliampShape.small))
             .then(
                 if (art != null) Modifier.background(p.panel)
@@ -351,7 +351,7 @@ private fun HitRow(
             if (enabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             onClick()
         },
-        verticalPadding = 10.dp,
+        verticalPadding = 9.dp,
         leading = { HitArt(hit, accent, active, playing && active) },
         trailing = { Mono(hit.origin, CliampType.meta, p.inkFaint) },
     ) {
