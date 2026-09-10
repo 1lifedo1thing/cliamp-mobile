@@ -79,7 +79,7 @@ import stream.cliamp.mobile.ui.theme.Mono
 
 private enum class Scope(val label: String) {
     All("all"), Media("local"), Radio("radio"), Pods("podcasts"),
-    Tags("tags"), Providers("providers"), Cmds("cmds"),
+    Tags("tags"), Providers("providers"),
 }
 
 /**
@@ -90,7 +90,7 @@ private enum class Scope(val label: String) {
  * one query spans local songs, favourites, the radio directory and providers.
  */
 @Composable
-fun CommandScreen(
+fun SearchScreen(
     repository: Repository,
     podcasts: PodcastRepository,
     prefs: Prefs,
@@ -179,7 +179,6 @@ fun CommandScreen(
         Scope.Pods -> results.filter { it is SearchHit.Show }
         Scope.Tags -> results.filter { it is SearchHit.Tag }
         Scope.Providers -> results.filter { it is SearchHit.Provider }
-        Scope.Cmds -> results.filter { it is SearchHit.Command }
     }
 
     fun run(raw: String) {

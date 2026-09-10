@@ -51,7 +51,7 @@ import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.ui.components.CliampTabBar
 import stream.cliamp.mobile.ui.components.CliampTabRail
 import stream.cliamp.mobile.ui.components.Tab
-import stream.cliamp.mobile.ui.screens.CommandScreen
+import stream.cliamp.mobile.ui.screens.SearchScreen
 import stream.cliamp.mobile.ui.screens.FavScope
 import stream.cliamp.mobile.ui.screens.LibraryPlaylistPane
 import stream.cliamp.mobile.ui.screens.LibraryProvidersPane
@@ -293,7 +293,7 @@ fun CliampRoot(
                             onPlay = onPlay,
                             onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
                             onOpenSearch = {
-                                navController.navigate(Command)
+                                navController.navigate(Search)
                             },
                             onOpenSettings = {
                                 navController.navigate(Settings)
@@ -320,7 +320,7 @@ fun CliampRoot(
                                 podcasts.openShow(show)
                                 navController.navigate(PodcastShowRoute(show.id))
                             },
-                            onOpenSearch = { navController.navigate(Command) },
+                            onOpenSearch = { navController.navigate(Search) },
                             onOpenSettings = { navController.navigate(Settings) },
                         )
                     }
@@ -335,7 +335,7 @@ fun CliampRoot(
                             onPlay = onPlay,
                             onAddToQueue = { player.addToQueue(it) },
                             onPlayNext = { player.playNext(it) },
-                            onOpenSearch = { navController.navigate(Command) },
+                            onOpenSearch = { navController.navigate(Search) },
                             onOpenSettings = { navController.navigate(Settings) },
                         )
                     }
@@ -357,7 +357,7 @@ fun CliampRoot(
                             onOpenProviders = { navController.navigate(LibraryProviders) },
                             onOpenSmart = { kind -> navController.navigate(LibrarySmartPlaylist(kind)) },
                             onOpenPlaylist = { slug -> navController.navigate(LibraryPlaylist(slug)) },
-                            onOpenSearch = { navController.navigate(Command) },
+                            onOpenSearch = { navController.navigate(Search) },
                             onOpenSettings = { navController.navigate(Settings) },
                             favScope = favScope,
                         )
@@ -380,7 +380,7 @@ fun CliampRoot(
                                     navController.popBackStack()
                                 }
                             },
-                            onOpenSearch = { navController.navigate(Command) },
+                            onOpenSearch = { navController.navigate(Search) },
                             onOpenSettings = { navController.navigate(Settings) },
                         )
                     }
@@ -401,7 +401,7 @@ fun CliampRoot(
                             onFavScopeChange = { favScope = it },
                             onOpenSongInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
                             onBack = { navController.popBackStack() },
-                            onOpenSearch = { navController.navigate(Command) },
+                            onOpenSearch = { navController.navigate(Search) },
                             onOpenSettings = { navController.navigate(Settings) },
                         )
                     }
@@ -420,7 +420,7 @@ fun CliampRoot(
                             favorites = favorites,
                             onPlay = onPlay,
                             onBack = { navController.popBackStack() },
-                            onOpenSearch = { navController.navigate(Command) },
+                            onOpenSearch = { navController.navigate(Search) },
                             onOpenSettings = { navController.navigate(Settings) },
                         )
                     }
@@ -483,9 +483,9 @@ fun CliampRoot(
                     )
                 }
             }
-            composable<Command> {
+            composable<Search> {
                 Box(contentModifier) {
-                    CommandScreen(
+                    SearchScreen(
                     repository = repository,
                     podcasts = podcasts,
                     prefs = prefs,
