@@ -112,13 +112,17 @@ object WidgetRenderer {
         val ctx = context.applicationContext
         scope.launch {
             val mgr = AppWidgetManager.getInstance(ctx)
+            // The compact layout has no seek row; only full instances tick.
             val ids = mgr.getAppWidgetIds(ComponentName(ctx, CliampWidgetProvider::class.java))
+                .filterNot { isCompact(mgr, it) }
             if (ids.isEmpty()) return@launch
             val rv = RemoteViews(ctx.packageName, R.layout.widget_cliamp)
             rv.setTextViewText(R.id.w_elapsed, clock(positionMs))
             rv.setTextViewText(R.id.w_total, "-" + clock((durationMs - positionMs).coerceAtLeast(0)))
             rv.setProgressBar(R.id.w_seekbar, durationMs.toInt(), positionMs.toInt().coerceIn(0, durationMs.toInt()), false)
-            runCatching { mgr.partiallyUpdateAppWidget(ids, rv) }
+            runCatching {
+                for (id in ids) mgr.partiallyUpdateAppWidget(id, rv)
+            }
         }
     }
 
@@ -185,12 +189,37 @@ object WidgetRenderer {
 
         val mgr = AppWidgetManager.getInstance(ctx)
         val ids = mgr.getAppWidgetIds(ComponentName(ctx, CliampWidgetProvider::class.java))
-        if (ids.isEmpty()) return
-        mgr.updateAppWidget(ids, buildViews(ctx, row, p))
+        // Per instance: a tiny cell gets the centered compact row, anything
+        // roomier the full transport + seek layout.
+        for (id in ids) {
+            mgr.updateAppWidget(id, buildViews(ctx, row, p, compact = isCompact(mgr, id)))
+        }
     }
 
-    internal fun buildViews(ctx: Context, row: Row, p: CliampPalette): RemoteViews {
-        val rv = RemoteViews(ctx.packageName, R.layout.widget_cliamp)
+    /**
+     * True when the cell is too cramped for the full row (which wants ~250dp
+     * of width for title + keys and ~90dp of height with the seek row). Sizes
+     * come from the host in dp; the minimum across orientations wins so the
+     * layout fits however the phone is held.
+     */
+    private fun isCompact(mgr: AppWidgetManager, id: Int): Boolean {
+        val o = mgr.getAppWidgetOptions(id)
+        val w = minOf(
+            o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 999),
+            o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 999),
+        )
+        val h = minOf(
+            o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 999),
+            o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 999),
+        )
+        return w < 200 || h < 84
+    }
+
+    internal fun buildViews(ctx: Context, row: Row, p: CliampPalette, compact: Boolean = false): RemoteViews {
+        val rv = RemoteViews(
+            ctx.packageName,
+            if (compact) R.layout.widget_cliamp_compact else R.layout.widget_cliamp,
+        )
         rv.setTextViewText(R.id.w_title, row.station?.name ?: "nothing tuned")
         rv.setTextViewText(R.id.w_subtitle, widgetSubtitle(row.track, row.station))
         rv.setTextColor(R.id.w_title, p.ink.toArgb())
@@ -213,12 +242,13 @@ object WidgetRenderer {
         // Seekable sources (local files, provider tracks, episodes) get the
         // live position row - elapsed, bar, remaining - mirroring the
         // expanded player's scrubber readout. Live radio gets the streaming
-        // rule instead. Neither shows before anything has played.
-        val showSeek = row.seekable && row.durationMs > 0 && row.station != null
+        // rule instead. Neither shows before anything has played, and neither
+        // exists in the compact layout, which has no room for a second row.
+        val showSeek = !compact && row.seekable && row.durationMs > 0 && row.station != null
         rv.setViewVisibility(R.id.w_seek_row, if (showSeek) View.VISIBLE else View.GONE)
         rv.setViewVisibility(
             R.id.w_streaming,
-            if (!showSeek && row.station != null) View.VISIBLE else View.GONE,
+            if (!compact && !showSeek && row.station != null) View.VISIBLE else View.GONE,
         )
         if (showSeek) {
             rv.setTextViewText(R.id.w_elapsed, clock(row.positionMs))
