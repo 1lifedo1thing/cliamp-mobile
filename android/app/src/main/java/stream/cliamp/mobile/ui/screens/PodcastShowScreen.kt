@@ -132,7 +132,10 @@ fun PodcastShowScreen(
                 }
             }
 
-            if (state.loading) {
+            // The loading note only shows on an empty list: with episodes on
+            // screen a refresh runs silently behind them instead of pushing
+            // a row in above and shifting everything when it lands.
+            if (state.loading && queue.isEmpty()) {
                 item { EmptyNote("reading the feed…") }
             } else if (queue.isEmpty() && state.error == null) {
                 item { EmptyNote("no episodes in this feed") }
