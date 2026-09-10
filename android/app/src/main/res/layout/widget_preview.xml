@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Pin-dialog preview. Mirrors the real Glance widget (WidgetBody): station
+<!-- Pin-dialog preview. Mirrors the real widget (widget_cliamp): station
     title and subtitle on the left, prev / play / next transport keys right.
     Static stand-ins only: tinted vector marks instead of live art. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"

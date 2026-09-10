@@ -25,7 +25,7 @@ import stream.cliamp.mobile.CliampApp
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.data.wrapNext
-import stream.cliamp.mobile.widget.CliampWidgetReceiver
+import stream.cliamp.mobile.widget.WidgetRenderer
 
 /**
  * The UI's handle on playback. Transport goes through a MediaController rather
@@ -379,13 +379,21 @@ class PlayerConnection(
      * row updates in lockstep with its title the instant a song changes, rather
      * than waiting on the service's next player event.
      */
-    /** Persist the now-current station and refresh the widget, as a single choke point. */
+    /** Persist the now-current station and push it to the widget, as a single choke point. */
     private fun persistAndRefresh(station: Station) {
         val prefs = (context.applicationContext as CliampApp).prefs
+        // A fresh play means intent-to-play; the service confirms audibility
+        // through its own events. The push carries the in-memory row so the
+        // widget never waits on the persistence write beside it.
+        WidgetRenderer.push(
+            context.applicationContext,
+            station,
+            PlaybackBus.streamTitle.value,
+            true,
+        )
         scope.launch {
             prefs.setLastStation(station)
             prefs.pushHistory(station)
-            CliampWidgetReceiver.refresh(context.applicationContext)
         }
     }
 
@@ -709,6 +717,15 @@ class PlayerConnection(
                 c.play()
             }
         }
+        // The widget mirrors tap intent, not audibility: read playWhenReady
+        // straight off the controller instead of waiting on the service's
+        // next player event.
+        WidgetRenderer.push(
+            context.applicationContext,
+            PlaybackBus.station.value,
+            PlaybackBus.streamTitle.value,
+            c.playWhenReady && c.mediaItemCount > 0,
+        )
         sync()
     }
 

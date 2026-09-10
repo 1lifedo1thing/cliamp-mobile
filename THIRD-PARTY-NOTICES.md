@@ -8,7 +8,7 @@ are redistributed under their own terms.
 | Component | Licence | Notes |
 | --- | --- | --- |
 | JetBrains Mono 2.304 | SIL Open Font License 1.1 | Full text in `licenses/JetBrainsMono-OFL.txt`. Redistributing the font files requires shipping this notice. |
-| AndroidX (core, lifecycle, activity, compose, datastore, glance) | Apache License 2.0 | Copyright The Android Open Source Project |
+| AndroidX (core, lifecycle, activity, compose, datastore) | Apache License 2.0 | Copyright The Android Open Source Project |
 | AndroidX Media3 (ExoPlayer, session, HLS, okhttp datasource) | Apache License 2.0 | Copyright The Android Open Source Project |
 | OkHttp 5 | Apache License 2.0 | Copyright Square, Inc. |
 | kotlinx.serialization, kotlinx.coroutines | Apache License 2.0 | Copyright JetBrains s.r.o. |

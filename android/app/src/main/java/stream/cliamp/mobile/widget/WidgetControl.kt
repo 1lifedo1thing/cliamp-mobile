@@ -63,8 +63,13 @@ object WidgetControl {
         val app = context.applicationContext as CliampApp
         var target: Boolean? = null
         withController(context) { c ->
+            // playWhenReady is the tap intent; isPlaying is audibility. During
+            // buffering isPlaying is false while intent is still "playing", so
+            // checking isPlaying turns a pause-tap mid-stall into a second
+            // play() and leaves the glyph stuck.
+            val intendingToPlay = c.playWhenReady && c.mediaItemCount > 0
             when {
-                c.isPlaying -> { c.pause(); target = false }
+                intendingToPlay -> { c.pause(); target = false }
                 c.mediaItemCount > 0 -> { c.prepare(); c.play(); target = true }
                 else -> target = null
             }
@@ -76,10 +81,17 @@ object WidgetControl {
                 ?: CliampRadio.builtin.first()
             tune(context, station)
         } else {
-            // Reflect the flip immediately instead of waiting on a second
-            // controller round-trip, which is what made stop/resume lag.
-            app.prefs.setWidgetPlaying(target == true)
-            CliampWidgetReceiver.refresh(context)
+            // Push the flip straight to the widget with the known intent;
+            // the DataStore write beside it is persistence only, nothing on
+            // screen waits for it. The service confirms via its own events.
+            val playing = target == true
+            app.prefs.setWidgetPlaying(playing)
+            WidgetRenderer.push(
+                context,
+                PlaybackBus.station.value ?: app.prefs.readLastStation(),
+                PlaybackBus.streamTitle.value.ifBlank { app.prefs.widgetTrack.first() },
+                playing,
+            )
         }
     }
 
@@ -125,6 +137,12 @@ object WidgetControl {
             }
         }
         app.prefs.setWidgetTrack(station.meta.orEmpty())
+        // Optimistic intent: resolve() follows playlist redirects over the
+        // network, so without this the glyph sits on paused through the whole
+        // tune. publish() after play() confirms it; the service is the final
+        // writer via onPlayWhenReadyChanged.
+        app.prefs.setWidgetPlaying(true)
+        WidgetRenderer.push(context, station, station.meta.orEmpty(), true)
 
         val resolved = StreamResolver.resolve(station.url)
         android.util.Log.d("cliamp/wid", "tune resolve ms=${System.currentTimeMillis() - t0}")
@@ -134,14 +152,17 @@ object WidgetControl {
             c.play()
         }
         android.util.Log.d("cliamp/wid", "tune controller+play ms=${System.currentTimeMillis() - t0}")
-        publish(context)
+        publish(context, station)
     }
 
-    private suspend fun publish(context: Context) {
+    private suspend fun publish(context: Context, station: Station) {
         val app = context.applicationContext as CliampApp
-        val playing = withController(context) { it.isPlaying } ?: false
+        // Read intent, not audibility: right after play() the player is still
+        // BUFFERING so isPlaying is false and the widget would be parked on
+        // the play glyph until first audio. playWhenReady is true from the tap.
+        val playing = withController(context) { it.playWhenReady && it.mediaItemCount > 0 } ?: false
         app.prefs.setWidgetPlaying(playing)
-        CliampWidgetReceiver.refresh(context)
+        WidgetRenderer.push(context, station, station.meta.orEmpty(), playing)
     }
 
     @Suppress("unused")

@@ -49,7 +49,7 @@ import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.data.wrapNext
 import stream.cliamp.mobile.net.Http
-import stream.cliamp.mobile.widget.CliampWidgetReceiver
+import stream.cliamp.mobile.widget.WidgetRenderer
 
 /**
  * Owns the player, the session and the audio effects. Everything the phone
@@ -329,17 +329,33 @@ class PlaybackService : MediaSessionService() {
     private fun publishWidgetState() {
         val station = PlaybackBus.station.value
         val source = PlaybackBus.source.value
+        // Intent, not audibility: isPlaying is false while buffering /
+        // reconnecting, so using it flips the widget to the play glyph every
+        // stall and right after tune (before READY). playWhenReady flips on
+        // the tap itself, which is what the toggle icon must mirror.
+        val playing = player.playWhenReady && player.mediaItemCount > 0
         val next = Triple(
-            player.isPlaying,
+            playing,
             PlaybackBus.streamTitle.value,
             station?.url.orEmpty(),
         )
         Log.d("cliamp/wid", "publishWidgetState playing=${next.first} streamTitle=${next.second} url=${next.third} station=${station?.name}")
-        if (next == lastWidgetState) {
-            val sourceKey = (source.map { it.url } + (station?.url.orEmpty())).joinToString("|")
-            if (sourceKey == lastWidgetSourceKey) return
-        }
+        // Both halves of the cache update synchronously. lastWidgetSourceKey
+        // used to be assigned inside the launch below (and only when upNext
+        // was non-empty), so after a cold start it stayed null forever, the
+        // early return never fired, and every tap emitted 2-3 writes +
+        // updateAlls - concurrent RemoteViews the launcher can apply out of
+        // order, leaving the glyph stuck on a stale frame.
+        val sourceKey = (source.map { it.url } + (station?.url.orEmpty())).joinToString("|")
+        val upNext = widgetUpNext(source, station)
+        if (next == lastWidgetState && sourceKey == lastWidgetSourceKey) return
         lastWidgetState = next
+        val sourceChanged = sourceKey != lastWidgetSourceKey
+        lastWidgetSourceKey = sourceKey
+        // Pixels first: the widget renders this exact row with no disk read
+        // on the path. The writes below are persistence for cold boot (and
+        // the tile fallback) and never gate what is on screen.
+        WidgetRenderer.push(this, station, next.second, next.first)
         scope.launch {
             val favs = prefs0.favorites.first()
             session?.setMediaButtonPreferences(
@@ -347,23 +363,19 @@ class PlaybackService : MediaSessionService() {
                     favs.any { it.url == station?.url },
                 )
             )
-            val upNext = widgetUpNext(source, station)
             Log.d("cliamp/wid", "nextUp source.size=${source.size} count=${upNext.size} names=${upNext.map { it.name }}")
-            val sourceKey = (source.map { it.url } + (station?.url.orEmpty())).joinToString("|")
             // Only ever write a real, non-empty next-up. When the in-memory
             // source is empty (playback started/tuned through the widget's
             // MediaController, which never populates PlayerConnection's source)
             // an empty write here would clobber the correct list that
             // persistWidgetWindow / WidgetControl.tune already saved, sinking the
             // widget back to the built-in radio channels.
-            if (sourceKey != lastWidgetSourceKey && upNext.isNotEmpty()) {
-                lastWidgetSourceKey = sourceKey
+            if (sourceChanged && upNext.isNotEmpty()) {
                 prefs0.setWidgetNext(upNext)
             }
-            // One transaction for the whole widget row, so the Flow emits once
-            // and Glance recomposes once.
+            // One transaction for the whole widget row, so cold-boot readers
+            // see a consistent snapshot.
             prefs0.writeWidgetSnapshot(playing = next.first, track = next.second)
-            CliampWidgetReceiver.refresh(this@PlaybackService)
         }
     }
 
@@ -456,6 +468,13 @@ class PlaybackService : MediaSessionService() {
                 onSpectrum = ::handleSpectrum,
                 onLiveChanged = PlaybackBus::publishSpectrumLive,
             )
+        }
+
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            // isPlaying only flips once audio actually flows (READY); intent
+            // flips on the tap. Without this, resume sits on the play glyph
+            // through the whole buffering stall until first audio.
+            publishWidgetState()
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {

@@ -37,7 +37,7 @@ import stream.cliamp.mobile.BuildConfig
 import stream.cliamp.mobile.R
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Repository
-import stream.cliamp.mobile.widget.CliampWidgetReceiver
+import stream.cliamp.mobile.widget.CliampWidgetProvider
 import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampToggle
@@ -176,7 +176,7 @@ fun SettingsScreen(
                 .fillMaxWidth()
                 .microPress {
                     val mgr = AppWidgetManager.getInstance(context)
-                    val provider = ComponentName(context, CliampWidgetReceiver::class.java)
+                    val provider = ComponentName(context, CliampWidgetProvider::class.java)
                     if (mgr.isRequestPinAppWidgetSupported) {
                         mgr.requestPinAppWidget(provider, null, null)
                     }

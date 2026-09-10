@@ -43,8 +43,11 @@ class CliampTileService : TileService() {
 
     private suspend fun render() {
         val app = application as CliampApp
-        val playing = app.prefs.widgetPlaying.first()
-        val station = app.prefs.readLastStation()
+        // Prefer the renderer's in-memory row: it is newer than the DataStore
+        // snapshot whenever a tap just landed.
+        val cached = WidgetRenderer.lastKnown
+        val playing = cached?.playing ?: app.prefs.widgetPlaying.first()
+        val station = cached?.station ?: app.prefs.readLastStation()
         qsTile?.apply {
             state = if (playing) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
             label = station?.name ?: "cliamp"

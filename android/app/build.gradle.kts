@@ -118,8 +118,6 @@ dependencies {
     implementation(libs.androidx.media3.common)
     implementation(libs.androidx.media3.datasource.okhttp)
 
-    implementation(libs.glance.appwidget)
-    implementation(libs.glance.material3)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)

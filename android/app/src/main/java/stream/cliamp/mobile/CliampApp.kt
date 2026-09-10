@@ -27,7 +27,7 @@ import stream.cliamp.mobile.data.PodcastRepository
 import stream.cliamp.mobile.data.RadioBrowser
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.playback.PlayerConnection
-import stream.cliamp.mobile.widget.CliampWidgetReceiver
+import stream.cliamp.mobile.widget.WidgetRenderer
 
 /**
  * Manual DI. The graph is four objects deep; a framework would cost more
@@ -86,7 +86,7 @@ class CliampApp : Application() {
         // nudge from the playback service, so watch the setting directly.
         appScope.launch {
             prefs.palette.distinctUntilChanged().drop(1).collect {
-                CliampWidgetReceiver.refresh(this@CliampApp)
+                WidgetRenderer.refresh(this@CliampApp)
             }
         }
 
