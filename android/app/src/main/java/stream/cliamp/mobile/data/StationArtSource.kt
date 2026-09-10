@@ -109,13 +109,19 @@ object StationArtSource {
         bitmaps.get(station.id)?.let { return it }
         if (isOut(station.id)) return null
 
-        val bmp = if (station.source == StationSource.Local) {
-            embeddedArt(station.url, TARGET)
-        } else {
-            disk(station.id, TARGET) ?: cover(station) { url, save -> download(url, save) }
+        // Off the caller (usually the main thread, straight out of a row's
+        // LaunchedEffect) and through the shared 4-worker pool: disk decodes
+        // must never run on Main, and capping the parallelism turns a
+        // fast-scroll stampede into a queue instead of a stall.
+        return withContext(CoverIo) {
+            val bmp = if (station.source == StationSource.Local) {
+                embeddedArt(station.url, TARGET)
+            } else {
+                disk(station.id, TARGET) ?: cover(station) { url, save -> download(url, save) }
+            }
+            if (bmp == null) noteMiss(station.id) else bitmaps.put(station.id, bmp)
+            bmp
         }
-        if (bmp == null) noteMiss(station.id) else bitmaps.put(station.id, bmp)
-        return bmp
     }
 
     /**
@@ -128,13 +134,17 @@ object StationArtSource {
     suspend fun bitmapForSmall(station: Station): Bitmap? {
         if (station.source == StationSource.Cliamp) return null
         smallBitmaps.get(station.id)?.let { return it }
-        val bmp = if (station.source == StationSource.Local) {
-            embeddedArt(station.url, TARGET_SMALL)
-        } else {
-            disk(station.id, TARGET_SMALL) ?: cover(station) { url, save -> download(url, save, TARGET_SMALL) }
+        // Same off-main + pooled treatment as [bitmapFor]; row thumbnails
+        // are what a fast scroll resolves dozens of at once.
+        return withContext(CoverIo) {
+            val bmp = if (station.source == StationSource.Local) {
+                embeddedArt(station.url, TARGET_SMALL)
+            } else {
+                disk(station.id, TARGET_SMALL) ?: cover(station) { url, save -> download(url, save, TARGET_SMALL) }
+            }
+            if (bmp != null) smallBitmaps.put(station.id, bmp)
+            bmp
         }
-        if (bmp != null) smallBitmaps.put(station.id, bmp)
-        return bmp
     }
 
     /**
@@ -163,9 +173,11 @@ object StationArtSource {
         if (url.isBlank()) return null
         bitmaps.get(url)?.let { return it }
         if (isOut(url)) return null
-        val bmp = disk(url, TARGET) ?: download(url, save = url)
-        if (bmp == null) noteMiss(url) else bitmaps.put(url, bmp)
-        return bmp
+        return withContext(CoverIo) {
+            val bmp = disk(url, TARGET) ?: download(url, save = url)
+            if (bmp == null) noteMiss(url) else bitmaps.put(url, bmp)
+            bmp
+        }
     }
 
     /** A known URL's low-quality art for tiny surfaces, the [bitmapForSmall]
@@ -175,9 +187,11 @@ object StationArtSource {
         if (url.isBlank()) return null
         smallBitmaps.get(url)?.let { return it }
         if (isOut(url)) return null
-        val bmp = disk(url, TARGET_SMALL) ?: download(url, save = url, target = TARGET_SMALL)
-        if (bmp == null) noteMiss(url) else smallBitmaps.put(url, bmp)
-        return bmp
+        return withContext(CoverIo) {
+            val bmp = disk(url, TARGET_SMALL) ?: download(url, save = url, target = TARGET_SMALL)
+            if (bmp == null) noteMiss(url) else smallBitmaps.put(url, bmp)
+            bmp
+        }
     }
 
     private suspend fun imageUrl(station: Station): String? {
