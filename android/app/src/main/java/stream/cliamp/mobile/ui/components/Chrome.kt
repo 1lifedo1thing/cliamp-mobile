@@ -3,7 +3,13 @@ package stream.cliamp.mobile.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.MutatePriority
+import androidx.compose.foundation.gestures.ScrollScope
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -221,23 +227,64 @@ fun MainLayout(
  * Smooth-scroll tickets for a title tap, and no-ops when already at the very
  * top so an accidental tap never visibly moves the list.
  *
- * Near the top the list glides home, which the eye can follow. Further out
- * it jumps straight there instead: the lazy glide animates at a stately
- * row-by-row pace, so a deep list would crawl all the way up.
+ * One tween, never a correction: stock animateScrollToItem steers toward an
+ * estimated offset and re-aims as unmeasured rows compose, which reads as
+ * jumps - and any settle step afterwards only moves the jump to the landing.
+ * Here the distance is estimated once from visible row sizes, biased to
+ * overshoot (scrolling past the top clamps exactly onto it), and tweened
+ * down in pixels. The trailing snap only ever settles invisible crumbs. A
+ * user's own scroll preempts the flight and leaves the list alone.
  */
-private const val TOP_GLIDE_ITEMS = 8
-
 fun CoroutineScope.scrollToTop(list: LazyListState) = launch {
-    if (list.firstVisibleItemIndex > TOP_GLIDE_ITEMS) list.scrollToItem(0)
-    else if (list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0) {
-        list.animateScrollToItem(0)
+    val info = list.layoutInfo
+    val visible = info.visibleItemsInfo
+    if (visible.isEmpty()) return@launch
+    if (list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset == 0) return@launch
+    val viewport = (info.viewportEndOffset - info.viewportStartOffset).coerceAtLeast(1)
+    val avg = visible.map { it.size }.average().toFloat().coerceAtLeast(1f)
+    val est = (list.firstVisibleItemIndex * avg + list.firstVisibleItemScrollOffset) * OVERSHOOT_LIST
+    try {
+        list.scroll(MutatePriority.Default) { zipToTop(est, viewport) }
+    } catch (_: CancellationException) {
+        return@launch
     }
+    if (list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0) list.scrollToItem(0)
 }
 
 fun CoroutineScope.scrollToTop(grid: LazyGridState) = launch {
-    if (grid.firstVisibleItemIndex > TOP_GLIDE_ITEMS) grid.scrollToItem(0)
-    else if (grid.firstVisibleItemIndex > 0 || grid.firstVisibleItemScrollOffset > 0) {
-        grid.animateScrollToItem(0)
+    val info = grid.layoutInfo
+    val visible = info.visibleItemsInfo
+    if (visible.isEmpty()) return@launch
+    if (grid.firstVisibleItemIndex == 0 && grid.firstVisibleItemScrollOffset == 0) return@launch
+    val viewport = (info.viewportEndOffset - info.viewportStartOffset).coerceAtLeast(1)
+    val avg = visible.map { it.size.height }.average().toFloat().coerceAtLeast(1f)
+    val est = (grid.firstVisibleItemIndex * avg + grid.firstVisibleItemScrollOffset) * OVERSHOOT_GRID
+    try {
+        grid.scroll(MutatePriority.Default) { zipToTop(est, viewport) }
+    } catch (_: CancellationException) {
+        return@launch
+    }
+    if (grid.firstVisibleItemIndex > 0 || grid.firstVisibleItemScrollOffset > 0) grid.scrollToItem(0)
+}
+
+/** Overshoot bias: scrolling past the top clamps exactly onto it, so the
+ * common case lands with no residue and no correction of any kind. Grids
+ * mix tall tiles with short rows, so their average underestimates further
+ * and earns the stronger bias. */
+private const val OVERSHOOT_LIST = 1.1f
+private const val OVERSHOOT_GRID = 1.3f
+
+/** Near is a quick glide, far a capped zip: proportional but bounded. */
+private fun zipDuration(est: Float, viewport: Int) =
+    (est / viewport * 300f + 250f).toInt().coerceIn(250, 650)
+
+/** One pixel tween down to zero inside the caller's scroll session. */
+private suspend fun ScrollScope.zipToTop(est: Float, viewport: Int) {
+    var prev = est
+    Animatable(prev).animateTo(0f, tween(zipDuration(est, viewport), easing = FastOutSlowInEasing)) {
+        val d = value - prev
+        prev = value
+        scrollBy(d)
     }
 }
 
