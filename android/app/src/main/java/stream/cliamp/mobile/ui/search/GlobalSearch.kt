@@ -1,9 +1,11 @@
 package stream.cliamp.mobile.ui.search
 
 import stream.cliamp.mobile.data.NameCount
+import stream.cliamp.mobile.data.PodcastEpisode
 import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.provider.ProviderAccount
+import stream.cliamp.mobile.data.toStation
 
 /**
  * Fans the query out across every catalogue the app knows about - local songs,
@@ -22,18 +24,24 @@ object GlobalSearch {
         providers: List<ProviderAccount>,
         shows: List<PodcastShow> = emptyList(),
         subscribedFeeds: Set<String> = emptySet(),
+        episodes: List<Pair<PodcastShow, PodcastEpisode>> = emptyList(),
     ): SearchResults {
         val term = query.trim()
         if (term.isBlank()) {
             val idle = ArrayList<SearchHit>()
             tags.take(12).forEach { idle += SearchHit.Tag(it.name, it.stationcount) }
             // Subscribed shows before the radio wall: with an empty bar they
-            // are the shortest list here and the one you meant.
+            // are the shortest list here and the one you meant. Deduped by
+            // feed like the scored path: the same show usually sits in both
+            // halves, and twin keys crash the list.
+            val seenIdleFeeds = HashSet<String>()
             shows.filter { it.feedUrl in subscribedFeeds }.take(8).forEach {
+                if (!seenIdleFeeds.add(it.feedUrl)) return@forEach
                 idle += SearchHit.Show(it, subscribed = true)
             }
             radio.take(20).forEach { idle += SearchHit.StationHit(it) }
-            return SearchResults(idle, idle.size)
+            val deduped = idle.distinctBy { it.key }
+            return SearchResults(deduped, deduped.size)
         }
 
         val scored = ArrayList<Pair<Int, SearchHit>>()
@@ -78,7 +86,24 @@ object GlobalSearch {
         }
 
         scored.sortWith(compareBy({ it.first }, { it.second.origin }))
-        val hits = scored.map { it.second }
+        // Subscribed episodes answer "which installment" once the show and
+        // song level already spoke, so they rank after everything else. The
+        // url dedup above already claimed favourited episodes for their own
+        // buckets; only genuinely new ones land here.
+        val knownUrls = byUrl.keys
+        val epScored = ArrayList<Pair<Int, SearchHit>>()
+        episodes.forEach { (show, ep) ->
+            val station = ep.toStation(show)
+            if (station.url in knownUrls) return@forEach
+            val score = Fuzzy.score(term, "${ep.title} ${ep.description} ${show.title}")
+            if (score != Int.MAX_VALUE) epScored += score to SearchHit.Episode(station, show.title)
+        }
+        epScored.sortBy { it.first }
+        // Keys feed a keyed LazyColumn, so uniqueness is load-bearing: first
+        // wins. The per-source dedups above already keep the _right_ copy
+        // (subscribed shows, Song over Favorite); this only guarantees the
+        // invariant against sources meeting for the first time.
+        val hits = (scored.map { it.second } + epScored.map { it.second }).distinctBy { it.key }
         return SearchResults(hits.take(240), hits.size)
     }
 }

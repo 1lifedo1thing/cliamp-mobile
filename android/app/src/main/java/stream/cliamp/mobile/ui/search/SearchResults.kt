@@ -43,6 +43,17 @@ sealed interface SearchHit {
             (listOf(station.name) + station.tagList).joinToString(" ")
     }
 
+    /**
+     * One episode out of a subscribed show's cached feed: plays immediately,
+     * with the show's artwork behind it when the episode carries none.
+     */
+    data class Episode(val station: Station, val showTitle: String) : SearchHit {
+        override val playable get() = station
+        override val key get() = "episode:${station.id}"
+        override val origin get() = "episode"
+        override val haystack get() = "${station.name} $showTitle".trim()
+    }
+
     data class Tag(val name: String, val count: Int) : SearchHit {
         override val playable get() = null
         override val key get() = "tag:#$name"

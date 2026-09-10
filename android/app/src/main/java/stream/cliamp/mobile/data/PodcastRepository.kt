@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -293,6 +294,7 @@ private var chartCursor: List<String> = emptyList()
     }
 
     private fun snapshotFeed(show: PodcastShow, episodes: List<PodcastEpisode>) {
+        episodeIndex = null
         scope.launch {
             runCatching {
                 cache.putFeed(
@@ -315,6 +317,7 @@ private var chartCursor: List<String> = emptyList()
 
     /** Returns the new state, so a row can toggle without re-reading. */
     suspend fun toggleSubscription(show: PodcastShow): Boolean {
+        episodeIndex = null
         if (dao.isSubscribed(show.feedUrl)) {
             dao.unsubscribe(show.feedUrl)
             return false
@@ -331,6 +334,35 @@ private var chartCursor: List<String> = emptyList()
     }
 
     suspend fun progressFor(url: String): EpisodeProgress? = dao.progress(url)?.toProgress()
+
+    /**
+     * Every cached episode of every subscribed show, as (show, episode)
+     * pairs. Feeds snapshot on open, so this is the offline episode index
+     * search reads: flattened once, then held in memory until a snapshot or
+     * a subscription changes it. A show never opened contributes nothing -
+     * global episode search needs a server index that does not exist.
+     */
+    @Volatile private var episodeIndex: List<Pair<PodcastShow, PodcastEpisode>>? = null
+
+    suspend fun subscribedEpisodes(): List<Pair<PodcastShow, PodcastEpisode>> {
+        episodeIndex?.let { return it }
+        val subs = subscriptions.first()
+        if (subs.isEmpty()) return emptyList()
+        val out = ArrayList<Pair<PodcastShow, PodcastEpisode>>()
+        for (show in subs) {
+            val row = cache.getFeed(show.feedUrl) ?: continue
+            val episodes = runCatching {
+                Http.json.decodeFromString<List<PodcastEpisode>>(row.episodesJson)
+            }.getOrDefault(emptyList())
+            if (episodes.isEmpty()) continue
+            val liveShow = runCatching {
+                Http.json.decodeFromString<PodcastShow>(row.showJson)
+            }.getOrDefault(show)
+            episodes.mapTo(out) { liveShow to it }
+        }
+        episodeIndex = out
+        return out
+    }
 
     /**
      * Where playback should start. Anything within [NEAR_END] of the end counts
