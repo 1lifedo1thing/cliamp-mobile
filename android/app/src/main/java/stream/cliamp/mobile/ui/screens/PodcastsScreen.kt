@@ -64,6 +64,7 @@ import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.RetryNote
 import stream.cliamp.mobile.ui.components.MainLayout
 import stream.cliamp.mobile.ui.components.SectionLabel
+import stream.cliamp.mobile.ui.components.scrollToTop
 import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -119,6 +120,7 @@ fun PodcastsScreen(
         title = "Podcasts",
         onOpenSearch = onOpenSearch,
         onOpenSettings = onOpenSettings,
+        onTitleClick = { scope.scrollToTop(listState) },
         chips = {
             Pane.entries.forEach { s -> Chip(s.label, pane == s, onClick = { pane = s }) }
             Spacer(Modifier.width(4.dp))

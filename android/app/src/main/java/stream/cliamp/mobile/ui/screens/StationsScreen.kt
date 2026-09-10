@@ -64,6 +64,7 @@ import stream.cliamp.mobile.ui.components.RetryNote
 
 import stream.cliamp.mobile.ui.components.MainLayout
 import stream.cliamp.mobile.ui.components.SectionLabel
+import stream.cliamp.mobile.ui.components.scrollToTop
 import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -140,6 +141,7 @@ fun StationsScreen(
         title = "Stations",
         onOpenSearch = onOpenSearch,
         onOpenSettings = onOpenSettings,
+        onTitleClick = { scope.scrollToTop(listState) },
         chips = {
             Source.entries.forEach { s ->
                 Chip(s.label, source == s, onClick = { source = s })

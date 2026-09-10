@@ -42,6 +42,7 @@ import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampToggle
 import stream.cliamp.mobile.ui.components.Gutter
+import stream.cliamp.mobile.ui.components.scrollToTop
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.MechSlider
 import stream.cliamp.mobile.ui.components.microPress
@@ -79,13 +80,14 @@ fun SettingsScreen(
     val favorites by prefs.favorites.collectAsState(initial = emptyList())
     val dirStats by repository.directoryStats.collectAsState()
 
+    val scrollState = rememberScrollState()
     Column(
         Modifier
             .fillMaxSize()
             .background(p.ground)
             .statusBarsPadding()
             .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 12.dp),
@@ -95,7 +97,10 @@ fun SettingsScreen(
             BackChip(onClick = onBack)
         }
         Box(Modifier.padding(horizontal = Gutter, vertical = 4.dp)) {
-            Mono("Settings", CliampType.screenTitle, p.ink)
+            Mono(
+                "Settings", CliampType.screenTitle, p.ink,
+                modifier = Modifier.microPress { scope.scrollToTop(scrollState) },
+            )
         }
         Spacer(Modifier.height(12.dp))
         HairlineDivider(region = true)

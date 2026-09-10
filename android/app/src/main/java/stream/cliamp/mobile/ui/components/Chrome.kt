@@ -3,6 +3,7 @@ package stream.cliamp.mobile.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -26,10 +27,14 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
@@ -139,7 +144,12 @@ fun ScreenHeader(
  * the page body below it to [content]. Each page passes in only its own
  * [title] (and any [chips]), so the chrome pixels are identical everywhere
  * while the title stays dynamic per page. The extended player and the finder
- * are separate surfaces and host their own layouts instead of this one. */
+ * are separate surfaces and host their own layouts instead of this one.
+ *
+ * Tapping the title smooth-scrolls the page back to the top: pages opt in by
+ * passing [onTitleClick], usually `{ scope.scrollToTop(listState) }`. The
+ * search/settings corners keep their own taps - only the title text itself
+ * is the hit area. */
 @Composable
 fun MainLayout(
     title: String,
@@ -147,6 +157,7 @@ fun MainLayout(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     chips: (@Composable RowScope.() -> Unit)? = null,
+    onTitleClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val p = LocalPalette.current
@@ -161,7 +172,11 @@ fun MainLayout(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Mono(title, CliampType.screenTitle, p.ink, maxLines = 1)
+            Mono(
+                title, CliampType.screenTitle, p.ink,
+                modifier = if (onTitleClick != null) Modifier.microPress(onClick = onTitleClick) else Modifier,
+                maxLines = 1,
+            )
             Row(
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -196,8 +211,27 @@ fun MainLayout(
     }
 }
 
-enum class Tab(val label: String) {
-    // Play is gone: the full player opens from the mini-player bar. Servers is
+/**
+ * Smooth-scroll tickets for a title tap: glide to the very top, and no-op
+ * when already there so an accidental tap never visibly moves the list.
+ */
+fun CoroutineScope.scrollToTop(list: LazyListState) = launch {
+    if (list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0) {
+        list.animateScrollToItem(0)
+    }
+}
+
+fun CoroutineScope.scrollToTop(grid: LazyGridState) = launch {
+    if (grid.firstVisibleItemIndex > 0 || grid.firstVisibleItemScrollOffset > 0) {
+        grid.animateScrollToItem(0)
+    }
+}
+
+fun CoroutineScope.scrollToTop(scroll: ScrollState) = launch {
+    if (scroll.value > 0) scroll.animateScrollTo(0)
+}
+
+enum class Tab(val label: String) {    // Play is gone: the full player opens from the mini-player bar. Servers is
     // gone too, folded into Library beside the other sources. Search is gone
     // too: it is a floating corner icon rather than a destination.
     Stations("STATIONS"), Pods("PODCASTS"), Lib("Library")

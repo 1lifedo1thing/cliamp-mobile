@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -55,6 +56,7 @@ import stream.cliamp.mobile.ui.components.OverflowItem
 import stream.cliamp.mobile.ui.components.OverflowMenu
 import stream.cliamp.mobile.ui.components.MainLayout
 import stream.cliamp.mobile.ui.components.SectionLabel
+import stream.cliamp.mobile.ui.components.scrollToTop
 import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -100,11 +102,13 @@ fun PodcastShowScreen(
     val queue = remember(state.episodes, show?.feedUrl) {
         show?.let { s -> state.episodes.map { it.toStation(s) } } ?: emptyList()
     }
+    val listState = rememberLazyListState()
 
     MainLayout(
         title = show?.title ?: "podcasts",
         onOpenSearch = onOpenSearch,
         onOpenSettings = onOpenSettings,
+        onTitleClick = { scope.scrollToTop(listState) },
         chips = {
             BackChip(onClick = onBack)
             Chip(
@@ -115,7 +119,7 @@ fun PodcastShowScreen(
         },
     ) {
 
-        LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
             item { ShowHeader(show) }
 
             state.error?.let {

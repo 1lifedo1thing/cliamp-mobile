@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -44,6 +45,7 @@ import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
+import stream.cliamp.mobile.ui.components.scrollToTop
 import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.SectionLabel
@@ -84,6 +86,7 @@ fun ProviderBrowseScreen(
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
+    val browseListState = rememberLazyListState()
     val client = remember(account.id) { account.browseClient() }
     // Roots with no semantics on the server are dropped from the chip row.
     val roots = remember(account.providerKey) {
@@ -169,6 +172,7 @@ fun ProviderBrowseScreen(
                         is Node.Album -> n.name
                     },
                     CliampType.screenTitle, p.ink, maxLines = 1,
+                    modifier = Modifier.microPress { scope.scrollToTop(browseListState) },
                 )
             }
             if (here == Node.Home) {
@@ -191,7 +195,7 @@ fun ProviderBrowseScreen(
             }
         }
 
-        LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = browseListState) {
             if (indexState.text.isNotBlank()) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 10.dp)) {

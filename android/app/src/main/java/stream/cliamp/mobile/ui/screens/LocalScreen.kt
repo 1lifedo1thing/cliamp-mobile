@@ -27,11 +27,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -102,6 +106,7 @@ import stream.cliamp.mobile.ui.components.OverflowItem
 import stream.cliamp.mobile.ui.components.OverflowMenu
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
+import stream.cliamp.mobile.ui.components.scrollToTop
 import stream.cliamp.mobile.ui.components.ArtGlow
 import stream.cliamp.mobile.ui.components.ArtPlate
 import stream.cliamp.mobile.ui.components.MainLayout
@@ -230,10 +235,13 @@ fun LocalScreen(
             .fillMaxSize()
             .background(p.ground),
     ) {
+    // Hoisted above the remounting grid so a grid/list toggle keeps position.
+    val libraryGridState = rememberLazyGridState()
     MainLayout(
             title = "Library",
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
+            onTitleClick = { scope.scrollToTop(libraryGridState) },
             chips = {
                 Chip("playlists", selected = true, onClick = {})
                 Chip("providers", selected = false, onClick = onOpenProviders)
@@ -245,6 +253,7 @@ fun LocalScreen(
                 !haveAudio -> PermissionNote()
                 libError != null && songs.isEmpty() -> CenterNote(libError!!, p.destructiveInk)
                 else -> PlaylistList(
+                    gridState = libraryGridState,
                     smart = smartPlaylists,
                     pinnedPlaylists = pinnedPlaylists,
                     playlists = unpinnedPlaylists,
@@ -340,16 +349,20 @@ fun LibraryProvidersPane(
 ) {
     val p = LocalPalette.current
     Box(Modifier.fillMaxSize().background(p.ground)) {
+        val scope = rememberCoroutineScope()
+        val listState = rememberLazyListState()
         MainLayout(
             title = "providers",
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
+            onTitleClick = { scope.scrollToTop(listState) },
             chips = {
                 BackChip(onClick = onBack)
             },
         ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 ProvidersView(
+                    listState = listState,
                     providers = providers,
                     onOpenProvider = onOpenProvider,
                     onAddProvider = onAddProvider,
@@ -412,10 +425,13 @@ fun LibrarySmartPlaylistPane(
     }
     val pl = smartPlaylists.firstOrNull { it.kind == kind }
     Box(Modifier.fillMaxSize().background(p.ground)) {
+        val scope = rememberCoroutineScope()
+        val listState = rememberLazyListState()
         MainLayout(
             title = pl?.label ?: "playlist",
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
+            onTitleClick = { scope.scrollToTop(listState) },
             chips = {
                 BackChip(onClick = onBack)
             },
@@ -425,6 +441,7 @@ fun LibrarySmartPlaylistPane(
                     CenterNote("no such playlist", p.inkTertiary)
                 } else {
                     SmartPlaylistDetail(
+                        listState = listState,
                         pl = pl,
                         current = current,
                         playing = playing,
@@ -481,10 +498,12 @@ fun LibraryPlaylistPane(
         if (cover.isNotBlank()) scope.launch { playlists.setCover(slug, cover) }
     }
     Box(Modifier.fillMaxSize().background(p.ground)) {
+        val listState = rememberLazyListState()
         MainLayout(
             title = pl?.station?.name ?: "playlist",
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
+            onTitleClick = { scope.scrollToTop(listState) },
             chips = {
                 BackChip(onClick = onBack)
                 if (pl != null) {
@@ -498,6 +517,7 @@ fun LibraryPlaylistPane(
                     CenterNote("playlist gone", p.inkTertiary)
                 } else {
                     PlaylistDetailShown(
+                        listState = listState,
                         playlist = pl,
                         songIds = pl.songIds,
                         playlists = playlists,
@@ -586,6 +606,7 @@ private fun PermissionNote() {
 
 @Composable
 private fun PlaylistList(
+    gridState: LazyGridState,
     smart: List<SmartPlaylist>,
     pinnedPlaylists: List<PlaylistStore.Playlist>,
     playlists: List<PlaylistStore.Playlist>,
@@ -621,6 +642,7 @@ private fun PlaylistList(
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(150.dp),
             modifier = Modifier.weight(1f).fillMaxWidth(),
+            state = gridState,
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -758,6 +780,7 @@ private fun PlaylistList(
 /** Dedicated providers pane: connected accounts, then every addable type. */
 @Composable
 private fun ProvidersView(
+    listState: LazyListState,
     providers: List<ProviderAccount>,
     onOpenProvider: (ProviderAccount) -> Unit,
     onAddProvider: (ProviderSpec) -> Unit,
@@ -768,7 +791,7 @@ private fun ProvidersView(
     // A Subsonic server holds one library and there is no point adding it
     // twice; SSH hosts are machines, and a nas and a seedbox are two of them.
     val available = ProviderCatalog.all.filter { it.multiple || it.key !in connectedKeys }
-    LazyColumn(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize(), state = listState) {
         item {
             SectionLabel("connected — ${providers.size}") { }
         }
@@ -1253,6 +1276,7 @@ private fun playlistPreview(songIds: List<String>, byId: Map<String, String>): S
 
 @Composable
 private fun PlaylistDetailShown(
+    listState: LazyListState,
     playlist: PlaylistStore.Playlist,
     songIds: List<String>,
     playlists: PlaylistStore,
@@ -1295,7 +1319,7 @@ private fun PlaylistDetailShown(
     }
 
     val visible = remember(members, sort) { sortedStations(members, sort) }
-    LazyColumn(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize(), state = listState) {
         if (members.isEmpty()) {
             item {
                 Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
@@ -1555,6 +1579,7 @@ private fun PodcastGroups(
 /** Detail view for a pinned smart playlist: every member station, local and radio. */
 @Composable
 private fun SmartPlaylistDetail(
+    listState: LazyListState,
     pl: SmartPlaylist,
     current: Station?,
     playing: Boolean,
@@ -1591,7 +1616,7 @@ private fun SmartPlaylistDetail(
             }
         }
     }
-    LazyColumn(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize(), state = listState) {
         if (isFav) {
             item {
                 Row(
