@@ -689,6 +689,18 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
                 tint = p.accent.copy(alpha = 0.16f),
             )
         }
+        // No cover at all: the station's broadcast glyph, the same mark its
+        // list rows wear, instead of an empty plate with only a caption.
+        if (art == null && station?.source != StationSource.Cliamp) {
+            Icon(
+                CliampIcons.StationsTab,
+                null,
+                Modifier
+                    .align(Alignment.Center)
+                    .size(96.dp),
+                tint = p.inkTertiary,
+            )
+        }
     }
     }
 }
