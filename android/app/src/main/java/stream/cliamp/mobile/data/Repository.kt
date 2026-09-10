@@ -116,8 +116,12 @@ class Repository(
                 val cur = _directory.value
                 if (!reset && (cur.loading || cur.exhausted || cur.error != null)) return@withLock
                 val offset = if (reset) 0 else cur.stations.size
+                // A reset never empties what is on screen: the old rows stay
+                // put (and keep their scroll position) while the new query
+                // loads, then the live page replaces them. Emptying first is
+                // what made every filter tap flash and jump.
                 _directory.value =
-                    if (reset) DirectoryState(query = query, loading = true)
+                    if (reset) DirectoryState(query = query, loading = true, stations = cur.stations)
                     else cur.copy(loading = true, error = null)
 
                 // A reset empties nothing the user already has on screen: fill

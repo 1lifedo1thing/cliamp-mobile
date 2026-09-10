@@ -111,15 +111,18 @@ private var chartCursor: List<String> = emptyList()
             pageLock.withLock {
                 val cur = _directory.value
                 if (!reset && (cur.loading || cur.exhausted || cur.error != null)) return@withLock
+                // Same stale-while-revalidate as radio: a reset keeps the old
+                // rows on screen (and their scroll position) instead of
+                // flashing empty while the new query loads.
                 _directory.value =
-                    if (reset) PodcastDirectoryState(query = query, loading = true)
+                    if (reset) PodcastDirectoryState(query = query, loading = true, shows = cur.shows)
                     else cur.copy(loading = true, error = null)
 
                 if (reset) {
                     chartCursor = emptyList()
                     pending = emptyList()
                     chartQueue.clear()
-                    _directory.value = PodcastDirectoryState(query = query, loading = true)
+                    _directory.value = PodcastDirectoryState(query = query, loading = true, shows = cur.shows)
                     // Fill the screen from the last snapshot of this query while
                     // the network answers; the first live page replaces it.
                     restore(query)

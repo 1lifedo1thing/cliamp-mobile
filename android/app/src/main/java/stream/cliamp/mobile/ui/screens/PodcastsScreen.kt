@@ -104,6 +104,7 @@ fun PodcastsScreen(
     val subscriptions by podcasts.subscriptions.collectAsState(initial = emptyList())
 
     val listState = rememberLazyGridState()
+    // NOTE: no scroll reset on query/pane change, same reasoning as Stations.
     val nearEnd by remember {
         derivedStateOf {
             val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0

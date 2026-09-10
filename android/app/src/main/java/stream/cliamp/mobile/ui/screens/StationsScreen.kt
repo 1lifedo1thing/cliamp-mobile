@@ -103,6 +103,10 @@ fun StationsScreen(
     val countries by repository.countries.collectAsState(initial = emptyList())
 
     val listState = rememberLazyGridState()
+    // NOTE: no scroll reset on query/source change. A filter keeps its
+    // scroll position while the repository swaps content underneath
+    // (stale rows stay until the live page lands), and returning from
+    // search or the player keeps the position you left.
     val nearEnd by remember {
         derivedStateOf {
             val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
