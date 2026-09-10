@@ -70,7 +70,7 @@ class Prefs(private val context: Context) {
     private val pinnedGridFlag = MutableStateFlow(true)
     private val playlistsGridFlag = MutableStateFlow(false)
     private val cliampGridFlag = MutableStateFlow(false)
-    private val directoryGridFlag = MutableStateFlow(true)
+    private val directoryGridFlag = MutableStateFlow(false)
     private val subsGridFlag = MutableStateFlow(true)
     private val podDirectoryGridFlag = MutableStateFlow(true)
 
@@ -197,7 +197,7 @@ class Prefs(private val context: Context) {
         pinnedGridFlag.value = p[K.pinnedGrid] ?: true
         playlistsGridFlag.value = p[K.playlistsGrid] ?: false
         cliampGridFlag.value = p[K.cliampGrid] ?: false
-        directoryGridFlag.value = p[K.directoryGrid] ?: true
+        directoryGridFlag.value = p[K.directoryGrid] ?: false
         subsGridFlag.value = p[K.subsGrid] ?: true
         podDirectoryGridFlag.value = p[K.podDirectoryGrid] ?: true
     }
