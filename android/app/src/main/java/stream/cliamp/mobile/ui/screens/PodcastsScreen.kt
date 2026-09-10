@@ -280,7 +280,7 @@ private fun ShowRow(
     val p = LocalPalette.current
     ListRow(
         onClick = onOpen,
-        verticalPadding = 11.dp,
+        verticalPadding = 9.dp,
         leading = { Artwork(show.artwork) },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -319,9 +319,9 @@ private fun Artwork(url: String) {
     val bmp = art
     Box(
         Modifier
-            .size(34.dp)
-            .clip(RoundedCornerShape(CliampShape.tiny))
-            .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny)),
+            .size(40.dp)
+            .clip(RoundedCornerShape(CliampShape.small))
+            .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small)),
         contentAlignment = Alignment.Center,
     ) {
         if (bmp != null) {
@@ -332,7 +332,7 @@ private fun Artwork(url: String) {
                 contentScale = ContentScale.Crop,
             )
         } else {
-            Icon(CliampIcons.PodRow, null, Modifier.size(13.dp), tint = p.inkFaint)
+            Icon(CliampIcons.PodRow, null, Modifier.size(15.dp), tint = p.inkFaint)
         }
     }
 }

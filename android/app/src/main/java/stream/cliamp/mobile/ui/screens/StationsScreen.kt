@@ -324,7 +324,7 @@ private fun StationRow(
     ListRow(
         rail = active,
         onClick = onPlay,
-        verticalPadding = 11.dp,
+        verticalPadding = 9.dp,
         leading = { StationThumb(station, active, playing) },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -377,11 +377,11 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
     val bmp = art
 Box(
         Modifier
-            .size(26.dp)
-            .clip(RoundedCornerShape(CliampShape.tiny))
+            .size(40.dp)
+            .clip(RoundedCornerShape(CliampShape.small))
             .then(
                 if (art != null) Modifier.background(p.panel)
-                else Modifier.border(1.dp, if (active) p.accent else p.chipBorder, RoundedCornerShape(CliampShape.tiny))
+                else Modifier.border(1.dp, if (active) p.accent else p.chipBorder, RoundedCornerShape(CliampShape.small))
             ),
         contentAlignment = Alignment.Center,
     ) {
