@@ -448,6 +448,9 @@ class PlaybackService : MediaSessionService() {
                     duration,
                 )
             }
+            // Resting state reads as silence: bars and peaks drop to the
+            // grid instead of freezing mid-air.
+            WidgetRenderer.settleScope(this)
         }
     }
 

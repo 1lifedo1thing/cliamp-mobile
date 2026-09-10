@@ -97,6 +97,9 @@ object WidgetRenderer {
     /** Palette of the last full render, for ticks that carry no theme. */
     @Volatile private var lastPalette: CliampPalette? = null
 
+    /** True once the scope has been settled flat; skips repeat settle pushes. */
+    @Volatile private var scopeSettled = false
+
     /** Last tick's clock second + duration: identical ticks are skipped. */
     @Volatile private var lastTickSecond = -1L
     @Volatile private var lastTickDuration = 0L
@@ -167,6 +170,33 @@ object WidgetRenderer {
     }
 
     /**
+     * Drops every bar to the grid: zeroed peaks plus one empty frame. Called
+     * when playback stops or pauses, so the scope reads as silence instead
+     * of a frozen mid-air frame. Skipped when already settled.
+     */
+    fun settleScope(context: Context) {
+        if (scopeSettled) return
+        val p = lastPalette ?: return
+        scopeSettled = true
+        val frame: Bitmap = synchronized(scopeDrawLock) {
+            scopePeaks.fill(0f)
+            drawScope(FloatArray(0), p)
+        }
+        val ctx = context.applicationContext
+        scope.launch {
+            val mgr = AppWidgetManager.getInstance(ctx)
+            val ids = mgr.getAppWidgetIds(ComponentName(ctx, CliampWidgetProvider::class.java))
+                .filterNot { isCompact(mgr, it) }
+            if (ids.isEmpty()) return@launch
+            val rv = RemoteViews(ctx.packageName, R.layout.widget_cliamp)
+            rv.setImageViewBitmap(R.id.w_scope, frame)
+            runCatching {
+                for (id in ids) mgr.partiallyUpdateAppWidget(id, rv)
+            }
+        }
+    }
+
+    /**
      * One scope frame: paints the latest FFT into the shared bitmap and
      * partially updates standard instances. No-ops without a rendered
      * palette or without spectrum - so the service can fire it on a dumb
@@ -179,6 +209,7 @@ object WidgetRenderer {
         val frame: Bitmap = synchronized(scopeDrawLock) {
             drawScope(spectrum, p)
         }
+        scopeSettled = false
         val ctx = context.applicationContext
         scope.launch {
             val mgr = AppWidgetManager.getInstance(ctx)
@@ -402,14 +433,17 @@ object WidgetRenderer {
         // something is tuned, flexing to the leftover height: a slim strip
         // in a one-row cell, tall bricks in a two-row one. Its bitmap
         // arrives separately (pushSpectrum flipbook); the current frame is
-        // painted inline here so a full re-render never blanks it.
+        // painted inline here so a full re-render never blanks it. Paused
+        // renders silence, never the frozen live frame.
         val showScope = !compact && row.station != null
         if (!compact) {
             rv.setViewVisibility(R.id.w_scope, if (showScope) View.VISIBLE else View.GONE)
             if (showScope) {
                 val frame = synchronized(scopeDrawLock) {
-                    drawScope(PlaybackBus.spectrum.value, p)
+                    if (!row.playing) scopePeaks.fill(0f)
+                    drawScope(if (row.playing) PlaybackBus.spectrum.value else FloatArray(0), p)
                 }
+                scopeSettled = !row.playing
                 rv.setImageViewBitmap(R.id.w_scope, frame)
             }
         }
