@@ -8,6 +8,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.provider.ProviderStore
@@ -80,17 +81,24 @@ class CliampApp : Application() {
         repository.bootstrap()
         podcasts.bootstrap()
 
-        // The last station is restored but never auto-played unless asked:
-        // a radio app that starts making noise on launch is a bad neighbour.
-        // The widget reads the palette too, and a paused widget gets no
-        // nudge from the playback service, so watch the setting directly.
+        // The widget reads the palette and the visualizer family too, and a
+        // paused widget gets no nudge from the playback service, so watch
+        // both settings directly: a theme or visualizer change re-renders
+        // even with nothing playing. Merged, not combined - combine would
+        // wait for both to emit, so toggling one alone would never fire.
         appScope.launch {
-            prefs.palette.distinctUntilChanged().drop(1).collect {
+            merge(
+                prefs.palette.distinctUntilChanged().drop(1),
+                prefs.visualizer.distinctUntilChanged().drop(1),
+            ).collect {
                 WidgetRenderer.refresh(this@CliampApp)
             }
         }
 
         player.onReady = {
+            // The last station is restored but never auto-played unless
+            // asked: a radio app that starts making noise on launch is a bad
+            // neighbour.
             appScope.launch {
                 if (prefs.autoResume.first()) {
                     prefs.lastStation.first()?.let { s -> player.play(s) }

@@ -104,6 +104,9 @@ object WidgetRenderer {
     /** Palette of the last full render, for ticks that carry no theme. */
     @Volatile private var lastPalette: CliampPalette? = null
 
+    /** Visualizer family of the last full render; ticks obey it. */
+    @Volatile private var lastViz: WidgetViz = WidgetViz.SPECTRUM
+
     /** True once the scope has been settled flat; skips repeat settle pushes. */
     @Volatile private var scopeSettled = false
 
@@ -205,12 +208,15 @@ object WidgetRenderer {
     }
 
     /**
-     * One scope frame: paints the latest FFT into the shared bitmap and
-     * partially updates standard instances. No-ops without a rendered
-     * palette or without spectrum - so the service can fire it on a dumb
-     * cadence while playing and it costs nothing otherwise.
+     * One visualizer frame: paints the latest FFT into the shared bitmap and
+     * partially updates standard instances. No-ops when the family shows
+     * nothing, without a rendered palette, or without spectrum - so the
+     * service fires it on a dumb cadence while playing and it costs nothing
+     * otherwise. Which family paints is [WidgetViz]'s decision, read from
+     * the last full render.
      */
-    fun pushSpectrum(context: Context) {
+    fun pushVisualizer(context: Context) {
+        if (!lastViz.showsScope) return
         val spectrum = PlaybackBus.spectrum.value
         if (spectrum.isEmpty()) return
         val p = lastPalette ?: return
@@ -348,18 +354,20 @@ object WidgetRenderer {
         val systemDark = (ctx.resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val p = paletteFor(paletteName, systemDark)
+        val viz = WidgetViz.of(app.prefs.visualizer.first())
 
         val mgr = AppWidgetManager.getInstance(ctx)
         val ids = mgr.getAppWidgetIds(ComponentName(ctx, CliampWidgetProvider::class.java))
-        // Per instance: a tiny cell gets the centered compact card, anything
+        // Per instance: a tiny cell gets the centered compact row, anything
         // roomier the transport row with the flexing scope and seek.
         for (id in ids) {
             val (w, h) = cellSize(mgr, id)
             val compact = w < COMPACT_MAX_WIDTH_DP || h < COMPACT_MAX_HEIGHT_DP
-            Log.d("cliamp/wid", "widget layout id=$id cell=${w}x${h} compact=$compact")
-            mgr.updateAppWidget(id, buildViews(ctx, row, p, compact))
+            Log.d("cliamp/wid", "widget layout id=$id cell=${w}x${h} compact=$compact viz=${viz.settingId}")
+            mgr.updateAppWidget(id, buildViews(ctx, row, p, compact, viz))
         }
         lastPalette = p
+        lastViz = viz
     }
 
     /**
@@ -391,6 +399,7 @@ object WidgetRenderer {
         row: Row,
         p: CliampPalette,
         compact: Boolean = false,
+        viz: WidgetViz = WidgetViz.SPECTRUM,
     ): RemoteViews {
         val rv = RemoteViews(
             ctx.packageName,
@@ -456,12 +465,13 @@ object WidgetRenderer {
         }
 
         // The scope lives in the standard layout only and shows whenever
-        // something is tuned, flexing to the leftover height: a slim strip
-        // in a one-row cell, tall bricks in a two-row one. Its bitmap
-        // arrives separately (pushSpectrum flipbook); the current frame is
-        // painted inline here so a full re-render never blanks it. Paused
-        // renders silence, never the frozen live frame.
-        val showScope = !compact && row.station != null
+        // something is tuned and the family draws one - `off` removes the
+        // strip entirely rather than leaving an empty gap. It flexes to the
+        // leftover height: a slim strip in a one-row cell, tall bricks in a
+        // two-row one. Its bitmap arrives separately (pushVisualizer
+        // flipbook); the current frame is painted inline here so a full
+        // re-render never blanks it mid-animation.
+        val showScope = !compact && viz.showsScope && row.station != null
         if (!compact) {
             rv.setViewVisibility(R.id.w_scope, if (showScope) View.VISIBLE else View.GONE)
             if (showScope) {

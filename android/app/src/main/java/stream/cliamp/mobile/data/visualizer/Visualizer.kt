@@ -5,8 +5,8 @@ import kotlin.math.sin
 
 /**
  * The visualizer families the app can draw, and everything shared between the
- * two places that actually render them: the in-app Compose meters and the
- * home-screen Glance widget.
+ * places that actually render them: the in-app Compose meters and the
+ * home-screen RemoteViews widget.
  *
  * A visualizer is described by an id (persisted in settings), the number of
  * columns it wants, and its brick geometry. Rendering itself is necessarily
@@ -17,9 +17,11 @@ import kotlin.math.sin
  * frozen at the last snapshot rather than a coarser stand-in.
  *
  * To add a new visualizer type later: add a [Visualizer] here, register its id
- * in the settings enum, and give it a Compose renderer and a Glance renderer
+ * in the settings enum, and give it a Compose renderer and a widget painter
  * that both consume a [MeterCore] snapshot. The pipeline (AudioFx -> MeterCore
  * -> per-host renderer) is shared, so it works correctly everywhere for free.
+ * [stream.cliamp.mobile.widget.WidgetViz] is the widget-side dispatch that
+ * maps the persisted setting id onto whichever painter draws it.
  */
 enum class Visualizer(val id: String, val columns: Int, val brickDp: Int, val gapDp: Int) {
     /** The signature brick meter: 24 columns, the NowPlaying geometry. */
@@ -43,8 +45,8 @@ enum class Visualizer(val id: String, val columns: Int, val brickDp: Int, val ga
 }
 
 /**
- * The shared brick meter geometry. Both the in-app BrickMeter and the Glance
- * widget read this so the pitch, gap and column count can never drift apart.
+ * The shared brick meter geometry. Both the in-app BrickMeter and the widget
+ * painter read this so the pitch, gap and column count can never drift apart.
  */
 object BrickGeometry {
     const val columnGapDp = 3

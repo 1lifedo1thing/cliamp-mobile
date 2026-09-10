@@ -433,9 +433,8 @@ class PlaybackService : MediaSessionService() {
                         dur,
                     )
                 }
-                if (prefs0.visualizer.first() != "off") {
-                    WidgetRenderer.pushSpectrum(this@PlaybackService)
-                }
+                // The renderer decides by family: `off` no-ops inside.
+                WidgetRenderer.pushVisualizer(this@PlaybackService)
                 delay(500)
             }
         } else null
@@ -457,7 +456,7 @@ class PlaybackService : MediaSessionService() {
     /**
      * Shared spectrum sink used by every fx.attach (onCreate and the playing
      * re-attach). The in-app meter and the oscilloscope read it live; the
-     * widget samples it twice a second for its slim scope.
+     * widget samples it twice a second for its scope strip.
      */
     private fun handleSpectrum(it: FloatArray) {
         PlaybackBus.publishSpectrum(it)
