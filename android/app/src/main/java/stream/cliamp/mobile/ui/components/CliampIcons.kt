@@ -140,7 +140,6 @@ object CliampIcons {
      */
     val LibTab = stroked(18f, 18f, 1.7f, rect(1f, 1f, 5f, 16f), rect(8f, 1f, 5f, 16f), "M15 2l2 15")
     val QueueTabLines = stroked(18f, 18f, 1.7f, "M1 4h16M1 9h11M1 14h11")
-    val CmdSmall = stroked(18f, 18f, 1.7f, rrect(0.9f, 1.9f, 16.2f, 14.2f, 2f), "M4.5 7l2.2 2.2L4.5 11.4")
     val Search = stroked(16f, 16f, 1.5f, circle(7.1f, 7.1f, 3.9f), "M9.9 9.9L14 14.2")
 
     /**

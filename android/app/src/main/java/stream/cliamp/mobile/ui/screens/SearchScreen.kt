@@ -27,7 +27,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,7 +45,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.DirectoryQuery
 import stream.cliamp.mobile.data.LocalLibrary
 import stream.cliamp.mobile.data.PodcastDirectory
@@ -58,7 +56,6 @@ import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.data.provider.ProviderStore
-import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.ui.components.BackIconChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
@@ -83,11 +80,8 @@ private enum class Scope(val label: String) {
 }
 
 /**
- * The command bar owns its own keyboard. That is not a stylistic flourish: a
- * system IME would cover half the screen with a different type family and
- * break the frame budget, and the concept's key caps are the same mechanical
- * component used by the transport. It doubles as the app-wide fuzzy finder:
- * one query spans local songs, favourites, the radio directory and providers.
+ * The app-wide fuzzy finder: one query spans local songs, favourites, the
+ * radio directory, podcasts and providers.
  */
 @Composable
 fun SearchScreen(
@@ -99,8 +93,6 @@ fun SearchScreen(
     current: Station? = null,
     playing: Boolean = false,
     onPlay: (Station, List<Station>) -> Unit,
-    onOpenScope: () -> Unit,
-    onOpenSettings: () -> Unit,
     onOpenProvider: (ProviderAccount) -> Unit,
     onOpenShow: (PodcastShow) -> Unit,
     onOpenTag: (String) -> Unit,
@@ -109,7 +101,6 @@ fun SearchScreen(
     onQueryChange: (String) -> Unit,
 ) {
     val p = LocalPalette.current
-    val scope = rememberCoroutineScope()
     var filter by remember { mutableStateOf(Scope.All) }
     // Podcast search hits, kept local to this screen. The Podcasts tab shares
     // the same PodcastRepository, so routing search through podcasts.load()
@@ -130,13 +121,12 @@ fun SearchScreen(
         cliamp + directory.stations
     }
 
-    val isCommand = query.startsWith(":")
     val term = query.trim()
 
     // Debounce the directory: it is somebody else's server, not ours. The local
     // and radio fuzzy pass runs instantly on what we already hold.
     LaunchedEffect(term) {
-        if (isCommand || term.length < 2) return@LaunchedEffect
+        if (term.length < 2) return@LaunchedEffect
         delay(320)
         repository.loadDirectory(DirectoryQuery.Search(term), reset = true)
         // The podcast directory takes the same query, so a show can be found
@@ -184,32 +174,7 @@ fun SearchScreen(
     fun run(raw: String) {
         val text = raw.trim()
         if (text.isEmpty()) return
-        val verb = text.substringBefore(' ')
-        val arg = text.substringAfter(' ', "").trim()
-        when (verb) {
-            ":play" -> {
-                val hit = results.firstOrNull {
-                    it.playable != null && (arg.isBlank() || it.haystack.contains(arg, ignoreCase = true))
-                } ?: GlobalSearch.run(arg, songs, favorites, recent, radio, tags, providerAccounts).hits
-                    .firstOrNull { it.playable != null }
-                hit?.playable?.let { onPlay(it, listOf(it)) }
-            }
-            ":tag" -> onOpenTag(arg)
-            ":country" -> repository.loadDirectory(DirectoryQuery.Country(arg.uppercase(), arg.uppercase()), reset = true)
-            ":random" -> {
-                val pool = directory.stations.ifEmpty { cliamp }
-                pool.randomOrNull()?.let { onPlay(it, pool) }
-            }
-            ":fav" -> PlaybackBus.station.value?.let { s -> scope.launch { prefs.toggleFavorite(s) } }
-            ":scope" -> onOpenScope()
-            ":settings" -> onOpenSettings()
-            ":eq" -> scope.launch {
-                prefs.setEqPreset(arg.ifBlank { "flat" }); prefs.setEqEnabled(true)
-            }
-            ":clear" -> onQueryChange("")
-            else -> repository.loadDirectory(DirectoryQuery.Search(text), reset = true)
-        }
-        if (verb != ":clear" && !verb.startsWith(":")) onQueryChange(text)
+        repository.loadDirectory(DirectoryQuery.Search(text), reset = true)
     }
 
     fun open(hit: SearchHit, queue: List<SearchHit>) {
@@ -287,7 +252,6 @@ private fun sectionOf(hit: SearchHit): String {
         is SearchHit.Show -> "podcasts"
         is SearchHit.Tag -> "tags"
         is SearchHit.Provider -> "providers"
-        is SearchHit.Command -> "commands"
     }
     return if (hit is SearchHit.Tag) "tags — global" else "$head — global"
 }
@@ -300,7 +264,7 @@ private fun HitArt(
     playing: Boolean = false,
 ) {
     val p = LocalPalette.current
-    // Commands, tags and provider rows carry no art; the type glyph is right.
+    // Tags and provider rows carry no art; the type glyph is right.
     val station = when (hit) {
         is SearchHit.Song -> hit.station
         is SearchHit.Favorite -> hit.station
@@ -310,7 +274,7 @@ private fun HitArt(
     if (station == null) {
         Icon(
             iconOf(hit), null, Modifier.size(15.dp),
-            tint = if (hit is SearchHit.Command) accent else p.inkTertiary,
+            tint = p.inkTertiary,
         )
         return
     }
@@ -373,7 +337,6 @@ private fun HitRow(
     val p = LocalPalette.current
     val haptics = LocalHapticFeedback.current
     val enabled = LocalHapticsEnabled.current
-    val fuzzTerm = if (term.startsWith(":")) "" else term
     val currentUrl = when (hit) {
         is SearchHit.Song -> hit.station.url
         is SearchHit.Favorite -> hit.station.url
@@ -399,7 +362,6 @@ private fun HitRow(
             is SearchHit.Show -> hit.show.title
             is SearchHit.Tag -> "#${hit.name}"
             is SearchHit.Provider -> hit.account.label
-            is SearchHit.Command -> hit.syntax + if (hit.takesArg) " …" else ""
         }
         val sub = when (hit) {
             is SearchHit.Song -> hit.station.artist
@@ -408,10 +370,9 @@ private fun HitRow(
             is SearchHit.Show -> hit.show.meta
             is SearchHit.Tag -> "${hit.count} stations"
             is SearchHit.Provider -> hit.specLabel
-            is SearchHit.Command -> hit.hint
         }
         androidx.compose.material3.Text(
-            text = highlight(title, fuzzTerm, accent),
+            text = highlight(title, term, accent),
             style = CliampType.rowPrimary.copy(color = if (active) accent else p.ink),
             maxLines = 1,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -439,5 +400,4 @@ private fun iconOf(hit: SearchHit): ImageVector = when (hit) {
     is SearchHit.Show -> CliampIcons.PodRow
     is SearchHit.Tag -> CliampIcons.ListShort
     is SearchHit.Provider -> CliampIcons.Search
-    is SearchHit.Command -> CliampIcons.CmdSmall
 }

@@ -35,12 +35,6 @@ object GlobalSearch {
             radio.take(20).forEach { idle += SearchHit.StationHit(it) }
             return SearchResults(idle, idle.size)
         }
-        if (term.startsWith(":")) {
-            val cmdHits = searchCommands.filter {
-                it.syntax.startsWith(term.substringBefore(' '), ignoreCase = true)
-            }
-            return SearchResults(cmdHits, cmdHits.size)
-        }
 
         val scored = ArrayList<Pair<Int, SearchHit>>()
 

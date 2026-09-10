@@ -494,8 +494,6 @@ fun CliampRoot(
                     current = station,
                     playing = playerState.playing,
                     onPlay = onPlay,
-                    onOpenScope = { navController.navigate(Scope) },
-                    onOpenSettings = { navController.navigate(Settings) },
                     onOpenProvider = { account ->
                         navController.navigate(ProviderBrowse(account.id))
                     },
