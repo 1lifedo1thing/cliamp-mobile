@@ -23,7 +23,7 @@ object LocalArt {
     private const val TARGET = 512
     private const val TARGET_SMALL = 96
     private val bitmaps = LruCache<String, Bitmap>(96)
-    private val smallBitmaps = LruCache<String, Bitmap>(192)
+    private val smallBitmaps = LruCache<String, Bitmap>(384)
     private val misses = LruCache<String, Boolean>(128)
 
     suspend fun bitmapFor(cover: String?, resolver: ContentResolver): Bitmap? =
@@ -32,6 +32,15 @@ object LocalArt {
     /** Low-quality art for row thumbnails and the mini player. */
     suspend fun bitmapForSmall(cover: String?, resolver: ContentResolver): Bitmap? =
         bitmapForAt(cover, resolver, TARGET_SMALL, smallBitmaps)
+
+    /**
+     * Memory-only peek for rows: a plain LRU get, safe on Main, so a
+     * scrolling list can paint its cached cover synchronously instead of
+     * flashing the placeholder through an async lookup that hits memory
+     * a frame later anyway.
+     */
+    fun cachedSmall(cover: String?): Bitmap? =
+        cover?.takeIf { it.isNotBlank() }?.let { smallBitmaps.get(it) }
 
     private suspend fun bitmapForAt(
         cover: String?,

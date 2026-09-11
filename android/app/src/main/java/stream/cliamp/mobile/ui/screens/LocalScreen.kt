@@ -1540,12 +1540,23 @@ private fun SmartPlaylistDetail(
 private fun SongCover(s: Station, current: Station?, playing: Boolean) {
     val p = LocalPalette.current
     val context = LocalContext.current
-    var art by remember(s.id) { mutableStateOf<ImageBitmap?>(null) }
+    val resolver = context.contentResolver
+    // Paint the memory hit synchronously so scrolling back over seen rows
+    // never flashes the placeholder; the async lookup below only runs on a
+    // real miss and lands on the same bitmap.
+    var art by remember(s.id) {
+        mutableStateOf(
+            (LocalArt.cachedSmall(s.cover) ?: StationArtSource.cachedSmall(s))?.asImageBitmap()
+        )
+    }
     LaunchedEffect(s.id) {
-        art = (LocalArt.bitmapForSmall(s.cover, context.contentResolver)
+        if (art != null) return@LaunchedEffect
+        art = (LocalArt.bitmapForSmall(s.cover, resolver)
             // Episodes and provider tracks carry their real artwork as a URL;
-            // the discovery path below scrapes homepages and would never find it.
-            ?: s.cover.takeIf { it.startsWith("http") }?.let { StationArtSource.bitmapForUrlSmall(it) }
+            // the discovery path below scrapes homepages and would never find
+            // it. Keyed by station id like branding, because signed provider
+            // URLs rotate and a URL key would never hit twice.
+            ?: StationArtSource.bitmapForKnownSmall(s)
             ?: StationArtSource.bitmapForSmall(s))
             ?.asImageBitmap()
     }

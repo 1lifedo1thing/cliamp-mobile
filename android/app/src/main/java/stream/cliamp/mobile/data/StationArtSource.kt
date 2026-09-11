@@ -48,7 +48,7 @@ object StationArtSource {
 
     private val resolved = LruCache<String, String>(128)
     private val bitmaps = LruCache<String, Bitmap>(128)
-    private val smallBitmaps = LruCache<String, Bitmap>(192)
+    private val smallBitmaps = LruCache<String, Bitmap>(384)
     // Key -> when its art last failed. A failure is not permanent: a cover
     // that times out on a cold-start stampede still gets another try once the
     // backoff passes, so a station that does have art ends up showing it.
@@ -130,6 +130,10 @@ object StationArtSource {
      * doesn't hold a dozen full-size bitmaps in memory. Unlike [bitmapFor] it
      * keeps retrying a failed cover on every look, which is how the same
      * station can end up with art in the list while the grid still misses it.
+     *
+     * Local files are the exception: a missing embedded picture is re-parsed
+     * out of the audio file on every look without this, so their misses rest
+     * for [MISS_RETRY_MS] like [bitmapFor]'s do.
      */
     suspend fun bitmapForSmall(station: Station): Bitmap? {
         if (station.source == StationSource.Cliamp) return null
@@ -137,12 +141,14 @@ object StationArtSource {
         // Same off-main + pooled treatment as [bitmapFor]; row thumbnails
         // are what a fast scroll resolves dozens of at once.
         return withContext(CoverIo) {
+            if (station.source == StationSource.Local && isOut(station.id)) return@withContext null
             val bmp = if (station.source == StationSource.Local) {
                 embeddedArt(station.url, TARGET_SMALL)
             } else {
                 disk(station.id, TARGET_SMALL) ?: cover(station) { url, save -> download(url, save, TARGET_SMALL) }
             }
             if (bmp != null) smallBitmaps.put(station.id, bmp)
+            else if (station.source == StationSource.Local) noteMiss(station.id)
             bmp
         }
     }
@@ -190,6 +196,36 @@ object StationArtSource {
         return withContext(CoverIo) {
             val bmp = disk(url, TARGET_SMALL) ?: download(url, save = url, target = TARGET_SMALL)
             if (bmp == null) noteMiss(url) else smallBitmaps.put(url, bmp)
+            bmp
+        }
+    }
+
+    /**
+     * Memory-only peeks for rows: plain LRU gets, safe on Main, so a
+     * scrolling list paints cached covers synchronously instead of flashing
+     * placeholders through an async lookup that would hit memory a frame
+     * later anyway. Known art and discovery share the station-id key; the
+     * URL-keyed form is for callers that only ever held a URL.
+     */
+    fun cachedSmall(station: Station): Bitmap? = smallBitmaps.get(station.id)
+
+    fun cachedSmallUrl(url: String): Bitmap? =
+        url.takeIf { it.isNotBlank() }?.let { smallBitmaps.get(it) }
+
+    /**
+     * A known cover URL cached the stations way: keyed by the stable station
+     * id rather than the URL. Provider artwork URLs are signed per request,
+     * so keying by URL (as [bitmapForUrlSmall] does) never hits twice and
+     * every list build re-downloads every cover. The bytes on disk are shared
+     * with the discovery path, which files under the same id.
+     */
+    suspend fun bitmapForKnownSmall(station: Station): Bitmap? {
+        val url = station.cover.takeIf { it.startsWith("http") } ?: return bitmapForSmall(station)
+        smallBitmaps.get(station.id)?.let { return it }
+        if (isOut(station.id)) return null
+        return withContext(CoverIo) {
+            val bmp = disk(station.id, TARGET_SMALL) ?: download(url, save = station.id, target = TARGET_SMALL)
+            if (bmp == null) noteMiss(station.id) else smallBitmaps.put(station.id, bmp)
             bmp
         }
     }

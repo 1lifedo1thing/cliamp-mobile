@@ -278,9 +278,12 @@ private fun EpisodeRow(
             // show without any cover at all lands on the icon plate.
             val artUrl = station.cover.takeIf { it.startsWith("http") }
                 ?: episode.artwork.takeIf { it.startsWith("http") }
-            var thumb by remember(artUrl) { mutableStateOf<ImageBitmap?>(null) }
+            var thumb by remember(artUrl) {
+                mutableStateOf(artUrl?.let { StationArtSource.cachedSmallUrl(it)?.asImageBitmap() })
+            }
             if (artUrl != null) {
                 LaunchedEffect(artUrl) {
+                    if (thumb != null) return@LaunchedEffect
                     thumb = StationArtSource.bitmapForUrlSmall(artUrl)?.asImageBitmap()
                 }
             }
