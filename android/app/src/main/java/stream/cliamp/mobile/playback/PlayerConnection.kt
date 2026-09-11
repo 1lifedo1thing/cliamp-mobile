@@ -72,6 +72,23 @@ class PlayerConnection(
     fun setFallbackSource(list: List<Station>) { _fallbackSource = list }
 
     /**
+     * Runs [action] once the controller is connected: immediately when warm,
+     * chained behind any existing onReady hook when cold (a share arriving
+     * at a dead process must not play into the void, nor clobber
+     * auto-resume's hook).
+     */
+    fun doWhenReady(action: () -> Unit) {
+        if (controller != null) action()
+        else {
+            val prev = onReady
+            onReady = {
+                prev?.invoke()
+                action()
+            }
+        }
+    }
+
+    /**
      * While navigation is walking the launch-seeded fallback (nothing has been
      * played from a real list this session), prev/next run it as a ring - the
      * same wrap the widget uses - so both keys always have somewhere to go from
@@ -91,6 +108,7 @@ class PlayerConnection(
             if (_fallbackSource.isEmpty()) {
                 _fallbackSource = history.ifEmpty { favs }
             }
+            _speed.value = prefs.speed.first()
             prefs.resumeLocal.collect { _resumeLocal.value = it }
         }
     }
@@ -98,6 +116,10 @@ class PlayerConnection(
     /** Whether shuffled playback is switched on. */
     private val _shuffle = MutableStateFlow(false)
     val shuffle: StateFlow<Boolean> = _shuffle.asStateFlow()
+
+    /** Playback speed multiplier, 0.5–2.0. Persisted; re-applied on every play. */
+    private val _speed = MutableStateFlow(1f)
+    val speed: StateFlow<Float> = _speed.asStateFlow()
 
     /** Whether local files resume (podcasts and provider tracks always do). */
     private val _resumeLocal = MutableStateFlow(false)
@@ -199,6 +221,7 @@ class PlayerConnection(
             c.addListener(object : Player.Listener {
                 override fun onEvents(player: Player, events: Player.Events) = sync()
             })
+            c.setPlaybackSpeed(_speed.value)
             sync()
             onReady?.invoke()
         }, MoreExecutors.directExecutor())
@@ -320,6 +343,7 @@ class PlayerConnection(
             durationMs = c.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L,
             seekable = c.isCurrentMediaItemSeekable,
             live = c.isCurrentMediaItemLive,
+            speed = c.playbackParameters.speed,
             hasPrev = if (ring) true else nav.isNotEmpty() && navIdx > 0,
             hasNext = if (ring) true else nav.size > 1 && navIdx in 0 until nav.lastIndex,
         )
@@ -540,6 +564,7 @@ class PlayerConnection(
                 ensureActive()
                 c.prepare()
                 c.play()
+                c.setPlaybackSpeed(_speed.value)
             } finally {
                 swapping = false
             }
@@ -807,9 +832,10 @@ class PlayerConnection(
      * so the tap leg only ever brings back the finished items.
      */
     /**
-     * A part-listened episode opens where it was left. Radio and local files
-     * have no saved position, so this is 0 for everything but podcasts and the
-     * lookup is skipped entirely for them.
+     * A part-listened track opens where it was left. Radio has no saved
+     * position, so this is 0 for everything but tracks, and local files
+     * additionally need the resume setting - the lookup is skipped entirely
+     * for anything that cannot resume.
      */
     private suspend fun resumeAt(station: Station): Long {
         if (!station.isTrack) return 0L
@@ -838,6 +864,7 @@ class PlayerConnection(
                 // a stalled live stream has to be re-primed, not resumed
                 c.prepare()
                 c.play()
+                c.setPlaybackSpeed(_speed.value)
             }
         }
         // The widget mirrors tap intent, not audibility: read playWhenReady
@@ -1130,6 +1157,17 @@ class PlayerConnection(
         sync()
     }
 
+    /** Speed applies live and persists, so podcasts reopen at your pace. */
+    fun setSpeed(v: Float) {
+        val s = v.coerceIn(0.5f, 2f)
+        _speed.value = s
+        controller?.setPlaybackSpeed(s)
+        scope.launch {
+            (context.applicationContext as CliampApp).prefs.setSpeed(s)
+        }
+        sync()
+    }
+
     fun release() {
         controller?.release()
         controller = null
@@ -1149,6 +1187,7 @@ data class PlayerState(
     val durationMs: Long = 0L,
     val seekable: Boolean = false,
     val live: Boolean = false,
+    val speed: Float = 1f,
 ) {
     /** A scrubber is only honest when there is a length to scrub through. */
     val scrubbable: Boolean get() = seekable && !live && durationMs > 0
