@@ -42,6 +42,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.DirectoryQuery
@@ -55,11 +57,15 @@ import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.ChipDropdown
 import stream.cliamp.mobile.ui.components.ChipOption
 import stream.cliamp.mobile.ui.components.CliampIcons
+import stream.cliamp.mobile.ui.components.CliampTextField
 import stream.cliamp.mobile.ui.components.EmptyNote
 import stream.cliamp.mobile.ui.components.GlyphPlate
 import stream.cliamp.mobile.ui.components.GridListToggle
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
+import stream.cliamp.mobile.ui.components.OverflowButton
+import stream.cliamp.mobile.ui.components.OverflowItem
+import stream.cliamp.mobile.ui.components.OverflowMenu
 import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.RetryNote
 
@@ -72,7 +78,7 @@ import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
 
 private enum class Source(val label: String) {
-    All("all"), Cliamp("cliamp"), Directory("directory")
+    All("all"), Cliamp("cliamp"), Directory("directory"), Custom("custom")
 }
 
 @Composable
@@ -92,11 +98,14 @@ fun StationsScreen(
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
     var source by rememberSaveable { mutableStateOf(Source.All) }
+    var addingCustom by rememberSaveable { mutableStateOf(false) }
     val cliampGrid by prefs.cliampGrid.collectAsState(initial = prefs.cliampGrid.value)
     val directoryGrid by prefs.directoryGrid.collectAsState(initial = prefs.directoryGrid.value)
+    val customGrid by prefs.customGrid.collectAsState(initial = prefs.customGrid.value)
 
     val cliamp by repository.cliamp.collectAsState()
     val cliampError by repository.cliampError.collectAsState()
+    val custom by prefs.custom.collectAsState(initial = emptyList())
     val directory by repository.directory.collectAsState()
     val dirStats by repository.directoryStats.collectAsState()
     val tags by repository.tags.collectAsState()
@@ -114,7 +123,7 @@ fun StationsScreen(
         }
     }
     LaunchedEffect(nearEnd, directory.stations.size) {
-        if (nearEnd && source != Source.Cliamp) repository.nextPage()
+        if (nearEnd && source != Source.Cliamp && source != Source.Custom) repository.nextPage()
     }
 
     // A global search in the command/tab writes its temporary query into the
@@ -175,7 +184,7 @@ fun StationsScreen(
         // on a node which was placed already"). Keying the whole grid on the
         // two mode flags remounts it fresh instead - spans are then constant
         // for the grid's whole lifetime, and a toggle just rebuilds it.
-        key(cliampGrid, directoryGrid) {
+        key(cliampGrid, directoryGrid, customGrid) {
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(150.dp),
                 modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -227,6 +236,69 @@ fun StationsScreen(
                             )
                         }
                     }
+                    }
+                }
+
+                if (source == Source.All || source == Source.Custom) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        SectionLabel("custom — ${custom.size}", gutter = 8.dp) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                if (!addingCustom) {
+                                    Box(
+                                        Modifier
+                                            .size(34.dp)
+                                            .clip(RoundedCornerShape(CliampShape.small))
+                                            .background(if (p.dark) p.keyFace else p.ground)
+                                            .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.small))
+                                            .microPress(onClick = { addingCustom = true }),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(CliampIcons.Plus, "add station", Modifier.size(16.dp), tint = p.accent)
+                                    }
+                                }
+                                GridListToggle(customGrid) { scope.launch { prefs.setCustomGrid(!customGrid) } }
+                            }
+                        }
+                    }
+                    if (addingCustom) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            CustomAddForm(
+                                onAdd = { name, url ->
+                                    customStation(name, url)?.let { s ->
+                                        scope.launch { prefs.addCustom(s) }
+                                    }
+                                    addingCustom = false
+                                },
+                                onCancel = { addingCustom = false },
+                            )
+                        }
+                    }
+                    items(
+                        custom,
+                        key = { "cu:${it.url}" },
+                        span = { GridItemSpan(if (customGrid) 1 else maxLineSpan) },
+                    ) { s ->
+                        if (customGrid) {
+                            StationTile(
+                                station = s,
+                                active = current?.url == s.url,
+                                playing = playing && current?.url == s.url,
+                                favorite = favorites.any { it.url == s.url },
+                                onPlay = { onPlay(s, custom) },
+                                onToggleFavorite = { onToggleFavorite(s) },
+                                onRemove = { scope.launch { prefs.removeCustom(s) } },
+                            )
+                        } else {
+                            CustomStationRow(
+                                station = s,
+                                active = current?.url == s.url,
+                                playing = playing && current?.url == s.url,
+                                favorite = favorites.any { it.url == s.url },
+                                onPlay = { onPlay(s, custom) },
+                                onToggleFavorite = { onToggleFavorite(s) },
+                                onRemove = { scope.launch { prefs.removeCustom(s) } },
+                            )
+                        }
                     }
                 }
 
@@ -434,7 +506,8 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
 }
 
 /** A station as a small square tile: cover (or the broadcast mark), favourite
- * star, play badge, and name/source on a scrim. The grid layout's cell. */
+ * star, play badge, and name/source on a scrim. The grid layout's cell.
+ * [onRemove] adds the providers-style ⋮ remove menu (custom stations only). */
 @Composable
 private fun StationTile(
     station: Station,
@@ -443,6 +516,7 @@ private fun StationTile(
     favorite: Boolean,
     onPlay: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onRemove: (() -> Unit)? = null,
 ) {
     val p = LocalPalette.current
     var art by remember(station.id) { mutableStateOf<ImageBitmap?>(null) }
@@ -485,6 +559,20 @@ private fun StationTile(
                 Modifier.align(Alignment.TopEnd).padding(10.dp).size(15.dp).microPress(onClick = onToggleFavorite),
                 tint = if (favorite) p.accent else p.inkFaint,
             )
+            if (onRemove != null) {
+                Box(Modifier.align(Alignment.TopStart).padding(10.dp)) {
+                    OverflowMenu(
+                        trigger = { open -> OverflowButton(open, size = 16) },
+                        items = listOf(
+                            OverflowItem(
+                                "remove station",
+                                color = p.destructiveInk,
+                                action = onRemove,
+                            ),
+                        ),
+                    )
+                }
+            }
             if (active) {
 Box(
                         Modifier
@@ -514,5 +602,101 @@ Box(
                 CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
             )
         }
+    }
+}
+
+/** A hand-added station: name plus stream URL, playable like anything else. */
+fun customStation(name: String, rawUrl: String): Station? {
+    val url = rawUrl.trim()
+    if (url.isBlank()) return null
+    val fixed = if ("://" in url) url else "https://$url"
+    if (!fixed.startsWith("http://") && !fixed.startsWith("https://")) return null
+    val label = name.trim().ifBlank {
+        runCatching { java.net.URI(fixed).host }.getOrNull()?.removePrefix("www.") ?: fixed
+    }
+    return Station(id = "custom:$fixed", name = label, url = fixed, source = StationSource.Custom)
+}
+
+/** Name + URL form for a hand-added station, opened by the header plus key. */
+@Composable
+private fun CustomAddForm(onAdd: (String, String) -> Unit, onCancel: () -> Unit) {
+    var name by rememberSaveable { mutableStateOf("") }
+    var url by rememberSaveable { mutableStateOf("") }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+        fun save() {
+            if (customStation(name, url) == null) return
+            onAdd(name, url)
+            name = ""
+            url = ""
+        }
+        CliampTextField(
+            value = name,
+            onValueChange = { name = it },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            placeholder = "name (optional)",
+            imeAction = ImeAction.Next,
+        )
+        CliampTextField(
+            value = url,
+            onValueChange = { url = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = "stream url",
+            keyboardType = KeyboardType.Uri,
+            imeAction = ImeAction.Go,
+            onAction = ::save,
+        )
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.End),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Chip("cancel", selected = false, onClick = onCancel)
+            Chip("save", url.isNotBlank(), onClick = ::save)
+        }
+    }
+}
+
+/** A custom station row: plays and favourites like a directory row, plus remove. */
+@Composable
+private fun CustomStationRow(
+    station: Station,
+    active: Boolean,
+    playing: Boolean,
+    favorite: Boolean,
+    onPlay: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    val p = LocalPalette.current
+    ListRow(
+        rail = active,
+        onClick = onPlay,
+        verticalPadding = 9.dp,
+        gutter = 8.dp,
+        railOffset = 14.dp,
+        leading = { StationThumb(station, active, playing) },
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(
+                    if (favorite) CliampIcons.StarFilled else CliampIcons.Star,
+                    "favourite",
+                    Modifier.size(15.dp).microPress(onClick = onToggleFavorite),
+                    tint = if (favorite) p.accent else p.inkFaint,
+                )
+                OverflowMenu(
+                    trigger = { open -> OverflowButton(open, size = 16) },
+                    items = listOf(
+                        OverflowItem(
+                            "remove station",
+                            color = p.destructiveInk,
+                            action = onRemove,
+                        ),
+                    ),
+                )
+            }
+        },
+    ) {
+        Mono(station.name, CliampType.rowPrimary, if (active) p.accent else p.ink, maxLines = 1)
+        Mono("custom station", CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
     }
 }

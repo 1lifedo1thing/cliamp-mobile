@@ -70,6 +70,7 @@ class Prefs(private val context: Context) {
     // restore-after-boot source, like the per-playlist sorts below.
     private val cliampGridFlag = MutableStateFlow(false)
     private val directoryGridFlag = MutableStateFlow(false)
+    private val customGridFlag = MutableStateFlow(false)
     private val subsGridFlag = MutableStateFlow(true)
     private val podDirectoryGridFlag = MutableStateFlow(true)
 
@@ -95,6 +96,7 @@ class Prefs(private val context: Context) {
         val playlistSorts = stringPreferencesKey("playlist_sorts")  // slug -> PlaylistSort.ordinal
         val cliampGrid = booleanPreferencesKey("cliamp_grid")       // stations: cliamp channel tiles
         val directoryGrid = booleanPreferencesKey("directory_grid") // stations: directory tiles
+        val customGrid = booleanPreferencesKey("custom_grid")       // stations: custom station tiles
         val subsGrid = booleanPreferencesKey("subs_grid")           // podcasts: subscribed shows as tiles
         val podDirectoryGrid = booleanPreferencesKey("pod_directory_grid") // podcasts: directory as tiles
     }
@@ -115,6 +117,7 @@ class Prefs(private val context: Context) {
     val cliampGrid: StateFlow<Boolean> = cliampGridFlag.asStateFlow()
     /** Stations directory section as a grid. */
     val directoryGrid: StateFlow<Boolean> = directoryGridFlag.asStateFlow()
+    val customGrid: StateFlow<Boolean> = customGridFlag.asStateFlow()
     /** Podcasts subscribed-shows section as a grid. */
     val subsGrid: StateFlow<Boolean> = subsGridFlag.asStateFlow()
     /** Podcasts directory section as a grid. */
@@ -196,6 +199,7 @@ class Prefs(private val context: Context) {
         } ?: emptyMap()
         cliampGridFlag.value = p[K.cliampGrid] ?: false
         directoryGridFlag.value = p[K.directoryGrid] ?: false
+        customGridFlag.value = p[K.customGrid] ?: false
         subsGridFlag.value = p[K.subsGrid] ?: true
         podDirectoryGridFlag.value = p[K.podDirectoryGrid] ?: true
     }
@@ -232,6 +236,8 @@ class Prefs(private val context: Context) {
         directoryGridFlag.value = v
         put(K.directoryGrid, v)
     }
+        customGridFlag.value = v
+        put(K.customGrid, v)
     suspend fun setSubsGrid(v: Boolean) {
         subsGridFlag.value = v
         put(K.subsGrid, v)
