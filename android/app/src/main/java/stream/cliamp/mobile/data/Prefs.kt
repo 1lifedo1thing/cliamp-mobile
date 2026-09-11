@@ -87,6 +87,7 @@ class Prefs(private val context: Context) {
         val volume = floatPreferencesKey("volume")
         val speed = floatPreferencesKey("speed")
         val autoResume = booleanPreferencesKey("auto_resume")
+        val autoDownload = booleanPreferencesKey("auto_download")
         val resumeLocal = booleanPreferencesKey("resume_local")
         val wPlaying = booleanPreferencesKey("w_playing")
         val wTrack = stringPreferencesKey("w_track")
@@ -111,6 +112,8 @@ class Prefs(private val context: Context) {
     val eqEnabled: Flow<Boolean> = context.settingsStore.data.map { it[K.eqEnabled] ?: false }
     val eqPreset: Flow<String> = context.settingsStore.data.map { it[K.eqPreset] ?: "flat" }
     val autoResume: Flow<Boolean> = context.settingsStore.data.map { it[K.autoResume] ?: false }
+    /** Latest episodes fetch themselves for subscribed shows. Off by default. */
+    val autoDownload: Flow<Boolean> = context.settingsStore.data.map { it[K.autoDownload] ?: false }
     /** Local files reopen where they stopped. Off by default: songs restart. */
     val resumeLocal: Flow<Boolean> = context.settingsStore.data.map { it[K.resumeLocal] ?: false }
     val volume: Flow<Float> = context.settingsStore.data.map { it[K.volume] ?: 1f }
@@ -244,6 +247,7 @@ class Prefs(private val context: Context) {
     suspend fun setEqEnabled(v: Boolean) = put(K.eqEnabled, v)
     suspend fun setEqPreset(v: String) = put(K.eqPreset, v)
     suspend fun setAutoResume(v: Boolean) = put(K.autoResume, v)
+    suspend fun setAutoDownload(v: Boolean) = put(K.autoDownload, v)
     suspend fun setResumeLocal(v: Boolean) = put(K.resumeLocal, v)
     suspend fun setVolume(v: Float) = put(K.volume, v)
     suspend fun setSpeed(v: Float) = put(K.speed, v.coerceIn(0.5f, 2f))

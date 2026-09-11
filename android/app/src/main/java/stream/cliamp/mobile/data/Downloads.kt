@@ -32,6 +32,8 @@ data class DownloadEntry(
     val bytes: Long = 0L,
     val station: Station,
     val downloadedAt: Long = 0L,
+    /** Fetched by auto-download rather than a tap; retention only sweeps these. */
+    val auto: Boolean = false,
 )
 
 /** Transient per-URL fetch state; anything permanent lives in [DownloadEntry]. */
@@ -67,6 +69,9 @@ class DownloadStore(
     private val dir = File(context.filesDir, "episode-downloads").apply { mkdirs() }
     private val jobs = mutableMapOf<String, Job>()
 
+    /** Auto-download keeps this many latest episodes per subscribed show. */
+    private val AUTO_KEEP = 3
+
     private val _entries = MutableStateFlow<Map<String, DownloadEntry>>(emptyMap())
     val entries: StateFlow<Map<String, DownloadEntry>> = _entries.asStateFlow()
 
@@ -90,7 +95,7 @@ class DownloadStore(
     fun isDownloaded(url: String): Boolean = localPath(url) != null
 
     /** Queue a fetch; a no-op when already held or already running. */
-    fun download(station: Station) {
+    fun download(station: Station, auto: Boolean = false) {
         val url = station.url
         if (isDownloaded(url) || jobs.containsKey(url)) return
         if (!station.isTrack || !(url.startsWith("http://") || url.startsWith("https://"))) {
@@ -141,6 +146,7 @@ class DownloadStore(
                         bytes = final.length(),
                         station = station,
                         downloadedAt = System.currentTimeMillis(),
+                        auto = auto,
                     )
                     prefs.addDownload(entry)
                     _entries.value = _entries.value + (url to entry)
@@ -170,6 +176,31 @@ class DownloadStore(
         _entries.value = _entries.value - url
         clearState(url)
         scope.launch { prefs.removeDownload(url) }
+    }
+
+    /**
+     * Auto-download for one subscribed show: the latest [AUTO_KEEP] full,
+     * unplayed episodes fetch themselves, and older auto fetches for the
+     * show are swept. Manual downloads are never touched. Idempotent, so a
+     * feed refresh re-firing it is free.
+     */
+    fun autoDownload(show: PodcastShow, episodes: List<PodcastEpisode>, completedUrls: Set<String>) {
+        scope.launch {
+            if (!prefs.autoDownload.first()) return@launch
+            val fresh = episodes
+                .filter { it.isFull && it.audioUrl.isNotBlank() && it.audioUrl !in completedUrls }
+                .take(AUTO_KEEP)
+            fresh.forEach { ep ->
+                if (!isDownloaded(ep.audioUrl) && !jobs.containsKey(ep.audioUrl)) {
+                    download(ep.toStation(show), auto = true)
+                }
+            }
+            // Retention: keep the newest AUTO_KEEP auto fetches of this show.
+            val mine = _entries.value.values
+                .filter { it.auto && it.station.slug == show.id }
+                .sortedByDescending { it.downloadedAt }
+            mine.drop(AUTO_KEEP).forEach { remove(it.url) }
+        }
     }
 
     private fun setState(url: String, s: DownloadState) {

@@ -98,6 +98,8 @@ fun PodcastShowScreen(
     }
     val dlStates by downloads.states.collectAsState()
     val dlEntries by downloads.entries.collectAsState()
+    val autoOn by (context.applicationContext as CliampApp).prefs.autoDownload
+        .collectAsState(initial = false)
     val state by podcasts.show.collectAsState()
     val progress by podcasts.progress.collectAsState(initial = emptyMap())
     val subscriptions by podcasts.subscriptions.collectAsState(initial = emptyList())
@@ -113,6 +115,16 @@ fun PodcastShowScreen(
         show?.let { s -> state.episodes.map { it.toStation(s) } } ?: emptyList()
     }
     val listState = rememberLazyListState()
+
+    // Subscribed + auto-download on: the latest episodes fetch themselves
+    // whenever the feed lands. Idempotent, so refreshes re-firing it cost
+    // nothing; the toggle being off keeps this dead.
+    LaunchedEffect(show?.feedUrl, subscribed, state.episodes, autoOn) {
+        val s = show
+        if (s != null && subscribed && autoOn && state.episodes.isNotEmpty()) {
+            downloads.autoDownload(s, state.episodes, progress.filterValues { it.completed }.keys)
+        }
+    }
 
     MainLayout(
         title = show?.title ?: "podcasts",
