@@ -77,6 +77,11 @@ object WidgetRenderer {
     private const val COMPACT_MAX_WIDTH_DP = 200
     private const val COMPACT_MAX_HEIGHT_DP = 84
 
+    /** At or above this height a stopped widget keeps the scope strip (as
+     * the flat stopped visualizer); below it - the shrunk one-row cell -
+     * only a playing widget earns the strip. */
+    private const val SCOPE_TALL_MIN_HEIGHT_DP = 90
+
     /** Scope flipbook: two frames a second of this bitmap over binder.
      * Painted at 2x and downscaled by the host for smooth edges. */
     private const val SCOPE_COLS = 32
@@ -363,8 +368,9 @@ object WidgetRenderer {
         for (id in ids) {
             val (w, h) = cellSize(mgr, id)
             val compact = w < COMPACT_MAX_WIDTH_DP || h < COMPACT_MAX_HEIGHT_DP
-            Log.d("cliamp/wid", "widget layout id=$id cell=${w}x${h} compact=$compact viz=${viz.settingId}")
-            mgr.updateAppWidget(id, buildViews(ctx, row, p, compact, viz))
+            val tall = h >= SCOPE_TALL_MIN_HEIGHT_DP
+            Log.d("cliamp/wid", "widget layout id=$id cell=${w}x${h} compact=$compact tall=$tall viz=${viz.settingId}")
+            mgr.updateAppWidget(id, buildViews(ctx, row, p, compact, viz, tall))
         }
         lastPalette = p
         lastViz = viz
@@ -400,6 +406,7 @@ object WidgetRenderer {
         p: CliampPalette,
         compact: Boolean = false,
         viz: WidgetViz = WidgetViz.SPECTRUM,
+        tall: Boolean = false,
     ): RemoteViews {
         val rv = RemoteViews(
             ctx.packageName,
@@ -465,14 +472,15 @@ object WidgetRenderer {
         }
 
         // The scope lives in the standard layout only and shows whenever the
-        // family draws one - even with nothing tuned yet, where it reads as
-        // the stopped visualizer (flat unlit grid) instead of an empty gap.
-        // `off` removes the strip entirely. It flexes to the leftover
-        // height: a slim strip in a one-row cell, tall bricks in a two-row
-        // one. Its bitmap arrives separately (pushVisualizer flipbook); the
-        // current frame is painted inline here so a full re-render never
-        // blanks it mid-animation.
-        val showScope = !compact && viz.showsScope
+        // family draws one while playing. Stopped, it stays only where it
+        // has room to breathe (a tall cell), reading as the stopped
+        // visualizer - a short cell drops it instead of an empty gap. `off`
+        // removes the strip entirely. It flexes to the leftover height: a
+        // slim strip in a one-row cell, tall bricks in a two-row one. Its
+        // bitmap arrives separately (pushVisualizer flipbook); the current
+        // frame is painted inline here so a full re-render never blanks it
+        // mid-animation.
+        val showScope = !compact && viz.showsScope && (row.playing || tall)
         if (!compact) {
             rv.setViewVisibility(R.id.w_scope, if (showScope) View.VISIBLE else View.GONE)
             if (showScope) {
