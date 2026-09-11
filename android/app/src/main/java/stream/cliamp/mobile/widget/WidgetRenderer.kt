@@ -30,6 +30,7 @@ import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.ui.clock
 import stream.cliamp.mobile.ui.theme.CliampPalette
+import stream.cliamp.mobile.ui.theme.decodeCustomThemeOrNull
 import stream.cliamp.mobile.ui.theme.paletteFor
 
 const val WIDGET_ACTION_TOGGLE = "stream.cliamp.mobile.widget.TOGGLE"
@@ -358,7 +359,7 @@ object WidgetRenderer {
         val paletteName = app.prefs.palette.first()
         val systemDark = (ctx.resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        val p = paletteFor(paletteName, systemDark)
+        val p = paletteFor(paletteName, systemDark, decodeCustomThemeOrNull(app.prefs.customTheme.first()))
         val viz = WidgetViz.of(app.prefs.visualizer.first())
 
         val mgr = AppWidgetManager.getInstance(ctx)

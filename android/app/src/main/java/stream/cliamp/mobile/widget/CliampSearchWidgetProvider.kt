@@ -19,6 +19,7 @@ import stream.cliamp.mobile.CliampApp
 import stream.cliamp.mobile.MainActivity
 import stream.cliamp.mobile.R
 import stream.cliamp.mobile.ui.theme.paletteFor
+import stream.cliamp.mobile.ui.theme.decodeCustomThemeOrNull
 
 /**
  * Static home-screen search bar: one tappable row that opens the app's
@@ -64,7 +65,7 @@ object SearchWidgetRenderer {
         val paletteName = app.prefs.palette.first()
         val systemDark = (ctx.resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        val p = paletteFor(paletteName, systemDark)
+        val p = paletteFor(paletteName, systemDark, decodeCustomThemeOrNull(app.prefs.customTheme.first()))
 
         val mgr = AppWidgetManager.getInstance(ctx)
         val ids = mgr.getAppWidgetIds(ComponentName(ctx, CliampSearchWidgetProvider::class.java))

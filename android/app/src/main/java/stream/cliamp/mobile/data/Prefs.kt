@@ -98,6 +98,7 @@ class Prefs(private val context: Context) {
         val wNext = stringPreferencesKey("w_next")
         val wSource = stringPreferencesKey("w_source")
         val downloads = stringPreferencesKey("downloads")
+        val customTheme = stringPreferencesKey("custom_theme")
         val playlistSorts = stringPreferencesKey("playlist_sorts")  // slug -> PlaylistSort.ordinal
         val cliampGrid = booleanPreferencesKey("cliamp_grid")       // stations: cliamp channel tiles
         val directoryGrid = booleanPreferencesKey("directory_grid") // stations: directory tiles
@@ -246,6 +247,13 @@ class Prefs(private val context: Context) {
     }
 
     suspend fun setPalette(v: String) = put(K.palette, v)
+    /** Raw imported theme JSON; blank means none. Validated on the way in. */
+    val customTheme: Flow<String> = context.settingsStore.data.map { it[K.customTheme].orEmpty() }
+    suspend fun setCustomTheme(v: String) = put(K.customTheme, v)
+    suspend fun clearCustomTheme() {
+        if (palette.first() == "custom") put(K.palette, "system")
+        put(K.customTheme, "")
+    }
     suspend fun setHaptics(v: Boolean) = put(K.haptics, v)
     suspend fun setVisualizer(v: String) = put(K.visualizer, v)
     suspend fun setCellular(v: Boolean) = put(K.cellular, v)

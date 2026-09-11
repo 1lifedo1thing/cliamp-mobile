@@ -224,6 +224,33 @@ the themes Omarchy ships. Two rules worth repeating: amber means "this lives som
 else" and nothing else, red is only ever destructive, and there is never a third accent
 hue.
 
+### Custom themes (for now: JSON files only)
+
+Settings → themes → `Import theme file` turns a JSON file into a theme. The
+file maps every palette role to a hex colour, plus the mode flag — the whole
+32-role contract from `ui/theme/Palette.kt`, not just a ground and an accent,
+because a partial theme would leave bevels and meter cells sitting on it as
+grey overlay:
+
+```json
+{
+  "dark": true,
+  "canvas": "#0A0D0A",
+  "ground": "#0A0D0A",
+  "ink": "#F2F7F3",
+  "accent": "#73E889"
+}
+```
+
+A good import applies immediately as the `custom` theme (with swatches, like
+the rest) and follows into the widgets. A bad one is refused with the exact
+fault named (`missing "accent"`, `bad colour for "ground": blue`) and nothing
+is written. `Remove custom theme` deletes it, falling back to system.
+
+Current limits, all temporary: JSON only (no TOML import yet), no live
+editing (change the file, import again), and an absent or broken custom theme
+can never brick the app — it falls back to system.
+
 Where the build departs from the document, and why:
 
 | Concept | Here | Why |

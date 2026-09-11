@@ -19,11 +19,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +56,7 @@ import stream.cliamp.mobile.ui.theme.AmberPalette
 import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.DarkPalette
+import stream.cliamp.mobile.ui.theme.decodeCustomThemeOrNull
 import stream.cliamp.mobile.ui.theme.LightPalette
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.OmarchyPalettes
@@ -58,6 +64,7 @@ import stream.cliamp.mobile.ui.theme.OxideLightPalette
 import stream.cliamp.mobile.ui.theme.OxidePalette
 import stream.cliamp.mobile.ui.theme.OmarchyThemeKeys
 import stream.cliamp.mobile.ui.theme.Mono
+import stream.cliamp.mobile.ui.theme.parseCustomTheme
 import kotlin.math.roundToInt
 
 @Composable
@@ -73,6 +80,32 @@ fun SettingsScreen(
     val context = LocalContext.current
 
     val palette by prefs.palette.collectAsState(initial = "dark")
+    val customJson by prefs.customTheme.collectAsState(initial = "")
+    val custom = remember(customJson) { decodeCustomThemeOrNull(customJson) }
+    var importError by remember { mutableStateOf<String?>(null) }
+    val themeImporter = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val raw = runCatching {
+            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                ?.take(256 * 1024)?.toByteArray()?.decodeToString()
+        }.getOrNull()
+        if (raw.isNullOrBlank()) {
+            importError = "could not read that file"
+            return@rememberLauncherForActivityResult
+        }
+        parseCustomTheme(raw).fold(
+            onSuccess = {
+                importError = null
+                scope.launch {
+                    prefs.setCustomTheme(raw)
+                    prefs.setPalette("custom")
+                }
+            },
+            onFailure = { importError = it.message ?: "not a theme file" },
+        )
+    }
     val haptics by prefs.haptics.collectAsState(initial = true)
     val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
     val cellular by prefs.cellular.collectAsState(initial = true)
@@ -195,9 +228,45 @@ fun SettingsScreen(
                 selected = palette == key,
                 // Last row before the next section: its divider runs full
                 // width instead of stacking a second inset line under it.
-                trailDivider = index != OmarchyThemeKeys.lastIndex,
+                trailDivider = index != OmarchyThemeKeys.lastIndex || custom != null,
                 onSelect = { scope.launch { prefs.setPalette(key) } },
             )
+        }
+        if (custom != null) {
+            ThemeRow(
+                key = "custom",
+                theme = custom,
+                selected = palette == "custom",
+                subtitle = "imported",
+                trailDivider = false,
+                onSelect = { scope.launch { prefs.setPalette("custom") } },
+            )
+        }
+        Row(
+            Modifier.fillMaxWidth().microPress { themeImporter.launch("application/json") }
+                .padding(horizontal = Gutter, vertical = 13.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Mono("Import theme file", CliampType.rowPrimaryMedium, p.ink)
+            Mono("json", CliampType.meta, p.inkFaint)
+        }
+        importError?.let {
+            Mono(
+                it, CliampType.rowSecondary, p.destructiveInk,
+                Modifier.padding(start = Gutter, end = Gutter, bottom = 12.dp),
+            )
+        }
+        if (custom != null) {
+            Row(
+                Modifier.fillMaxWidth().microPress { scope.launch { prefs.clearCustomTheme() } }
+                    .padding(horizontal = Gutter, vertical = 13.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Mono("Remove custom theme", CliampType.rowPrimary, p.destructiveInk)
+                Mono("▸", CliampType.rowPrimary, p.destructiveInk)
+            }
         }
 
         SectionLabel("storage")

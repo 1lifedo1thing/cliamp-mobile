@@ -54,13 +54,14 @@ object CliampShape {
  * rather than crashing, so a theme removed from the machine does not brick the
  * app.
  */
-fun paletteFor(preference: String, systemDark: Boolean): CliampPalette = when (preference) {
+fun paletteFor(preference: String, systemDark: Boolean, custom: CliampPalette? = null): CliampPalette = when (preference) {
     "system" -> if (systemDark) OxidePalette else OxideLightPalette
     "oxide" -> OxidePalette
     "oxide-light" -> OxideLightPalette
     "dark" -> DarkPalette
     "light" -> LightPalette
     "amber" -> AmberPalette
+    "custom" -> custom ?: if (systemDark) OxidePalette else OxideLightPalette
     else -> OmarchyPalettes[preference]
         ?: if (systemDark) OxidePalette else OxideLightPalette
 }

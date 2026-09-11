@@ -22,6 +22,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.util.UnstableApi
 import stream.cliamp.mobile.ui.CliampRoot
 import stream.cliamp.mobile.ui.theme.CliampTheme
+import stream.cliamp.mobile.ui.theme.decodeCustomThemeOrNull
 import stream.cliamp.mobile.ui.theme.paletteFor
 
 @UnstableApi
@@ -109,7 +110,8 @@ class MainActivity : ComponentActivity() {
             val systemDark = resources.configuration.uiMode and
                 android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
                 android.content.res.Configuration.UI_MODE_NIGHT_YES
-            val palette = paletteFor(preference, systemDark)
+            val customJson by app.prefs.customTheme.collectAsState(initial = "")
+            val palette = paletteFor(preference, systemDark, decodeCustomThemeOrNull(customJson))
             val haptics by app.prefs.haptics.collectAsState(initial = true)
             val dark = palette.dark
 
