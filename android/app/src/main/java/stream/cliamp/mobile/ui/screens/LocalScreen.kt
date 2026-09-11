@@ -15,10 +15,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,7 +28,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -91,6 +88,8 @@ import stream.cliamp.mobile.data.provider.ProviderCatalog
 import stream.cliamp.mobile.data.provider.ProviderSpec
 import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
+import stream.cliamp.mobile.ui.components.ChipDropdown
+import stream.cliamp.mobile.ui.components.ChipOption
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampTextField
 import stream.cliamp.mobile.ui.components.GlyphPlate
@@ -130,6 +129,28 @@ enum class FavScope(val label: String) {
 class SmartPlaylist(val kind: SmartKind, val stations: List<Station>) {
     val label: String get() = kind.label
     val key: String get() = kind.key
+}
+
+/** One on-device folder and the songs MediaStore found inside it. */
+data class SongFolder(val path: String, val name: String, val songs: List<Station>)
+
+/**
+ * Groups the library by parent directory, folders by name. Derived from the
+ * songs flow, so it tracks rescans and deletions with nothing stored.
+ */
+fun foldersOf(songs: List<Station>): List<SongFolder> {
+    val byDir = LinkedHashMap<String, MutableList<Station>>()
+    songs.forEach { s ->
+        if (!s.url.startsWith("file://")) return@forEach
+        val dir = java.io.File(android.net.Uri.decode(s.url.removePrefix("file://"))).parent
+            ?: return@forEach
+        byDir.getOrPut(dir) { mutableListOf() } += s
+    }
+    return byDir
+        .map { (dir, list) ->
+            SongFolder(dir, java.io.File(dir).name.ifBlank { dir }, list.sortedBy { it.name.lowercase() })
+        }
+        .sortedBy { it.name.lowercase() }
 }
 
 /**
@@ -1403,8 +1424,21 @@ private fun SmartPlaylistDetail(
         .collectAsState(initial = prefs.playlistSortValue(sortKey))
     val members = pl.stations
     val fetched by prefs.downloads.collectAsState(initial = emptyMap())
-    val visible = remember(members, local, sort, isFav, favScope) {
-        val base = if (local) sortedStations(members, sort) else members
+    // Local songs filter by folder through a picker dropdown that leads the
+    // sort row - one scrollable row, no mode switching, no drill state.
+    val folders = remember(members) {
+        if (pl.kind == SmartKind.LocalSongs) foldersOf(members) else emptyList()
+    }
+    var folder by rememberSaveable(pl.key) { mutableStateOf<String?>(null) }
+    // A deleted folder must not leave the filter pointing at nothing.
+    LaunchedEffect(folders) {
+        if (folder != null && folders.none { it.path == folder }) folder = null
+    }
+    val pool = if (pl.kind == SmartKind.LocalSongs && folder != null) {
+        folders.firstOrNull { it.path == folder }?.songs.orEmpty()
+    } else members
+    val visible = remember(pool, local, sort, isFav, favScope) {
+        val base = if (local) sortedStations(pool, sort) else pool
         if (!isFav || favScope == FavScope.All) base
         else base.filter { s ->
             when (favScope) {
@@ -1460,6 +1494,17 @@ private fun SmartPlaylistDetail(
                             Chip(t.label, sort == t, onClick = {
                                 prefs.setPlaylistSort(sortKey, t)
                             })
+                        }
+                        if (pl.kind == SmartKind.LocalSongs && folders.isNotEmpty()) {
+                            ChipDropdown(
+                                label = folders.firstOrNull { it.path == folder }?.name ?: "all folders",
+                                selected = folder != null,
+                                options = listOf(
+                                    ChipOption("all folders") { folder = null },
+                                ) + folders.map { f ->
+                                    ChipOption(f.name) { folder = f.path }
+                                },
+                            )
                         }
                     }
                 }
@@ -1535,9 +1580,11 @@ private fun SmartPlaylistDetail(
  * generic note where its home shows real art. Coverless rows wear their
  * home placeholder: the show's PodRow, the provider's PlayRow, the themed
  * plate (note for local files, broadcast mark for live stations).
+ *
+ * Shared with folder rows so they wear exactly what list rows wear.
  */
 @Composable
-private fun SongCover(s: Station, current: Station?, playing: Boolean) {
+internal fun SongCover(s: Station, current: Station?, playing: Boolean) {
     val p = LocalPalette.current
     val context = LocalContext.current
     val resolver = context.contentResolver
@@ -1623,6 +1670,7 @@ private fun CoverBadge(playing: Boolean) {
         )
     }
 }
+
 /**
  * Full-bleed song detail reached from a song row's ⋮ → "info": the cover art
  * up top with every scrap of metadata, a favourite toggle, and the destructive
