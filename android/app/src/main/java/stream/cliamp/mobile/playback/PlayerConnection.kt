@@ -770,11 +770,18 @@ class PlayerConnection(
         // rather than the mutable [_queueIndex]. sync()/realign rewrite
         // [_queueIndex] under rolls and could otherwise pin the target to the
         // same song on every tap; the live index is strictly monotonic, so
-        // prev/next always advance.
+        // prev/next always advance. Single-item playback is the exception:
+        // live radio holds one Media3 item while the panel shows a whole
+        // list, so the live index is always 0 - which pinned every next to
+        // the same second song and swallowed every prev. There the published
+        // station is the honest anchor.
         val liveHere = controller?.let { c ->
-            if (c.mediaItemCount > 0) windowBase + c.currentMediaItemIndex else null
+            if (c.mediaItemCount > 1) windowBase + c.currentMediaItemIndex else null
         }
-        val here = pending ?: (liveHere ?: (windowBase + _queueIndex.value))
+        val busHere = PlaybackBus.station.value?.let { s ->
+            src.indexOfFirst { it.url == s.url }.takeIf { it >= 0 }
+        }
+        val here = pending ?: liveHere ?: busHere ?: (windowBase + _queueIndex.value)
         val wrap = { k: Int -> ((k % src.size) + src.size) % src.size }
         val abs = if (_source.isEmpty() && pending == null) {
             val shown = (PlaybackBus.station.value ?: src.firstOrNull())?.let { s ->
