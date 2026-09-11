@@ -85,6 +85,7 @@ class Prefs(private val context: Context) {
         val eqBands = stringPreferencesKey("eq_bands")
         val lastStation = stringPreferencesKey("last_station")
         val volume = floatPreferencesKey("volume")
+        val speed = floatPreferencesKey("speed")
         val autoResume = booleanPreferencesKey("auto_resume")
         val resumeLocal = booleanPreferencesKey("resume_local")
         val wPlaying = booleanPreferencesKey("w_playing")
@@ -112,11 +113,14 @@ class Prefs(private val context: Context) {
     /** Local files reopen where they stopped. Off by default: songs restart. */
     val resumeLocal: Flow<Boolean> = context.settingsStore.data.map { it[K.resumeLocal] ?: false }
     val volume: Flow<Float> = context.settingsStore.data.map { it[K.volume] ?: 1f }
+    /** Playback speed multiplier, 0.5–2.0. Applied to every play. */
+    val speed: Flow<Float> = context.settingsStore.data.map { (it[K.speed] ?: 1f).coerceIn(0.5f, 2f) }
 
     /** Stations cliamp channel section as a grid. */
     val cliampGrid: StateFlow<Boolean> = cliampGridFlag.asStateFlow()
     /** Stations directory section as a grid. */
     val directoryGrid: StateFlow<Boolean> = directoryGridFlag.asStateFlow()
+    /** Stations custom section as a grid. */
     val customGrid: StateFlow<Boolean> = customGridFlag.asStateFlow()
     /** Podcasts subscribed-shows section as a grid. */
     val subsGrid: StateFlow<Boolean> = subsGridFlag.asStateFlow()
@@ -228,6 +232,7 @@ class Prefs(private val context: Context) {
     suspend fun setAutoResume(v: Boolean) = put(K.autoResume, v)
     suspend fun setResumeLocal(v: Boolean) = put(K.resumeLocal, v)
     suspend fun setVolume(v: Float) = put(K.volume, v)
+    suspend fun setSpeed(v: Float) = put(K.speed, v.coerceIn(0.5f, 2f))
     suspend fun setCliampGrid(v: Boolean) {
         cliampGridFlag.value = v
         put(K.cliampGrid, v)
@@ -236,8 +241,10 @@ class Prefs(private val context: Context) {
         directoryGridFlag.value = v
         put(K.directoryGrid, v)
     }
+    suspend fun setCustomGrid(v: Boolean) {
         customGridFlag.value = v
         put(K.customGrid, v)
+    }
     suspend fun setSubsGrid(v: Boolean) {
         subsGridFlag.value = v
         put(K.subsGrid, v)

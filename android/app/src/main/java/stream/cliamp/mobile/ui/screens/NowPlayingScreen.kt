@@ -125,6 +125,7 @@ private data class PlayerModel(
 private data class PlayerActions(
     val onBack: () -> Unit,
     val onToggleShuffle: () -> Unit,
+    val onCycleSpeed: () -> Unit,
     val onOpenScope: () -> Unit,
     val onToggleFav: () -> Unit,
     val onSeek: (Float) -> Unit,
@@ -132,6 +133,19 @@ private data class PlayerActions(
     val onPlayPause: () -> Unit,
     val onNext: () -> Unit,
 )
+
+/** Tap-steps through the speed ladder, wrapping back to normal. */
+private val SpeedSteps = listOf(1f, 1.25f, 1.5f, 1.75f, 2f, 0.5f, 0.75f)
+
+private fun nextSpeed(now: Float): Float {
+    val i = SpeedSteps.indexOfFirst { kotlin.math.abs(it - now) < 0.01f }
+    return if (i < 0) 1f else SpeedSteps[(i + 1) % SpeedSteps.size]
+}
+
+private fun speedLabel(v: Float): String {
+    val s = if (v % 1f == 0f) v.toInt().toString() else v.toString().trimEnd('0')
+    return "${s}×"
+}
 
 @UnstableApi
 @Composable
@@ -176,6 +190,7 @@ fun NowPlayingScreen(
     val actions = PlayerActions(
         onBack = onBack,
         onToggleShuffle = { player.toggleShuffle() },
+        onCycleSpeed = { player.setSpeed(nextSpeed(player.speed.value)) },
         onOpenScope = onOpenScope,
         onToggleFav = { shownStation?.let { s -> scope.launch { prefs.toggleFavorite(s) } } },
         onSeek = { player.seekTo(it) },
@@ -388,6 +403,7 @@ private fun PlayerStatusRow(
             if (model.shuffled) "stop shuffling" else "shuffle",
             tint = if (model.shuffled) p.accent else p.inkSecondary,
         ) { actions.onToggleShuffle() }
+        SpeedAction(speed = model.state.speed) { actions.onCycleSpeed() }
         SmallAction(CliampIcons.MeterSmall, "scope and equaliser", onClick = actions.onOpenScope)
         SmallAction(
             if (model.isFav) CliampIcons.StarFilled else CliampIcons.Star,
@@ -715,6 +731,26 @@ private fun SmallAction(
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, description, Modifier.size(15.dp), tint = tint ?: p.inkSecondary)
+    }
+}
+
+/** Playback speed as a terse mono key: taps step through the ladder. */
+@Composable
+private fun SpeedAction(speed: Float, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    Box(
+        Modifier
+            .size(28.dp)
+            .clip(RoundedCornerShape(CliampShape.small))
+            .microPress(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Mono(
+            speedLabel(speed),
+            CliampType.meta,
+            if (speed != 1f) p.accent else p.inkSecondary,
+            maxLines = 1,
+        )
     }
 }
 
