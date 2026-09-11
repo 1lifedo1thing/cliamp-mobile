@@ -18,3 +18,6 @@ keystore.properties
 
 # test artifact: local Room database dump
 kls_database.db
+
+# local planning scratchpad, not for upstream (for now)
+plan.md
