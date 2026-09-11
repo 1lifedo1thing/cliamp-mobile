@@ -165,15 +165,53 @@ class AudioFx(private val bands: Int = 64) {
     }
 }
 
-/** The presets the concept names: FLAT / ROCK / HEADPHONE, plus a saved slot. */
+/**
+ * The presets the concept names (FLAT / ROCK / HEADPHONE) plus the CLI's
+ * sixteen, folded from its 10 bands (70Hz–16kHz, dB) onto these 7 by
+ * nearest band (400Hz and 8kHz average their neighbours), scaled ÷12.
+ */
 object EqPresets {
     val flat = List(7) { 0f }
-    val rock = listOf(0.45f, 0.28f, -0.12f, -0.2f, 0.1f, 0.38f, 0.42f)
+    val rock = listOf(0.42f, 0.33f, 0.04f, -0.17f, 0.17f, 0.38f, 0.42f)
+    val pop = listOf(-0.08f, 0.17f, 0.38f, 0.33f, 0.08f, -0.08f, 0.17f)
+    val jazz = listOf(0.25f, 0.33f, 0.12f, -0.08f, -0.08f, 0.12f, 0.33f)
+    val classical = listOf(0.25f, 0.17f, 0.04f, -0.08f, -0.08f, 0.08f, 0.33f)
+    val bass = listOf(0.67f, 0.5f, 0.25f, 0f, 0f, 0f, 0f)
+    val treble = listOf(0f, 0f, 0f, 0f, 0.08f, 0.33f, 0.58f)
+    val vocal = listOf(-0.17f, -0.08f, 0.21f, 0.42f, 0.33f, 0.08f, -0.17f)
+    val electronic = listOf(0.5f, 0.33f, 0f, -0.17f, 0.08f, 0.29f, 0.5f)
+    val acoustic = listOf(0.25f, 0.25f, 0.08f, 0.08f, 0.17f, 0.25f, 0.08f)
+    val hiphop = listOf(0.58f, 0.42f, 0.17f, -0.08f, -0.08f, 0.17f, 0.25f)
+    val rnb = listOf(0.33f, 0.5f, 0.17f, -0.08f, 0.08f, 0.17f, 0f)
+    val loudness = listOf(0.5f, 0.33f, 0.04f, -0.17f, -0.08f, 0.21f, 0.42f)
+    val latenight = listOf(0.42f, 0.25f, 0.04f, -0.17f, -0.08f, 0.08f, 0.25f)
+    val podcast = listOf(-0.25f, -0.08f, 0.25f, 0.33f, 0.25f, 0f, -0.25f)
+    val speakers = listOf(0.58f, 0.42f, 0.25f, 0.08f, 0f, -0.04f, 0.17f)
     val headphone = listOf(0.35f, 0.18f, 0f, 0.1f, 0.16f, 0.3f, 0.45f)
+
+    val names = listOf(
+        "flat", "rock", "pop", "jazz", "classical", "bass", "treble",
+        "vocal", "electronic", "acoustic", "hip-hop", "r&b", "loudness",
+        "late night", "podcast", "speakers", "headphone",
+    )
 
     fun byName(name: String): List<Float>? = when (name) {
         "flat" -> flat
         "rock" -> rock
+        "pop" -> pop
+        "jazz" -> jazz
+        "classical" -> classical
+        "bass" -> bass
+        "treble" -> treble
+        "vocal" -> vocal
+        "electronic" -> electronic
+        "acoustic" -> acoustic
+        "hip-hop" -> hiphop
+        "r&b" -> rnb
+        "loudness" -> loudness
+        "late night" -> latenight
+        "podcast" -> podcast
+        "speakers" -> speakers
         "headphone" -> headphone
         else -> null
     }

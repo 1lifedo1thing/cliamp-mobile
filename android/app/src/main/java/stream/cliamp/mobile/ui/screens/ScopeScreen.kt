@@ -216,7 +216,7 @@ fun ScopeScreen(
                 .padding(horizontal = Gutter, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            listOf("flat", "rock", "headphone").forEach { name ->
+            EqPresets.names.forEach { name ->
                 Chip(name, eqPreset == name, onClick = {
                     scope.launch {
                         EqPresets.byName(name)?.let { prefs.setEqBands(it) }
