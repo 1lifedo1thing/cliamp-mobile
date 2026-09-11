@@ -1509,8 +1509,14 @@ private fun SmartPlaylistDetail(
 }
 
 /**
- * A song-row's leading thumbnail: real cover art when the file has it, with a
- * small play/pause badge overlaid when it is the current track.
+ * A playlist row's leading thumbnail: the item's exact cover when it has one,
+ * with a small play/pause badge overlaid when it is the current track. The
+ * cover is resolved the way each source's home screen resolves it - embedded
+ * art for local files, the known artwork URL for episodes and provider
+ * tracks, branding discovery for radio - so a row never shows a
+ * generic note where its home shows real art. Coverless rows wear their
+ * home placeholder: the show's PodRow, the provider's PlayRow, the themed
+ * plate (note for local files, broadcast mark for live stations).
  */
 @Composable
 private fun SongCover(s: Station, current: Station?, playing: Boolean) {
@@ -1519,10 +1525,27 @@ private fun SongCover(s: Station, current: Station?, playing: Boolean) {
     var art by remember(s.id) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(s.id) {
         art = (LocalArt.bitmapForSmall(s.cover, context.contentResolver)
+            // Episodes and provider tracks carry their real artwork as a URL;
+            // the discovery path below scrapes homepages and would never find it.
+            ?: s.cover.takeIf { it.startsWith("http") }?.let { StationArtSource.bitmapForUrlSmall(it) }
             ?: StationArtSource.bitmapForSmall(s))
             ?.asImageBitmap()
     }
     val active = current?.url == s.url
+    // Coverless local files and live stations wear the themed plate - the
+    // same accent glyph plate the playlist rows wear - instead of a faint
+    // outline box, so the fallback follows the theme like everything else.
+    if (art == null && (s.source == StationSource.Local || !s.isTrack)) {
+        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            GlyphPlate(
+                if (s.isTrack) CliampIcons.MusicNote else CliampIcons.StationsTab,
+                s.name,
+                Modifier.size(40.dp),
+            )
+            if (active) CoverBadge(playing)
+        }
+        return
+    }
     Box(
         Modifier
             .size(40.dp)
@@ -1536,25 +1559,39 @@ private fun SongCover(s: Station, current: Station?, playing: Boolean) {
         if (art != null) {
             Image(art!!, s.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
-            Icon(CliampIcons.MusicNote, null, Modifier.size(15.dp), tint = p.inkTertiary)
+            // Coverless episodes and provider tracks keep their home mark in
+            // the row box; local files and stations take the plate above.
+            Icon(
+                when (s.source) {
+                    StationSource.Podcast -> CliampIcons.PodRow
+                    else -> CliampIcons.PlayRow
+                },
+                null,
+                Modifier.size(if (s.source == StationSource.Podcast) 18.dp else 15.dp),
+                tint = if (s.source == StationSource.Podcast) p.inkFaint else p.inkTertiary,
+            )
         }
-        if (active) {
-            Box(
-                Modifier
-                    .align(Alignment.Center)
-                    .size(18.dp)
-                    .clip(RoundedCornerShape(CliampShape.tiny))
-                    .background(p.accent.copy(alpha = 0.92f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    if (playing) CliampIcons.Pause else CliampIcons.PlayRow,
-                    null,
-                    Modifier.size(9.dp),
-                    tint = p.onAccent,
-                )
-            }
-        }
+        if (active) CoverBadge(playing)
+    }
+}
+
+/** The small accent play/pause badge worn over a current track's cover. */
+@Composable
+private fun CoverBadge(playing: Boolean) {
+    val p = LocalPalette.current
+    Box(
+        Modifier
+            .size(18.dp)
+            .clip(RoundedCornerShape(CliampShape.tiny))
+            .background(p.accent.copy(alpha = 0.92f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            if (playing) CliampIcons.Pause else CliampIcons.PlayRow,
+            null,
+            Modifier.size(9.dp),
+            tint = p.onAccent,
+        )
     }
 }
 /**
