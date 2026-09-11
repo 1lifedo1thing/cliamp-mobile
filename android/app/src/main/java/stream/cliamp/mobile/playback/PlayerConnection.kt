@@ -220,6 +220,16 @@ class PlayerConnection(
             controller = c
             c.addListener(object : Player.Listener {
                 override fun onEvents(player: Player, events: Player.Events) = sync()
+                // Auto-advance never passes a commit point, and neither do
+                // widget/tile tunes (they drive the controller directly), so
+                // the history stack learns them here. Manual nav lands through
+                // play() / applyNavigation first, making this a duplicate
+                // no-op for it - only REPEAT is skipped outright.
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) {
+                        mediaItem?.mediaId?.let { stationForMediaId(it)?.let(::recordPlay) }
+                    }
+                }
             })
             c.setPlaybackSpeed(_speed.value)
             sync()
@@ -344,8 +354,8 @@ class PlayerConnection(
             seekable = c.isCurrentMediaItemSeekable,
             live = c.isCurrentMediaItemLive,
             speed = c.playbackParameters.speed,
-            hasPrev = if (ring) true else nav.isNotEmpty() && navIdx > 0,
-            hasNext = if (ring) true else nav.size > 1 && navIdx in 0 until nav.lastIndex,
+            hasPrev = if (ring) true else _pastIdx > 0 || (nav.isNotEmpty() && navIdx > 0),
+            hasNext = if (ring) true else _pastIdx < _past.lastIndex || (nav.size > 1 && navIdx in 0 until nav.lastIndex),
         )
 
         // Track positions are written from here because this is the only
@@ -505,6 +515,7 @@ class PlayerConnection(
 
         PlaybackBus.publishStation(station)
         PlaybackBus.publishSource(_source)
+        recordPlay(station)
         android.util.Log.d("cliamp/wid", "PLAY source.size=${_source.size} station=${station.name} preserve=$preserveOrder")
         persistWidgetWindow(station)
         PlaybackBus.publishError(null)
@@ -886,8 +897,84 @@ class PlayerConnection(
         sync()
     }
 
-    fun next() = step(+1)
-    fun prev() = step(-1)
+    /**
+     * Actual play order this session, oldest to newest, for Prev. The [_source]
+     * list a tap came from is the *context* (what Next walks); this stack is
+     * what was genuinely heard, so Prev returns to the previous song even when
+     * it came from another list entirely - the Spotify/Apple normal. Recents
+     * stays a picker, never the queue. Capped; consecutive duplicates never
+     * append, which also makes every record site safe to overlap (a tap plus
+     * the transition event for the same switch).
+     */
+    private val _past = ArrayDeque<Station>()
+    private var _pastIdx = -1
+    /** Cap: a session log, not an archive; persisted recents owns depth. */
+    private val PAST_CAP = 100
+
+    /** Appends [station] unless it already tips the stack (re-seek, double record). */
+    private fun recordPlay(station: Station) = synchronized(_past) {
+        if (_past.getOrNull(_pastIdx)?.url == station.url) return@synchronized
+        // A fresh play after stepping back forks: the redo tail is dropped.
+        while (_pastIdx < _past.lastIndex) _past.removeLast()
+        _past.addLast(station)
+        _pastIdx = _past.lastIndex
+        while (_past.size > PAST_CAP) {
+            _past.removeFirst()
+            _pastIdx--
+        }
+    }
+
+    /**
+     * Next walks the current context forward, but replays the history tail
+     * first when Prev stepped back - the redo half of the stack.
+     */
+    fun next() {
+        // Claimed under lock so the goto's own record sees its tip and no-ops.
+        val fwd = synchronized(_past) {
+            if (_pastIdx < _past.lastIndex) _past[++_pastIdx] else null
+        }
+        if (fwd != null) {
+            gotoHistory(fwd)
+            return
+        }
+        step(+1)
+    }
+
+    /**
+     * Prev walks what was actually heard, across contexts, falling back to
+     * the context walk only at the bottom of the stack.
+     */
+    fun prev() {
+        val back = synchronized(_past) {
+            if (_pastIdx > 0) _past[--_pastIdx] else null
+        }
+        if (back != null) {
+            gotoHistory(back)
+            return
+        }
+        step(-1)
+    }
+
+    /**
+     * Jumps to a history item without recording (the caller pre-stepped, so
+     * the record is a duplicate by construction). Reuses [applyNavigation]'s
+     * fast path when the item lives in the current context, else starts it
+     * as a fresh single - a foreign context, same as tapping it would.
+     */
+    private fun gotoHistory(station: Station) {
+        _ringFallback = false
+        // A manual jump supersedes any coalescing burst still waiting.
+        _navTimerJob?.cancel()
+        _navTimerJob = null
+        val src = _source.ifEmpty { _fallbackSource }
+        val abs = src.indexOfFirst { it.url == station.url }
+        if (abs >= 0 && _source.isNotEmpty()) {
+            _navPending = abs
+            applyNavigation()
+        } else {
+            play(station)
+        }
+    }
 
     /**
      * Moves prev/next by [delta]. Each tap targets exactly one song forward or
@@ -980,6 +1067,7 @@ class PlayerConnection(
         // has switched over.
         PlaybackBus.publishStation(station)
         PlaybackBus.publishSource(src)
+        recordPlay(station)
         PlaybackBus.publishError(null)
         PlaybackBus.publishFormat(StreamFormat())
         persistWidgetWindow(station)

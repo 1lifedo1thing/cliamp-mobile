@@ -400,7 +400,19 @@ fun LibrarySmartPlaylistPane(
     val fetched by appPrefs.downloads.collectAsState(initial = emptyMap())
     val removeLocalSong = rememberRemoveLocalSong(localLibrary)
     val downloads = (context.applicationContext as CliampApp).downloads
-    val smartPlaylists = remember(songs, favorites, recent, localSort, favScope, fetched) {
+    // Recently-played re-sorts itself on every tap (the tap pushes history),
+    // so a live list would jump under the finger and next/prev would chase a
+    // moving order. Freeze the view on entry like a normal playlist - the
+    // queue then matches exactly what is on screen, and the fresh order lands
+    // on return. Other lists stay live; only history reorders on play.
+    val frozenRecent = remember(kindName) { mutableStateOf<List<Station>?>(null) }
+    LaunchedEffect(kindName, recent.isNotEmpty()) {
+        if (kind == SmartKind.RecentlyPlayed && frozenRecent.value == null && recent.isNotEmpty()) {
+            frozenRecent.value = recent
+        }
+    }
+    val viewRecent = if (kind == SmartKind.RecentlyPlayed) (frozenRecent.value ?: recent) else recent
+    val smartPlaylists = remember(songs, favorites, viewRecent, localSort, favScope, fetched) {
         val local = sortedStations(songs, localSort)
         val favs = if (favScope == FavScope.All) favorites
         else favorites.filter { s ->
@@ -412,7 +424,7 @@ fun LibrarySmartPlaylistPane(
             }
         }
         listOf(
-            SmartPlaylist(SmartKind.RecentlyPlayed, recent),
+            SmartPlaylist(SmartKind.RecentlyPlayed, viewRecent),
             SmartPlaylist(SmartKind.Downloads, sortedStations(fetched.values.map { it.station }, localSort)),
             SmartPlaylist(SmartKind.Favorites, favs),
             SmartPlaylist(SmartKind.LocalSongs, local),
