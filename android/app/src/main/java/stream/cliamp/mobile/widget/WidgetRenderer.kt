@@ -464,14 +464,15 @@ object WidgetRenderer {
             }
         }
 
-        // The scope lives in the standard layout only and shows whenever
-        // something is tuned and the family draws one - `off` removes the
-        // strip entirely rather than leaving an empty gap. It flexes to the
-        // leftover height: a slim strip in a one-row cell, tall bricks in a
-        // two-row one. Its bitmap arrives separately (pushVisualizer
-        // flipbook); the current frame is painted inline here so a full
-        // re-render never blanks it mid-animation.
-        val showScope = !compact && viz.showsScope && row.station != null
+        // The scope lives in the standard layout only and shows whenever the
+        // family draws one - even with nothing tuned yet, where it reads as
+        // the stopped visualizer (flat unlit grid) instead of an empty gap.
+        // `off` removes the strip entirely. It flexes to the leftover
+        // height: a slim strip in a one-row cell, tall bricks in a two-row
+        // one. Its bitmap arrives separately (pushVisualizer flipbook); the
+        // current frame is painted inline here so a full re-render never
+        // blanks it mid-animation.
+        val showScope = !compact && viz.showsScope
         if (!compact) {
             rv.setViewVisibility(R.id.w_scope, if (showScope) View.VISIBLE else View.GONE)
             if (showScope) {

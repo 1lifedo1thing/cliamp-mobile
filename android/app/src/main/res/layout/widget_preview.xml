@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Pin-dialog preview. Mirrors the real widget (widget_cliamp): station
-    title and subtitle on the left, prev / play / next transport keys right.
-    Static stand-ins only: tinted vector marks instead of live art. -->
+    title and subtitle on the left, prev / play / next transport keys right,
+    the brick scope strip below, then the seek row. Static stand-ins only:
+    tinted vector marks and one frozen frame of the scope algorithm. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -64,6 +65,16 @@
         android:src="@drawable/ic_w_next"
         android:tint="@color/ink" />
     </LinearLayout>
+    <!-- Frozen scope frame: one rendered pass of the live brick algorithm
+        (same geometry, same oxide colors), so the pin dialog shows the
+        visualizer instead of an empty gap. -->
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_scope_preview" />
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
