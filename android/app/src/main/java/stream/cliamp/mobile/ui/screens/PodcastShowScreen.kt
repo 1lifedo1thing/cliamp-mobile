@@ -33,8 +33,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import stream.cliamp.mobile.CliampApp
+import stream.cliamp.mobile.data.DownloadState
+import stream.cliamp.mobile.data.downloadSizeLabel
 import stream.cliamp.mobile.data.EpisodeProgress
 import stream.cliamp.mobile.data.PodcastEpisode
 import stream.cliamp.mobile.data.PodcastRepository
@@ -88,6 +92,12 @@ fun PodcastShowScreen(
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val downloads = remember(context) {
+        (context.applicationContext as CliampApp).downloads
+    }
+    val dlStates by downloads.states.collectAsState()
+    val dlEntries by downloads.entries.collectAsState()
     val state by podcasts.show.collectAsState()
     val progress by podcasts.progress.collectAsState(initial = emptyMap())
     val subscriptions by podcasts.subscriptions.collectAsState(initial = emptyList())
@@ -149,17 +159,24 @@ fun PodcastShowScreen(
                 }
                 items(queue.indices.toList(), key = { i -> "ep:${queue[i].url}" }) { i ->
                     val station = queue[i]
+                    val dl = dlStates[station.url] ?: DownloadState.Idle
+                    val fetched = dlEntries[station.url]
                     EpisodeRow(
                         episode = state.episodes[i],
                         station = station,
                         progress = progress[station.url],
                         active = current?.url == station.url,
                         playing = playing && current?.url == station.url,
+                        dlState = dl,
+                        downloadedBytes = fetched?.bytes ?: 0L,
                         onPlay = { onPlay(station, queue) },
                         onPlayNext = { onPlayNext(station) },
                         onAddToQueue = { onAddToQueue(station) },
                         onMarkPlayed = { scope.launch { podcasts.markCompleted(station) } },
                         onForget = { scope.launch { podcasts.clearProgress(station) } },
+                        onDownload = { downloads.download(station) },
+                        onCancelDownload = { downloads.cancel(station.url) },
+                        onRemoveDownload = { downloads.remove(station.url) },
                     )
                 }
             }
@@ -230,9 +247,15 @@ private fun EpisodeRow(
     onAddToQueue: () -> Unit,
     onMarkPlayed: () -> Unit,
     onForget: () -> Unit,
+    dlState: DownloadState = DownloadState.Idle,
+    downloadedBytes: Long = 0L,
+    onDownload: () -> Unit = {},
+    onCancelDownload: () -> Unit = {},
+    onRemoveDownload: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val done = progress?.completed == true
+    val fetched = downloadedBytes > 0L
     ListRow(
         rail = active,
         onClick = onPlay,
@@ -289,17 +312,54 @@ private fun EpisodeRow(
             }
         },
         trailing = {
-            OverflowMenu(
-                trigger = { open -> OverflowButton(open) },
-                items = listOf(
-                    OverflowItem("play next", onPlayNext),
-                    OverflowItem("add to queue", onAddToQueue),
-                    OverflowItem(
-                        if (done) "mark unplayed" else "mark played",
-                        { if (done) onForget() else onMarkPlayed() },
-                    ),
-                ),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                // Fetch state lives left of the ⋮: idle offers the download,
+                // active reads percent (tap cancels), done wears accent (the
+                // ⋮ removes it), failed offers a retry.
+                when (val d = dlState) {
+                    is DownloadState.Active -> Mono(
+                        if (d.indeterminate) downloadSizeLabel(d.bytesRead)
+                        else "${(d.fraction * 100).toInt()}%",
+                        CliampType.meta, p.amber,
+                        Modifier.padding(8.dp, 4.dp).microPress { onCancelDownload() },
+                    )
+                    is DownloadState.Failed -> Mono(
+                        "retry", CliampType.meta, p.destructiveInk,
+                        Modifier.padding(8.dp, 4.dp).microPress { onDownload() },
+                    )
+                    is DownloadState.Idle ->
+                        if (fetched) Icon(
+                            CliampIcons.Download, "downloaded",
+                            Modifier.size(15.dp), tint = p.accent,
+                        )
+                        else Icon(
+                            CliampIcons.Download, "download",
+                            Modifier.size(15.dp).microPress { onDownload() }, tint = p.inkTertiary,
+                        )
+                }
+                OverflowMenu(
+                    trigger = { open -> OverflowButton(open) },
+                    items = buildList {
+                        add(OverflowItem("play next", onPlayNext))
+                        add(OverflowItem("add to queue", onAddToQueue))
+                        when {
+                            fetched -> add(
+                                OverflowItem("remove download", color = p.destructiveInk, action = onRemoveDownload)
+                            )
+                            dlState is DownloadState.Active -> add(
+                                OverflowItem("cancel download", color = p.destructiveInk, action = onCancelDownload)
+                            )
+                            else -> add(OverflowItem("download", onDownload))
+                        }
+                        add(
+                            OverflowItem(
+                                if (done) "mark unplayed" else "mark played",
+                                { if (done) onForget() else onMarkPlayed() },
+                            )
+                        )
+                    },
+                )
+            }
         },
     ) {
         Mono(
@@ -317,6 +377,15 @@ private fun EpisodeRow(
                 if (!episode.isFull) add(episode.type.lowercase())
                 shortDate(episode.publishedAt)?.let { add(it) }
                 clock(episode.durationMs)?.let { add(it) }
+                if (fetched) add("offline · ${downloadSizeLabel(downloadedBytes)}")
+                else when (val d = dlState) {
+                    is DownloadState.Active -> add(
+                        if (d.indeterminate) "fetching ${downloadSizeLabel(d.bytesRead)}"
+                        else "fetching ${(d.fraction * 100).toInt()}%"
+                    )
+                    is DownloadState.Failed -> add(d.reason)
+                    is DownloadState.Idle -> {}
+                }
                 progress?.takeIf { !it.completed && it.positionMs > 0 }?.let {
                     add("${(it.fraction * 100).toInt()}% in")
                 }

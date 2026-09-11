@@ -94,6 +94,7 @@ class Prefs(private val context: Context) {
         val wDuration = longPreferencesKey("w_duration")
         val wNext = stringPreferencesKey("w_next")
         val wSource = stringPreferencesKey("w_source")
+        val downloads = stringPreferencesKey("downloads")
         val playlistSorts = stringPreferencesKey("playlist_sorts")  // slug -> PlaylistSort.ordinal
         val cliampGrid = booleanPreferencesKey("cliamp_grid")       // stations: cliamp channel tiles
         val directoryGrid = booleanPreferencesKey("directory_grid") // stations: directory tiles
@@ -173,6 +174,19 @@ class Prefs(private val context: Context) {
         db.history().recent().map { rows -> rows.map { it.toStation() } }
     val custom: Flow<List<Station>> =
         db.customStations().all().map { rows -> rows.map { it.toStation() } }
+
+    /**
+     * Files the app itself fetched, by remote audio URL. The downloads smart
+     * playlist shows exactly these - never the whole local library - so
+     * membership means "cliamp put it here". Each entry carries its path and
+     * the station snapshot that plays it, which is how the playlist lists
+     * episodes that live nowhere else on the phone.
+     */
+    val downloads: Flow<Map<String, DownloadEntry>> = context.settingsStore.data.map { p ->
+        p[K.downloads]?.let { raw ->
+            runCatching { Http.json.decodeFromString<Map<String, DownloadEntry>>(raw) }.getOrNull()
+        } ?: emptyMap()
+    }
 
     /** Per-playlist remembered sort, seeded into memory at construction. */
     private val persist = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -323,6 +337,18 @@ class Prefs(private val context: Context) {
     }
 
     suspend fun removeCustom(s: Station) = db.customStations().remove(s.url)
+
+    suspend fun addDownload(entry: DownloadEntry) {
+        put(K.downloads, Http.json.encodeToString((downloads.first() + (entry.url to entry))))
+    }
+
+    suspend fun removeDownload(url: String) {
+        put(K.downloads, Http.json.encodeToString((downloads.first() - url)))
+    }
+
+    suspend fun setDownloads(map: Map<String, DownloadEntry>) {
+        put(K.downloads, Http.json.encodeToString(map))
+    }
 
     private suspend fun <T> put(key: Preferences.Key<T>, value: T) {
         context.settingsStore.edit { it[key] = value }

@@ -21,6 +21,7 @@ import stream.cliamp.mobile.playback.ResolvedStream
 import stream.cliamp.mobile.playback.SftpDataSource
 import stream.cliamp.mobile.playback.StreamResolver
 import stream.cliamp.mobile.net.Http
+import stream.cliamp.mobile.data.DownloadStore
 import stream.cliamp.mobile.data.LocalLibrary
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.PlaylistStore
@@ -46,6 +47,7 @@ class CliampApp : Application() {
     val localLibrary: LocalLibrary by lazy { LocalLibrary(this) }
     val playlists: PlaylistStore by lazy { PlaylistStore(this) }
     val player: PlayerConnection by lazy { PlayerConnection(this, CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)) }
+    val downloads: DownloadStore by lazy { DownloadStore(this, prefs, appScope) }
 
     override fun onCreate() {
         super.onCreate()
@@ -73,6 +75,7 @@ class CliampApp : Application() {
         // itself, and the one thing a podcast is useless without. Wired here
         // for the same reason the provider resolver is: playback should not be
         // holding a database.
+        StreamResolver.downloadLookup = { url -> downloads.localPath(url) }
         player.resumeLookup = { station -> podcasts.resumePosition(station) }
         player.progressSink = { station, position, duration ->
             podcasts.saveProgress(station, position, duration)

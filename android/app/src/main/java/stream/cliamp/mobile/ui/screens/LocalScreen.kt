@@ -84,6 +84,7 @@ import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.data.toStation
 import stream.cliamp.mobile.data.PlaylistSort
 import stream.cliamp.mobile.data.durationLabel
+import stream.cliamp.mobile.data.downloadSizeLabel
 import stream.cliamp.mobile.data.sortedStations
 import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.data.provider.ProviderCatalog
@@ -113,6 +114,7 @@ import stream.cliamp.mobile.ui.theme.Mono
 /** The pinned, auto-populated smart playlists on the library tab. */
 enum class SmartKind(val label: String) {
     LocalSongs("local songs"),
+    Downloads("downloads"),
     Favorites("favorites"),
     RecentlyPlayed("recently played");
 
@@ -198,10 +200,11 @@ fun LocalScreen(
     val prefs = (context.applicationContext as CliampApp).prefs
     val localSort by prefs.playlistSort("local-songs")
         .collectAsState(initial = prefs.playlistSortValue("local-songs"))
+    val fetched by prefs.downloads.collectAsState(initial = emptyMap())
 
     // Pinned smart playlists — auto-populated from global state, non-removable.
-    // "local songs" is always at the very top.
-    val smartPlaylists = remember(filtered, favorites, recent, localSort, favScope) {
+    // Order is recency first: recently played, downloads, favorites, local songs.
+    val smartPlaylists = remember(filtered, favorites, recent, localSort, favScope, fetched) {
         val local = sortedStations(filtered, localSort)
         val favs = if (favScope == FavScope.All) favorites
         else favorites.filter { s ->
@@ -213,9 +216,10 @@ fun LocalScreen(
             }
         }
         listOf(
-            SmartPlaylist(SmartKind.LocalSongs, local),
-            SmartPlaylist(SmartKind.Favorites, favs),
             SmartPlaylist(SmartKind.RecentlyPlayed, recent),
+            SmartPlaylist(SmartKind.Downloads, sortedStations(fetched.values.map { it.station }, localSort)),
+            SmartPlaylist(SmartKind.Favorites, favs),
+            SmartPlaylist(SmartKind.LocalSongs, local),
         )
     }
     // ---- base page (always composed) ----
@@ -393,8 +397,10 @@ fun LibrarySmartPlaylistPane(
     val appPrefs = (context.applicationContext as CliampApp).prefs
     val localSort by appPrefs.playlistSort("local-songs")
         .collectAsState(initial = appPrefs.playlistSortValue("local-songs"))
+    val fetched by appPrefs.downloads.collectAsState(initial = emptyMap())
     val removeLocalSong = rememberRemoveLocalSong(localLibrary)
-    val smartPlaylists = remember(songs, favorites, recent, localSort, favScope) {
+    val downloads = (context.applicationContext as CliampApp).downloads
+    val smartPlaylists = remember(songs, favorites, recent, localSort, favScope, fetched) {
         val local = sortedStations(songs, localSort)
         val favs = if (favScope == FavScope.All) favorites
         else favorites.filter { s ->
@@ -406,9 +412,10 @@ fun LibrarySmartPlaylistPane(
             }
         }
         listOf(
-            SmartPlaylist(SmartKind.LocalSongs, local),
-            SmartPlaylist(SmartKind.Favorites, favs),
             SmartPlaylist(SmartKind.RecentlyPlayed, recent),
+            SmartPlaylist(SmartKind.Downloads, sortedStations(fetched.values.map { it.station }, localSort)),
+            SmartPlaylist(SmartKind.Favorites, favs),
+            SmartPlaylist(SmartKind.LocalSongs, local),
         )
     }
     val pl = smartPlaylists.firstOrNull { it.kind == kind }
@@ -440,7 +447,12 @@ fun LibrarySmartPlaylistPane(
                         favScope = favScope,
                         onFavScopeChange = onFavScopeChange,
                         onInfo = onOpenSongInfo,
-                        onRemove = removeLocalSong,
+                        // Removing from downloads deletes the fetched file and
+                        // untracks the URL; anywhere else it drops the song.
+                        onRemove = { s ->
+                            if (pl.kind == SmartKind.Downloads) downloads.remove(s.url)
+                            else removeLocalSong(s)
+                        },
                         progress = progress,
                         showResume = showResume,
                     )
@@ -927,6 +939,7 @@ private fun PlaylistGlyph(icon: ImageVector, contentDescription: String?) {
 /** The smart playlist's identifying glyph. */
 private fun smartKindIcon(kind: SmartKind): ImageVector = when (kind) {
     SmartKind.LocalSongs -> CliampIcons.MusicNote
+    SmartKind.Downloads -> CliampIcons.Download
     SmartKind.Favorites -> CliampIcons.Star
     SmartKind.RecentlyPlayed -> CliampIcons.Clock
 }
@@ -1361,15 +1374,17 @@ private fun SmartPlaylistDetail(
     val p = LocalPalette.current
     val context = LocalContext.current
     val prefs = (context.applicationContext as CliampApp).prefs
-    // Only the local-songs smart list sorts; favourites and recent have their
+    // Only the on-device smart lists sort; favourites and recent have their
     // own fixed orders (recent is already time-sorted).
-    val local = pl.kind == SmartKind.LocalSongs
+    val local = pl.kind == SmartKind.LocalSongs || pl.kind == SmartKind.Downloads
     // Favourites mix local songs, radio stations and podcasts, so they get
     // their own type sub-tabs: all / local / stations / podcasts.
     val isFav = pl.kind == SmartKind.Favorites
-    val sort by prefs.playlistSort("local-songs")
-        .collectAsState(initial = prefs.playlistSortValue("local-songs"))
+    val sortKey = if (pl.kind == SmartKind.Downloads) "downloads" else "local-songs"
+    val sort by prefs.playlistSort(sortKey)
+        .collectAsState(initial = prefs.playlistSortValue(sortKey))
     val members = pl.stations
+    val fetched by prefs.downloads.collectAsState(initial = emptyMap())
     val visible = remember(members, local, sort, isFav, favScope) {
         val base = if (local) sortedStations(members, sort) else members
         if (!isFav || favScope == FavScope.All) base
@@ -1406,6 +1421,8 @@ private fun SmartPlaylistDetail(
                             pl.kind == SmartKind.Favorites && favScope == FavScope.Pods -> "no podcast favourites yet"
                             pl.kind == SmartKind.LocalSongs ->
                                 if (loading) "scanning for songs…" else "no songs on the phone yet"
+                            pl.kind == SmartKind.Downloads ->
+                                if (loading) "scanning for songs…" else "no downloads yet"
                             pl.kind == SmartKind.Favorites -> "no favourites yet"
                             else -> "nothing played recently"
                         },
@@ -1423,7 +1440,7 @@ private fun SmartPlaylistDetail(
                     ) {
                         PlaylistSort.entries.forEach { t ->
                             Chip(t.label, sort == t, onClick = {
-                                prefs.setPlaylistSort("local-songs", t)
+                                prefs.setPlaylistSort(sortKey, t)
                             })
                         }
                     }
@@ -1441,7 +1458,7 @@ private fun SmartPlaylistDetail(
                     trailing = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             // ⋮ menu sits immediately to the left of the star,
-                            // only on the local-songs list: favourites and
+                            // only on the on-device lists: favourites and
                             // recently-played are read-only views.
                             if (local) {
                                 OverflowMenu(
@@ -1478,6 +1495,9 @@ private fun SmartPlaylistDetail(
                                 }
                             }
                             resumed?.let { add("${(it.fraction * 100).toInt()}% in") }
+                            if (pl.kind == SmartKind.Downloads) {
+                                fetched[s.url]?.let { add(downloadSizeLabel(it.bytes)) }
+                            }
                         }.joinToString(" · "),
                         CliampType.rowSecondary, if (resumed != null) p.amber else p.inkTertiary, maxLines = 1,
                     )

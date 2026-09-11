@@ -35,12 +35,24 @@ object StreamResolver {
      */
     @Volatile var providerResolver: (suspend (String, String) -> ResolvedStream?)? = null
 
+    /**
+     * Set once at startup. A fetched episode plays from its file instead of
+     * the network - the offline half of the downloads playlist. Returns an
+     * absolute path for a live file, or null to stream as usual.
+     */
+    @Volatile var downloadLookup: ((String) -> String?)? = null
+
     suspend fun resolve(url: String): ResolvedStream {
         if (url.startsWith(PROVIDER_SCHEME)) {
             val ref = url.removePrefix(PROVIDER_SCHEME)
             val accountId = ref.substringBefore('/')
             val trackId = ref.substringAfter('/')
             return providerResolver?.invoke(accountId, trackId) ?: ResolvedStream(url)
+        }
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            downloadLookup?.invoke(url)?.let { path ->
+                return ResolvedStream(java.io.File(path).toURI().toString())
+            }
         }
         val lower = url.substringBefore('?').lowercase()
         return when {
