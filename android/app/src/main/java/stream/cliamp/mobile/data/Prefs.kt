@@ -27,6 +27,7 @@ import stream.cliamp.mobile.data.db.CustomStationEntity
 import stream.cliamp.mobile.data.db.FavoriteEntity
 import stream.cliamp.mobile.data.db.HistoryEntity
 import stream.cliamp.mobile.data.db.toEntity
+import stream.cliamp.mobile.data.provider.SecretStore
 import stream.cliamp.mobile.net.Http
 
 private val Context.settingsStore: DataStore<Preferences> by preferencesDataStore("cliamp")
@@ -86,6 +87,7 @@ class Prefs(private val context: Context) {
         val lastStation = stringPreferencesKey("last_station")
         val volume = floatPreferencesKey("volume")
         val speed = floatPreferencesKey("speed")
+        val lbToken = stringPreferencesKey("lb_token")
         val autoResume = booleanPreferencesKey("auto_resume")
         val autoDownload = booleanPreferencesKey("auto_download")
         val resumeLocal = booleanPreferencesKey("resume_local")
@@ -108,6 +110,10 @@ class Prefs(private val context: Context) {
     val haptics: Flow<Boolean> = context.settingsStore.data.map { it[K.haptics] ?: true }
     val visualizer: Flow<String> = context.settingsStore.data.map { it[K.visualizer] ?: "spectrum" }
     val cellular: Flow<Boolean> = context.settingsStore.data.map { it[K.cellular] ?: true }
+    /** ListenBrainz user token, encrypted at rest like provider secrets. Blank until pasted. */
+    val listenBrainzToken: Flow<String> = context.settingsStore.data.map { p ->
+        p[K.lbToken]?.let { runCatching { SecretStore.decrypt(it) }.getOrNull() }.orEmpty()
+    }
     val bufferSeconds: Flow<Int> = context.settingsStore.data.map { it[K.bufferSeconds] ?: 30 }
     val eqEnabled: Flow<Boolean> = context.settingsStore.data.map { it[K.eqEnabled] ?: false }
     val eqPreset: Flow<String> = context.settingsStore.data.map { it[K.eqPreset] ?: "flat" }
@@ -243,6 +249,8 @@ class Prefs(private val context: Context) {
     suspend fun setHaptics(v: Boolean) = put(K.haptics, v)
     suspend fun setVisualizer(v: String) = put(K.visualizer, v)
     suspend fun setCellular(v: Boolean) = put(K.cellular, v)
+    suspend fun listenBrainzTokenSync(): String = listenBrainzToken.first()
+    suspend fun setListenBrainzToken(v: String) = put(K.lbToken, SecretStore.encrypt(v))
     suspend fun setBufferSeconds(v: Int) = put(K.bufferSeconds, v)
     suspend fun setEqEnabled(v: Boolean) = put(K.eqEnabled, v)
     suspend fun setEqPreset(v: String) = put(K.eqPreset, v)

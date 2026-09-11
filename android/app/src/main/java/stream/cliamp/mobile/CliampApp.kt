@@ -28,6 +28,7 @@ import stream.cliamp.mobile.data.PlaylistStore
 import stream.cliamp.mobile.data.PodcastRepository
 import stream.cliamp.mobile.data.RadioBrowser
 import stream.cliamp.mobile.data.Repository
+import stream.cliamp.mobile.data.Scrobbler
 import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.widget.WidgetRenderer
 
@@ -48,6 +49,7 @@ class CliampApp : Application() {
     val playlists: PlaylistStore by lazy { PlaylistStore(this) }
     val player: PlayerConnection by lazy { PlayerConnection(this, CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)) }
     val downloads: DownloadStore by lazy { DownloadStore(this, prefs, appScope) }
+    val scrobbler: Scrobbler by lazy { Scrobbler(this, prefs, appScope) }
 
     override fun onCreate() {
         super.onCreate()
@@ -76,6 +78,9 @@ class CliampApp : Application() {
         // for the same reason the provider resolver is: playback should not be
         // holding a database.
         StreamResolver.downloadLookup = { url -> downloads.localPath(url) }
+        player.scrobbleTick = { station, playing, durationMs ->
+            scrobbler.onTick(station, playing, durationMs)
+        }
         player.resumeLookup = { station -> podcasts.resumePosition(station) }
         player.progressSink = { station, position, duration ->
             podcasts.saveProgress(station, position, duration)

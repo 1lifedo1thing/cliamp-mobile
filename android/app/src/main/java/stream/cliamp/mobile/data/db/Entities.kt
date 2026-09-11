@@ -172,11 +172,23 @@ data class EpisodeProgressEntity(
     val durationMs: Long,
     val completed: Boolean,
     val updatedAt: Long,
-) {
-    fun toProgress() = stream.cliamp.mobile.data.EpisodeProgress(
+) {    fun toProgress() = stream.cliamp.mobile.data.EpisodeProgress(
         url = url, positionMs = positionMs, durationMs = durationMs, completed = completed,
     )
 }
+
+/**
+ * Local play counts for music tracks (local files and provider tracks -
+ * radio has no ends and episodes have resume instead). One row per URL:
+ * a replay only bumps the counters, so scrobbling "this play counted"
+ * stays a single upsert.
+ */
+@Entity(tableName = "play_stats")
+data class PlayStatEntity(
+    @PrimaryKey val url: String,
+    val plays: Int = 0,
+    val lastPlayedAt: Long = 0L,
+)
 
 /**
  * One audio file on an SSH host, as the last scan of that account saw it.

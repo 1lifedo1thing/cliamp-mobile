@@ -23,8 +23,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SftpIndexEntity::class,
         KvCacheEntity::class,
         PodcastFeedCacheEntity::class,
+        PlayStatEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class CliampDatabase : RoomDatabase() {
@@ -38,6 +39,7 @@ abstract class CliampDatabase : RoomDatabase() {
     abstract fun podcasts(): PodcastDao
     abstract fun sftp(): SftpDao
     abstract fun cache(): CacheDao
+    abstract fun stats(): StatsDao
 
     companion object {
         @Volatile private var instance: CliampDatabase? = null
@@ -145,6 +147,22 @@ abstract class CliampDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Play counts. One new table and nothing touched, additive like the
+         * ones before it - stats are re-derivable (replays recount), so even
+         * a destructive fallback would only lose counts, but a real migration
+         * keeps them for free.
+         */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `play_stats` (" +
+                        "`url` TEXT NOT NULL, `plays` INTEGER NOT NULL, " +
+                        "`lastPlayedAt` INTEGER NOT NULL, PRIMARY KEY(`url`))"
+                )
+            }
+        }
+
         fun get(context: Context): CliampDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
@@ -154,7 +172,7 @@ abstract class CliampDatabase : RoomDatabase() {
                 // playlist_members cascades from playlists, which only works
                 // with foreign keys actually switched on
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
                 .also { instance = it }
         }

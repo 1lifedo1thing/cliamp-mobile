@@ -210,6 +210,9 @@ class PlayerConnection(
     /** Receives (station, position, duration) for episodes as they play. */
     var progressSink: (suspend (Station, Long, Long) -> Unit)? = null
 
+    /** Receives (station, playing, duration) twice a second for scrobbling. */
+    var scrobbleTick: ((Station?, Boolean, Long) -> Unit)? = null
+
     private var lastProgressWrite = 0L
 
     fun connect() {
@@ -375,6 +378,14 @@ class PlayerConnection(
                 progressSink?.let { sink -> scope.launch { sink(playingNow, position, duration) } }
             }
         }
+
+        // Scrobble clock: same choke point, unthrottled - the scrobbler keeps
+        // its own heard-time and fires once per play.
+        scrobbleTick?.invoke(
+            playingNow,
+            c.isPlaying,
+            c.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: playingNow?.durationMs ?: 0L,
+        )
     }
 
     /**

@@ -20,9 +20,13 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +41,7 @@ import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
+import stream.cliamp.mobile.ui.components.CliampTextField
 import stream.cliamp.mobile.ui.components.CliampToggle
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.scrollToTop
@@ -76,6 +81,7 @@ fun SettingsScreen(
     val buffer by prefs.bufferSeconds.collectAsState(initial = 20)
     val autoResume by prefs.autoResume.collectAsState(initial = false)
     val autoDownload by prefs.autoDownload.collectAsState(initial = false)
+    val lbToken by prefs.listenBrainzToken.collectAsState(initial = "")
     val resumeLocal by prefs.resumeLocal.collectAsState(initial = false)
     val history by prefs.history.collectAsState(initial = emptyList())
     val favorites by prefs.favorites.collectAsState(initial = emptyList())
@@ -132,6 +138,13 @@ fun SettingsScreen(
             )
             Mono("deeper buffers survive a bad tunnel, at the cost of latency", CliampType.meta, p.inkFaint)
         }
+        HairlineDivider()
+
+        SectionLabel("scrobble")
+        ScrobbleTokenRow(
+            token = lbToken,
+            onSave = { scope.launch { prefs.setListenBrainzToken(it) } },
+        )
         HairlineDivider()
 
         SectionLabel("feel")
@@ -240,6 +253,52 @@ private fun ToggleRow(title: String, checked: Boolean, onChange: (Boolean) -> Un
             Mono(title, CliampType.rowPrimaryMedium, p.ink, Modifier.weight(1f))
             CliampToggle(checked, onChange)
         }
+        Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
+    }
+}
+
+/**
+ * ListenBrainz user token: pasted once, encrypted at rest, blank means
+ * local counts only. Plays always count locally; the token only adds the
+ * network scrobble.
+ */
+@Composable
+private fun ScrobbleTokenRow(token: String, onSave: (String) -> Unit) {
+    val p = LocalPalette.current
+    var text by remember { mutableStateOf("") }
+    LaunchedEffect(token) {
+        if (text.isEmpty() && token.isNotBlank()) text = token
+    }
+    Column {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Mono("ListenBrainz token", CliampType.rowPrimaryMedium, p.ink, Modifier.weight(1f))
+            Mono(
+                if (token.isBlank()) "off" else "on",
+                CliampType.meta, if (token.isBlank()) p.inkFaint else p.accent,
+            )
+        }
+        CliampTextField(
+            value = text,
+            onValueChange = { text = it.trim() },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = Gutter),
+            placeholder = "paste user token",
+            onAction = { onSave(text) },
+        )
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 10.dp),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            Chip("save", text.isNotBlank() && text != token, onClick = { onSave(text) })
+        }
+        Mono(
+            "plays count locally either way · a token also scrobbles them",
+            CliampType.meta, p.inkFaint,
+            Modifier.padding(start = Gutter, end = Gutter, bottom = 12.dp),
+        )
         Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
     }
 }

@@ -69,6 +69,25 @@ interface HistoryDao {
 }
 
 @Dao
+interface StatsDao {
+    @Query("SELECT * FROM play_stats WHERE url = :url")
+    fun stat(url: String): Flow<PlayStatEntity?>
+
+    @Query("SELECT * FROM play_stats WHERE url = :url")
+    suspend fun peek(url: String): PlayStatEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(row: PlayStatEntity)
+
+    /** One counted play: bump the counter and stamp last-played atomically. */
+    @Transaction
+    suspend fun record(url: String, now: Long) {
+        val cur = peek(url)
+        upsert(PlayStatEntity(url, (cur?.plays ?: 0) + 1, now))
+    }
+}
+
+@Dao
 interface CustomStationDao {
     @Query("SELECT s.* FROM stations s JOIN custom_stations c ON c.url = s.url ORDER BY c.position")
     fun all(): Flow<List<StationEntity>>

@@ -578,6 +578,10 @@ fun LibrarySongInfoPane(
             .firstOrNull { it.url == stationUrl }
     }
     val removeLocalSong = rememberRemoveLocalSong(localLibrary) { onBack() }
+    val context = LocalContext.current
+    val stat by remember(stationUrl) {
+        (context.applicationContext as CliampApp).scrobbler.statsFor(stationUrl)
+    }.collectAsState(initial = null)
     Box(Modifier.fillMaxSize().background(p.ground)) {
         if (station == null) {
             CenterNote("song gone", p.inkTertiary)
@@ -589,6 +593,8 @@ fun LibrarySongInfoPane(
                 onToggleFavorite = onToggleFavorite,
                 favorite = station.url in favorites.map { it.url }.toSet(),
                 onRemove = { removeLocalSong(station) },
+                plays = stat?.plays ?: 0,
+                lastPlayedAt = stat?.lastPlayedAt ?: 0L,
             )
         }
     }
@@ -1620,6 +1626,8 @@ private fun SongInfoView(
     onToggleFavorite: (Station) -> Unit,
     favorite: Boolean,
     onRemove: () -> Unit,
+    plays: Int = 0,
+    lastPlayedAt: Long = 0L,
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
@@ -1702,6 +1710,12 @@ private fun SongInfoView(
                 ) {
                     SongInfoRow("duration", durationLabel(s.durationMs))
                     SongInfoRow("added", added)
+                    SongInfoRow("plays", if (plays > 0) "$plays" else "—")
+                    SongInfoRow(
+                        "last played",
+                        if (lastPlayedAt > 0) SimpleDateFormat("dd MMM yyyy", Locale.US)
+                            .format(Date(lastPlayedAt)) else "—",
+                    )
                     SongInfoRow("size", sizeLabel)
                     SongInfoRow("format", File(path).extension.uppercase().ifBlank { "—" })
                     SongInfoRow("location", File(path).parent.orEmpty())
