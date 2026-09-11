@@ -79,6 +79,7 @@ import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.data.ShowState
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.DirectoryState
+import stream.cliamp.mobile.data.EpisodeProgress
 import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.data.toStation
 import stream.cliamp.mobile.data.PlaylistSort
@@ -377,6 +378,10 @@ fun LibrarySmartPlaylistPane(
     onBack: () -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    /** Saved positions by station URL, for the resume readout on local rows. */
+    progress: Map<String, EpisodeProgress> = emptyMap(),
+    /** True when local files resume: rows may show their saved position. */
+    showResume: Boolean = false,
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
@@ -436,6 +441,8 @@ fun LibrarySmartPlaylistPane(
                         onFavScopeChange = onFavScopeChange,
                         onInfo = onOpenSongInfo,
                         onRemove = removeLocalSong,
+                        progress = progress,
+                        showResume = showResume,
                     )
                 }
             }
@@ -1348,6 +1355,8 @@ private fun SmartPlaylistDetail(
     onFavScopeChange: (FavScope) -> Unit = {},
     onInfo: (Station) -> Unit = {},
     onRemove: (Station) -> Unit = {},
+    progress: Map<String, EpisodeProgress> = emptyMap(),
+    showResume: Boolean = false,
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
@@ -1453,16 +1462,24 @@ private fun SmartPlaylistDetail(
                     },
                 ) {
                     Mono(s.name, CliampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
+                    // Local rows wear their saved position like podcast
+                    // episodes do, but only while resume is switched on.
+                    val resumed = if (local && showResume) {
+                        progress[s.url]?.takeIf { !it.completed && it.positionMs > 0 }
+                    } else null
                     Mono(
-                        when (s.source) {
-                            StationSource.Podcast -> s.artist.ifBlank { s.meta.ifBlank { "podcast" } }
-                            StationSource.Local -> s.artistAlbum.ifBlank { s.meta }
-                            else -> buildList {
-                                s.meta.takeIf { it.isNotBlank() }?.let { add(it) }
-                                s.tagList.take(2).forEach { add(it) }
-                            }.joinToString(" · ")
-                        },
-                        CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
+                        buildList {
+                            when (s.source) {
+                                StationSource.Podcast -> add(s.artist.ifBlank { s.meta.ifBlank { "podcast" } })
+                                StationSource.Local -> add(s.artistAlbum.ifBlank { s.meta })
+                                else -> {
+                                    s.meta.takeIf { it.isNotBlank() }?.let { add(it) }
+                                    s.tagList.take(2).forEach { add(it) }
+                                }
+                            }
+                            resumed?.let { add("${(it.fraction * 100).toInt()}% in") }
+                        }.joinToString(" · "),
+                        CliampType.rowSecondary, if (resumed != null) p.amber else p.inkTertiary, maxLines = 1,
                     )
                 }
             }

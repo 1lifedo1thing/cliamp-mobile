@@ -370,10 +370,12 @@ private var chartCursor: List<String> = emptyList()
     /**
      * Where playback should start. Anything within [NEAR_END] of the end counts
      * as finished and restarts from zero, so a completed episode replayed does
-     * not open two seconds from its own credits.
+     * not open two seconds from its own credits. Keyed by URL, so local and
+     * provider tracks resume exactly like episodes; live radio is not a track
+     * and always starts at zero.
      */
     suspend fun resumePosition(station: Station): Long {
-        if (station.source != StationSource.Podcast) return 0L
+        if (!station.isTrack) return 0L
         val p = dao.progress(station.url) ?: return 0L
         if (p.completed) return 0L
         if (p.durationMs > 0 && p.positionMs >= p.durationMs - NEAR_END) return 0L
@@ -381,7 +383,7 @@ private var chartCursor: List<String> = emptyList()
     }
 
     suspend fun saveProgress(station: Station, positionMs: Long, durationMs: Long) {
-        if (station.source != StationSource.Podcast) return
+        if (!station.isTrack) return
         if (positionMs <= 0) return
         val done = durationMs > 0 && positionMs >= durationMs - NEAR_END
         dao.saveProgress(

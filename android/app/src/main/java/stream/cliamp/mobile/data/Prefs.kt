@@ -85,6 +85,7 @@ class Prefs(private val context: Context) {
         val lastStation = stringPreferencesKey("last_station")
         val volume = floatPreferencesKey("volume")
         val autoResume = booleanPreferencesKey("auto_resume")
+        val resumeLocal = booleanPreferencesKey("resume_local")
         val wPlaying = booleanPreferencesKey("w_playing")
         val wTrack = stringPreferencesKey("w_track")
         val wSeekable = booleanPreferencesKey("w_seekable")
@@ -106,6 +107,8 @@ class Prefs(private val context: Context) {
     val eqEnabled: Flow<Boolean> = context.settingsStore.data.map { it[K.eqEnabled] ?: false }
     val eqPreset: Flow<String> = context.settingsStore.data.map { it[K.eqPreset] ?: "flat" }
     val autoResume: Flow<Boolean> = context.settingsStore.data.map { it[K.autoResume] ?: false }
+    /** Local files reopen where they stopped. Off by default: songs restart. */
+    val resumeLocal: Flow<Boolean> = context.settingsStore.data.map { it[K.resumeLocal] ?: false }
     val volume: Flow<Float> = context.settingsStore.data.map { it[K.volume] ?: 1f }
 
     /** Stations cliamp channel section as a grid. */
@@ -219,6 +222,7 @@ class Prefs(private val context: Context) {
     suspend fun setEqEnabled(v: Boolean) = put(K.eqEnabled, v)
     suspend fun setEqPreset(v: String) = put(K.eqPreset, v)
     suspend fun setAutoResume(v: Boolean) = put(K.autoResume, v)
+    suspend fun setResumeLocal(v: Boolean) = put(K.resumeLocal, v)
     suspend fun setVolume(v: Float) = put(K.volume, v)
     suspend fun setCliampGrid(v: Boolean) {
         cliampGridFlag.value = v

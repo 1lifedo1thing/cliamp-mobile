@@ -75,6 +75,7 @@ fun SettingsScreen(
     val cellular by prefs.cellular.collectAsState(initial = true)
     val buffer by prefs.bufferSeconds.collectAsState(initial = 20)
     val autoResume by prefs.autoResume.collectAsState(initial = false)
+    val resumeLocal by prefs.resumeLocal.collectAsState(initial = false)
     val history by prefs.history.collectAsState(initial = emptyList())
     val favorites by prefs.favorites.collectAsState(initial = emptyList())
     val dirStats by repository.directoryStats.collectAsState()
@@ -101,6 +102,11 @@ fun SettingsScreen(
             title = "Auto-resume",
             checked = autoResume,
             onChange = { scope.launch { prefs.setAutoResume(it) } },
+        )
+        ToggleRow(
+            title = "Resume local songs",
+            checked = resumeLocal,
+            onChange = { scope.launch { prefs.setResumeLocal(it) } },
         )
         ToggleRow(
             title = "Stream over cellular",

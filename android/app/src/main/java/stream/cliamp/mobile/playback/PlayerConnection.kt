@@ -91,12 +91,16 @@ class PlayerConnection(
             if (_fallbackSource.isEmpty()) {
                 _fallbackSource = history.ifEmpty { favs }
             }
+            prefs.resumeLocal.collect { _resumeLocal.value = it }
         }
     }
 
     /** Whether shuffled playback is switched on. */
     private val _shuffle = MutableStateFlow(false)
     val shuffle: StateFlow<Boolean> = _shuffle.asStateFlow()
+
+    /** Whether local files resume (podcasts and provider tracks always do). */
+    private val _resumeLocal = MutableStateFlow(false)
 
 
     /**
@@ -320,12 +324,14 @@ class PlayerConnection(
             hasNext = if (ring) true else nav.size > 1 && navIdx in 0 until nav.lastIndex,
         )
 
-        // Episode positions are written from here because this is the only
+        // Track positions are written from here because this is the only
         // place that already holds both the station and the player's clock.
-        // Throttled to [PROGRESS_INTERVAL]: sync runs twice a second, and an
-        // episode does not need committing to disk twenty times a minute.
+        // Throttled to [PROGRESS_INTERVAL]: sync runs twice a second, and a
+        // track does not need committing to disk twenty times a minute.
         val playingNow = PlaybackBus.station.value
-        if (playingNow != null && playingNow.source == StationSource.Podcast && c.isPlaying) {
+        if (playingNow != null && playingNow.isTrack && c.isPlaying &&
+            (playingNow.source != StationSource.Local || _resumeLocal.value)
+        ) {
             val now = System.currentTimeMillis()
             val position = c.currentPosition
             if (position > 0 && now - lastProgressWrite >= PROGRESS_INTERVAL) {
@@ -695,9 +701,13 @@ class PlayerConnection(
      * have no saved position, so this is 0 for everything but podcasts and the
      * lookup is skipped entirely for them.
      */
-    private suspend fun resumeAt(station: Station): Long =
-        if (station.source != StationSource.Podcast) 0L
-        else resumeLookup?.invoke(station) ?: 0L
+    private suspend fun resumeAt(station: Station): Long {
+        if (!station.isTrack) return 0L
+        // Local files only resume when the user asked them to; podcasts and
+        // provider tracks always do.
+        if (station.source == StationSource.Local && !_resumeLocal.value) return 0L
+        return resumeLookup?.invoke(station) ?: 0L
+    }
 
     private suspend fun buildItem(station: Station): MediaItem =
         withContext(Dispatchers.Default) {

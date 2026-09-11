@@ -133,6 +133,8 @@ fun CliampRoot(
     val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
     val reconnect by PlaybackBus.reconnectAttempt.collectAsState()
     val providerAccounts by providers.accounts.collectAsState(initial = emptyList())
+    val progress by podcasts.progress.collectAsState(initial = emptyMap())
+    val resumeLocal by prefs.resumeLocal.collectAsState(initial = false)
 
     player.setFallbackSource(recent)
 
@@ -440,6 +442,8 @@ fun CliampRoot(
                             onBack = { navController.popBackStack() },
                             onOpenSearch = { navController.navigate(Search) },
                             onOpenSettings = { navController.navigate(Settings) },
+                            progress = progress,
+                            showResume = resumeLocal,
                         )
                     }
                 }
