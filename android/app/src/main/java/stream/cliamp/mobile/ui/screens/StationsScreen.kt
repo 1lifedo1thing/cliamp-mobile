@@ -39,9 +39,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -617,11 +620,16 @@ fun customStation(name: String, rawUrl: String): Station? {
     return Station(id = "custom:$fixed", name = label, url = fixed, source = StationSource.Custom)
 }
 
-/** Name + URL form for a hand-added station, opened by the header plus key. */
+/** Name + URL form for a hand-added station, opened by the header plus key.
+ * Fields wear the provider wizard's FieldRow styling exactly (label row with
+ * optional marker, trackTitleSmall entry, hairline underline that accents on
+ * focus); the outer 8dp keeps them on the rows' gutter inside the grid page.
+ * One form serves both the All and the Custom views, so both match. */
 @Composable
 private fun CustomAddForm(onAdd: (String, String) -> Unit, onCancel: () -> Unit) {
     var name by rememberSaveable { mutableStateOf("") }
     var url by rememberSaveable { mutableStateOf("") }
+    val focus = LocalFocusManager.current
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
         fun save() {
             if (customStation(name, url) == null) return
@@ -629,20 +637,26 @@ private fun CustomAddForm(onAdd: (String, String) -> Unit, onCancel: () -> Unit)
             name = ""
             url = ""
         }
-        CliampTextField(
+        CustomField(
+            label = "name",
+            optional = true,
             value = name,
-            onValueChange = { name = it },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            placeholder = "name (optional)",
+            onValue = { name = it },
+            placeholder = "name",
+            keyboard = KeyboardType.Text,
             imeAction = ImeAction.Next,
+            autoFocus = true,
+            onAction = { focus.moveFocus(FocusDirection.Next) },
         )
-        CliampTextField(
+        CustomField(
+            label = "stream url",
+            optional = false,
             value = url,
-            onValueChange = { url = it },
-            modifier = Modifier.fillMaxWidth(),
+            onValue = { url = it },
             placeholder = "stream url",
-            keyboardType = KeyboardType.Uri,
+            keyboard = KeyboardType.Uri,
             imeAction = ImeAction.Go,
+            autoFocus = false,
             onAction = ::save,
         )
         Row(
@@ -653,6 +667,50 @@ private fun CustomAddForm(onAdd: (String, String) -> Unit, onCancel: () -> Unit)
             Chip("cancel", selected = false, onClick = onCancel)
             Chip("save", url.isNotBlank(), onClick = ::save)
         }
+    }
+}
+
+/** One provider-wizard-style field row: label (+ optional marker), entry,
+ * and the hairline underline that accents while focused. */
+@Composable
+private fun CustomField(
+    label: String,
+    optional: Boolean,
+    value: String,
+    onValue: (String) -> Unit,
+    placeholder: String,
+    keyboard: KeyboardType,
+    imeAction: ImeAction,
+    autoFocus: Boolean,
+    onAction: () -> Unit,
+) {
+    val p = LocalPalette.current
+    var focused by remember { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Mono(label, CliampType.rowSecondary, if (focused) p.accent else p.inkTertiary)
+            if (optional) Mono("optional", CliampType.meta, p.inkFaint)
+        }
+        CliampTextField(
+            value = value,
+            onValueChange = onValue,
+            modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+            placeholder = placeholder,
+            textStyle = CliampType.trackTitleSmall,
+            keyboardType = keyboard,
+            imeAction = imeAction,
+            autoFocus = autoFocus,
+            onAction = onAction,
+        )
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(if (focused) 2.dp else 1.dp)
+                .background(if (focused) p.accent else p.hairline)
+        )
     }
 }
 
