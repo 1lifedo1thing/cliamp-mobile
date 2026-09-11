@@ -623,11 +623,12 @@ class PlayerConnection(
      * nothing to reorder, so only the flag flips.
      */
     fun toggleShuffle() {
-        // Pure-flip plus a Media3 queue rebuild. Both the model and the player
-        // are rebuilt together from the new order so sync() never sees a
+        // Model reorder plus a seamless Media3 head/tail swap. Both the model
+        // and the player end up on the new order so sync() never sees a
         // mismatch (a mismatch is what made a cardboard shuffle either only
         // reach the loaded window - "a few random songs" - or show one song
-        // while playing another).
+        // while playing another) - but the audible item itself is never
+        // touched, so there is no rebuffer or seek either.
         val newOn = !_shuffle.value
         val c = controller
         if (c == null || _source.isEmpty()) { _shuffle.value = newOn; sync(); return }
@@ -667,42 +668,132 @@ class PlayerConnection(
             _source = base
         }
 
-        // Rebuild Media3 to match the model so the loaded queue, the panel and
-        // the audio always agree, for short lists and huge windowed ones alike.
-        // Cancel any in-flight window roll first: a delayed roll resuming on top
-        // of the just-rebuilt window would rewrite Media3 again and snap the
-        // audio to a wrong (repeated) song - the same hazard a manual prev/next
-        // guards against by cancelling [_extending].
+        // Re-anchor the model immediately so the panel shows the new order
+        // instantly - the same reason the stations path feels smooth. The
+        // Media3 tail is then swapped around the still-playing item below,
+        // without touching it, so there is no rebuffer or seek.
         _extending?.cancel()
         _extending = null
         _shuffleJob?.cancel()
-        _shuffleJob = scope.launch(Dispatchers.Main) {
-            val p = controller ?: return@launch
-            ensureActive()
-            val src = _source
-            val absJ = src.indexOfFirst { it.url == current.url }.coerceAtLeast(0)
-            windowBase = if (src.size > WINDOW) absJ else 0
-            val slice = sliceAt(src, absJ)
-            _queue.value = slice
-            val idx = (absJ - windowBase).coerceIn(0, slice.lastIndex.coerceAtLeast(0))
-            _queueIndex.value = idx
-            if (slice.all { it.isTrack } && slice.size > 1) {
-                swapping = true
-                try {
-                    ensureActive()
-                    val items = slice.map { buildItem(it) }
-                    val pos = p.currentPosition.coerceAtLeast(0)
-                    p.setMediaItems(items, idx.coerceIn(0, items.lastIndex), pos)
-                } finally {
-                    swapping = false
-                }
-            }
+        _shuffleJob = null
+        val src = _source
+        val absJ = src.indexOfFirst { it.url == current.url }.coerceAtLeast(0)
+        windowBase = if (src.size > WINDOW) absJ else 0
+        val slice = sliceAt(src, absJ)
+        _queue.value = slice
+        val idx = (absJ - windowBase).coerceIn(0, slice.lastIndex.coerceAtLeast(0))
+        _queueIndex.value = idx
+        if (!(slice.all { it.isTrack } && slice.size > 1)) {
             // Anything else keeps the single-item shape play() gave it, and
             // that item is the current station itself: reordering the model
             // IS the shuffle, and swapping Media3 would only rebuffer the
             // same stream (plus resolve dozens of stations for nothing).
-            ensureActive()
             sync()
+            return
+        }
+        // Track playlist: keep the audible item playing exactly where it is
+        // and only swap the items around it - the stations equivalent of
+        // "reordering the model IS the shuffle". The old code rebuilt the
+        // whole Media3 queue with setMediaItems(..., pos), which threw away
+        // the current decoder and reloaded the same song from `pos`: an
+        // audible gap plus up to WINDOW item resolves on the main thread.
+        // Removing/adding only head and tail leaves the current item (and
+        // its position) untouched, so toggling shuffle never interrupts.
+        swapping = true
+        val currentId = current.id
+        _shuffleJob = scope.launch(Dispatchers.Main) {
+            try {
+                ensureActive()
+                var anchorId = currentId
+                var anchorSlice = slice
+                var anchorIdx = idx
+                // Build neighbours off the main thread: resolving + artwork
+                // per item is what made the old toggle jank on long lists.
+                var headItems = withContext(Dispatchers.Default) {
+                    anchorSlice.subList(0, anchorIdx).map { buildItem(it) }
+                }
+                ensureActive()
+                var tailItems = withContext(Dispatchers.Default) {
+                    anchorSlice.subList(anchorIdx + 1, anchorSlice.size).map { buildItem(it) }
+                }
+                ensureActive()
+                var p = controller ?: return@launch
+                if (p.mediaItemCount == 0) {
+                    val all = withContext(Dispatchers.Default) {
+                        anchorSlice.map { buildItem(it) }
+                    }
+                    ensureActive()
+                    p.setMediaItems(all, anchorIdx.coerceIn(0, all.lastIndex), 0L)
+                    ensureActive()
+                    sync()
+                    return@launch
+                }
+                // The track may have rolled forward while the tail was
+                // building; re-anchor on what is actually audible rather than
+                // swapping a stale tail around the wrong song.
+                var pi = p.currentMediaItemIndex.coerceIn(0, p.mediaItemCount - 1)
+                var audibleNow = p.getMediaItemAt(pi).mediaId
+                if (audibleNow != anchorId) {
+                    val retry = _source.firstOrNull { it.id == audibleNow }
+                    if (retry != null) {
+                        anchorId = retry.id
+                        val abs2 = _source.indexOfFirst { it.url == retry.url }.coerceAtLeast(0)
+                        windowBase = if (_source.size > WINDOW) abs2 else 0
+                        anchorSlice = sliceAt(_source, abs2)
+                        _queue.value = anchorSlice
+                        anchorIdx = (abs2 - windowBase).coerceIn(0, anchorSlice.lastIndex.coerceAtLeast(0))
+                        _queueIndex.value = anchorIdx
+                        headItems = withContext(Dispatchers.Default) {
+                            anchorSlice.subList(0, anchorIdx).map { buildItem(it) }
+                        }
+                        ensureActive()
+                        tailItems = withContext(Dispatchers.Default) {
+                            anchorSlice.subList(anchorIdx + 1, anchorSlice.size).map { buildItem(it) }
+                        }
+                        ensureActive()
+                        p = controller ?: return@launch
+                        if (p.mediaItemCount == 0) {
+                            val all = withContext(Dispatchers.Default) {
+                                anchorSlice.map { buildItem(it) }
+                            }
+                            ensureActive()
+                            p.setMediaItems(all, anchorIdx.coerceIn(0, all.lastIndex), p.currentPosition.coerceAtLeast(0))
+                            ensureActive()
+                            sync()
+                            return@launch
+                        }
+                        pi = p.currentMediaItemIndex.coerceIn(0, p.mediaItemCount - 1)
+                        audibleNow = p.getMediaItemAt(pi).mediaId
+                        if (audibleNow != anchorId) return@launch
+                    } else {
+                        return@launch
+                    }
+                }
+                // Tail first: the current index is unaffected, so `pi` stays
+                // valid for the head swap that follows.
+                val tailCount = p.mediaItemCount
+                if (pi + 1 < tailCount || tailItems.isNotEmpty()) {
+                    ensureActive()
+                    if (pi + 1 < tailCount) p.removeMediaItems(pi + 1, tailCount)
+                    ensureActive()
+                    if (tailItems.isNotEmpty()) p.addMediaItems(pi + 1, tailItems)
+                }
+                ensureActive()
+                // Head second: removing shifts the current item to 0, adding
+                // the new head slides it to its shuffled index - playback of
+                // the untouched current item continues throughout.
+                if (pi > 0 || headItems.isNotEmpty()) {
+                    ensureActive()
+                    if (pi > 0) p.removeMediaItems(0, pi)
+                    ensureActive()
+                    if (headItems.isNotEmpty()) p.addMediaItems(0, headItems)
+                }
+                ensureActive()
+                sync()
+            } finally {
+                if (_shuffleJob === coroutineContext[Job]) swapping = false
+                else if (_shuffleJob == null) swapping = false
+            }
         }
     }
 
