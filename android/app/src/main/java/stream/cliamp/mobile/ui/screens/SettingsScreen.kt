@@ -1,7 +1,5 @@
 package stream.cliamp.mobile.ui.screens
 
-import android.appwidget.AppWidgetManager
-import android.content.ComponentName
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,7 +35,6 @@ import stream.cliamp.mobile.BuildConfig
 import stream.cliamp.mobile.R
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Repository
-import stream.cliamp.mobile.widget.CliampWidgetProvider
 import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampToggle
@@ -168,26 +165,6 @@ fun SettingsScreen(
                 onSelect = { scope.launch { prefs.setPalette(key) } },
             )
         }
-
-        SectionLabel("home screen")
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .microPress {
-                    val mgr = AppWidgetManager.getInstance(context)
-                    val provider = ComponentName(context, CliampWidgetProvider::class.java)
-                    if (mgr.isRequestPinAppWidgetSupported) {
-                        mgr.requestPinAppWidget(provider, null, null)
-                    }
-                }
-                .padding(horizontal = Gutter, vertical = 13.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Mono("Add widget", CliampType.rowPrimaryMedium, p.ink)
-            Mono("+", CliampType.rowPrimary, p.accent)
-        }
-        HairlineDivider()
 
         SectionLabel("storage")
         InfoRow("Favourites", "${favorites.size} stations")
