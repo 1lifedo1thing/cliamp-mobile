@@ -573,9 +573,21 @@ class PlayerConnection(
         // so the consumer side of sync() is safe to resume.
         swapping = true
         try {
-            val items = slice.map { buildItem(it) }
-            val startAt = slice.getOrNull(index)?.let { resumeAt(it) } ?: 0L
-            c.setMediaItems(items, index.coerceIn(0, items.lastIndex), startAt)
+            // Tracks ride a real multi-item window so they auto-advance and
+            // seek in place. Anything else (live radio, mixed walls) loads
+            // exactly the audible item - same as play()'s single-item path -
+            // so a next/prev never resolves dozens of streams and artworks it
+            // will never play. The [_queue] mirror above still holds the whole
+            // window, so the panel, the widget ring and the anchors keep
+            // walking the full list either way.
+            if (slice.all { it.isTrack } && slice.size > 1) {
+                val items = slice.map { buildItem(it) }
+                val startAt = slice.getOrNull(index)?.let { resumeAt(it) } ?: 0L
+                c.setMediaItems(items, index.coerceIn(0, items.lastIndex), startAt)
+            } else {
+                val target = slice.getOrNull(index) ?: return
+                c.setMediaItems(listOf(buildItem(target)), 0, resumeAt(target))
+            }
         } finally {
             swapping = false
         }
@@ -666,22 +678,29 @@ class PlayerConnection(
         _shuffleJob?.cancel()
         _shuffleJob = scope.launch(Dispatchers.Main) {
             val p = controller ?: return@launch
-            swapping = true
-            try {
-                ensureActive()
-                val src = _source
-                val absJ = src.indexOfFirst { it.url == current.url }.coerceAtLeast(0)
-                windowBase = if (src.size > WINDOW) absJ else 0
-                val slice = sliceAt(src, absJ)
-                _queue.value = slice
-                val idx = (absJ - windowBase).coerceIn(0, slice.lastIndex.coerceAtLeast(0))
-                _queueIndex.value = idx
-                val items = slice.map { buildItem(it) }
-                val pos = p.currentPosition.coerceAtLeast(0)
-                p.setMediaItems(items, idx.coerceIn(0, items.lastIndex), pos)
-            } finally {
-                swapping = false
+            ensureActive()
+            val src = _source
+            val absJ = src.indexOfFirst { it.url == current.url }.coerceAtLeast(0)
+            windowBase = if (src.size > WINDOW) absJ else 0
+            val slice = sliceAt(src, absJ)
+            _queue.value = slice
+            val idx = (absJ - windowBase).coerceIn(0, slice.lastIndex.coerceAtLeast(0))
+            _queueIndex.value = idx
+            if (slice.all { it.isTrack } && slice.size > 1) {
+                swapping = true
+                try {
+                    ensureActive()
+                    val items = slice.map { buildItem(it) }
+                    val pos = p.currentPosition.coerceAtLeast(0)
+                    p.setMediaItems(items, idx.coerceIn(0, items.lastIndex), pos)
+                } finally {
+                    swapping = false
+                }
             }
+            // Anything else keeps the single-item shape play() gave it, and
+            // that item is the current station itself: reordering the model
+            // IS the shuffle, and swapping Media3 would only rebuffer the
+            // same stream (plus resolve dozens of stations for nothing).
             ensureActive()
             sync()
         }
