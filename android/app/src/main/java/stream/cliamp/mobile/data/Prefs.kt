@@ -80,6 +80,7 @@ class Prefs(private val context: Context) {
         val haptics = booleanPreferencesKey("haptics")
         val visualizer = stringPreferencesKey("visualizer")     // spectrum | scope | off
         val cellular = booleanPreferencesKey("cellular")
+        val mono = booleanPreferencesKey("mono")
         val bufferSeconds = intPreferencesKey("buffer_seconds")
         val eqEnabled = booleanPreferencesKey("eq_enabled")
         val eqPreset = stringPreferencesKey("eq_preset")
@@ -111,6 +112,8 @@ class Prefs(private val context: Context) {
     val haptics: Flow<Boolean> = context.settingsStore.data.map { it[K.haptics] ?: true }
     val visualizer: Flow<String> = context.settingsStore.data.map { it[K.visualizer] ?: "spectrum" }
     val cellular: Flow<Boolean> = context.settingsStore.data.map { it[K.cellular] ?: true }
+    /** Stereo folds to dual mono; one dead earbud never loses half the mix. */
+    val mono: Flow<Boolean> = context.settingsStore.data.map { it[K.mono] ?: false }
     /** ListenBrainz user token, encrypted at rest like provider secrets. Blank until pasted. */
     val listenBrainzToken: Flow<String> = context.settingsStore.data.map { p ->
         p[K.lbToken]?.let { runCatching { SecretStore.decrypt(it) }.getOrNull() }.orEmpty()
@@ -257,6 +260,7 @@ class Prefs(private val context: Context) {
     suspend fun setHaptics(v: Boolean) = put(K.haptics, v)
     suspend fun setVisualizer(v: String) = put(K.visualizer, v)
     suspend fun setCellular(v: Boolean) = put(K.cellular, v)
+    suspend fun setMono(v: Boolean) = put(K.mono, v)
     suspend fun listenBrainzTokenSync(): String = listenBrainzToken.first()
     suspend fun setListenBrainzToken(v: String) = put(K.lbToken, SecretStore.encrypt(v))
     suspend fun setBufferSeconds(v: Int) = put(K.bufferSeconds, v)

@@ -17,8 +17,13 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.common.audio.ChannelMixingAudioProcessor
+import androidx.media3.common.audio.ChannelMixingMatrix
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.metadata.icy.IcyHeaders
 import androidx.media3.extractor.metadata.icy.IcyInfo
@@ -64,6 +69,53 @@ class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
     private lateinit var player: ExoPlayer
     private val fx = AudioFx(bands = SPECTRUM_BANDS)
+
+    /**
+     * Mono downmix through Media3's own channel mixer - no hand-rolled buffer
+     * math. Stereo folds to dual mono (the average in both ears) so channel
+     * counts never change and the AudioTrack never reconfigures; anything
+     * else wears an identity matrix, which the mixer treats as inactive
+     * passthrough. Matrices are pure state on the mixer, so the key flips
+     * live with no rebuild and no gap.
+     */
+    private val mixer = ChannelMixingAudioProcessor().also { m ->
+        for (n in 1..8) m.putChannelMixingMatrix(identityMatrix(n))
+    }
+
+    /** Last channel count seen, so the toggle reapplies without a format event. */
+    @Volatile private var mixerChannels = 2
+
+    /** The settings key, mirrored here because the format listener is sync. */
+    @Volatile private var monoOn = false
+
+    /** Stereo averages to dual mono while on; everything else is identity. */
+    private fun applyMonoMatrix() {
+        val n = mixerChannels.coerceIn(1, 8)
+        mixer.putChannelMixingMatrix(
+            if (monoOn && n == 2) ChannelMixingMatrix(2, 2, floatArrayOf(0.5f, 0.5f, 0.5f, 0.5f))
+            else identityMatrix(n)
+        )
+    }
+
+    /**
+     * The stock audio sink plus the mixer. Byte-for-byte the default chain
+     * otherwise - verified against DefaultRenderersFactory.buildAudioSink,
+     * which is exactly Builder + these two flags.
+     */
+    private fun renderersFactory(): DefaultRenderersFactory {
+        val sinkMixer = mixer
+        return object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean,
+            ): AudioSink = DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioOutputPlaybackParameters(enableAudioTrackPlaybackParams)
+                .setAudioProcessors(arrayOf(sinkMixer))
+                .build()
+        }
+    }
     @Volatile private var spectrumWanted = true
     private var artworkJob: kotlinx.coroutines.Job? = null
     private var reconnector: Reconnector? = null
@@ -105,7 +157,7 @@ class PlaybackService : MediaSessionService() {
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
-        player = ExoPlayer.Builder(this)
+        player = ExoPlayer.Builder(this, renderersFactory())
             .setMediaSourceFactory(sources)
             .setLoadControl(load)
             .setWakeMode(C.WAKE_MODE_NETWORK)
@@ -127,6 +179,15 @@ class PlaybackService : MediaSessionService() {
 
         player.addListener(PlayerEvents())
         player.addAnalyticsListener(FormatEvents())
+
+        // The mono key flips a matrix, not the chain; the format listener
+        // below re-anchors it per stream so exotic channel counts stay safe.
+        scope.launch {
+            prefs0.mono.collect {
+                monoOn = it
+                applyMonoMatrix()
+            }
+        }
 
         reconnector = Reconnector(this, player, scope) { retrying, attempt ->
             PlaybackBus.publishReconnect(if (retrying) attempt else 0)
@@ -607,6 +668,10 @@ class PlaybackService : MediaSessionService() {
             format: Format,
             decoderReuseEvaluation: androidx.media3.exoplayer.DecoderReuseEvaluation?,
         ) {
+            format.channelCount.takeIf { it > 0 }?.let {
+                mixerChannels = it
+                applyMonoMatrix()
+            }
             PlaybackBus.publishFormat(
                 StreamFormat(
                     bitrateKbps = if (format.bitrate != Format.NO_VALUE) format.bitrate / 1000 else 0,
@@ -687,3 +752,7 @@ private class OxideNotificationProvider(context: Context) :
         const val ACCENT = 0xFFD15D4D.toInt()
     }
 }
+
+/** An N-to-N diagonal of ones: the mixer's spelling of passthrough. */
+private fun identityMatrix(n: Int): ChannelMixingMatrix =
+    ChannelMixingMatrix(n, n, FloatArray(n * n) { i -> if (i % (n + 1) == 0) 1f else 0f })

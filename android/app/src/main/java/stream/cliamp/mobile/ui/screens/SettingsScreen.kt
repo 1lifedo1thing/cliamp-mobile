@@ -109,6 +109,7 @@ fun SettingsScreen(
     val haptics by prefs.haptics.collectAsState(initial = true)
     val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
     val cellular by prefs.cellular.collectAsState(initial = true)
+    val mono by prefs.mono.collectAsState(initial = false)
     val buffer by prefs.bufferSeconds.collectAsState(initial = 20)
     val autoResume by prefs.autoResume.collectAsState(initial = false)
     val autoDownload by prefs.autoDownload.collectAsState(initial = false)
@@ -155,6 +156,11 @@ fun SettingsScreen(
             title = "Stream over cellular",
             checked = cellular,
             onChange = { scope.launch { prefs.setCellular(it) } },
+        )
+        ToggleRow(
+            title = "Mono downmix",
+            checked = mono,
+            onChange = { scope.launch { prefs.setMono(it) } },
         )
         Column(Modifier.padding(horizontal = Gutter, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
