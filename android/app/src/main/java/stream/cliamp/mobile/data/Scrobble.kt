@@ -120,3 +120,30 @@ private data class TrackMetadata(
     val trackName: String,
     val releaseName: String? = null,
 )
+
+@kotlinx.serialization.Serializable
+private data class TokenCheck(
+    val valid: Boolean = false,
+    val userName: String? = null,
+)
+
+/**
+ * The wizard's TEST: asks ListenBrainz whether [token] is theirs, returning
+ * the username on success. Nothing is saved until this succeeds, the same
+ * rule every provider probe follows.
+ */
+suspend fun validateListenBrainzToken(token: String): Result<String> = runCatching {
+    val raw = try {
+        Http.text(
+            "https://api.listenbrainz.org/1/validate-token?token=$token",
+            emptyMap(),
+        )
+    } catch (e: IllegalStateException) {
+        // Http.text raises non-2xx as "HTTP ...": a dead token, while a dead
+        // network arrives as an IOException and keeps its own message.
+        throw IllegalStateException("token rejected")
+    }
+    val check = Http.json.decodeFromString(TokenCheck.serializer(), raw)
+    if (!check.valid) throw IllegalStateException("token rejected")
+    check.userName?.takeIf { it.isNotBlank() } ?: "listenbrainz"
+}

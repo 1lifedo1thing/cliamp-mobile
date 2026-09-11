@@ -19,14 +19,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,7 +38,7 @@ import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
-import stream.cliamp.mobile.ui.components.CliampTextField
+import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampToggle
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.scrollToTop
@@ -69,6 +66,7 @@ fun SettingsScreen(
     repository: Repository,
     onBack: () -> Unit,
     onOpenSearch: () -> Unit = {},
+    onOpenScrobble: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -141,10 +139,21 @@ fun SettingsScreen(
         HairlineDivider()
 
         SectionLabel("scrobble")
-        ScrobbleTokenRow(
-            token = lbToken,
-            onSave = { scope.launch { prefs.setListenBrainzToken(it) } },
-        )
+        Row(
+            Modifier.fillMaxWidth().microPress { onOpenScrobble() }
+                .padding(horizontal = Gutter, vertical = 13.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Mono("ListenBrainz", CliampType.rowPrimaryMedium, p.ink)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Mono(
+                    if (lbToken.isBlank()) "off" else "on",
+                    CliampType.meta, if (lbToken.isBlank()) p.inkFaint else p.accent,
+                )
+                Icon(CliampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary)
+            }
+        }
         HairlineDivider()
 
         SectionLabel("feel")
@@ -253,52 +262,6 @@ private fun ToggleRow(title: String, checked: Boolean, onChange: (Boolean) -> Un
             Mono(title, CliampType.rowPrimaryMedium, p.ink, Modifier.weight(1f))
             CliampToggle(checked, onChange)
         }
-        Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
-    }
-}
-
-/**
- * ListenBrainz user token: pasted once, encrypted at rest, blank means
- * local counts only. Plays always count locally; the token only adds the
- * network scrobble.
- */
-@Composable
-private fun ScrobbleTokenRow(token: String, onSave: (String) -> Unit) {
-    val p = LocalPalette.current
-    var text by remember { mutableStateOf("") }
-    LaunchedEffect(token) {
-        if (text.isEmpty() && token.isNotBlank()) text = token
-    }
-    Column {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Mono("ListenBrainz token", CliampType.rowPrimaryMedium, p.ink, Modifier.weight(1f))
-            Mono(
-                if (token.isBlank()) "off" else "on",
-                CliampType.meta, if (token.isBlank()) p.inkFaint else p.accent,
-            )
-        }
-        CliampTextField(
-            value = text,
-            onValueChange = { text = it.trim() },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = Gutter),
-            placeholder = "paste user token",
-            onAction = { onSave(text) },
-        )
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 10.dp),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            Chip("save", text.isNotBlank() && text != token, onClick = { onSave(text) })
-        }
-        Mono(
-            "plays count locally either way · a token also scrobbles them",
-            CliampType.meta, p.inkFaint,
-            Modifier.padding(start = Gutter, end = Gutter, bottom = 12.dp),
-        )
         Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
     }
 }

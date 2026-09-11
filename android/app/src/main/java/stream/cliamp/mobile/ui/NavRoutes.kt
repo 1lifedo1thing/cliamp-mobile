@@ -19,6 +19,8 @@ import kotlinx.serialization.Serializable
 @Serializable data class ProviderBrowse(val accountId: String)
 @Serializable data class ProviderWizardRoute(val providerKey: String, val accountId: String = "")
 
+@Serializable data object ScrobbleWizard
+
 @Serializable data class PodcastShowRoute(val podcastId: String)
 
 @Serializable data object LibraryProviders

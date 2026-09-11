@@ -65,6 +65,7 @@ import stream.cliamp.mobile.ui.screens.PodcastShowScreen
 import stream.cliamp.mobile.ui.screens.PodcastsScreen
 import stream.cliamp.mobile.ui.screens.QueueScreen
 import stream.cliamp.mobile.ui.screens.ScopeScreen
+import stream.cliamp.mobile.ui.screens.ScrobbleWizard as ScrobbleWizardScreen
 import stream.cliamp.mobile.data.provider.ProviderCatalog
 import stream.cliamp.mobile.data.provider.ProviderStore
 import stream.cliamp.mobile.ui.screens.ProviderBrowseScreen
@@ -522,6 +523,7 @@ fun CliampRoot(
                         repository = repository,
                         onBack = { navController.popBackStack() },
                         onOpenSearch = { navController.navigate(Search) },
+                        onOpenScrobble = { navController.navigate(ScrobbleWizard) },
                     )
                 }
             }
@@ -611,6 +613,19 @@ fun CliampRoot(
                         },
                     )
                     }
+                }
+            }
+            composable<ScrobbleWizard> {
+                val token by prefs.listenBrainzToken.collectAsState(initial = "")
+                OverlayCover {
+                    ScrobbleWizardScreen(
+                        existingToken = token,
+                        onCancel = { navController.popBackStack() },
+                        onSave = { t ->
+                            scope.launch { prefs.setListenBrainzToken(t) }
+                            navController.popBackStack()
+                        },
+                    )
                 }
             }
         }
