@@ -1,6 +1,7 @@
 package stream.cliamp.mobile
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -11,6 +12,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -21,6 +24,21 @@ import stream.cliamp.mobile.ui.theme.paletteFor
 
 @UnstableApi
 class MainActivity : ComponentActivity() {
+
+    companion object {
+        /** Action + extra the search widget sends to open the Search page. */
+        const val ACTION_OPEN_SEARCH = "stream.cliamp.mobile.OPEN_SEARCH"
+        const val EXTRA_OPEN_SEARCH = "open_search"
+    }
+
+    /** Bumped every time an intent asks for Search (cold start + taps while
+     * running - the activity is singleTask so the latter arrives via
+     * onNewIntent). Observed by CliampRoot, which navigates to Search. */
+    private var openSearchTick by mutableIntStateOf(0)
+
+    private fun wantsSearch(intent: Intent?): Boolean =
+        intent?.getBooleanExtra(EXTRA_OPEN_SEARCH, false) == true ||
+            intent?.action == ACTION_OPEN_SEARCH
 
     private val permissions = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -49,6 +67,8 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        if (wantsSearch(intent)) openSearchTick++
 
         val app = application as CliampApp
         app.player.connect()
@@ -96,8 +116,15 @@ class MainActivity : ComponentActivity() {
                     providers = app.providers,
                     podcasts = app.podcasts,
                     dark = dark,
+                    openSearchTick = openSearchTick,
                 )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (wantsSearch(intent)) openSearchTick++
     }
 }

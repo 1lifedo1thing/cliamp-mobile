@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -102,12 +103,17 @@ fun CliampRoot(
     providers: ProviderStore,
     podcasts: PodcastRepository,
     dark: Boolean,
+    /** Bumped by MainActivity whenever the search widget (or any
+     * OPEN_SEARCH intent) asks for the Search page. */
+    openSearchTick: Int = 0,
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
     val navController = rememberNavController()
 
-    var tab by remember { mutableStateOf(Tab.Stations) }
+    // The active tab, or null when a search-widget launch started directly
+    // on Search: no tab has been visited yet, so none reads as selected.
+    var tab by remember { mutableStateOf<Tab?>(if (openSearchTick > 0) null else Tab.Stations) }
     var focusDirectory by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     // True for a beat after any tab-bar tap: pop transitions go flat so a
@@ -129,6 +135,22 @@ fun CliampRoot(
     val providerAccounts by providers.accounts.collectAsState(initial = emptyList())
 
     player.setFallbackSource(recent)
+
+    // Search-widget deep link while running: any OPEN_SEARCH tick opens the
+    // Search overlay, unless it is already on top. launchSingleTop keeps
+    // rapid double-taps from stacking two copies. The cold-start case needs
+    // no navigation: the NavHost below starts directly on Search, so there
+    // is no one-frame flash of Stations first.
+    LaunchedEffect(openSearchTick) {
+        if (openSearchTick > 0) {
+            val route = navController.currentDestination?.route
+            if (route?.startsWith(Search::class.qualifiedName!!) != true) {
+                navController.navigate(Search) {
+                    launchSingleTop = true
+                }
+            }
+        }
+    }
 
     val onPlay: (Station, List<Station>) -> Unit = { s, from ->
         player.play(s, from)
@@ -159,30 +181,42 @@ fun CliampRoot(
             // popped inclusive with its state saved - so the new tab is the
             // only graph on the stack. Back on any tab root then has nothing
             // to pop and exits natively, the way the start tab always did.
-            val currentRoot = when (tab) {
-                Tab.Stations -> StationsRoot
-                Tab.Pods -> PodcastsRoot
-                Tab.Lib -> LibraryRoot
-            }
-            val currentGraphRoute = when (tab) {
-                Tab.Stations -> StationsTab::class.qualifiedName!!
-                Tab.Pods -> PodcastsTab::class.qualifiedName!!
-                Tab.Lib -> LibraryTab::class.qualifiedName!!
-            }
-            navController.popBackStack(currentRoot, false)
+            //
+            // Null means a search-widget launch is sitting on Search with no
+            // tab visited yet: drop it and enter the picked tab fresh.
+            val prev = tab
             tab = newTab
             val dest = when (newTab) {
                 Tab.Stations -> StationsTab
                 Tab.Pods -> PodcastsTab
                 Tab.Lib -> LibraryTab
             }
-            navController.navigate(dest) {
-                popUpTo(currentGraphRoute) {
-                    inclusive = true
-                    saveState = true
+            if (prev == null) {
+                navController.popBackStack()
+                navController.navigate(dest) {
+                    launchSingleTop = true
+                    restoreState = true
                 }
-                launchSingleTop = true
-                restoreState = true
+            } else {
+                val currentRoot = when (prev) {
+                    Tab.Stations -> StationsRoot
+                    Tab.Pods -> PodcastsRoot
+                    Tab.Lib -> LibraryRoot
+                }
+                val currentGraphRoute = when (prev) {
+                    Tab.Stations -> StationsTab::class.qualifiedName!!
+                    Tab.Pods -> PodcastsTab::class.qualifiedName!!
+                    Tab.Lib -> LibraryTab::class.qualifiedName!!
+                }
+                navController.popBackStack(currentRoot, false)
+                navController.navigate(dest) {
+                    popUpTo(currentGraphRoute) {
+                        inclusive = true
+                        saveState = true
+                    }
+                    launchSingleTop = true
+                    restoreState = true
+                }
             }
         }
     }
@@ -267,7 +301,10 @@ fun CliampRoot(
         // slide-out + scale-in transition, finger-driven on a gesture.
         NavHost(
             navController = navController,
-            startDestination = StationsTab,
+            // A search-widget launch starts directly on Search: no one-frame
+            // flash of Stations first. Back from there falls through to the
+            // Stations tab (see the Search onBack below).
+            startDestination = if (openSearchTick > 0) Search else StationsTab,
             // Transparent: the chrome underneath shows through the padded
             // zone; every overlay paints its own opaque cover instead.
             modifier = Modifier.fillMaxSize(),
@@ -512,7 +549,18 @@ fun CliampRoot(
                         navController.popBackStack()
                         switchTab(Tab.Stations)
                     },
-                    onBack = { navController.popBackStack() },
+                    onBack = {
+                        // Normally pops back to the tab underneath. When a
+                        // search-widget launch started directly on Search
+                        // there is nothing to pop: fall through to Stations
+                        // and mark it visited so it reads as selected.
+                        if (!navController.popBackStack()) {
+                            tab = Tab.Stations
+                            navController.navigate(StationsTab) {
+                                launchSingleTop = true
+                            }
+                        }
+                    },
                     query = searchQuery,
                     onQueryChange = { searchQuery = it },
                 )

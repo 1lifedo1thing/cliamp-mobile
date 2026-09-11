@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home-screen search bar: a single tappable row that opens the app's Search
+    page. Every colour is applied at runtime from the palette (white bg shape +
+    white glyph tinted via setColorFilter), so one layout wears every theme.
+    RemoteViews only: FrameLayout / LinearLayout / TextView / ImageView. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/s_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:src="@drawable/widget_bg_root" />
+
+    <LinearLayout
+        android:id="@+id/s_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp">
+
+        <ImageView
+            android:id="@+id/s_icon"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:src="@drawable/ic_w_search" />
+
+        <TextView
+            android:id="@+id/s_hint"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="10dp"
+            android:ellipsize="end"
+            android:fontFamily="monospace"
+            android:maxLines="1"
+            android:singleLine="true"
+            android:text="@string/search_widget_hint"
+            android:textSize="13sp" />
+    </LinearLayout>
+</FrameLayout>

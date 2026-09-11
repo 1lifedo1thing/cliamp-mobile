@@ -4,4 +4,7 @@
     <string name="widget_name">cliamp</string>
     <string name="widget_description">Play, pause and skip stations from the home screen.</string>
     <string name="tile_label">cliamp</string>
+    <string name="search_widget_name">cliamp search</string>
+    <string name="search_widget_description">Search stations, podcasts and library from the home screen.</string>
+    <string name="search_widget_hint">Search stations, podcasts…</string>
 </resources>

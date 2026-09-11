@@ -304,7 +304,7 @@ enum class Tab(val label: String) {    // Play is gone: the full player opens fr
 }
 
 @Composable
-fun CliampTabBar(current: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = Modifier) {
+fun CliampTabBar(current: Tab?, onSelect: (Tab) -> Unit, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Column(modifier.fillMaxWidth().background(p.ground)) {
@@ -360,7 +360,7 @@ private fun Modifier.offsetTopBorder(color: Color) = drawBehind {
  */
 @Composable
 fun CliampTabRail(
-    current: Tab,
+    current: Tab?,
     onSelect: (Tab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
