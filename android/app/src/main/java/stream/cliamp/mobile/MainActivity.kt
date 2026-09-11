@@ -14,6 +14,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -39,6 +41,21 @@ class MainActivity : ComponentActivity() {
     private fun wantsSearch(intent: Intent?): Boolean =
         intent?.getBooleanExtra(EXTRA_OPEN_SEARCH, false) == true ||
             intent?.action == ACTION_OPEN_SEARCH
+
+    /**
+     * A shared URL (or text holding one) becomes a custom station: saved to
+     * the custom list and played straight away, so "share → cliamp" just
+     * tunes in.
+     */
+    private fun handleShare(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND) return
+        val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString().orEmpty()
+        val url = Regex("""https?://\S+""").find(text)?.value?.trimEnd('.', ',', ')') ?: return
+        val station = stream.cliamp.mobile.ui.screens.customStation("", url) ?: return
+        val app = application as CliampApp
+        lifecycleScope.launch { app.prefs.addCustom(station) }
+        app.player.doWhenReady { app.player.play(station, listOf(station)) }
+    }
 
     private val permissions = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -72,6 +89,7 @@ class MainActivity : ComponentActivity() {
 
         val app = application as CliampApp
         app.player.connect()
+        handleShare(intent)
 
         val wanted = buildList {
             // the Visualizer taps the output mix, which the platform treats as
@@ -126,5 +144,6 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (wantsSearch(intent)) openSearchTick++
+        handleShare(intent)
     }
 }
