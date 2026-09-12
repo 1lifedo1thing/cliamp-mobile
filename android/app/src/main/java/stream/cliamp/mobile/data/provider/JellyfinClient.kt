@@ -45,16 +45,6 @@ class JellyfinClient(
         }
     }
 
-    suspend fun libraries(): Result<List<Library>> = withContext(Dispatchers.IO) {
-        runCatching {
-            ensureAuth()
-            val body = Http.text(get("Users/Me/Views"))
-            Http.json.decodeFromString<ItemsResult<LibraryItem>>(body).items
-                .filter { it.collectionType == "music" }
-                .map { Library(it.id, it.name) }
-        }
-    }
-
     /** [style] is one of the Roots in the browse screen (newest / a-z). */
     suspend fun albums(style: String): Result<List<JellyfinAlbum>> = withContext(Dispatchers.IO) {
         runCatching {
@@ -155,35 +145,6 @@ class JellyfinClient(
         }
     }
 
-    suspend fun search(query: String): Result<List<JellyfinTrack>> = withContext(Dispatchers.IO) {
-        runCatching {
-            ensureAuth()
-            val body = Http.text(
-                get(
-                    "Items",
-                    mapOf(
-                        "searchTerm" to query,
-                        "recursive" to "true",
-                        "includeItemTypes" to "Audio",
-                        "sortBy" to "SortName",
-                        "fields" to "RunTimeTicks",
-                    ),
-                )
-            )
-            Http.json.decodeFromString<ItemsResult<JellyfinTrackItem>>(body).items.map {
-                JellyfinTrack(
-                    id = it.id,
-                    title = it.name,
-                    artist = it.artists.firstOrNull().orEmpty(),
-                    album = it.album.orEmpty(),
-                    duration = if (it.runTimeTicks > 0) (it.runTimeTicks / 10_000_000).toInt() else 0,
-                    bitRate = it.bitRate,
-                    suffix = it.container.orEmpty(),
-                )
-            }
-        }
-    }
-
     /**
      * The stream to play: the original file. Jellyfin accepts the token as an
      * `api_key` query parameter (the same route the desktop app uses), so the
@@ -248,15 +209,6 @@ private data class PublicSystemInfo(
     @SerialName("ServerName") val serverName: String = "",
     val version: String = "",
 )
-
-@Serializable
-private data class LibraryItem(
-    val id: String = "",
-    val name: String = "",
-    @SerialName("CollectionType") val collectionType: String = "",
-)
-
-data class Library(val id: String, val name: String)
 
 @Serializable
 private data class AuthenticateResult(

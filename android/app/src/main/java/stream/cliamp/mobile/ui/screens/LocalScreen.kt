@@ -65,12 +65,10 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import stream.cliamp.mobile.CliampApp
 import stream.cliamp.mobile.data.LocalArt
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.LocalLibrary
 import stream.cliamp.mobile.data.PlaylistStore
-import stream.cliamp.mobile.data.PodcastRepository
 import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.data.ShowState
@@ -166,10 +164,7 @@ fun foldersOf(songs: List<Station>): List<SongFolder> {
  */
 @Composable
 fun LocalScreen(
-    localLibrary: LocalLibrary,
-    playlists: PlaylistStore,
-    favorites: List<Station>,
-    recent: List<Station>,
+    vm: LocalViewModel,
     onOpenProviders: () -> Unit = {},
     onOpenSmart: (String) -> Unit = {},
     onOpenPlaylist: (String) -> Unit = {},
@@ -185,13 +180,17 @@ fun LocalScreen(
     var renamingSlug by rememberSaveable { mutableStateOf<String?>(null) }
     var nameText by rememberSaveable { mutableStateOf("") }
 
-    val songs by localLibrary.songs.collectAsState()
-    val loading by localLibrary.loading.collectAsState()
-    val libError by localLibrary.error.collectAsState()
-    val allPlaylists by playlists.playlists.collectAsState(initial = emptyList())
-    val pinnedSlugs by playlists.pinnedSlugs.collectAsState(initial = emptySet())
-    val pinnedPlaylists = allPlaylists.filter { it.station.slug in pinnedSlugs }
-    val unpinnedPlaylists = allPlaylists.filterNot { it.station.slug in pinnedSlugs }
+    val ui by vm.state.collectAsState()
+    val songs = ui.songs
+    val loading = ui.loading
+    val libError = ui.error
+    val allPlaylists = ui.allPlaylists
+    val pinnedPlaylists = ui.pinnedPlaylists
+    val unpinnedPlaylists = ui.unpinnedPlaylists
+    val favorites = ui.favorites
+    val recent = ui.recent
+    val localSort = ui.localSort
+    val fetched = ui.fetched
 
     val audioPerm = if (Build.VERSION.SDK_INT >= 33)
         Manifest.permission.READ_MEDIA_AUDIO
@@ -207,7 +206,7 @@ fun LocalScreen(
     }
 
     LaunchedEffect(haveAudio) {
-        if (haveAudio) localLibrary.refresh()
+        if (haveAudio) vm.onEvent(LocalViewModel.Event.Refresh)
     }
 
     val filtered = songs
@@ -218,11 +217,6 @@ fun LocalScreen(
     // pinned tile collage follows it, so the covers preview the filtered scope.
     // Hoisted to the navigation owner so the list and the smart detail pane
     // stay on the same scope.
-    val prefs = (context.applicationContext as CliampApp).prefs
-    val localSort by prefs.playlistSort("local-songs")
-        .collectAsState(initial = prefs.playlistSortValue("local-songs"))
-    val fetched by prefs.downloads.collectAsState(initial = emptyMap())
-
     // Pinned smart playlists — auto-populated from global state, non-removable.
     // Order is recency first: recently played, downloads, favorites, local songs.
     val smartPlaylists = remember(filtered, favorites, recent, localSort, favScope, fetched) {
@@ -275,11 +269,11 @@ fun LocalScreen(
                     renamingSlug = renamingSlug,
                     editText = nameText,
                     onEditTextChange = { nameText = it },
-                    onCreate = { name -> scope.launch { playlists.create(name) }; creatingName = false },
+                    onCreate = { name -> vm.onEvent(LocalViewModel.Event.Create(name)); creatingName = false },
                     onBeginCreate = { creatingName = true; nameText = "" },
                     onCancel = { creatingName = false; renamingSlug = null },
                     onRename = { slug, name ->
-                        scope.launch { playlists.rename(slug, name) }
+                        vm.onEvent(LocalViewModel.Event.Rename(slug, name))
                         renamingSlug = null
                     },
                     onBeginRename = { slug ->
@@ -287,11 +281,11 @@ fun LocalScreen(
                         nameText = allPlaylists.firstOrNull { it.station.slug == slug }?.station?.name.orEmpty()
                     },
                     onDelete = { slug ->
-                        scope.launch { playlists.delete(slug) }
+                        vm.onEvent(LocalViewModel.Event.Delete(slug))
                         if (renamingSlug == slug) renamingSlug = null
                     },
                     onAddSongs = { slug -> onOpenPlaylist(slug) },
-                    onPin = { slug, pinned -> scope.launch { playlists.setPinned(slug, pinned) } },
+                    onPin = { slug, pinned -> vm.onEvent(LocalViewModel.Event.SetPinned(slug, pinned)) },
                     onOpen = { onOpenPlaylist(it.station.slug) },
                     onOpenSmart = { onOpenSmart(it.kind.name) },
                     loading = loading,
@@ -302,61 +296,18 @@ fun LocalScreen(
     }
 }
 
-/**
- * Shared delete helper: hands the file to the OS delete sheet (or drops it
- * directly on old Android). Only the confirmed case drops the song.
- */
-@Composable
-private fun rememberRemoveLocalSong(
-    localLibrary: LocalLibrary,
-    onGone: (Station) -> Unit = {},
-): (Station) -> Unit {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val prefs = (context.applicationContext as CliampApp).prefs
-    val favorites by prefs.favorites.collectAsState(initial = emptyList())
-    val favoriteUrls = remember(favorites) { favorites.mapTo(HashSet()) { it.url } }
-    var pendingDelete by remember { mutableStateOf<Station?>(null) }
-    val dropLocal: (Station) -> Unit = { s ->
-        scope.launch {
-            localLibrary.removeLocal(s)
-            if (s.url in favoriteUrls) prefs.removeFavorite(s)
-            onGone(s)
-        }
-    }
-    val deleteLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartIntentSenderForResult()
-    ) { res ->
-        pendingDelete?.let { s ->
-            if (res.resultCode == Activity.RESULT_OK) dropLocal(s)
-            pendingDelete = null
-        }
-    }
-    return remember(localLibrary) {
-        { s: Station ->
-            val start = localLibrary.deleteRequest(s)
-            if (start != null) {
-                pendingDelete = s
-                deleteLauncher.launch(IntentSenderRequest.Builder(start).build())
-            } else {
-                dropLocal(s)
-            }
-        }
-    }
-}
-
 /** Providers as a navigation pane: connected accounts, then every addable type. */
 @Composable
 fun LibraryProvidersPane(
-    providers: List<ProviderAccount>,
+    vm: ProvidersPaneViewModel,
     onBack: () -> Unit,
     onOpenProvider: (ProviderAccount) -> Unit,
     onAddProvider: (ProviderSpec) -> Unit,
-    onRemoveProvider: (ProviderAccount) -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
 ) {
     val p = LocalPalette.current
+    val ui by vm.state.collectAsState()
     Box(Modifier.fillMaxSize().background(p.ground)) {
         val scope = rememberCoroutineScope()
         val listState = rememberLazyListState()
@@ -372,10 +323,10 @@ fun LibraryProvidersPane(
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 ProvidersView(
                     listState = listState,
-                    providers = providers,
+                    providers = ui.providers,
                     onOpenProvider = onOpenProvider,
                     onAddProvider = onAddProvider,
-                    onRemoveProvider = onRemoveProvider,
+                    onRemoveProvider = { vm.onEvent(ProvidersPaneViewModel.Event.Remove(it)) },
                 )
             }
         }
@@ -389,14 +340,11 @@ fun LibraryProvidersPane(
  */
 @Composable
 fun LibrarySmartPlaylistPane(
+    vm: SmartPlaylistViewModel,
     kindName: String,
-    localLibrary: LocalLibrary,
     current: Station?,
     playing: Boolean,
-    favorites: List<Station>,
-    recent: List<Station>,
     onPlay: (Station, List<Station>) -> Unit,
-    onToggleFavorite: (Station) -> Unit,
     favScope: FavScope = FavScope.All,
     onFavScopeChange: (FavScope) -> Unit = {},
     onOpenSongInfo: (Station) -> Unit = {},
@@ -405,34 +353,46 @@ fun LibrarySmartPlaylistPane(
     onOpenSettings: () -> Unit = {},
     /** Saved positions by station URL, for the resume readout on local rows. */
     progress: Map<String, EpisodeProgress> = emptyMap(),
-    /** True when local files resume: rows may show their saved position. */
-    showResume: Boolean = false,
 ) {
     val p = LocalPalette.current
-    val context = LocalContext.current
+    val ui by vm.state.collectAsState()
     val kind = remember(kindName) {
         SmartKind.entries.firstOrNull { it.name == kindName }
     }
-    val songs by localLibrary.songs.collectAsState()
-    val loading by localLibrary.loading.collectAsState()
-    val appPrefs = (context.applicationContext as CliampApp).prefs
-    val localSort by appPrefs.playlistSort("local-songs")
-        .collectAsState(initial = appPrefs.playlistSortValue("local-songs"))
-    val fetched by appPrefs.downloads.collectAsState(initial = emptyMap())
-    val removeLocalSong = rememberRemoveLocalSong(localLibrary)
-    val downloads = (context.applicationContext as CliampApp).downloads
+    val songs = ui.songs
+    val loading = ui.loading
+    val localSort = ui.localSort
+    val detailSort = ui.detailSort
+    val fetched = ui.fetched
+    val favorites = ui.favorites
     // Recently-played re-sorts itself on every tap (the tap pushes history),
     // so a live list would jump under the finger and next/prev would chase a
     // moving order. Freeze the view on entry like a normal playlist - the
     // queue then matches exactly what is on screen, and the fresh order lands
     // on return. Other lists stay live; only history reorders on play.
-    val frozenRecent = remember(kindName) { mutableStateOf<List<Station>?>(null) }
-    LaunchedEffect(kindName, recent.isNotEmpty()) {
-        if (kind == SmartKind.RecentlyPlayed && frozenRecent.value == null && recent.isNotEmpty()) {
-            frozenRecent.value = recent
+    // Frozen inside SmartPlaylistViewModel to keep the queue stable.
+    val viewRecent = ui.viewRecent
+    val showResume = ui.resumeLocal
+    var pendingDelete by remember { mutableStateOf<Station?>(null) }
+    val deleteLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { res ->
+        pendingDelete?.let { s ->
+            if (res.resultCode == Activity.RESULT_OK) {
+                vm.onEvent(SmartPlaylistViewModel.Event.DeleteLocal(s))
+            }
+            pendingDelete = null
         }
     }
-    val viewRecent = if (kind == SmartKind.RecentlyPlayed) (frozenRecent.value ?: recent) else recent
+    val removeLocalSong: (Station) -> Unit = { s ->
+        val start = vm.deleteRequest(s)
+        if (start != null) {
+            pendingDelete = s
+            deleteLauncher.launch(IntentSenderRequest.Builder(start).build())
+        } else {
+            vm.onEvent(SmartPlaylistViewModel.Event.DeleteLocal(s))
+        }
+    }
     val smartPlaylists = remember(songs, favorites, viewRecent, localSort, favScope, fetched) {
         val local = sortedStations(songs, localSort)
         val favs = if (favScope == FavScope.All) favorites
@@ -474,7 +434,7 @@ fun LibrarySmartPlaylistPane(
                         current = current,
                         playing = playing,
                         onPlay = onPlay,
-                        onToggleFavorite = onToggleFavorite,
+                        onToggleFavorite = { vm.onEvent(SmartPlaylistViewModel.Event.ToggleFavorite(it)) },
                         favorites = favorites.map { it.url }.toSet(),
                         loading = loading,
                         favScope = favScope,
@@ -483,11 +443,15 @@ fun LibrarySmartPlaylistPane(
                         // Removing from downloads deletes the fetched file and
                         // untracks the URL; anywhere else it drops the song.
                         onRemove = { s ->
-                            if (pl.kind == SmartKind.Downloads) downloads.remove(s.url)
-                            else removeLocalSong(s)
+                            if (pl.kind == SmartKind.Downloads) {
+                                vm.onEvent(SmartPlaylistViewModel.Event.RemoveDownload(s))
+                            } else removeLocalSong(s)
                         },
                         progress = progress,
                         showResume = showResume,
+                        sort = detailSort,
+                        fetchedBytes = fetched.mapValues { it.value.bytes },
+                        onSortChange = { vm.onEvent(SmartPlaylistViewModel.Event.SetSort(it)) },
                     )
                 }
             }
@@ -498,14 +462,10 @@ fun LibrarySmartPlaylistPane(
 /** One user playlist as a navigation pane, with add-songs and cover editing. */
 @Composable
 fun LibraryPlaylistPane(
+    vm: PlaylistDetailViewModel,
     slug: String,
-    localLibrary: LocalLibrary,
-    playlists: PlaylistStore,
-    repository: Repository,
-    podcasts: PodcastRepository,
     current: Station?,
     playing: Boolean,
-    favorites: List<Station>,
     onPlay: (Station, List<Station>) -> Unit,
     onBack: () -> Unit,
     onOpenSearch: () -> Unit = {},
@@ -514,23 +474,16 @@ fun LibraryPlaylistPane(
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
     var adding by rememberSaveable(slug) { mutableStateOf(false) }
-    val songs by localLibrary.songs.collectAsState()
-    val allPlaylists by playlists.playlists.collectAsState(initial = emptyList())
-    val subscriptions by podcasts.subscriptions.collectAsState(initial = emptyList())
-    val cliamp by repository.cliamp.collectAsState(initial = emptyList())
-    val directory by repository.directory.collectAsState(initial = DirectoryState())
-    val radioStations = remember(cliamp, directory.stations, favorites) {
-        val favRadio = favorites.filterNot {
-            it.source == StationSource.Local || it.source == StationSource.Podcast
-        }
-        (cliamp + directory.stations + favRadio).distinctBy { it.id }
-    }
-    val pl = allPlaylists.firstOrNull { it.station.slug == slug }
+    val ui by vm.state.collectAsState()
+    val songs = ui.localSongs
+    val radioStations = ui.radioStations
+    val subscriptions = ui.subscribedShows
+    val pl = ui.playlist
     val coverLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri ->
         val cover = uri?.toString().orEmpty()
-        if (cover.isNotBlank()) scope.launch { playlists.setCover(slug, cover) }
+        if (cover.isNotBlank()) vm.onEvent(PlaylistDetailViewModel.Event.SetCover(cover))
     }
     Box(Modifier.fillMaxSize().background(p.ground)) {
         val listState = rememberLazyListState()
@@ -555,19 +508,20 @@ fun LibraryPlaylistPane(
                         listState = listState,
                         playlist = pl,
                         songIds = pl.songIds,
-                        playlists = playlists,
+                        members = ui.members,
+                        visible = ui.visible,
+                        sort = ui.sort,
+                        onSortChange = { vm.onEvent(PlaylistDetailViewModel.Event.SetSort(it)) },
                         localSongs = songs,
                         radioStations = radioStations,
-                        podcasts = podcasts,
                         subscribedShows = subscriptions,
+                        showState = ui.showState,
+                        onOpenShow = { vm.onEvent(PlaylistDetailViewModel.Event.OpenShow(it)) },
                         current = current,
                         playing = playing,
                         onPlay = onPlay,
                         onToggle = { s, add ->
-                            scope.launch {
-                                if (add) playlists.addStation(pl.station.slug, s)
-                                else playlists.removeSong(pl.station.slug, s.id)
-                            }
+                            vm.onEvent(PlaylistDetailViewModel.Event.ToggleMember(s, add))
                         },
                         adding = adding,
                         doneAdding = { adding = false },
@@ -581,16 +535,16 @@ fun LibraryPlaylistPane(
 /** One song's full detail as a navigation pane. */
 @Composable
 fun LibrarySongInfoPane(
+    vm: SongInfoViewModel,
     stationUrl: String,
-    localLibrary: LocalLibrary,
     repository: Repository,
-    favorites: List<Station>,
-    recent: List<Station>,
-    onToggleFavorite: (Station) -> Unit,
     onBack: () -> Unit,
 ) {
     val p = LocalPalette.current
-    val songs by localLibrary.songs.collectAsState()
+    val ui by vm.state.collectAsState()
+    val songs = ui.songs
+    val favorites = ui.favorites
+    val recent = ui.recent
     val cliamp by repository.cliamp.collectAsState(initial = emptyList())
     val directory by repository.directory.collectAsState(initial = DirectoryState())
     val station = remember(stationUrl, songs, favorites, recent, cliamp, directory) {
@@ -598,11 +552,28 @@ fun LibrarySongInfoPane(
             .distinctBy { it.url }
             .firstOrNull { it.url == stationUrl }
     }
-    val removeLocalSong = rememberRemoveLocalSong(localLibrary) { onBack() }
-    val context = LocalContext.current
-    val stat by remember(stationUrl) {
-        (context.applicationContext as CliampApp).scrobbler.statsFor(stationUrl)
-    }.collectAsState(initial = null)
+    var pendingDelete by remember { mutableStateOf<Station?>(null) }
+    val deleteLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { res ->
+        pendingDelete?.let { s ->
+            if (res.resultCode == Activity.RESULT_OK) {
+                vm.onEvent(SongInfoViewModel.Event.DeleteLocal(s))
+                onBack()
+            }
+            pendingDelete = null
+        }
+    }
+    val removeLocalSong: (Station) -> Unit = { s ->
+        val start = vm.deleteRequest(s)
+        if (start != null) {
+            pendingDelete = s
+            deleteLauncher.launch(IntentSenderRequest.Builder(start).build())
+        } else {
+            vm.onEvent(SongInfoViewModel.Event.DeleteLocal(s))
+            onBack()
+        }
+    }
     Box(Modifier.fillMaxSize().background(p.ground)) {
         if (station == null) {
             CenterNote("song gone", p.inkTertiary)
@@ -611,11 +582,11 @@ fun LibrarySongInfoPane(
                 s = station,
                 systemBack = false,
                 onDismiss = onBack,
-                onToggleFavorite = onToggleFavorite,
-                favorite = station.url in favorites.map { it.url }.toSet(),
+                onToggleFavorite = { vm.onEvent(SongInfoViewModel.Event.ToggleFavorite(it)) },
+                favorite = ui.favorite,
                 onRemove = { removeLocalSong(station) },
-                plays = stat?.plays ?: 0,
-                lastPlayedAt = stat?.lastPlayedAt ?: 0L,
+                plays = ui.plays,
+                lastPlayedAt = ui.lastPlayedAt,
             )
         }
     }
@@ -1095,11 +1066,15 @@ private fun PlaylistDetailShown(
     listState: LazyListState,
     playlist: PlaylistStore.Playlist,
     songIds: List<String>,
-    playlists: PlaylistStore,
+    members: List<Station>,
+    visible: List<Station>,
+    sort: PlaylistSort,
+    onSortChange: (PlaylistSort) -> Unit,
     localSongs: List<Station>,
     radioStations: List<Station>,
-    podcasts: PodcastRepository,
     subscribedShows: List<PodcastShow>,
+    showState: ShowState,
+    onOpenShow: (PodcastShow) -> Unit,
     current: Station?,
     playing: Boolean,
     onPlay: (Station, List<Station>) -> Unit,
@@ -1108,33 +1083,25 @@ private fun PlaylistDetailShown(
     doneAdding: () -> Unit,
 ) {
     val p = LocalPalette.current
-    val context = LocalContext.current
-    val prefs = (context.applicationContext as CliampApp).prefs
-    val sort by prefs.playlistSort(playlist.station.slug)
-        .collectAsState(initial = prefs.playlistSortValue(playlist.station.slug))
 
     // Members can be any source now, so they resolve against the live local
     // library plus the persisted snapshot stations (radio/podcast members).
-    var members by remember(songIds) { mutableStateOf<List<Station>>(emptyList()) }
-    LaunchedEffect(songIds, localSongs) {
-        members = playlists.resolveMembers(songIds, localSongs)
-    }
-
+    // Resolved in PlaylistDetailViewModel so the pane stays dumb.
     if (adding) {
         AddSongsPicker(
             selected = songIds.toSet(),
             playlistName = playlist.station.name,
             localSongs = localSongs,
             radioStations = radioStations,
-            podcasts = podcasts,
             subscribedShows = subscribedShows,
+            showState = showState,
+            onOpenShow = onOpenShow,
             onToggle = onToggle,
             doneAdding = doneAdding,
         )
         return
     }
 
-    val visible = remember(members, sort) { sortedStations(members, sort) }
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
         if (members.isEmpty()) {
             item {
@@ -1150,9 +1117,7 @@ private fun PlaylistDetailShown(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
                     PlaylistSort.entries.forEach { t ->
-                        Chip(t.label, sort == t, onClick = {
-                            prefs.setPlaylistSort(playlist.station.slug, t)
-                        })
+                        Chip(t.label, sort == t, onClick = { onSortChange(t) })
                     }
                 }
             }
@@ -1202,8 +1167,9 @@ private fun AddSongsPicker(
     playlistName: String,
     localSongs: List<Station>,
     radioStations: List<Station>,
-    podcasts: PodcastRepository,
     subscribedShows: List<PodcastShow>,
+    showState: ShowState,
+    onOpenShow: (PodcastShow) -> Unit,
     onToggle: (Station, Boolean) -> Unit,
     doneAdding: () -> Unit,
 ) {
@@ -1211,7 +1177,6 @@ private fun AddSongsPicker(
     var tab by remember { mutableStateOf(AddTab.Local) }
     var openShow by remember { mutableStateOf<PodcastShow?>(null) }
     var picked by remember { mutableStateOf(selected) }
-    val showState by podcasts.show.collectAsState(initial = ShowState())
 
     fun toggle(s: Station) {
         val add = s.id !in picked
@@ -1257,12 +1222,11 @@ private fun AddSongsPicker(
                 empty = "no stations to add",
             )
             AddTab.Podcasts -> PodcastGroups(
-                podcasts = podcasts,
                 shows = subscribedShows,
                 openShow = openShow,
                 onOpenShow = { show ->
                     openShow = show
-                    podcasts.openShow(show)
+                    onOpenShow(show)
                 },
                 onBackToShows = { openShow = null },
                 showState = showState,
@@ -1317,7 +1281,6 @@ private fun GroupList(
 
 @Composable
 private fun PodcastGroups(
-    podcasts: PodcastRepository,
     shows: List<PodcastShow>,
     openShow: PodcastShow?,
     onOpenShow: (PodcastShow) -> Unit,
@@ -1409,21 +1372,18 @@ private fun SmartPlaylistDetail(
     onRemove: (Station) -> Unit = {},
     progress: Map<String, EpisodeProgress> = emptyMap(),
     showResume: Boolean = false,
+    sort: PlaylistSort = PlaylistSort.Title,
+    fetchedBytes: Map<String, Long> = emptyMap(),
+    onSortChange: (PlaylistSort) -> Unit = {},
 ) {
     val p = LocalPalette.current
-    val context = LocalContext.current
-    val prefs = (context.applicationContext as CliampApp).prefs
     // Only the on-device smart lists sort; favourites and recent have their
     // own fixed orders (recent is already time-sorted).
     val local = pl.kind == SmartKind.LocalSongs || pl.kind == SmartKind.Downloads
     // Favourites mix local songs, radio stations and podcasts, so they get
     // their own type sub-tabs: all / local / stations / podcasts.
     val isFav = pl.kind == SmartKind.Favorites
-    val sortKey = if (pl.kind == SmartKind.Downloads) "downloads" else "local-songs"
-    val sort by prefs.playlistSort(sortKey)
-        .collectAsState(initial = prefs.playlistSortValue(sortKey))
     val members = pl.stations
-    val fetched by prefs.downloads.collectAsState(initial = emptyMap())
     // Local songs filter by folder through a picker dropdown that leads the
     // sort row - one scrollable row, no mode switching, no drill state.
     val folders = remember(members) {
@@ -1491,9 +1451,7 @@ private fun SmartPlaylistDetail(
                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
                         PlaylistSort.entries.forEach { t ->
-                            Chip(t.label, sort == t, onClick = {
-                                prefs.setPlaylistSort(sortKey, t)
-                            })
+                            Chip(t.label, sort == t, onClick = { onSortChange(t) })
                         }
                         if (pl.kind == SmartKind.LocalSongs && folders.isNotEmpty()) {
                             ChipDropdown(
@@ -1559,7 +1517,7 @@ private fun SmartPlaylistDetail(
                             }
                             resumed?.let { add("${(it.fraction * 100).toInt()}% in") }
                             if (pl.kind == SmartKind.Downloads) {
-                                fetched[s.url]?.let { add(downloadSizeLabel(it.bytes)) }
+                                fetchedBytes[s.url]?.let { add(downloadSizeLabel(it)) }
                             }
                         }.joinToString(" · "),
                         CliampType.rowSecondary, if (resumed != null) p.amber else p.inkTertiary, maxLines = 1,

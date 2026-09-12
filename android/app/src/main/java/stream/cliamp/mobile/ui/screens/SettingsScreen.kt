@@ -25,10 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,11 +33,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import kotlinx.coroutines.launch
 import stream.cliamp.mobile.BuildConfig
 import stream.cliamp.mobile.R
-import stream.cliamp.mobile.data.Prefs
-import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
@@ -56,7 +50,6 @@ import stream.cliamp.mobile.ui.theme.AmberPalette
 import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.DarkPalette
-import stream.cliamp.mobile.ui.theme.decodeCustomThemeOrNull
 import stream.cliamp.mobile.ui.theme.LightPalette
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.OmarchyPalettes
@@ -64,13 +57,11 @@ import stream.cliamp.mobile.ui.theme.OxideLightPalette
 import stream.cliamp.mobile.ui.theme.OxidePalette
 import stream.cliamp.mobile.ui.theme.OmarchyThemeKeys
 import stream.cliamp.mobile.ui.theme.Mono
-import stream.cliamp.mobile.ui.theme.parseCustomTheme
 import kotlin.math.roundToInt
 
 @Composable
 fun SettingsScreen(
-    prefs: Prefs,
-    repository: Repository,
+    vm: SettingsViewModel,
     onBack: () -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenScrobble: () -> Unit = {},
@@ -79,10 +70,20 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    val palette by prefs.palette.collectAsState(initial = "dark")
-    val customJson by prefs.customTheme.collectAsState(initial = "")
-    val custom = remember(customJson) { decodeCustomThemeOrNull(customJson) }
-    var importError by remember { mutableStateOf<String?>(null) }
+    val uiState by vm.state.collectAsState()
+    val palette = uiState.palette
+    val custom = uiState.custom
+    val importError = uiState.importError
+    val haptics = uiState.haptics
+    val visualizer = uiState.visualizer
+    val cellular = uiState.cellular
+    val mono = uiState.mono
+    val buffer = uiState.buffer
+    val autoResume = uiState.autoResume
+    val autoDownload = uiState.autoDownload
+    val resumeLocal = uiState.resumeLocal
+    val listenBrainzOn = uiState.listenBrainzOn
+    val dirStats = uiState.directoryStats
     val themeImporter = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri ->
@@ -91,33 +92,8 @@ fun SettingsScreen(
             context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                 ?.take(256 * 1024)?.toByteArray()?.decodeToString()
         }.getOrNull()
-        if (raw.isNullOrBlank()) {
-            importError = "could not read that file"
-            return@rememberLauncherForActivityResult
-        }
-        parseCustomTheme(raw).fold(
-            onSuccess = {
-                importError = null
-                scope.launch {
-                    prefs.setCustomTheme(raw)
-                    prefs.setPalette("custom")
-                }
-            },
-            onFailure = { importError = it.message ?: "not a theme file" },
-        )
+        vm.onEvent(SettingsViewModel.Event.ImportTheme(raw))
     }
-    val haptics by prefs.haptics.collectAsState(initial = true)
-    val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
-    val cellular by prefs.cellular.collectAsState(initial = true)
-    val mono by prefs.mono.collectAsState(initial = false)
-    val buffer by prefs.bufferSeconds.collectAsState(initial = 20)
-    val autoResume by prefs.autoResume.collectAsState(initial = false)
-    val autoDownload by prefs.autoDownload.collectAsState(initial = false)
-    val lbToken by prefs.listenBrainzToken.collectAsState(initial = "")
-    val resumeLocal by prefs.resumeLocal.collectAsState(initial = false)
-    val history by prefs.history.collectAsState(initial = emptyList())
-    val favorites by prefs.favorites.collectAsState(initial = emptyList())
-    val dirStats by repository.directoryStats.collectAsState()
 
     val scrollState = rememberScrollState()
     MainLayout(
@@ -140,27 +116,27 @@ fun SettingsScreen(
         ToggleRow(
             title = "Auto-resume",
             checked = autoResume,
-            onChange = { scope.launch { prefs.setAutoResume(it) } },
+            onChange = { vm.onEvent(SettingsViewModel.Event.SetAutoResume(it)) },
         )
         ToggleRow(
             title = "Resume local songs",
             checked = resumeLocal,
-            onChange = { scope.launch { prefs.setResumeLocal(it) } },
+            onChange = { vm.onEvent(SettingsViewModel.Event.SetResumeLocal(it)) },
         )
         ToggleRow(
             title = "Auto-download episodes",
             checked = autoDownload,
-            onChange = { scope.launch { prefs.setAutoDownload(it) } },
+            onChange = { vm.onEvent(SettingsViewModel.Event.SetAutoDownload(it)) },
         )
         ToggleRow(
             title = "Stream over cellular",
             checked = cellular,
-            onChange = { scope.launch { prefs.setCellular(it) } },
+            onChange = { vm.onEvent(SettingsViewModel.Event.SetCellular(it)) },
         )
         ToggleRow(
             title = "Mono downmix",
             checked = mono,
-            onChange = { scope.launch { prefs.setMono(it) } },
+            onChange = { vm.onEvent(SettingsViewModel.Event.SetMono(it)) },
         )
         Column(Modifier.padding(horizontal = Gutter, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -169,7 +145,7 @@ fun SettingsScreen(
             }
             MechSlider(
                 value = buffer.toFloat(),
-                onValueChange = { scope.launch { prefs.setBufferSeconds(it.roundToInt()) } },
+                onValueChange = { vm.onEvent(SettingsViewModel.Event.SetBuffer(it.roundToInt())) },
                 range = 5f..60f,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -187,8 +163,8 @@ fun SettingsScreen(
             Mono("ListenBrainz", CliampType.rowPrimaryMedium, p.ink)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Mono(
-                    if (lbToken.isBlank()) "off" else "on",
-                    CliampType.meta, if (lbToken.isBlank()) p.inkFaint else p.accent,
+                    if (listenBrainzOn) "on" else "off",
+                    CliampType.meta, if (listenBrainzOn) p.accent else p.inkFaint,
                 )
                 Icon(CliampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary)
             }
@@ -199,13 +175,13 @@ fun SettingsScreen(
         ToggleRow(
             title = "Key haptics",
             checked = haptics,
-            onChange = { scope.launch { prefs.setHaptics(it) } },
+            onChange = { vm.onEvent(SettingsViewModel.Event.SetHaptics(it)) },
         )
         ChoiceRow(
             title = "Visualizer",
             options = listOf("spectrum", "off"),
             selected = visualizer,
-            onSelect = { scope.launch { prefs.setVisualizer(it) } },
+            onSelect = { vm.onEvent(SettingsViewModel.Event.SetVisualizer(it)) },
         )
 
         SectionLabel("themes — ${OmarchyThemeKeys.size + 6}")
@@ -224,7 +200,7 @@ fun SettingsScreen(
                 theme = theme,
                 selected = palette == key,
                 subtitle = if (key == "system") "follows the device" else null,
-                onSelect = { scope.launch { prefs.setPalette(key) } },
+                onSelect = { vm.onEvent(SettingsViewModel.Event.SetPalette(key)) },
             )
         }
         OmarchyThemeKeys.forEachIndexed { index, key ->
@@ -235,7 +211,7 @@ fun SettingsScreen(
                 // Last row before the next section: its divider runs full
                 // width instead of stacking a second inset line under it.
                 trailDivider = index != OmarchyThemeKeys.lastIndex || custom != null,
-                onSelect = { scope.launch { prefs.setPalette(key) } },
+                onSelect = { vm.onEvent(SettingsViewModel.Event.SetPalette(key)) },
             )
         }
         if (custom != null) {
@@ -245,7 +221,7 @@ fun SettingsScreen(
                 selected = palette == "custom",
                 subtitle = "imported",
                 trailDivider = false,
-                onSelect = { scope.launch { prefs.setPalette("custom") } },
+                onSelect = { vm.onEvent(SettingsViewModel.Event.SetPalette("custom")) },
             )
         }
         Row(
@@ -265,7 +241,7 @@ fun SettingsScreen(
         }
         if (custom != null) {
             Row(
-                Modifier.fillMaxWidth().microPress { scope.launch { prefs.clearCustomTheme() } }
+                Modifier.fillMaxWidth().microPress { vm.onEvent(SettingsViewModel.Event.ClearCustomTheme) }
                     .padding(horizontal = Gutter, vertical = 13.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
@@ -276,12 +252,12 @@ fun SettingsScreen(
         }
 
         SectionLabel("storage")
-        InfoRow("Favourites", "${favorites.size} stations")
-        InfoRow("History", "${history.size} entries")
+        InfoRow("Favourites", "${uiState.favoritesCount} stations")
+        InfoRow("History", "${uiState.historyCount} entries")
         Row(
             Modifier
                 .fillMaxWidth()
-                .microPress { scope.launch { prefs.clearHistory() } }
+                .microPress { vm.onEvent(SettingsViewModel.Event.ClearHistory) }
                 .padding(horizontal = Gutter, vertical = 13.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,

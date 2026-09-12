@@ -234,7 +234,6 @@ class PlaybackService : MediaSessionService() {
                     onSpectrum = ::handleSpectrum,
                     onLiveChanged = PlaybackBus::publishSpectrumLive,
                 )
-                PlaybackBus.publishEqBandLabels(fx.bandLabels)
                 fx.setEqEnabled(eqOn)
                 if (eqOn) fx.applyBands(bands)
             }

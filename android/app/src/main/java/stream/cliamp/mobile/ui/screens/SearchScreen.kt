@@ -45,18 +45,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
-import stream.cliamp.mobile.data.DirectoryQuery
-import stream.cliamp.mobile.data.LocalLibrary
-import stream.cliamp.mobile.data.PodcastDirectory
-import stream.cliamp.mobile.data.PodcastEpisode
 import stream.cliamp.mobile.data.PodcastShow
-import stream.cliamp.mobile.data.PodcastRepository
-import stream.cliamp.mobile.data.Prefs
-import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.provider.ProviderAccount
-import stream.cliamp.mobile.data.provider.ProviderStore
 import stream.cliamp.mobile.ui.components.BackIconChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
@@ -67,7 +59,6 @@ import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
 import stream.cliamp.mobile.ui.search.Fuzzy
-import stream.cliamp.mobile.ui.search.GlobalSearch
 import stream.cliamp.mobile.ui.search.SearchHit
 import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
@@ -75,22 +66,13 @@ import stream.cliamp.mobile.ui.theme.LocalHapticsEnabled
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
 
-private enum class Scope(val label: String) {
-    All("all"), Media("local"), Radio("radio"), Pods("podcasts"),
-    Tags("tags"), Providers("providers"),
-}
-
 /**
  * The app-wide fuzzy finder: one query spans local songs, favourites, the
  * radio directory, podcasts and providers.
  */
 @Composable
 fun SearchScreen(
-    repository: Repository,
-    podcasts: PodcastRepository,
-    prefs: Prefs,
-    localLibrary: LocalLibrary,
-    providers: ProviderStore,
+    vm: SearchViewModel,
     current: Station? = null,
     playing: Boolean = false,
     onPlay: (Station, List<Station>) -> Unit,
@@ -102,88 +84,14 @@ fun SearchScreen(
     onQueryChange: (String) -> Unit,
 ) {
     val p = LocalPalette.current
-    var filter by remember { mutableStateOf(Scope.All) }
-    // Podcast search hits, kept local to this screen. The Podcasts tab shares
-    // the same PodcastRepository, so routing search through podcasts.load()
-    // left the tab stuck on the last search query instead of its own
-    // top/category directory. The search still resolves shows by name, but
-    // through a query-scoped fetch here rather than a rewrite of the shared state.
-    var podcastHits by remember { mutableStateOf<List<PodcastShow>>(emptyList()) }
-    // Cached episodes of subscribed shows, for the episode tail of results.
-    // Resolved in the same debounced fetch as the show directory above.
-    var episodeIndex by remember { mutableStateOf<List<Pair<PodcastShow, PodcastEpisode>>>(emptyList()) }
-
-    val directory by repository.directory.collectAsState()
-    val cliamp by repository.cliamp.collectAsState()
-    val tags by repository.tags.collectAsState()
-    val songs by localLibrary.songs.collectAsState()
-    val favorites by prefs.favorites.collectAsState(initial = emptyList())
-    val recent by prefs.history.collectAsState(initial = emptyList())
-    val providerAccounts by providers.accounts.collectAsState(initial = emptyList())
-
-    val radio = remember(cliamp, directory) {
-        cliamp + directory.stations
-    }
-
-    val term = query.trim()
-
-    // Debounce the directory: it is somebody else's server, not ours. The local
-    // and radio fuzzy pass runs instantly on what we already hold.
-    LaunchedEffect(term) {
-        if (term.length < 2) {
-            episodeIndex = emptyList()
-            return@LaunchedEffect
-        }
-        delay(320)
-        repository.loadDirectory(DirectoryQuery.Search(term), reset = true)
-        // The podcast directory takes the same query, so a show can be found
-        // by name. Unlike the Stations tab, the Podcasts tab keeps the search
-        // rather than resetting it: Apple's search returns whole shows in one
-        // request with nothing to page, so the searched list IS the directory
-        // for as long as the query stands, and its header names the query.
-        //
-        // This used to go through podcasts.load(), which rewrites the shared
-        // directory state the Podcasts tab reads, leaving that tab filtered by
-        // whatever was last searched instead of its own top/category browse.
-        // The search now keeps its own copy so it still resolves shows without
-        // disturbing the tab.
-        podcastHits = runCatching { PodcastDirectory.search(term) }.getOrDefault(emptyList())
-        episodeIndex = runCatching { podcasts.subscribedEpisodes() }.getOrDefault(emptyList())
-    }
-
-    val subscriptions by podcasts.subscriptions.collectAsState(initial = emptyList())
-
-    // Subscriptions are resident, the search half is whatever the debounced
-    // query above just fetched, so a show can be found whether or not it is
-    // already followed. podcastHits is this screen's own copy: the Podcasts
-    // tab reads the same repository but must keep its own top/category browse.
-    val shows = remember(subscriptions, podcastHits) {
-        subscriptions + podcastHits
-    }
-    val subscribedFeeds = remember(subscriptions) { subscriptions.mapTo(HashSet()) { it.feedUrl } }
-
-    val results = remember(
-        term, filter, songs, favorites, recent, radio, tags, providerAccounts, shows, subscribedFeeds, episodeIndex,
-    ) {
-        GlobalSearch.run(
-            term, songs, favorites, recent, radio, tags, providerAccounts, shows, subscribedFeeds, episodeIndex,
-        )
-    }.hits
-
-    val shown = when (filter) {
-        Scope.All -> results
-        Scope.Media -> results.filter { it is SearchHit.Song || it is SearchHit.Favorite }
-        Scope.Radio -> results.filter { it is SearchHit.StationHit }
-        Scope.Pods -> results.filter { it is SearchHit.Show || it is SearchHit.Episode }
-        Scope.Tags -> results.filter { it is SearchHit.Tag }
-        Scope.Providers -> results.filter { it is SearchHit.Provider }
-    }
-
-    fun run(raw: String) {
-        val text = raw.trim()
-        if (text.isEmpty()) return
-        repository.loadDirectory(DirectoryQuery.Search(text), reset = true)
-    }
+    val uiState by vm.state.collectAsState()
+    // The query text itself stays hoisted in the root; the VM mirrors it to
+    // drive the debounced directory fetch and the result computation.
+    LaunchedEffect(query) { vm.onEvent(SearchViewModel.Event.QueryChanged(query)) }
+    val filter = uiState.filter
+    val term = uiState.term
+    val results = uiState.results
+    val shown = uiState.shown
 
     fun open(hit: SearchHit, queue: List<SearchHit>) {
         when (hit) {
@@ -213,7 +121,7 @@ fun SearchScreen(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     placeholder = "Search",
                     imeAction = ImeAction.Go,
-                    onAction = { run(query) },
+                    onAction = { vm.onEvent(SearchViewModel.Event.Submitted(query)) },
                 )
             }
             Row(
@@ -221,7 +129,9 @@ fun SearchScreen(
                     .padding(start = Gutter, end = Gutter, bottom = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
             ) {
-                Scope.entries.forEach { s -> Chip(s.label, filter == s, onClick = { filter = s }) }
+                SearchScope.entries.forEach { s ->
+                    Chip(s.label, filter == s, onClick = { vm.onEvent(SearchViewModel.Event.FilterChanged(s)) })
+                }
             }
             HairlineDivider(region = true)
         }

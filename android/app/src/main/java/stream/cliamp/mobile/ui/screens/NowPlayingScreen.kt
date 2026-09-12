@@ -32,8 +32,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -49,13 +49,9 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
-import kotlinx.coroutines.launch
-import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.StationSource
-import stream.cliamp.mobile.playback.PlaybackBus
-import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.playback.PlayerState
 import stream.cliamp.mobile.ui.clock
 import stream.cliamp.mobile.ui.compact
@@ -134,69 +130,41 @@ private data class PlayerActions(
     val onNext: () -> Unit,
 )
 
-/** Tap-steps through the speed ladder, wrapping back to normal. */
-private val SpeedSteps = listOf(1f, 1.25f, 1.5f, 1.75f, 2f, 0.5f, 0.75f)
-
-private fun nextSpeed(now: Float): Float {
-    val i = SpeedSteps.indexOfFirst { kotlin.math.abs(it - now) < 0.01f }
-    return if (i < 0) 1f else SpeedSteps[(i + 1) % SpeedSteps.size]
-}
-
-private fun speedLabel(v: Float): String {
-    val s = if (v % 1f == 0f) v.toInt().toString() else v.toString().trimEnd('0')
-    return "${s}×"
-}
-
 @UnstableApi
 @Composable
 fun NowPlayingScreen(
-    prefs: Prefs,
-    player: PlayerConnection,
+    vm: NowPlayingViewModel,
     onOpenScope: () -> Unit,
     onBack: () -> Unit,
 ) {
     val p = LocalPalette.current
-    val scope = rememberCoroutineScope()
 
-    val state by player.state.collectAsState()
-    val station by PlaybackBus.station.collectAsState()
-    val streamTitle by PlaybackBus.streamTitle.collectAsState()
-    val error by PlaybackBus.error.collectAsState()
-    val reconnect by PlaybackBus.reconnectAttempt.collectAsState()
-    val favorites by prefs.favorites.collectAsState(initial = emptyList())
-    val recent by prefs.history.collectAsState(initial = emptyList())
-    val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
-    val shuffled by player.shuffle.collectAsState()
-    val spectrumSource = PlaybackBus.spectrum.collectAsState()
-
-    // Before anything has been played this session the live bus carries no
-    // station, so fall back to the last-played station from history - the same
-    // fallback the mini bar uses - rather than showing an empty "no track".
-    val lastPlayed = recent.firstOrNull()
-    val shownStation = station ?: lastPlayed
-    val isFav = shownStation != null && favorites.any { it.url == shownStation.url }
+    val uiState by vm.state.collectAsState()
+    // rememberMeter reads its spectrum through Compose State, so hand it a
+    // state that tracks the latest VM frame.
+    val spectrum = rememberUpdatedState(uiState.spectrum)
 
     val model = PlayerModel(
-        state = state,
-        shownStation = shownStation,
-        streamTitle = streamTitle,
-        reconnect = reconnect,
-        error = error,
-        isFav = isFav,
-        shuffled = shuffled,
-        visualizer = visualizer,
-        spectrum = spectrumSource,
+        state = uiState.playerState,
+        shownStation = uiState.shownStation,
+        streamTitle = uiState.streamTitle,
+        reconnect = uiState.reconnect,
+        error = uiState.error,
+        isFav = uiState.isFav,
+        shuffled = uiState.shuffled,
+        visualizer = uiState.visualizer,
+        spectrum = spectrum,
     )
     val actions = PlayerActions(
         onBack = onBack,
-        onToggleShuffle = { player.toggleShuffle() },
-        onCycleSpeed = { player.setSpeed(nextSpeed(player.speed.value)) },
+        onToggleShuffle = { vm.player.toggleShuffle() },
+        onCycleSpeed = { vm.onEvent(NowPlayingViewModel.Event.CycleSpeed) },
         onOpenScope = onOpenScope,
-        onToggleFav = { shownStation?.let { s -> scope.launch { prefs.toggleFavorite(s) } } },
-        onSeek = { player.seekTo(it) },
-        onPrev = { player.prev() },
-        onPlayPause = { player.toggle(station ?: shownStation) },
-        onNext = { player.next() },
+        onToggleFav = { vm.onEvent(NowPlayingViewModel.Event.ToggleFavorite) },
+        onSeek = { vm.player.seekTo(it) },
+        onPrev = { vm.player.prev() },
+        onPlayPause = { vm.player.toggle(uiState.shownStation) },
+        onNext = { vm.player.next() },
     )
 
     Box(Modifier.fillMaxSize()) {
@@ -734,10 +702,14 @@ private fun SmallAction(
     }
 }
 
+private fun speedLabel(v: Float): String {
+    val s = if (v % 1f == 0f) v.toInt().toString() else v.toString().trimEnd('0')
+    return "${s}×"
+}
+
 /** Playback speed as a terse mono key: taps step through the ladder. */
 @Composable
-private fun SpeedAction(speed: Float, onClick: () -> Unit) {
-    val p = LocalPalette.current
+private fun SpeedAction(speed: Float, onClick: () -> Unit) {    val p = LocalPalette.current
     Box(
         Modifier
             .size(28.dp)

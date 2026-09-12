@@ -314,10 +314,6 @@ private var chartCursor: List<String> = emptyList()
 
     fun refreshShow() = _show.value.show?.let { openShow(it) }
 
-    fun closeShow() { _show.value = ShowState() }
-
-    suspend fun isSubscribed(feedUrl: String): Boolean = dao.isSubscribed(feedUrl)
-
     /** Returns the new state, so a row can toggle without re-reading. */
     suspend fun toggleSubscription(show: PodcastShow): Boolean {
         episodeIndex = null
@@ -328,15 +324,6 @@ private var chartCursor: List<String> = emptyList()
         dao.subscribe(show.toEntity(dao.nextTopPosition()))
         return true
     }
-
-    /** A feed URL typed by hand, resolved through Apple where it is listed. */
-    suspend fun addFeed(url: String): PodcastShow? {
-        val show = PodcastDirectory.byFeedUrl(url) ?: return null
-        dao.subscribe(show.toEntity(dao.nextTopPosition()))
-        return show
-    }
-
-    suspend fun progressFor(url: String): EpisodeProgress? = dao.progress(url)?.toProgress()
 
     /**
      * Every cached episode of every subscribed show, as (show, episode)

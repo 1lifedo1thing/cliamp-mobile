@@ -1,4 +1,4 @@
-package stream.cliamp.mobile.ui.screens
+package stream.cliamp.mobile.ui.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -32,15 +32,6 @@ import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.data.sourceLine
-import stream.cliamp.mobile.ui.components.BrickMeter
-import stream.cliamp.mobile.ui.components.CliampIcons
-import stream.cliamp.mobile.ui.components.Gutter
-import stream.cliamp.mobile.ui.components.HairlineDivider
-import stream.cliamp.mobile.ui.components.MeterFrame
-import stream.cliamp.mobile.ui.components.MeterSize
-import stream.cliamp.mobile.ui.components.ArtPlate
-import stream.cliamp.mobile.ui.components.microPress
-import stream.cliamp.mobile.ui.components.rememberMeter
 import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette

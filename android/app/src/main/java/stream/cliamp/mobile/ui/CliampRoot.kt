@@ -41,8 +41,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.DirectoryQuery
 import stream.cliamp.mobile.data.Prefs
-import stream.cliamp.mobile.data.LocalLibrary
-import stream.cliamp.mobile.data.PlaylistStore
 import stream.cliamp.mobile.data.PodcastRepository
 import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.Repository
@@ -51,6 +49,7 @@ import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.ui.components.CliampTabBar
 import stream.cliamp.mobile.ui.components.CliampTabRail
+import stream.cliamp.mobile.ui.components.MiniPlayer
 import stream.cliamp.mobile.ui.components.Tab
 import stream.cliamp.mobile.ui.screens.SearchScreen
 import stream.cliamp.mobile.ui.screens.FavScope
@@ -59,7 +58,6 @@ import stream.cliamp.mobile.ui.screens.LibraryProvidersPane
 import stream.cliamp.mobile.ui.screens.LibrarySmartPlaylistPane
 import stream.cliamp.mobile.ui.screens.LibrarySongInfoPane
 import stream.cliamp.mobile.ui.screens.LocalScreen
-import stream.cliamp.mobile.ui.screens.MiniPlayer
 import stream.cliamp.mobile.ui.screens.NowPlayingScreen
 import stream.cliamp.mobile.ui.screens.PodcastShowScreen
 import stream.cliamp.mobile.ui.screens.PodcastsScreen
@@ -72,6 +70,20 @@ import stream.cliamp.mobile.ui.screens.ProviderBrowseScreen
 import stream.cliamp.mobile.ui.screens.ProviderWizard as ProviderWizardScreen
 import stream.cliamp.mobile.ui.screens.SettingsScreen
 import stream.cliamp.mobile.ui.screens.StationsScreen
+import stream.cliamp.mobile.ui.screens.StationsViewModel
+import stream.cliamp.mobile.ui.screens.PodcastsViewModel
+import stream.cliamp.mobile.ui.screens.PodcastShowViewModel
+import stream.cliamp.mobile.ui.screens.LocalViewModel
+import stream.cliamp.mobile.ui.screens.ProvidersPaneViewModel
+import stream.cliamp.mobile.ui.screens.SmartPlaylistViewModel
+import stream.cliamp.mobile.ui.screens.PlaylistDetailViewModel
+import stream.cliamp.mobile.ui.screens.SongInfoViewModel
+import stream.cliamp.mobile.ui.screens.NowPlayingViewModel
+import stream.cliamp.mobile.ui.screens.SearchViewModel
+import stream.cliamp.mobile.ui.screens.SettingsViewModel
+import stream.cliamp.mobile.ui.screens.ProviderBrowseViewModel
+import stream.cliamp.mobile.ui.screens.ProviderWizardViewModel
+import stream.cliamp.mobile.ui.screens.ScrobbleWizardViewModel
 import stream.cliamp.mobile.ui.theme.LocalPalette
 
 /**
@@ -99,8 +111,6 @@ fun CliampRoot(
     repository: Repository,
     prefs: Prefs,
     player: PlayerConnection,
-    localLibrary: LocalLibrary,
-    playlists: PlaylistStore,
     providers: ProviderStore,
     podcasts: PodcastRepository,
     dark: Boolean,
@@ -135,7 +145,6 @@ fun CliampRoot(
     val reconnect by PlaybackBus.reconnectAttempt.collectAsState()
     val providerAccounts by providers.accounts.collectAsState(initial = emptyList())
     val progress by podcasts.progress.collectAsState(initial = emptyMap())
-    val resumeLocal by prefs.resumeLocal.collectAsState(initial = false)
 
     player.setFallbackSource(recent)
 
@@ -325,13 +334,11 @@ fun CliampRoot(
                 ) {
                     Box(contentModifier) {
                         StationsScreen(
-                            repository = repository,
-                            prefs = prefs,
+                            vm = appViewModel { app -> StationsViewModel(app.repository, app.prefs) },
                             current = station,
                             playing = playerState.playing,
                             favorites = favorites,
                             onPlay = onPlay,
-                            onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
                             onOpenSearch = {
                                 navController.navigate(Search)
                             },
@@ -353,9 +360,9 @@ fun CliampRoot(
                 ) {
                     Box(contentModifier) {
                         PodcastsScreen(
-                            podcasts = podcasts,
-                            prefs = prefs,
-                            countries = repository.countries,
+                            vm = appViewModel { app ->
+                                PodcastsViewModel(app.podcasts, app.prefs, app.repository.countries)
+                            },
                             onOpenShow = { show: PodcastShow ->
                                 podcasts.openShow(show)
                                 navController.navigate(PodcastShowRoute(show.id))
@@ -368,7 +375,9 @@ fun CliampRoot(
                 composable<PodcastShowRoute> {
                     Box(contentModifier) {
                         PodcastShowScreen(
-                            podcasts = podcasts,
+                            vm = appViewModel { app ->
+                                PodcastShowViewModel(app.podcasts, app.prefs, app.downloads)
+                            },
                             current = station,
                             playing = playerState.playing,
                             onBack = { navController.popBackStack() },
@@ -390,10 +399,9 @@ fun CliampRoot(
                 ) {
                     Box(contentModifier) {
                         LocalScreen(
-                            localLibrary = localLibrary,
-                            playlists = playlists,
-                            favorites = favorites,
-                            recent = recent,
+                            vm = appViewModel { app ->
+                                LocalViewModel(app.localLibrary, app.playlists, app.prefs)
+                            },
                             onOpenProviders = { navController.navigate(LibraryProviders) },
                             onOpenSmart = { kind -> navController.navigate(LibrarySmartPlaylist(kind)) },
                             onOpenPlaylist = { slug -> navController.navigate(LibraryPlaylist(slug)) },
@@ -406,19 +414,11 @@ fun CliampRoot(
                 composable<LibraryProviders> {
                     Box(contentModifier) {
                         LibraryProvidersPane(
-                            providers = providerAccounts,
+                            vm = appViewModel { app -> ProvidersPaneViewModel(app.providers) },
                             onBack = { navController.popBackStack() },
                             onOpenProvider = { a -> navController.navigate(ProviderBrowse(a.id)) },
                             onAddProvider = { spec ->
                                 navController.navigate(ProviderWizardRoute(spec.key))
-                            },
-                            onRemoveProvider = { account ->
-                                scope.launch { providers.remove(account.id) }
-                                val current = currentRoute
-                                if (current != null && current.contains("ProviderBrowse") &&
-                                    current.contains(account.id)) {
-                                    navController.popBackStack()
-                                }
                             },
                             onOpenSearch = { navController.navigate(Search) },
                             onOpenSettings = { navController.navigate(Settings) },
@@ -429,14 +429,13 @@ fun CliampRoot(
                     val kind = entry.toRoute<LibrarySmartPlaylist>().kind
                     Box(contentModifier) {
                         LibrarySmartPlaylistPane(
+                            vm = appViewModel(key = kind) { app ->
+                                SmartPlaylistViewModel(kind, app.localLibrary, app.prefs, app.downloads)
+                            },
                             kindName = kind,
-                            localLibrary = localLibrary,
                             current = station,
                             playing = playerState.playing,
-                            favorites = favorites,
-                            recent = recent,
                             onPlay = onPlay,
-                            onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
                             favScope = favScope,
                             onFavScopeChange = { favScope = it },
                             onOpenSongInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
@@ -444,7 +443,6 @@ fun CliampRoot(
                             onOpenSearch = { navController.navigate(Search) },
                             onOpenSettings = { navController.navigate(Settings) },
                             progress = progress,
-                            showResume = resumeLocal,
                         )
                     }
                 }
@@ -452,14 +450,20 @@ fun CliampRoot(
                     val slug = entry.toRoute<LibraryPlaylist>().slug
                     Box(contentModifier) {
                         LibraryPlaylistPane(
+                            vm = appViewModel(key = slug) { app ->
+                                PlaylistDetailViewModel(
+                                    slug,
+                                    app.localLibrary,
+                                    app.playlists,
+                                    app.prefs,
+                                    app.repository,
+                                    app.podcasts,
+                                    app.downloads,
+                                )
+                            },
                             slug = slug,
-                            localLibrary = localLibrary,
-                            playlists = playlists,
-                            repository = repository,
-                            podcasts = podcasts,
                             current = station,
                             playing = playerState.playing,
-                            favorites = favorites,
                             onPlay = onPlay,
                             onBack = { navController.popBackStack() },
                             onOpenSearch = { navController.navigate(Search) },
@@ -471,12 +475,11 @@ fun CliampRoot(
                     val stationUrl = entry.toRoute<LibrarySongInfo>().stationUrl
                     Box(contentModifier) {
                         LibrarySongInfoPane(
+                            vm = appViewModel(key = stationUrl) { app ->
+                                SongInfoViewModel(stationUrl, app.localLibrary, app.prefs, app.scrobbler)
+                            },
                             stationUrl = stationUrl,
-                            localLibrary = localLibrary,
                             repository = repository,
-                            favorites = favorites,
-                            recent = recent,
-                            onToggleFavorite = { s -> scope.launch { prefs.toggleFavorite(s) } },
                             onBack = { navController.popBackStack() },
                         )
                     }
@@ -487,8 +490,7 @@ fun CliampRoot(
             composable<Player> {
                 OverlayCover {
                 NowPlayingScreen(
-                    prefs = prefs,
-                    player = player,
+                    vm = appViewModel { app -> NowPlayingViewModel(app.player, app.prefs) },
                     onOpenScope = { navController.navigate(Scope) },
                     onBack = { navController.popBackStack() },
                 )
@@ -519,8 +521,7 @@ fun CliampRoot(
             composable<Settings> {
                 Box(contentModifier) {
                     SettingsScreen(
-                        prefs = prefs,
-                        repository = repository,
+                        vm = appViewModel { app -> SettingsViewModel(app.prefs, app.repository) },
                         onBack = { navController.popBackStack() },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenScrobble = { navController.navigate(ScrobbleWizard) },
@@ -530,11 +531,15 @@ fun CliampRoot(
             composable<Search> {
                 Box(contentModifier) {
                     SearchScreen(
-                    repository = repository,
-                    podcasts = podcasts,
-                    prefs = prefs,
-                    localLibrary = localLibrary,
-                    providers = providers,
+                    vm = appViewModel { app ->
+                        SearchViewModel(
+                            app.repository,
+                            app.podcasts,
+                            app.prefs,
+                            app.localLibrary,
+                            app.providers,
+                        )
+                    },
                     current = station,
                     playing = playerState.playing,
                     onPlay = onPlay,
@@ -580,7 +585,7 @@ fun CliampRoot(
                 } else {
                     OverlayCover {
                     ProviderBrowseScreen(
-                        account = account,
+                        vm = appViewModel(key = accountId) { _ -> ProviderBrowseViewModel(account) },
                         onBack = { navController.popBackStack() },
                         onEdit = {
                             navController.navigate(
@@ -604,8 +609,9 @@ fun CliampRoot(
                     } else null
                     OverlayCover {
                     ProviderWizardScreen(
-                        spec = spec,
-                        existing = existing,
+                        vm = appViewModel(key = route.providerKey + route.accountId) { _ ->
+                            ProviderWizardViewModel(spec, existing)
+                        },
                         onCancel = { navController.popBackStack() },
                         onSave = { account ->
                             scope.launch { providers.save(account) }
@@ -619,7 +625,7 @@ fun CliampRoot(
                 val token by prefs.listenBrainzToken.collectAsState(initial = "")
                 OverlayCover {
                     ScrobbleWizardScreen(
-                        existingToken = token,
+                        vm = appViewModel { _ -> ScrobbleWizardViewModel(token) },
                         onCancel = { navController.popBackStack() },
                         onSave = { t ->
                             scope.launch { prefs.setListenBrainzToken(t) }

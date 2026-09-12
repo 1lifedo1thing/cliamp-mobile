@@ -219,9 +219,6 @@ interface PodcastDao {
 
     @Query("DELETE FROM episode_progress WHERE url = :url")
     suspend fun clearProgress(url: String)
-
-    @Query("UPDATE episode_progress SET completed = 1, updatedAt = :now WHERE url = :url")
-    suspend fun markCompleted(url: String, now: Long = System.currentTimeMillis())
 }
 
 /** An album as the index sees it: a directory of tracks, grouped. */

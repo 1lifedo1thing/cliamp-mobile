@@ -44,12 +44,6 @@ object PlaybackBus {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    private val _audioSessionId = MutableStateFlow(0)
-    val audioSessionId: StateFlow<Int> = _audioSessionId.asStateFlow()
-
-    private val _eqBandLabels = MutableStateFlow<List<String>>(emptyList())
-    val eqBandLabels: StateFlow<List<String>> = _eqBandLabels.asStateFlow()
-
     fun publishSpectrum(v: FloatArray) { _spectrum.value = v }
     fun publishSpectrumLive(v: Boolean) { _spectrumLive.value = v }
     fun publishStreamTitle(v: String) { _streamTitle.value = v }
@@ -58,8 +52,6 @@ object PlaybackBus {
     fun publishFormat(v: StreamFormat) { _format.value = v }
     fun publishError(v: String?) { _error.value = v }
     fun publishReconnect(attempt: Int) { _reconnectAttempt.value = attempt }
-    fun publishAudioSessionId(v: Int) { _audioSessionId.value = v }
-    fun publishEqBandLabels(v: List<String>) { _eqBandLabels.value = v }
 }
 
 data class StreamFormat(

@@ -33,15 +33,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
-import stream.cliamp.mobile.CliampApp
 import stream.cliamp.mobile.data.DownloadState
 import stream.cliamp.mobile.data.downloadSizeLabel
 import stream.cliamp.mobile.data.EpisodeProgress
 import stream.cliamp.mobile.data.PodcastEpisode
-import stream.cliamp.mobile.data.PodcastRepository
 import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
@@ -80,7 +76,7 @@ import java.util.Locale
  */
 @Composable
 fun PodcastShowScreen(
-    podcasts: PodcastRepository,
+    vm: PodcastShowViewModel,
     current: Station?,
     playing: Boolean,
     onBack: () -> Unit,
@@ -92,17 +88,13 @@ fun PodcastShowScreen(
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    val downloads = remember(context) {
-        (context.applicationContext as CliampApp).downloads
-    }
-    val dlStates by downloads.states.collectAsState()
-    val dlEntries by downloads.entries.collectAsState()
-    val autoOn by (context.applicationContext as CliampApp).prefs.autoDownload
-        .collectAsState(initial = false)
-    val state by podcasts.show.collectAsState()
-    val progress by podcasts.progress.collectAsState(initial = emptyMap())
-    val subscriptions by podcasts.subscriptions.collectAsState(initial = emptyList())
+    val ui by vm.state.collectAsState()
+    val dlStates = ui.dlStates
+    val dlEntries = ui.dlEntries
+    val autoOn = ui.autoDownload
+    val state = ui.showState
+    val progress = ui.progress
+    val subscriptions = ui.subscriptions
 
     val show = state.show
     val subscribed = remember(subscriptions, show?.feedUrl) {
@@ -122,7 +114,7 @@ fun PodcastShowScreen(
     LaunchedEffect(show?.feedUrl, subscribed, state.episodes, autoOn) {
         val s = show
         if (s != null && subscribed && autoOn && state.episodes.isNotEmpty()) {
-            downloads.autoDownload(s, state.episodes, progress.filterValues { it.completed }.keys)
+            vm.onEvent(PodcastShowViewModel.Event.AutoDownload)
         }
     }
 
@@ -136,7 +128,7 @@ fun PodcastShowScreen(
             Chip(
                 if (subscribed) "subscribed" else "subscribe",
                 selected = subscribed,
-                onClick = { show?.let { s -> scope.launch { podcasts.toggleSubscription(s) } } },
+                onClick = { show?.let { s -> vm.onEvent(PodcastShowViewModel.Event.ToggleSubscription(s)) } },
             )
         },
     ) {
@@ -149,7 +141,7 @@ fun PodcastShowScreen(
                     RetryNote(
                         message = "couldn't read the feed",
                         prominent = true,
-                        onRetry = { podcasts.refreshShow() },
+                        onRetry = { vm.onEvent(PodcastShowViewModel.Event.RefreshShow) },
                     )
                 }
             }
@@ -166,7 +158,7 @@ fun PodcastShowScreen(
             if (queue.isNotEmpty()) {
                 item {
                     SectionLabel("episodes — ${queue.size}") {
-                        Mono("refresh", CliampType.meta, p.inkTertiary, Modifier.microPress { podcasts.refreshShow() })
+                        Mono("refresh", CliampType.meta, p.inkTertiary, Modifier.microPress { vm.onEvent(PodcastShowViewModel.Event.RefreshShow) })
                     }
                 }
                 items(queue.indices.toList(), key = { i -> "ep:${queue[i].url}" }) { i ->
@@ -184,11 +176,11 @@ fun PodcastShowScreen(
                         onPlay = { onPlay(station, queue) },
                         onPlayNext = { onPlayNext(station) },
                         onAddToQueue = { onAddToQueue(station) },
-                        onMarkPlayed = { scope.launch { podcasts.markCompleted(station) } },
-                        onForget = { scope.launch { podcasts.clearProgress(station) } },
-                        onDownload = { downloads.download(station) },
-                        onCancelDownload = { downloads.cancel(station.url) },
-                        onRemoveDownload = { downloads.remove(station.url) },
+                        onMarkPlayed = { vm.onEvent(PodcastShowViewModel.Event.MarkCompleted(station)) },
+                        onForget = { vm.onEvent(PodcastShowViewModel.Event.ClearProgress(station)) },
+                        onDownload = { vm.onEvent(PodcastShowViewModel.Event.Download(station)) },
+                        onCancelDownload = { vm.onEvent(PodcastShowViewModel.Event.CancelDownload(station.url)) },
+                        onRemoveDownload = { vm.onEvent(PodcastShowViewModel.Event.RemoveDownload(station.url)) },
                     )
                 }
             }

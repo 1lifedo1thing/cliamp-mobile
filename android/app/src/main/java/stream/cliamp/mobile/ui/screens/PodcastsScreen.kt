@@ -43,14 +43,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
-import stream.cliamp.mobile.data.CountryCount
 import stream.cliamp.mobile.data.PodcastDirectory
 import stream.cliamp.mobile.data.PodcastQuery
-import stream.cliamp.mobile.data.PodcastRepository
 import stream.cliamp.mobile.data.PodcastShow
-import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.ChipDropdown
@@ -85,9 +80,7 @@ private enum class Pane(val label: String) {
  */
 @Composable
 fun PodcastsScreen(
-    podcasts: PodcastRepository,
-    prefs: Prefs,
-    countries: StateFlow<List<CountryCount>>,
+    vm: PodcastsViewModel,
     onOpenShow: (PodcastShow) -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
@@ -95,13 +88,14 @@ fun PodcastsScreen(
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
     var pane by rememberSaveable { mutableStateOf(Pane.All) }
-    val subsGrid by prefs.subsGrid.collectAsState(initial = prefs.subsGrid.value)
-    val podDirectoryGrid by prefs.podDirectoryGrid.collectAsState(initial = prefs.podDirectoryGrid.value)
+    val ui by vm.state.collectAsState()
+    val subsGrid = ui.subsGrid
+    val podDirectoryGrid = ui.podDirectoryGrid
 
-    val countryList by countries.collectAsState(initial = emptyList())
+    val countryList = ui.countries
 
-    val directory by podcasts.directory.collectAsState()
-    val subscriptions by podcasts.subscriptions.collectAsState(initial = emptyList())
+    val directory = ui.directory
+    val subscriptions = ui.subscriptions
 
     val listState = rememberLazyGridState()
     // NOTE: no scroll reset on query/pane change, same reasoning as Stations.
@@ -112,7 +106,7 @@ fun PodcastsScreen(
         }
     }
     LaunchedEffect(nearEnd, directory.shows.size) {
-        if (nearEnd && pane != Pane.Subs) podcasts.nextPage()
+        if (nearEnd && pane != Pane.Subs) vm.onEvent(PodcastsViewModel.Event.NextPage)
     }
 
     val subscribedFeeds = remember(subscriptions) { subscriptions.mapTo(HashSet()) { it.feedUrl } }
@@ -133,11 +127,11 @@ fun PodcastsScreen(
                 selected = topQuery != null && topQuery.country.isNotEmpty(),
                 options = listOf(
                     ChipOption("all countries") {
-                        podcasts.load(PodcastQuery.Top(), reset = true)
+                        vm.onEvent(PodcastsViewModel.Event.Load(PodcastQuery.Top()))
                     },
                 ) + countryList.map { c ->
                     ChipOption(c.name) {
-                        podcasts.load(PodcastQuery.Top(c.iso_3166_1), reset = true)
+                        vm.onEvent(PodcastsViewModel.Event.Load(PodcastQuery.Top(c.iso_3166_1)))
                     }
                 },
             )
@@ -162,7 +156,7 @@ fun PodcastsScreen(
                 if (pane == Pane.Subs) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         SectionLabel("subscribed — ${subscriptions.size}", gutter = 8.dp) {
-                            GridListToggle(subsGrid) { scope.launch { prefs.setSubsGrid(!subsGrid) } }
+                            GridListToggle(subsGrid) { vm.onEvent(PodcastsViewModel.Event.ToggleSubsGrid) }
                         }
                     }
                     if (subscriptions.isEmpty()) {
@@ -180,14 +174,14 @@ fun PodcastsScreen(
                                     show = show,
                                     subscribed = true,
                                     onOpen = { onOpenShow(show) },
-                                    onToggleSubscribe = { scope.launch { podcasts.toggleSubscription(show) } },
+                                    onToggleSubscribe = { vm.onEvent(PodcastsViewModel.Event.ToggleSubscription(show)) },
                                 )
                             } else {
                                 ShowRow(
                                     show = show,
                                     subscribed = true,
                                     onOpen = { onOpenShow(show) },
-                                    onToggleSubscribe = { scope.launch { podcasts.toggleSubscription(show) } },
+                                    onToggleSubscribe = { vm.onEvent(PodcastsViewModel.Event.ToggleSubscription(show)) },
                                 )
                             }
                         }
@@ -200,7 +194,7 @@ fun PodcastsScreen(
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Mono(directory.query.label, CliampType.meta, p.inkTertiary)
                                 GridListToggle(podDirectoryGrid) {
-                                    scope.launch { prefs.setPodDirectoryGrid(!podDirectoryGrid) }
+                                    vm.onEvent(PodcastsViewModel.Event.TogglePodDirectoryGrid)
                                 }
                             }
                         }
@@ -217,14 +211,14 @@ fun PodcastsScreen(
                             Chip(
                                 "top",
                                 topQuery != null,
-                                onClick = { podcasts.load(PodcastQuery.Top(), reset = true) },
+                                onClick = { vm.onEvent(PodcastsViewModel.Event.Load(PodcastQuery.Top())) },
                             )
                             PodcastDirectory.genres.forEach { g ->
                                 val q = directory.query
                                 Chip(
                                     g.name.lowercase(),
                                     selected = q is PodcastQuery.Category && q.genre.id == g.id,
-                                    onClick = { podcasts.load(PodcastQuery.Category(g), reset = true) },
+                                    onClick = { vm.onEvent(PodcastsViewModel.Event.Load(PodcastQuery.Category(g))) },
                                 )
                             }
                         }
@@ -241,14 +235,14 @@ fun PodcastsScreen(
                                 show = show,
                                 subscribed = show.feedUrl in subscribedFeeds,
                                 onOpen = { onOpenShow(show) },
-                                onToggleSubscribe = { scope.launch { podcasts.toggleSubscription(show) } },
+                                onToggleSubscribe = { vm.onEvent(PodcastsViewModel.Event.ToggleSubscription(show)) },
                             )
                         } else {
                             ShowRow(
                                 show = show,
                                 subscribed = show.feedUrl in subscribedFeeds,
                                 onOpen = { onOpenShow(show) },
-                                onToggleSubscribe = { scope.launch { podcasts.toggleSubscription(show) } },
+                                onToggleSubscribe = { vm.onEvent(PodcastsViewModel.Event.ToggleSubscription(show)) },
                             )
                         }
                     }
@@ -257,7 +251,7 @@ fun PodcastsScreen(
                             directory.error != null -> RetryNote(
                                 message = "couldn't fetch the directory",
                                 prominent = directory.shows.isEmpty(),
-                                onRetry = { podcasts.load(directory.query, reset = true) },
+                                onRetry = { vm.onEvent(PodcastsViewModel.Event.Load(directory.query)) },
                             )
                             directory.loading -> EmptyNote("loading more…")
                             directory.exhausted -> EmptyNote("end of ${directory.query.label}")

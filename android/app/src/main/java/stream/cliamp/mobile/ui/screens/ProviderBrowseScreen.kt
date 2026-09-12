@@ -20,26 +20,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.Station
-import stream.cliamp.mobile.data.provider.IndexState
-import stream.cliamp.mobile.data.provider.ProviderAccount
-import stream.cliamp.mobile.data.provider.ProviderAlbum
-import stream.cliamp.mobile.data.provider.ProviderArtist
-import stream.cliamp.mobile.data.provider.ProviderTrack
-import stream.cliamp.mobile.data.provider.browseClient
 import stream.cliamp.mobile.data.provider.toStation
 import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
@@ -54,31 +42,16 @@ import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
 
-private enum class Root(val label: String, val listType: String) {
-    Newest("newest", "newest"),
-    Frequent("most played", "frequent"),
-    AZ("a-z", "az"),
-    Artists("artists", ""),
-    Starred("starred", ""),
-}
-
-/** Where in the provider's own hierarchy we are. */
-private sealed interface Node {
-    data object Home : Node
-    data class Artist(val id: String, val name: String) : Node
-    data class Album(val id: String, val name: String, val artist: String) : Node
-}
-
 /**
  * Browses one provider's library: albums, artists, starred tracks, drilling
  * into an album's track list. Playing a track queues the whole album.
  *
- * The screen only knows the generic [ProviderBrowseClient]; Subsonic and
+ * The screen only knows the generic browse client behind [vm]; Subsonic and
  * Jellyfin/Emby behind it. Roots some providers do not offer are just hidden.
  */
 @Composable
 fun ProviderBrowseScreen(
-    account: ProviderAccount,
+    vm: ProviderBrowseViewModel,
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onPlay: (Station, List<Station>) -> Unit,
@@ -87,65 +60,16 @@ fun ProviderBrowseScreen(
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
     val browseListState = rememberLazyListState()
-    val client = remember(account.id) { account.browseClient() }
-    // Roots with no semantics on the server are dropped from the chip row.
-    val roots = remember(account.providerKey) {
-        when (account.providerKey) {
-            "jellyfin", "emby", "plex", "abs" -> listOf(Root.Newest, Root.AZ)
-            // A filesystem has play counts and stars nowhere; newest is the
-            // newest file in a folder, which is when it was copied across.
-            "ssh" -> listOf(Root.Newest, Root.AZ, Root.Artists)
-            else -> Root.entries
-        }
-    }
-    // Remembered unconditionally: switching to an account whose provider does
-    // keep an index would otherwise change how many slots this composition uses.
-    val noIndex = remember { MutableStateFlow(IndexState()) }
-    val indexing = client.index
-    val indexState by (indexing ?: noIndex).collectAsState()
+    val uiState by vm.state.collectAsState()
 
-    var stack by remember(account.id) { mutableStateOf<List<Node>>(listOf(Node.Home)) }
-    var root by remember(account.id) { mutableStateOf(roots.first()) }
-    var albums by remember { mutableStateOf<List<ProviderAlbum>>(emptyList()) }
-    var artists by remember { mutableStateOf<List<ProviderArtist>>(emptyList()) }
-    var tracks by remember { mutableStateOf<List<ProviderTrack>>(emptyList()) }
-    var busy by remember { mutableStateOf(false) }
-    var failure by remember { mutableStateOf<String?>(null) }
+    val here = uiState.stack.last()
 
-    val here = stack.last()
-
-    // Keyed on the scan too: an index that has just finished filling in is a
-    // different answer to the same question.
-    LaunchedEffect(account.id, here, root, indexState.scanning) {
-        busy = true
-        failure = null
-        albums = emptyList(); artists = emptyList(); tracks = emptyList()
-        when (val n = here) {
-            Node.Home -> when (root) {
-                Root.Artists -> client.artists()
-                    .onSuccess { artists = it }
-                    .onFailure { failure = it.message }
-                Root.Starred -> client.starred()
-                    .onSuccess { tracks = it }
-                    .onFailure { failure = it.message }
-                else -> client.albums(root.listType)
-                    .onSuccess { albums = it }
-                    .onFailure { failure = it.message }
-            }
-            is Node.Artist -> client.artistAlbums(n.id)
-                .onSuccess { albums = it }
-                .onFailure { failure = it.message }
-            is Node.Album -> client.albumTracks(n.id)
-                .onSuccess { tracks = it }
-                .onFailure { failure = it.message }
-        }
-        busy = false
+    fun pop() {
+        if (uiState.stack.size > 1) vm.onEvent(ProviderBrowseViewModel.Event.Pop) else onBack()
     }
 
-    fun pop() { if (stack.size > 1) stack = stack.dropLast(1) else onBack() }
-
-    androidx.activity.compose.BackHandler(enabled = stack.size > 1) {
-        stack = stack.dropLast(1)
+    androidx.activity.compose.BackHandler(enabled = uiState.stack.size > 1) {
+        vm.onEvent(ProviderBrowseViewModel.Event.Pop)
     }
 
     Column(Modifier.fillMaxSize().background(p.ground).navigationBarsPadding()) {
@@ -167,7 +91,7 @@ fun ProviderBrowseScreen(
             Box(Modifier.padding(horizontal = Gutter, vertical = 4.dp)) {
                 Mono(
                     when (val n = here) {
-                        Node.Home -> account.label.ifBlank { "provider" }
+                        Node.Home -> vm.account.label.ifBlank { "provider" }
                         is Node.Artist -> n.name
                         is Node.Album -> n.name
                     },
@@ -181,12 +105,18 @@ fun ProviderBrowseScreen(
                         .padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
-                    roots.forEach { r -> Chip(r.label, root == r, onClick = { root = r }) }
-                    if (indexing != null) {
+                    uiState.roots.forEach { r ->
                         Chip(
-                            if (indexState.scanning) "scanning" else "rescan",
+                            r.label,
+                            uiState.root == r,
+                            onClick = { vm.onEvent(ProviderBrowseViewModel.Event.SelectRoot(r)) },
+                        )
+                    }
+                    if (uiState.hasIndex) {
+                        Chip(
+                            if (uiState.indexState.scanning) "scanning" else "rescan",
                             selected = false,
-                            onClick = { if (!indexState.scanning) scope.launch { client.reindex() } },
+                            onClick = { vm.onEvent(ProviderBrowseViewModel.Event.Reindex) },
                         )
                     }
                 }
@@ -196,26 +126,26 @@ fun ProviderBrowseScreen(
         }
 
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = browseListState) {
-            if (indexState.text.isNotBlank()) {
+            if (uiState.indexState.text.isNotBlank()) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 10.dp)) {
                         Mono(
-                            indexState.text,
+                            uiState.indexState.text,
                             CliampType.rowSecondary,
-                            if (indexState.scanning) p.amber else p.inkFaint,
+                            if (uiState.indexState.scanning) p.amber else p.inkFaint,
                             maxLines = 1,
                         )
                     }
                 }
             }
-            failure?.let { msg ->
+            uiState.failure?.let { msg ->
                 item {
                     Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 20.dp)) {
                         Mono(msg, CliampType.rowSecondary, p.destructiveInk)
                     }
                 }
             }
-            if (busy && failure == null) {
+            if (uiState.busy && uiState.failure == null) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 20.dp)) {
                         Mono("loading…", CliampType.rowSecondary, p.inkFaint)
@@ -223,12 +153,12 @@ fun ProviderBrowseScreen(
                 }
             }
 
-            if (artists.isNotEmpty()) {
-                item { SectionLabel("artists — ${artists.size}") }
-                items(artists.size, key = { "ar:${artists[it].id}" }) { i ->
-                    val a = artists[i]
+            if (uiState.artists.isNotEmpty()) {
+                item { SectionLabel("artists — ${uiState.artists.size}") }
+                items(uiState.artists.size, key = { "ar:${uiState.artists[it].id}" }) { i ->
+                    val a = uiState.artists[i]
                     ListRow(
-                        onClick = { stack = stack + Node.Artist(a.id, a.name) },
+                        onClick = { vm.onEvent(ProviderBrowseViewModel.Event.PushArtist(a.id, a.name)) },
                         verticalPadding = 11.dp,
                         trailing = {
                             if (a.albumCount > 0) Mono("${a.albumCount}", CliampType.meta, p.inkFaint)
@@ -239,12 +169,12 @@ fun ProviderBrowseScreen(
                 }
             }
 
-            if (albums.isNotEmpty()) {
-                item { SectionLabel("albums — ${albums.size}") }
-                items(albums.size, key = { "al:${albums[it].id}" }) { i ->
-                    val a = albums[i]
+            if (uiState.albums.isNotEmpty()) {
+                item { SectionLabel("albums — ${uiState.albums.size}") }
+                items(uiState.albums.size, key = { "al:${uiState.albums[it].id}" }) { i ->
+                    val a = uiState.albums[i]
                     ListRow(
-                        onClick = { stack = stack + Node.Album(a.id, a.name, a.artist) },
+                        onClick = { vm.onEvent(ProviderBrowseViewModel.Event.PushAlbum(a.id, a.name, a.artist)) },
                         verticalPadding = 11.dp,
                         trailing = {
                             if (a.songCount > 0) Mono("${a.songCount}", CliampType.meta, p.inkFaint)
@@ -262,13 +192,13 @@ fun ProviderBrowseScreen(
                 }
             }
 
-            if (tracks.isNotEmpty()) {
-                item { SectionLabel("tracks — ${tracks.size}") }
-                items(tracks.size, key = { "tr:${tracks[it].id}" }) { i ->
-                    val t = tracks[i]
+            if (uiState.tracks.isNotEmpty()) {
+                item { SectionLabel("tracks — ${uiState.tracks.size}") }
+                items(uiState.tracks.size, key = { "tr:${uiState.tracks[it].id}" }) { i ->
+                    val t = uiState.tracks[i]
                     ListRow(
                         onClick = {
-                            val queue = tracks.map { it.toStation(account, client.trackCover(it.id)) }
+                            val queue = uiState.tracks.map { it.toStation(vm.account, vm.coverOf(it.id)) }
                             onPlay(queue[i], queue)
                             onOpenPlayer()
                         },
@@ -300,8 +230,8 @@ fun ProviderBrowseScreen(
                 }
             }
 
-            if (!busy && failure == null && !indexState.scanning &&
-                artists.isEmpty() && albums.isEmpty() && tracks.isEmpty()
+            if (!uiState.busy && uiState.failure == null && !uiState.indexState.scanning &&
+                uiState.artists.isEmpty() && uiState.albums.isEmpty() && uiState.tracks.isEmpty()
             ) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 20.dp)) {

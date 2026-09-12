@@ -131,8 +131,6 @@ class MainActivity : ComponentActivity() {
                     repository = app.repository,
                     prefs = app.prefs,
                     player = app.player,
-                    localLibrary = app.localLibrary,
-                    playlists = app.playlists,
                     providers = app.providers,
                     podcasts = app.podcasts,
                     dark = dark,

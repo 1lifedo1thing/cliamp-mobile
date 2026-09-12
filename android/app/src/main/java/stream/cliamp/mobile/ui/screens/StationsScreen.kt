@@ -48,10 +48,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.DirectoryQuery
-import stream.cliamp.mobile.data.Prefs
-import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.StationSource
@@ -86,13 +83,11 @@ private enum class Source(val label: String) {
 
 @Composable
 fun StationsScreen(
-    repository: Repository,
-    prefs: Prefs,
+    vm: StationsViewModel,
     current: Station?,
     playing: Boolean,
     favorites: List<Station>,
     onPlay: (Station, List<Station>) -> Unit,
-    onToggleFavorite: (Station) -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     focusDirectory: Boolean = false,
@@ -102,17 +97,18 @@ fun StationsScreen(
     val scope = rememberCoroutineScope()
     var source by rememberSaveable { mutableStateOf(Source.All) }
     var addingCustom by rememberSaveable { mutableStateOf(false) }
-    val cliampGrid by prefs.cliampGrid.collectAsState(initial = prefs.cliampGrid.value)
-    val directoryGrid by prefs.directoryGrid.collectAsState(initial = prefs.directoryGrid.value)
-    val customGrid by prefs.customGrid.collectAsState(initial = prefs.customGrid.value)
+    val ui by vm.state.collectAsState()
+    val cliampGrid = ui.cliampGrid
+    val directoryGrid = ui.directoryGrid
+    val customGrid = ui.customGrid
 
-    val cliamp by repository.cliamp.collectAsState()
-    val cliampError by repository.cliampError.collectAsState()
-    val custom by prefs.custom.collectAsState(initial = emptyList())
-    val directory by repository.directory.collectAsState()
-    val dirStats by repository.directoryStats.collectAsState()
-    val tags by repository.tags.collectAsState()
-    val countries by repository.countries.collectAsState(initial = emptyList())
+    val cliamp = ui.cliamp
+    val cliampError = ui.cliampError
+    val custom = ui.custom
+    val directory = ui.directory
+    val dirStats = ui.directoryStats
+    val tags = ui.tags
+    val countries = ui.countries
 
     val listState = rememberLazyGridState()
     // NOTE: no scroll reset on query/source change. A filter keeps its
@@ -126,7 +122,7 @@ fun StationsScreen(
         }
     }
     LaunchedEffect(nearEnd, directory.stations.size) {
-        if (nearEnd && source != Source.Cliamp && source != Source.Custom) repository.nextPage()
+        if (nearEnd && source != Source.Cliamp && source != Source.Custom) vm.onEvent(StationsViewModel.Event.NextPage)
     }
 
     // A global search in the command/tab writes its temporary query into the
@@ -136,7 +132,7 @@ fun StationsScreen(
     // back to the default full browse.
     LaunchedEffect(directory.query) {
         if (directory.query is DirectoryQuery.Search) {
-            repository.loadDirectory(DirectoryQuery.TopVoted, reset = true)
+            vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.TopVoted, reset = true))
         }
     }
 
@@ -170,11 +166,11 @@ fun StationsScreen(
                 selected = countryQuery != null,
                 options = listOf(
                     ChipOption("all countries") {
-                        repository.loadDirectory(DirectoryQuery.TopVoted, reset = true)
+                        vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.TopVoted, reset = true))
                     },
                 ) + countries.map { c ->
                     ChipOption(c.name) {
-                        repository.loadDirectory(DirectoryQuery.Country(c.iso_3166_1, c.name), reset = true)
+                        vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.Country(c.iso_3166_1, c.name), reset = true))
                     }
                 },
             )
@@ -203,14 +199,14 @@ fun StationsScreen(
                 if (source == Source.All || source == Source.Cliamp) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         SectionLabel("cliamp radio — ${cliamp.size}", gutter = 8.dp) {
-                            GridListToggle(cliampGrid) { scope.launch { prefs.setCliampGrid(!cliampGrid) } }
+                            GridListToggle(cliampGrid) { vm.onEvent(StationsViewModel.Event.ToggleCliampGrid) }
                         }
                     }
                     if (cliampError != null) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             RetryNote(
                                 message = "couldn't reach cliamp radio",
-                                onRetry = { repository.refreshCliamp() },
+                                onRetry = { vm.onEvent(StationsViewModel.Event.RefreshCliamp) },
                             )
                         }
                     } else {
@@ -226,7 +222,7 @@ fun StationsScreen(
                                 playing = playing && current?.url == s.url,
                                 favorite = favorites.any { it.url == s.url },
                                 onPlay = { onPlay(s, cliamp) },
-                                onToggleFavorite = { onToggleFavorite(s) },
+                                onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                             )
                         } else {
                             StationRow(
@@ -235,7 +231,7 @@ fun StationsScreen(
                                 playing = playing && current?.url == s.url,
                                 favorite = favorites.any { it.url == s.url },
                                 onPlay = { onPlay(s, cliamp) },
-                                onToggleFavorite = { onToggleFavorite(s) },
+                                onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                             )
                         }
                     }
@@ -259,7 +255,7 @@ fun StationsScreen(
                                         Icon(CliampIcons.Plus, "add station", Modifier.size(16.dp), tint = p.accent)
                                     }
                                 }
-                                GridListToggle(customGrid) { scope.launch { prefs.setCustomGrid(!customGrid) } }
+                                GridListToggle(customGrid) { vm.onEvent(StationsViewModel.Event.ToggleCustomGrid) }
                             }
                         }
                     }
@@ -268,7 +264,7 @@ fun StationsScreen(
                             CustomAddForm(
                                 onAdd = { name, url ->
                                     customStation(name, url)?.let { s ->
-                                        scope.launch { prefs.addCustom(s) }
+                                        vm.onEvent(StationsViewModel.Event.AddCustom(s))
                                     }
                                     addingCustom = false
                                 },
@@ -288,8 +284,8 @@ fun StationsScreen(
                                 playing = playing && current?.url == s.url,
                                 favorite = favorites.any { it.url == s.url },
                                 onPlay = { onPlay(s, custom) },
-                                onToggleFavorite = { onToggleFavorite(s) },
-                                onRemove = { scope.launch { prefs.removeCustom(s) } },
+                                onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
+                                onRemove = { vm.onEvent(StationsViewModel.Event.RemoveCustom(s)) },
                             )
                         } else {
                             CustomStationRow(
@@ -298,8 +294,8 @@ fun StationsScreen(
                                 playing = playing && current?.url == s.url,
                                 favorite = favorites.any { it.url == s.url },
                                 onPlay = { onPlay(s, custom) },
-                                onToggleFavorite = { onToggleFavorite(s) },
-                                onRemove = { scope.launch { prefs.removeCustom(s) } },
+                                onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
+                                onRemove = { vm.onEvent(StationsViewModel.Event.RemoveCustom(s)) },
                             )
                         }
                     }
@@ -314,7 +310,7 @@ fun StationsScreen(
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Mono(directory.query.label, CliampType.meta, p.inkTertiary)
                                 GridListToggle(directoryGrid) {
-                                    scope.launch { prefs.setDirectoryGrid(!directoryGrid) }
+                                    vm.onEvent(StationsViewModel.Event.ToggleDirectoryGrid)
                                 }
                             }
                         }
@@ -332,12 +328,12 @@ fun StationsScreen(
                             Chip(
                                 "top",
                                 directory.query == DirectoryQuery.TopVoted,
-                                onClick = { repository.loadDirectory(DirectoryQuery.TopVoted, reset = true) },
+                                onClick = { vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.TopVoted, reset = true)) },
                             )
                             Chip(
                                 "trending",
                                 directory.query == DirectoryQuery.Trending,
-                                onClick = { repository.loadDirectory(DirectoryQuery.Trending, reset = true) },
+                                onClick = { vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.Trending, reset = true)) },
                             )
                             if (tags.isNotEmpty()) {
                                 tags.take(24).forEach { t ->
@@ -345,7 +341,7 @@ fun StationsScreen(
                                     Chip(
                                         t.name,
                                         selected = q is DirectoryQuery.Tag && q.tag == t.name,
-                                        onClick = { repository.loadDirectory(DirectoryQuery.Tag(t.name), reset = true) },
+                                        onClick = { vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.Tag(t.name), reset = true)) },
                                     )
                                 }
                             }
@@ -364,7 +360,7 @@ fun StationsScreen(
                                 playing = playing && current?.url == s.url,
                                 favorite = favorites.any { it.url == s.url },
                                 onPlay = { onPlay(s, directory.stations) },
-                                onToggleFavorite = { onToggleFavorite(s) },
+                                onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                             )
                         } else {
                             StationRow(
@@ -373,7 +369,7 @@ fun StationsScreen(
                                 playing = playing && current?.url == s.url,
                                 favorite = favorites.any { it.url == s.url },
                                 onPlay = { onPlay(s, directory.stations) },
-                                onToggleFavorite = { onToggleFavorite(s) },
+                                onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                             )
                         }
                     }
@@ -382,7 +378,7 @@ fun StationsScreen(
                             directory.error != null -> RetryNote(
                                 message = "couldn't fetch the directory",
                                 prominent = directory.stations.isEmpty(),
-                                onRetry = { repository.loadDirectory(directory.query, reset = true) },
+                                onRetry = { vm.onEvent(StationsViewModel.Event.LoadDirectory(directory.query, reset = true)) },
                             )
                             directory.loading -> EmptyNote("loading more…")
                             directory.exhausted -> EmptyNote("end of ${directory.query.label}")

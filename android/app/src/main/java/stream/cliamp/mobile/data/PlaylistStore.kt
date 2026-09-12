@@ -103,10 +103,6 @@ class PlaylistStore(private val context: Context) {
         else stationsDao.byStationIds(snapshotIds).associateBy { it.stationId }
         return songIds.mapNotNull { id -> localById[id] ?: snapshotById[id]?.toStation() }
     }
-
-    /** Persisted snapshot stations (radio/podcast) that playlists can reference. */
-    fun persistedStations(): Flow<List<Station>> =
-        stationsDao.all().map { rows -> rows.map { it.toStation() } }
 }
 
 private fun PlaylistEntity.toStation() = Station(

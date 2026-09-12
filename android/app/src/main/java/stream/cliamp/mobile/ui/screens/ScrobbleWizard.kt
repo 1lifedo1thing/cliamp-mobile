@@ -15,10 +15,10 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,8 +27,6 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
-import stream.cliamp.mobile.data.validateListenBrainzToken
 import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.CliampTextField
 import stream.cliamp.mobile.ui.components.Gutter
@@ -37,13 +35,6 @@ import stream.cliamp.mobile.ui.components.MechKey
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
-
-private sealed interface ScrobbleProbe {
-    data object Idle : ScrobbleProbe
-    data object Running : ScrobbleProbe
-    data class Ok(val user: String) : ScrobbleProbe
-    data class Failed(val reason: String) : ScrobbleProbe
-}
 
 /**
  * The ListenBrainz setup wizard, cut to the provider wizard's pattern:
@@ -54,32 +45,14 @@ private sealed interface ScrobbleProbe {
  */
 @Composable
 fun ScrobbleWizard(
-    existingToken: String,
+    vm: ScrobbleWizardViewModel,
     onCancel: () -> Unit,
     onSave: (String) -> Unit,
 ) {
     val p = LocalPalette.current
-    val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
 
-    var token by remember(existingToken) { mutableStateOf(existingToken) }
-    var probe by remember { mutableStateOf<ScrobbleProbe>(ScrobbleProbe.Idle) }
-
-    fun runProbe() {
-        if (token.isBlank()) {
-            probe = ScrobbleProbe.Failed("paste a token first")
-            return
-        }
-        probe = ScrobbleProbe.Running
-        scope.launch {
-            val t = token.trim()
-            token = t
-            probe = validateListenBrainzToken(t).fold(
-                onSuccess = { ScrobbleProbe.Ok(it) },
-                onFailure = { ScrobbleProbe.Failed(it.message ?: "could not reach listenbrainz") },
-            )
-        }
-    }
+    val uiState by vm.state.collectAsState()
 
     Column(Modifier.fillMaxSize().background(p.ground).statusBarsPadding().navigationBarsPadding()) {
         Row(
@@ -90,7 +63,7 @@ fun ScrobbleWizard(
             BackChip(onClick = onCancel)
             // QueueBar floats over this corner on every screen
             Mono(
-                if (existingToken.isBlank()) "ADD SCROBBLER" else "EDIT",
+                if (vm.seedToken.isBlank()) "ADD SCROBBLER" else "EDIT",
                 CliampType.sectionLabel,
                 p.inkTertiary,
                 Modifier.padding(end = 56.dp),
@@ -116,17 +89,17 @@ fun ScrobbleWizard(
             HairlineDivider(region = true)
 
             TokenField(
-                value = token,
-                autoFocus = existingToken.isBlank(),
-                onValue = {
-                    token = it.trim()
-                    probe = ScrobbleProbe.Idle
+                value = uiState.token,
+                autoFocus = vm.seedToken.isBlank(),
+                onValue = { vm.onEvent(ScrobbleWizardViewModel.Event.SetToken(it)) },
+                onDone = {
+                    focus.clearFocus()
+                    vm.onEvent(ScrobbleWizardViewModel.Event.Test)
                 },
-                onDone = { focus.clearFocus(); runProbe() },
             )
 
             Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 14.dp)) {
-                when (val s = probe) {
+                when (val s = uiState.probe) {
                     ScrobbleProbe.Idle -> Mono(
                         "nothing is saved until listenbrainz answers.",
                         CliampType.meta, p.inkFaint,
@@ -142,19 +115,17 @@ fun ScrobbleWizard(
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
                 MechKey(
-                    onClick = { runProbe() },
+                    onClick = { vm.onEvent(ScrobbleWizardViewModel.Event.Test) },
                     modifier = Modifier.weight(1f),
                     height = 52.dp,
-                    enabled = probe != ScrobbleProbe.Running,
+                    enabled = uiState.probe != ScrobbleProbe.Running,
                 ) { Mono("TEST", CliampType.chip) }
                 MechKey(
-                    onClick = {
-                        if (probe is ScrobbleProbe.Ok) onSave(token)
-                    },
+                    onClick = { vm.buildSaveToken()?.let(onSave) },
                     modifier = Modifier.weight(1f),
                     height = 52.dp,
                     filled = true,
-                    enabled = probe is ScrobbleProbe.Ok,
+                    enabled = uiState.probe is ScrobbleProbe.Ok,
                 ) { Mono("SAVE", CliampType.chip) }
             }
             Spacer(Modifier.height(18.dp))

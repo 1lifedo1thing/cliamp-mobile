@@ -159,9 +159,6 @@ object RadioBrowser {
     suspend fun byCountryCode(cc: String, offset: Int = 0, limit: Int = 60): List<Station> =
         decode(get("/json/stations/search?countrycode=${enc(cc.uppercase())}&order=votes&reverse=true&hidebroken=true&limit=$limit&offset=$offset"))
 
-    suspend fun byLanguage(lang: String, offset: Int = 0, limit: Int = 60): List<Station> =
-        decode(get("/json/stations/search?language=${enc(lang)}&order=votes&reverse=true&hidebroken=true&limit=$limit&offset=$offset"))
-
     suspend fun topTags(limit: Int = 60): List<NameCount> =
         runCatching {
             Http.json.decodeFromString<List<NameCount>>(

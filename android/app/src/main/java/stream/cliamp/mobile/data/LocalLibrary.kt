@@ -6,12 +6,14 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.db.CliampDatabase
 import stream.cliamp.mobile.data.db.LocalSongEntity
-import kotlinx.coroutines.runBlocking
 import java.io.File
 
 /**
@@ -67,7 +69,7 @@ fun durationLabel(ms: Long): String {
  * every later one reads the cached snapshot instantly and refreshes in the
  * background, so opening the Library is never slow again.
  */
-class LocalLibrary(context: Context) {
+class LocalLibrary(context: Context, private val scope: CoroutineScope) {
 
     private val resolver = context.contentResolver
     private val dao = CliampDatabase.get(context).localSongs()
@@ -90,9 +92,10 @@ class LocalLibrary(context: Context) {
             _loading.value = true
         }
         _error.value = null
-        Thread {
-            // Cache read and MediaStore scan both live on this background thread
-            // so a warm launch's per-song File.isFile check never janks the UI.
+        scope.launch(Dispatchers.IO) {
+            // Cache read and MediaStore scan both live on this background
+            // context so a warm launch's per-song File.isFile check never
+            // janks the UI.
             val cached = readCache()
             if (_songs.value.isEmpty() && !cached.isNullOrEmpty()) {
                 _songs.value = cached
@@ -107,7 +110,7 @@ class LocalLibrary(context: Context) {
                 writeCache(found)
             }
             _loading.value = false
-        }.start()
+        }
     }
 
     private fun querySongs(): List<Station> {
@@ -193,7 +196,7 @@ class LocalLibrary(context: Context) {
      * what a preferences store being the wrong shape looks like; it is a table
      * now, so the fuzzy search can query it instead of scanning a parsed list.
      */
-    private fun readCache(): List<Station>? = runBlocking {
+    private suspend fun readCache(): List<Station>? =
         runCatching {
             dao.read()
                 .filter { File(it.path).isFile } // dropped since last scan
@@ -211,29 +214,26 @@ class LocalLibrary(context: Context) {
                 }
                 .takeIf { it.isNotEmpty() }
         }.getOrNull()
-    }
 
-    private fun writeCache(songs: List<Station>) {
-        runBlocking {
-            runCatching {
-                dao.replaceAll(
-                    songs.map { s ->
-                        val path = s.url.removePrefix("file://").let(Uri::decode)
-                        LocalSongEntity(
-                            songId = s.id,
-                            path = path,
-                            title = s.name,
-                            artist = s.artist,
-                            album = s.album,
-                            durationMs = s.durationMs,
-                            uri = s.url,
-                            cover = s.cover,
-                            dateAdded = s.dateAdded,
-                            sortKey = s.name.lowercase(),
-                        )
-                    }
-                )
-            }
+    private suspend fun writeCache(songs: List<Station>) {
+        runCatching {
+            dao.replaceAll(
+                songs.map { s ->
+                    val path = s.url.removePrefix("file://").let(Uri::decode)
+                    LocalSongEntity(
+                        songId = s.id,
+                        path = path,
+                        title = s.name,
+                        artist = s.artist,
+                        album = s.album,
+                        durationMs = s.durationMs,
+                        uri = s.url,
+                        cover = s.cover,
+                        dateAdded = s.dateAdded,
+                        sortKey = s.name.lowercase(),
+                    )
+                }
+            )
         }
     }
 
@@ -289,8 +289,11 @@ class LocalLibrary(context: Context) {
         if (_songs.value.any { it.id == s.id }) {
             _songs.value = _songs.value.filterNot { it.id == s.id }
         }
-        runBlocking { runCatching { dao.delete(s.id) } }
-        if (!s.url.startsWith("file://")) return // a stream-ish id, not a real file
-        runCatching { File(path).delete() }
+        scope.launch(Dispatchers.IO) {
+            runCatching { dao.delete(s.id) }
+            if (s.url.startsWith("file://")) {
+                runCatching { File(path).delete() }
+            }
+        }
     }
 }

@@ -69,11 +69,6 @@ class SubsonicClient(
     suspend fun starred(): Result<List<SubsonicTrack>> =
         call("getStarred2.view") { it.starred2?.song.orEmpty() }
 
-    suspend fun search(query: String): Result<SubsonicSearch> =
-        call("search3.view", mapOf("query" to query, "songCount" to "40", "albumCount" to "20", "artistCount" to "20")) {
-            it.searchResult3 ?: SubsonicSearch()
-        }
-
     private suspend fun <T> call(
         view: String,
         params: Map<String, String> = emptyMap(),
