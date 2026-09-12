@@ -625,7 +625,8 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
             .fillMaxSize()
             // Soft drop shadow so the plate floats over the page - the
             // premium read. Same large radius as the plate itself. A touch
-            // lighter on light grounds, where deep shadows read dirty.
+            // lighter on light grounds, where the same elevation reads
+            // stronger against the pale ground.
             .shadow(if (p.dark) 26.dp else 20.dp, RoundedCornerShape(CliampShape.large))
             .graphicsLayer {
                 scaleX = breath
