@@ -37,6 +37,30 @@
       "skillPath": "skills/compose-ui-testing-patterns/SKILL.md",
       "computedHash": "0a15f484b5ab04a5abf50afd19906d05d8c5eaa6d11a664c48f190db18815313"
     },
+    "go-cli": {
+      "source": "eduardo-sl/go-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/(architecture)/go-cli/SKILL.md",
+      "computedHash": "7d8c0a65bb1433679cabbca3165193288b850107660e66a5492ea10e0fd30ece"
+    },
+    "go-coding-standards": {
+      "source": "eduardo-sl/go-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/(code-quality)/go-coding-standards/SKILL.md",
+      "computedHash": "24398317d231c2269a026578205ca9b78e3a2051d9f6518798bd2e18e8311d65"
+    },
+    "go-concurrency-review": {
+      "source": "eduardo-sl/go-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/(safety)/go-concurrency-review/SKILL.md",
+      "computedHash": "331fc4df64041ad5582d8d079a0444902506a5e615efefec79a8dfecf6ebd650"
+    },
+    "go-skills-router": {
+      "source": "eduardo-sl/go-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/(workflow)/go-skills-router/SKILL.md",
+      "computedHash": "5a49d2455097778f12e65c82c9c53949574ff460d7fa395ae08288eee9869c67"
+    },
     "gradle-run": {
       "source": "chrisbanes/skills",
       "sourceType": "github",
