@@ -32,11 +32,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -182,7 +177,6 @@ fun LocalScreen(
 
     val ui by vm.state.collectAsState()
     val songs = ui.songs
-    val loading = ui.loading
     val libError = ui.error
     val allPlaylists = ui.allPlaylists
     val pinnedPlaylists = ui.pinnedPlaylists
@@ -288,7 +282,6 @@ fun LocalScreen(
                     onPin = { slug, pinned -> vm.onEvent(LocalViewModel.Event.SetPinned(slug, pinned)) },
                     onOpen = { onOpenPlaylist(it.station.slug) },
                     onOpenSmart = { onOpenSmart(it.kind.name) },
-                    loading = loading,
                 )
             }
         }
@@ -637,7 +630,6 @@ private fun PlaylistList(
     onPin: (String, Boolean) -> Unit,
     onOpen: (PlaylistStore.Playlist) -> Unit,
     onOpenSmart: (SmartPlaylist) -> Unit,
-    loading: Boolean = false,
 ) {
     val p = LocalPalette.current
     Column(Modifier.fillMaxSize()) {
@@ -675,7 +667,7 @@ private fun PlaylistList(
                 }
             }
             items(smart, key = { it.key }) { sp ->
-                SmartPlaylistRow(sp = sp, onOpen = { onOpenSmart(sp) }, loading = loading)
+                SmartPlaylistRow(sp = sp, onOpen = { onOpenSmart(sp) })
             }
 
             items(
@@ -888,51 +880,27 @@ private fun PlaylistRow(
 private fun SmartPlaylistRow(
     sp: SmartPlaylist,
     onOpen: () -> Unit,
-    loading: Boolean = false,
 ) {
     val p = LocalPalette.current
-    val scanning = loading && sp.kind == SmartKind.LocalSongs && sp.stations.isEmpty()
     val kindIcon = smartKindIcon(sp.kind)
-    val pulse = rememberInfiniteTransition(label = "scan")
-    val shimmer by pulse.animateFloat(
-        initialValue = 1f, targetValue = 0.35f,
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-        label = "shimmer",
-    )
     ListRow(
         onClick = onOpen,
         verticalPadding = 8.dp,
         leading = {
-            Box(Modifier.size(44.dp).clip(RoundedCornerShape(CliampShape.small))) {
-                if (scanning) {
-                    Box(
-                        Modifier.fillMaxSize().background(p.inkFaint.copy(alpha = 0.35f * shimmer)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(kindIcon, sp.label, Modifier.size(16.dp), tint = p.inkFaint.copy(alpha = 0.7f * shimmer))
-                    }
-                } else {
-                    PlaylistGlyph(kindIcon, sp.label)
-                }
-            }
+            PlaylistGlyph(kindIcon, sp.label)
         },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (scanning) {
-                    Box(Modifier.width(52.dp).height(12.dp).clip(RoundedCornerShape(CliampShape.small))
-                        .background(p.inkFaint.copy(alpha = 0.35f * shimmer)))
-                } else {
-                    Mono(
-                        if (sp.stations.isEmpty()) "empty" else "${sp.stations.size} items",
-                        CliampType.meta, p.inkFaint,
-                    )
-                }
+                Mono(
+                    if (sp.stations.isEmpty()) "empty" else "${sp.stations.size} items",
+                    CliampType.meta, p.inkFaint,
+                )
                 Icon(CliampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary)
             }
         },
     ) {
         Mono(sp.label, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
-        if (!scanning && sp.stations.isEmpty()) {
+        if (sp.stations.isEmpty()) {
             Mono("nothing here yet", CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
         }
     }
@@ -940,7 +908,7 @@ private fun SmartPlaylistRow(
 
 /** A playlist's identifying mark: static themed glyph on a plate, identical
  * in every theme. Deliberately not cover art - rows stay instant, with
- * nothing to load, decode or shimmer. */
+ * nothing to load or decode. */
 @Composable
 private fun PlaylistGlyph(icon: ImageVector, contentDescription: String?) {
     GlyphPlate(icon, contentDescription, Modifier.size(44.dp))

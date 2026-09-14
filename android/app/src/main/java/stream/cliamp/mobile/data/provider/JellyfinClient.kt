@@ -36,12 +36,29 @@ class JellyfinClient(
     suspend fun ping(): Result<ProviderIdentity> = withContext(Dispatchers.IO) {
         runCatching {
             if (authToken.isBlank()) login()
-            val body = Http.text("$base/System/Info/Public", emptyMap())
-            val info = Http.json.decodeFromString<PublicSystemInfo>(body)
-            ProviderIdentity(
-                name = info.serverName.orEmpty().ifBlank { providerKey },
-                detail = info.version.orEmpty(),
-            )
+            // The public info endpoint answers without credentials, so it
+            // cannot validate a token. Ping the authenticated endpoint the
+            // desktop app uses instead: /Users/Me for Jellyfin,
+            // /System/Info for Emby.
+            if (providerKey == "emby") {
+                val body = Http.text(get("System/Info"))
+                val info = Http.json.decodeFromString<PublicSystemInfo>(body)
+                ProviderIdentity(
+                    name = info.serverName.orEmpty().ifBlank { providerKey },
+                    detail = info.version.orEmpty(),
+                )
+            } else {
+                val me = Http.text(get("Users/Me"))
+                val user = Http.json.decodeFromString<UserMe>(me)
+                if (user.id.isBlank() && user.name.isBlank()) error("jellyfin rejected the credentials")
+                val info = runCatching {
+                    Http.json.decodeFromString<PublicSystemInfo>(Http.text("$base/System/Info/Public"))
+                }.getOrNull()
+                ProviderIdentity(
+                    name = info?.serverName.orEmpty().ifBlank { providerKey },
+                    detail = info?.version.orEmpty(),
+                )
+            }
         }
     }
 
@@ -195,10 +212,17 @@ class JellyfinClient(
 
     companion object {
         /** Tokens are exchanged for passwords per server and cached for the session. */
-        private val cachedToken = mutableMapOf<String, String>()
+        private val cachedToken = java.util.concurrent.ConcurrentHashMap<String, String>()
         private fun cachedToken(base: String): String = cachedToken[base].orEmpty()
     }
 }
+
+/** Authenticated user: `GET /Users/Me` on Jellyfin. */
+@Serializable
+private data class UserMe(
+    @SerialName("Name") val name: String = "",
+    @SerialName("Id") val id: String = "",
+)
 
 /** A Jellyfin/Emby item collection: `{ "Items": [...] }`. */
 @Serializable

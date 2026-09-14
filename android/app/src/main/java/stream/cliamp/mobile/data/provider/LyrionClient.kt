@@ -107,15 +107,20 @@ class LyrionClient(
     fun stream(trackId: String): ResolvedStream {
         // Baking userinfo into the URL authority means the default data source
         // sends the Basic header, so no custom playback headers are required.
+        // Userinfo is percent-encoded: a password containing @ : / or % would
+        // otherwise split the URL or leak into the path.
         val url = if (user.isBlank()) "$base/music/$trackId/download" else {
             val scheme = base.substringBefore("://") + "://"
             val rest = base.removePrefix(scheme)
-            "$scheme$user:${password}@$rest/music/$trackId/download"
+            "$scheme${userinfo(user)}:${userinfo(password)}@$rest/music/$trackId/download"
         }
         return ResolvedStream(url)
     }
 
     fun coverUrl(albumId: String): String = ""
+
+    private fun userinfo(s: String): String =
+        java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
     /** Core jsonrpc call; returns the `result` element (often an array). */
     private suspend fun rpc(args: List<String>): JsonElement = withContext(Dispatchers.IO) {
@@ -134,14 +139,6 @@ class LyrionClient(
 
     /** Finds the largest nested array of objects inside [result]. */
     private fun itemArray(result: JsonElement): List<JsonElement> {
-        val found = ArrayList<JsonElement>()
-        fun walk(e: JsonElement) {
-            when {
-                e is JsonArray -> e.forEach { walk(it) }
-                e is JsonObject -> e.values.forEach { walk(it) }
-            }
-        }
-        walk(result)
         // Collect all object elements from arrays in traversal order (dedup by identity).
         val seen = LinkedHashSet<JsonElement>()
         fun collect(e: JsonElement) {

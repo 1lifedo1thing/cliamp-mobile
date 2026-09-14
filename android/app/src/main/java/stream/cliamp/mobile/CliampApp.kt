@@ -15,6 +15,7 @@ import stream.cliamp.mobile.data.provider.ProviderStore
 import stream.cliamp.mobile.data.provider.SftpLibrary
 import stream.cliamp.mobile.data.provider.audiobookshelf
 import stream.cliamp.mobile.data.provider.jellyfin
+import stream.cliamp.mobile.data.provider.lyrion
 import stream.cliamp.mobile.data.provider.plex
 import stream.cliamp.mobile.data.provider.subsonic
 import stream.cliamp.mobile.playback.ResolvedStream
@@ -70,6 +71,7 @@ class CliampApp : Application() {
                 "jellyfin", "emby" -> account.jellyfin().stream(trackId)
                 "plex" -> account.plex().stream(trackId)
                 "abs" -> account.audiobookshelf().stream(trackId)
+                "lyrion" -> account.lyrion().stream(trackId)
                 else -> ResolvedStream(account.subsonic().streamUrl(trackId))
             }
         }

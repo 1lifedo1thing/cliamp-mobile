@@ -62,7 +62,7 @@ class ProviderBrowseViewModel(
     // A filesystem has play counts and stars nowhere; newest is the
     // newest file in a folder, which is when it was copied across.
     private val roots: List<Root> = when (account.providerKey) {
-        "jellyfin", "emby", "plex", "abs" -> listOf(Root.Newest, Root.AZ)
+        "jellyfin", "emby", "plex", "abs", "lyrion" -> listOf(Root.Newest, Root.AZ)
         "ssh" -> listOf(Root.Newest, Root.AZ, Root.Artists)
         else -> Root.entries
     }

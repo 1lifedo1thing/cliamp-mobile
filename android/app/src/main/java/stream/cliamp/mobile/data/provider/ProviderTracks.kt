@@ -20,6 +20,12 @@ fun ProviderAccount.plex(): PlexClient = PlexClient(
     values["token"].orEmpty(),
 )
 
+fun ProviderAccount.lyrion(): LyrionClient = LyrionClient(
+    values["url"].orEmpty(),
+    values["user"].orEmpty(),
+    values["password"].orEmpty(),
+)
+
 fun ProviderAccount.audiobookshelf(): AudiobookshelfClient = AudiobookshelfClient(
     values["url"].orEmpty(),
     values["token"].orEmpty(),

@@ -80,6 +80,7 @@ fun ProviderAccount.browseClient(): ProviderBrowseClient = when (providerKey) {
     "jellyfin", "emby" -> JellyfinBrowseClient(this, jellyfin())
     "plex" -> PlexBrowseClient(plex())
     "abs" -> AbsBrowseClient(audiobookshelf())
+    "lyrion" -> LyrionBrowseClient(lyrion())
     else -> SubsonicBrowseClient(this, subsonic())
 }
 
@@ -88,7 +89,7 @@ private class SubsonicBrowseClient(
     private val client: SubsonicClient,
 ) : ProviderBrowseClient {
     override suspend fun albums(style: String): Result<List<ProviderAlbum>> =
-        client.albums(style).map { objs ->
+        client.albums(subsonicSort(style)).map { objs ->
             objs.map { ProviderAlbum(it.id, it.name, it.artist, it.songCount, it.year) }
         }
 
@@ -143,6 +144,24 @@ private class JellyfinBrowseClient(
 
 private class PlexBrowseClient(
     private val client: PlexClient,
+) : ProviderBrowseClient {
+    override suspend fun albums(style: String): Result<List<ProviderAlbum>> = client.albums(style)
+    override suspend fun artists(): Result<List<ProviderArtist>> = client.artists()
+    override suspend fun artistAlbums(artistId: String): Result<List<ProviderAlbum>> =
+        client.artistAlbums(artistId)
+    override suspend fun albumTracks(albumId: String): Result<List<ProviderTrack>> =
+        client.albumTracks(albumId)
+    override suspend fun starred(): Result<List<ProviderTrack>> = Result.success(emptyList())
+    /**
+     * No per-track cover: the track id is the Part stream path, not a metadata
+     * ratingKey, so building a thumb URL from it 404s. The row falls back to
+     * the play glyph.
+     */
+    override fun trackCover(id: String): String = ""
+}
+
+private class LyrionBrowseClient(
+    private val client: LyrionClient,
 ) : ProviderBrowseClient {
     override suspend fun albums(style: String): Result<List<ProviderAlbum>> = client.albums(style)
     override suspend fun artists(): Result<List<ProviderArtist>> = client.artists()
@@ -220,3 +239,16 @@ private class SftpBrowseClient(private val account: ProviderAccount) : ProviderB
 
 private fun <T, R> Result<List<T>>.map(t: (List<T>) -> R): Result<R> =
     fold(onSuccess = { Result.success(t(it)) }, onFailure = { Result.failure(it) })
+
+/**
+ * The browse screen's root labels mapped onto Subsonic `getAlbumList2` types.
+ * The screen speaks "az"; the server only knows "alphabeticalByName".
+ */
+private fun subsonicSort(style: String): String = when (style) {
+    "az" -> "alphabeticalByName"
+    "newest" -> "newest"
+    "frequent" -> "frequent"
+    "recent" -> "recent"
+    "starred" -> "starred"
+    else -> "alphabeticalByName"
+}
