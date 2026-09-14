@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -34,7 +36,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navigation
 import androidx.navigation.toRoute
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -124,9 +125,15 @@ fun CliampRoot(
     val scope = rememberCoroutineScope()
     val navController = rememberNavController()
 
-    // The active tab, or null when a search-widget launch started directly
-    // on Search: no tab has been visited yet, so none reads as selected.
-    var tab by remember { mutableStateOf<Tab?>(if (openSearchTick > 0) null else Tab.Stations) }
+    // The three tabs are pages of one pager, so two of them are only ever a
+    // drag apart. The pager's page is the single source of truth for which tab
+    // is active: the strip highlight follows the finger across the midpoint of
+    // a drag instead of waiting for the page to settle.
+    val pagerState = rememberPagerState(pageCount = { Tab.entries.size })
+    // False only while a search-widget launch sits on Search with no tab seen
+    // yet, so the strip reads as having none selected, the way it always did.
+    var tabVisited by rememberSaveable { mutableStateOf(openSearchTick == 0) }
+    val tab: Tab? = if (tabVisited) Tab.entries[pagerState.currentPage] else null
     var focusDirectory by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     // True for a beat after any tab-bar tap: pop transitions go flat so a
@@ -171,69 +178,42 @@ fun CliampRoot(
         repository.reportPlay(s)
     }
 
-    // Switch tabs, clearing any overlay destinations from the back stack.
-    // Always instant: the calm window flattens pop transitions so going to
-    // a tab from the tabs never plays the intermediate page's animation.
-    val switchTab: (Tab) -> Unit = { newTab ->
+    // Move to a tab. Anything sitting above Home - a pane, Settings, Search -
+    // is popped first, so a tab tap always lands on the pager and never leaves
+    // the strip pointing at a page you cannot see. The calm window flattens
+    // that pop: travel by tab tap stays instant, and only a real back animates.
+    //
+    // Animated for a tab tap, so the strip and a swipe agree on how a tab
+    // change looks. Instant when the caller is about to cover the pager, where
+    // animating a page the user never sees only costs a frame.
+    val goToTab: (Tab, Boolean) -> Unit = { newTab, animate ->
         calmJob?.cancel()
         calmNav = true
         calmJob = scope.launch {
             delay(350)
             calmNav = false
         }
-        if (newTab == tab) {
-            // Tapping the current tab: pop to its root if drilled down.
-            val root = when (newTab) {
-                Tab.Stations -> StationsRoot
-                Tab.Pods -> PodcastsRoot
-                Tab.Lib -> LibraryRoot
-            }
-            navController.popBackStack(root, false)
-        } else {
-            // Switching tabs: pop to the current tab's root (clearing overlays
-            // and panes), then leave the whole current tab graph behind -
-            // popped inclusive with its state saved - so the new tab is the
-            // only graph on the stack. Back on any tab root then has nothing
-            // to pop and exits natively, the way the start tab always did.
-            //
-            // Null means a search-widget launch is sitting on Search with no
-            // tab visited yet: drop it and enter the picked tab fresh.
-            val prev = tab
-            tab = newTab
-            val dest = when (newTab) {
-                Tab.Stations -> StationsTab
-                Tab.Pods -> PodcastsTab
-                Tab.Lib -> LibraryTab
-            }
-            if (prev == null) {
-                navController.popBackStack()
-                navController.navigate(dest) {
-                    launchSingleTop = true
-                    restoreState = true
-                }
-            } else {
-                val currentRoot = when (prev) {
-                    Tab.Stations -> StationsRoot
-                    Tab.Pods -> PodcastsRoot
-                    Tab.Lib -> LibraryRoot
-                }
-                val currentGraphRoute = when (prev) {
-                    Tab.Stations -> StationsTab::class.qualifiedName!!
-                    Tab.Pods -> PodcastsTab::class.qualifiedName!!
-                    Tab.Lib -> LibraryTab::class.qualifiedName!!
-                }
-                navController.popBackStack(currentRoot, false)
-                navController.navigate(dest) {
-                    popUpTo(currentGraphRoute) {
-                        inclusive = true
-                        saveState = true
-                    }
-                    launchSingleTop = true
-                    restoreState = true
-                }
+        tabVisited = true
+        // Already on the pager: nothing to pop. Asking anyway would report
+        // failure and send us down the rebuild path below, which would drop
+        // the Home entry and take all three tabs' state with it.
+        val onHome = navController.currentDestination?.route
+            ?.startsWith(Home::class.qualifiedName!!) == true
+        if (!onHome && !navController.popBackStack(Home, false)) {
+            // A search-widget launch started on Search, so Home was never on
+            // the stack. Replace the stack with it rather than stacking Home
+            // on top of a Search the user has already left.
+            navController.navigate(Home) {
+                popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                launchSingleTop = true
             }
         }
+        scope.launch {
+            if (animate) pagerState.animateScrollToPage(newTab.ordinal)
+            else pagerState.scrollToPage(newTab.ordinal)
+        }
     }
+    val switchTab: (Tab) -> Unit = { newTab -> goToTab(newTab, true) }
 
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     // The chrome (mini player + tab strip) lives under every page for the
@@ -318,7 +298,7 @@ fun CliampRoot(
             // A search-widget launch starts directly on Search: no one-frame
             // flash of Stations first. Back from there falls through to the
             // Stations tab (see the Search onBack below).
-            startDestination = if (openSearchTick > 0) Search else StationsTab,
+            startDestination = if (openSearchTick > 0) Search else Home,
             // Transparent: the chrome underneath shows through the padded
             // zone; every overlay paints its own opaque cover instead.
             modifier = Modifier.fillMaxSize(),
@@ -327,180 +307,185 @@ fun CliampRoot(
             popEnterTransition = { if (calmNav) EnterTransition.None else PagePopEnter },
             popExitTransition = { if (calmNav) ExitTransition.None else PagePopExit },
         ) {
-            navigation<StationsTab>(startDestination = StationsRoot) {
-                composable<StationsRoot>(
-                    enterTransition = { rootEnter() },
-                    exitTransition = { rootExit() },
-                    popEnterTransition = { if (calmNav) EnterTransition.None else PagePopEnter },
-                    popExitTransition = { ExitTransition.None },
-                ) {
-                    Box(contentModifier) {
-                        StationsScreen(
-                            vm = appViewModel { app -> StationsViewModel(app.repository, app.prefs) },
-                            current = station,
-                            playing = playerState.playing,
-                            favorites = favorites,
-                            onPlay = onPlay,
-                            onOpenSearch = {
-                                navController.navigate(Search)
-                            },
-                            onOpenSettings = {
-                                navController.navigate(Settings)
-                            },
-                            focusDirectory = focusDirectory,
-                            onDirectoryFocusConsumed = { focusDirectory = false },
-                        )
+            // The three tabs: one destination, three pages. Swiping between
+            // them never touches the back stack, so back on any tab has
+            // nothing to pop and exits natively, as the start tab always did.
+            composable<Home>(
+                enterTransition = { rootEnter() },
+                exitTransition = { rootExit() },
+                popEnterTransition = { if (calmNav) EnterTransition.None else PagePopEnter },
+                popExitTransition = { ExitTransition.None },
+            ) {
+                // Landing here marks a tab as seen: a search-widget launch
+                // that reaches Home shows a selected tab from now on.
+                LaunchedEffect(Unit) { tabVisited = true }
+                HorizontalPager(
+                    state = pagerState,
+                    // Bounded to the content zone, not the whole frame, so the
+                    // pager ends above the mini player and tab strip. The
+                    // chrome keeps the touch geometry it always had: a drag
+                    // across the mini player still does nothing.
+                    modifier = contentModifier,
+                    key = { it },
+                    // Keep the neighbouring tab built. At the first pixel of a
+                    // drag the page beside you is already composed, so a swipe
+                    // uncovers a finished page instead of building one mid-drag.
+                    // Three pages is the whole set, so the cost is bounded.
+                    beyondViewportPageCount = 1,
+                ) { page ->
+                    // Each tab keeps its own chip rows, which scroll
+                    // horizontally as well. They consume the drag while they
+                    // still have room and hand it to the pager at their edge,
+                    // so a chip row slows a swipe but never swallows it.
+                    Box(Modifier.fillMaxSize()) {
+                        when (Tab.entries[page]) {
+                            Tab.Stations -> StationsScreen(
+                                vm = appViewModel { app -> StationsViewModel(app.repository, app.prefs) },
+                                current = station,
+                                playing = playerState.playing,
+                                favorites = favorites,
+                                onPlay = onPlay,
+                                onOpenSearch = {
+                                    navController.navigate(Search)
+                                },
+                                onOpenSettings = {
+                                    navController.navigate(Settings)
+                                },
+                                focusDirectory = focusDirectory,
+                                onDirectoryFocusConsumed = { focusDirectory = false },
+                            )
+                            Tab.Pods -> PodcastsScreen(
+                                vm = appViewModel { app ->
+                                    PodcastsViewModel(app.podcasts, app.prefs, app.repository.countries)
+                                },
+                                onOpenShow = { show: PodcastShow ->
+                                    podcasts.openShow(show)
+                                    navController.navigate(PodcastShowRoute(show.id))
+                                },
+                                onOpenSearch = { navController.navigate(Search) },
+                                onOpenSettings = { navController.navigate(Settings) },
+                            )
+                            Tab.Lib -> LocalScreen(
+                                vm = appViewModel { app ->
+                                    LocalViewModel(app.localLibrary, app.playlists, app.prefs, app.providers)
+                                },
+                                onOpenProviderSongs = { navController.navigate(LibraryProviderSongs) },
+                                onOpenSmart = { kind -> navController.navigate(LibrarySmartPlaylist(kind)) },
+                                onOpenPlaylist = { slug -> navController.navigate(LibraryPlaylist(slug)) },
+                                onOpenSearch = { navController.navigate(Search) },
+                                onOpenSettings = { navController.navigate(Settings) },
+                                favScope = favScope,
+                            )
+                        }
                     }
                 }
             }
-            navigation<PodcastsTab>(startDestination = PodcastsRoot) {
-                composable<PodcastsRoot>(
-                    enterTransition = { rootEnter() },
-                    exitTransition = { rootExit() },
-                    popEnterTransition = { if (calmNav) EnterTransition.None else PagePopEnter },
-                    popExitTransition = { ExitTransition.None },
-                ) {
-                    Box(contentModifier) {
-                        PodcastsScreen(
-                            vm = appViewModel { app ->
-                                PodcastsViewModel(app.podcasts, app.prefs, app.repository.countries)
-                            },
-                            onOpenShow = { show: PodcastShow ->
-                                podcasts.openShow(show)
-                                navController.navigate(PodcastShowRoute(show.id))
-                            },
-                            onOpenSearch = { navController.navigate(Search) },
-                            onOpenSettings = { navController.navigate(Settings) },
-                        )
-                    }
-                }
-                composable<PodcastShowRoute> {
-                    Box(contentModifier) {
-                        PodcastShowScreen(
-                            vm = appViewModel { app ->
-                                PodcastShowViewModel(app.podcasts, app.prefs, app.downloads)
-                            },
-                            current = station,
-                            playing = playerState.playing,
-                            onBack = { navController.popBackStack() },
-                            onPlay = onPlay,
-                            onAddToQueue = { player.addToQueue(it) },
-                            onPlayNext = { player.playNext(it) },
-                            onOpenSearch = { navController.navigate(Search) },
-                            onOpenSettings = { navController.navigate(Settings) },
-                        )
-                    }
+
+            // -- Tab panes (sit above the pager, keep the chrome) --
+            composable<PodcastShowRoute> {
+                Box(contentModifier) {
+                    PodcastShowScreen(
+                        vm = appViewModel { app ->
+                            PodcastShowViewModel(app.podcasts, app.prefs, app.downloads)
+                        },
+                        current = station,
+                        playing = playerState.playing,
+                        onBack = { navController.popBackStack() },
+                        onPlay = onPlay,
+                        onAddToQueue = { player.addToQueue(it) },
+                        onPlayNext = { player.playNext(it) },
+                        onOpenSearch = { navController.navigate(Search) },
+                        onOpenSettings = { navController.navigate(Settings) },
+                    )
                 }
             }
-            navigation<LibraryTab>(startDestination = LibraryRoot) {
-                composable<LibraryRoot>(
-                    enterTransition = { rootEnter() },
-                    exitTransition = { rootExit() },
-                    popEnterTransition = { if (calmNav) EnterTransition.None else PagePopEnter },
-                    popExitTransition = { ExitTransition.None },
-                ) {
-                    Box(contentModifier) {
-                        LocalScreen(
-                            vm = appViewModel { app ->
-                                LocalViewModel(app.localLibrary, app.playlists, app.prefs, app.providers)
-                            },
-                            onOpenProviderSongs = { navController.navigate(LibraryProviderSongs) },
-                            onOpenSmart = { kind -> navController.navigate(LibrarySmartPlaylist(kind)) },
-                            onOpenPlaylist = { slug -> navController.navigate(LibraryPlaylist(slug)) },
-                            onOpenSearch = { navController.navigate(Search) },
-                            onOpenSettings = { navController.navigate(Settings) },
-                            favScope = favScope,
-                        )
-                    }
+            composable<LibraryProviders> {
+                Box(contentModifier) {
+                    LibraryProvidersPane(
+                        vm = appViewModel { app -> ProvidersPaneViewModel(app.providers) },
+                        onBack = { navController.popBackStack() },
+                        onOpenProvider = { a -> navController.navigate(ProviderBrowse(a.id)) },
+                        onAddProvider = { spec ->
+                            navController.navigate(ProviderWizardRoute(spec.key))
+                        },
+                        onOpenSearch = { navController.navigate(Search) },
+                        onOpenSettings = { navController.navigate(Settings) },
+                    )
                 }
-                composable<LibraryProviders> {
-                    Box(contentModifier) {
-                        LibraryProvidersPane(
-                            vm = appViewModel { app -> ProvidersPaneViewModel(app.providers) },
-                            onBack = { navController.popBackStack() },
-                            onOpenProvider = { a -> navController.navigate(ProviderBrowse(a.id)) },
-                            onAddProvider = { spec ->
-                                navController.navigate(ProviderWizardRoute(spec.key))
-                            },
-                            onOpenSearch = { navController.navigate(Search) },
-                            onOpenSettings = { navController.navigate(Settings) },
-                        )
-                    }
+            }
+            composable<LibraryProviderSongs> {
+                Box(contentModifier) {
+                    ProviderSongsPane(
+                        vm = appViewModel { app ->
+                            ProviderSongsViewModel(app.providers, app.prefs)
+                        },
+                        current = station,
+                        playing = playerState.playing,
+                        onPlay = onPlay,
+                        onBack = { navController.popBackStack() },
+                        onAddProvider = { navController.navigate(LibraryProviders) },
+                        onOpenSearch = { navController.navigate(Search) },
+                        onOpenSettings = { navController.navigate(Settings) },
+                    )
                 }
-                composable<LibraryProviderSongs> {
-                    Box(contentModifier) {
-                        ProviderSongsPane(
-                            vm = appViewModel { app ->
-                                ProviderSongsViewModel(app.providers, app.prefs)
-                            },
-                            current = station,
-                            playing = playerState.playing,
-                            onPlay = onPlay,
-                            onBack = { navController.popBackStack() },
-                            onAddProvider = { navController.navigate(LibraryProviders) },
-                            onOpenSearch = { navController.navigate(Search) },
-                            onOpenSettings = { navController.navigate(Settings) },
-                        )
-                    }
+            }
+            composable<LibrarySmartPlaylist> { entry ->
+                val kind = entry.toRoute<LibrarySmartPlaylist>().kind
+                Box(contentModifier) {
+                    LibrarySmartPlaylistPane(
+                        vm = appViewModel(key = kind) { app ->
+                            SmartPlaylistViewModel(kind, app.localLibrary, app.prefs, app.downloads)
+                        },
+                        kindName = kind,
+                        current = station,
+                        playing = playerState.playing,
+                        onPlay = onPlay,
+                        favScope = favScope,
+                        onFavScopeChange = { favScope = it },
+                        onOpenSongInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
+                        onBack = { navController.popBackStack() },
+                        onOpenSearch = { navController.navigate(Search) },
+                        onOpenSettings = { navController.navigate(Settings) },
+                        progress = progress,
+                    )
                 }
-                composable<LibrarySmartPlaylist> { entry ->
-                    val kind = entry.toRoute<LibrarySmartPlaylist>().kind
-                    Box(contentModifier) {
-                        LibrarySmartPlaylistPane(
-                            vm = appViewModel(key = kind) { app ->
-                                SmartPlaylistViewModel(kind, app.localLibrary, app.prefs, app.downloads)
-                            },
-                            kindName = kind,
-                            current = station,
-                            playing = playerState.playing,
-                            onPlay = onPlay,
-                            favScope = favScope,
-                            onFavScopeChange = { favScope = it },
-                            onOpenSongInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
-                            onBack = { navController.popBackStack() },
-                            onOpenSearch = { navController.navigate(Search) },
-                            onOpenSettings = { navController.navigate(Settings) },
-                            progress = progress,
-                        )
-                    }
+            }
+            composable<LibraryPlaylist> { entry ->
+                val slug = entry.toRoute<LibraryPlaylist>().slug
+                Box(contentModifier) {
+                    LibraryPlaylistPane(
+                        vm = appViewModel(key = slug) { app ->
+                            PlaylistDetailViewModel(
+                                slug,
+                                app.localLibrary,
+                                app.playlists,
+                                app.prefs,
+                                app.repository,
+                                app.podcasts,
+                                app.downloads,
+                            )
+                        },
+                        slug = slug,
+                        current = station,
+                        playing = playerState.playing,
+                        onPlay = onPlay,
+                        onBack = { navController.popBackStack() },
+                        onOpenSearch = { navController.navigate(Search) },
+                        onOpenSettings = { navController.navigate(Settings) },
+                    )
                 }
-                composable<LibraryPlaylist> { entry ->
-                    val slug = entry.toRoute<LibraryPlaylist>().slug
-                    Box(contentModifier) {
-                        LibraryPlaylistPane(
-                            vm = appViewModel(key = slug) { app ->
-                                PlaylistDetailViewModel(
-                                    slug,
-                                    app.localLibrary,
-                                    app.playlists,
-                                    app.prefs,
-                                    app.repository,
-                                    app.podcasts,
-                                    app.downloads,
-                                )
-                            },
-                            slug = slug,
-                            current = station,
-                            playing = playerState.playing,
-                            onPlay = onPlay,
-                            onBack = { navController.popBackStack() },
-                            onOpenSearch = { navController.navigate(Search) },
-                            onOpenSettings = { navController.navigate(Settings) },
-                        )
-                    }
-                }
-                composable<LibrarySongInfo> { entry ->
-                    val stationUrl = entry.toRoute<LibrarySongInfo>().stationUrl
-                    Box(contentModifier) {
-                        LibrarySongInfoPane(
-                            vm = appViewModel(key = stationUrl) { app ->
-                                SongInfoViewModel(stationUrl, app.localLibrary, app.prefs, app.scrobbler)
-                            },
-                            stationUrl = stationUrl,
-                            repository = repository,
-                            onBack = { navController.popBackStack() },
-                        )
-                    }
+            }
+            composable<LibrarySongInfo> { entry ->
+                val stationUrl = entry.toRoute<LibrarySongInfo>().stationUrl
+                Box(contentModifier) {
+                    LibrarySongInfoPane(
+                        vm = appViewModel(key = stationUrl) { app ->
+                            SongInfoViewModel(stationUrl, app.localLibrary, app.prefs, app.scrobbler)
+                        },
+                        stationUrl = stationUrl,
+                        repository = repository,
+                        onBack = { navController.popBackStack() },
+                    )
                 }
             }
 
@@ -569,14 +554,14 @@ fun CliampRoot(
                         // Pop the search overlay, switch to podcasts tab,
                         // and navigate to the show.
                         navController.popBackStack()
-                        switchTab(Tab.Pods)
+                        goToTab(Tab.Pods, false)
                         navController.navigate(PodcastShowRoute(show.id))
                     },
                     onOpenTag = { name ->
                         repository.loadDirectory(DirectoryQuery.Tag(name), reset = true)
                         focusDirectory = true
                         navController.popBackStack()
-                        switchTab(Tab.Stations)
+                        goToTab(Tab.Stations, false)
                     },
                     onBack = {
                         // Normally pops back to the tab underneath. When a
@@ -584,10 +569,7 @@ fun CliampRoot(
                         // there is nothing to pop: fall through to Stations
                         // and mark it visited so it reads as selected.
                         if (!navController.popBackStack()) {
-                            tab = Tab.Stations
-                            navController.navigate(StationsTab) {
-                                launchSingleTop = true
-                            }
+                            goToTab(Tab.Stations, false)
                         }
                     },
                     query = searchQuery,

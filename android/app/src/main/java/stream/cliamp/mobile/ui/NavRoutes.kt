@@ -2,13 +2,13 @@ package stream.cliamp.mobile.ui
 
 import kotlinx.serialization.Serializable
 
-@Serializable data object StationsTab
-@Serializable data object PodcastsTab
-@Serializable data object LibraryTab
-
-@Serializable data object StationsRoot
-@Serializable data object PodcastsRoot
-@Serializable data object LibraryRoot
+/**
+ * The three tabs are pages of one pager, not three graphs: Home is the single
+ * destination that holds them. Swiping between Stations, Podcasts and Library
+ * never touches the back stack, so back from any tab exits natively the way
+ * the start tab always did.
+ */
+@Serializable data object Home
 
 @Serializable data object Player
 @Serializable data object Queue
