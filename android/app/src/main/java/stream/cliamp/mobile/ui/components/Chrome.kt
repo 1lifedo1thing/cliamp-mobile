@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -53,7 +54,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.em
 import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
@@ -161,6 +164,32 @@ fun ScreenHeader(
  * passing [onTitleClick], usually `{ scope.scrollToTop(listState) }`. The
  * search/settings corners keep their own taps - only the title text itself
  * is the hit area. */
+/**
+ * The back chevron every secondary page wears, Queue-style: set a touch
+ * larger than title text so the thin glyph reads at a glance. One shared
+ * size and colour everywhere instead of drifting per screen.
+ *
+ * Measured, not eyeballed: Poppins' ‹ ink sits ~5.5% of the em below the
+ * line-box centre, so the glyph rides [nudge] high to land optically
+ * centred beside the title. It scales with [size].
+ */
+@Composable
+fun BackChevron(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    size: TextUnit = 36.sp,
+) {
+    val p = LocalPalette.current
+    Mono(
+        "‹",
+        CliampType.screenTitle.copy(fontSize = size, lineHeight = size),
+        p.ink,
+        modifier
+            .offset(y = -(1.5f * size.value / 28f).dp)
+            .microPress(onClick = onBack),
+    )
+}
+
 @Composable
 fun MainLayout(
     title: String,
@@ -191,10 +220,7 @@ fun MainLayout(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (onBack != null) {
-                    Mono(
-                        "‹", CliampType.screenTitle, p.ink,
-                        Modifier.microPress(onClick = onBack),
-                    )
+                    BackChevron(onBack)
                     Spacer(Modifier.width(8.dp))
                 }
                 Mono(

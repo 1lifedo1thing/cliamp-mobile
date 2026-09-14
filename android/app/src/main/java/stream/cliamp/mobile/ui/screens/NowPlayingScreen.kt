@@ -48,6 +48,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.media3.common.util.UnstableApi
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
@@ -55,6 +56,7 @@ import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.playback.PlayerState
 import stream.cliamp.mobile.ui.clock
 import stream.cliamp.mobile.ui.compact
+import stream.cliamp.mobile.ui.components.BackChevron
 import stream.cliamp.mobile.ui.components.BrickMeter
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
@@ -203,7 +205,7 @@ private fun PortraitPlayer(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Mono("‹", CliampType.screenTitle, p.ink, Modifier.offset(x = -8.dp).microPress { actions.onBack() })
+            BackChevron(actions.onBack, Modifier.offset(x = -8.dp))
         }
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
         // it is the first thing to give way. Compose has no shrink factor, so
@@ -309,7 +311,7 @@ private fun LandscapePlayer(
                 Modifier.fillMaxWidth().padding(end = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Mono("‹", CliampType.screenTitle, p.ink, Modifier.offset(x = -8.dp).microPress { actions.onBack() })
+                BackChevron(actions.onBack, Modifier.offset(x = -8.dp))
                 Spacer(Modifier.width(10.dp))
                 PlayerStatusRow(
                     model = model,

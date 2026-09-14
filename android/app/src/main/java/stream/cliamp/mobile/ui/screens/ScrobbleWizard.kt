@@ -27,11 +27,11 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import stream.cliamp.mobile.ui.components.BackChevron
 import stream.cliamp.mobile.ui.components.CliampTextField
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.MechKey
-import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
@@ -60,7 +60,7 @@ fun ScrobbleWizard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Mono("‹", CliampType.sectionLabel, p.inkTertiary, Modifier.microPress { onCancel() })
+            BackChevron(onCancel)
             // QueueBar floats over this corner on every screen
             Mono(
                 if (vm.seedToken.isBlank()) "ADD SCROBBLER" else "EDIT",

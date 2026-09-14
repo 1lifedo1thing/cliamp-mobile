@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import stream.cliamp.mobile.data.PlaylistSort
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.provider.toStation
+import stream.cliamp.mobile.ui.components.BackChevron
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampTextField
@@ -83,7 +84,7 @@ fun ProviderBrowseScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Mono("‹", CliampType.sectionLabel, p.inkTertiary, Modifier.microPress { pop() })
+                BackChevron({ pop() })
                 // clear of QueueBar
                 Mono(
                     "EDIT",

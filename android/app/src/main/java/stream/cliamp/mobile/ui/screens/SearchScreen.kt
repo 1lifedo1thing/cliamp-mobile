@@ -49,6 +49,7 @@ import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.provider.ProviderAccount
+import stream.cliamp.mobile.ui.components.BackChevron
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampTextField
@@ -57,7 +58,6 @@ import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.ScreenHeader
 import stream.cliamp.mobile.ui.components.SectionLabel
-import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.search.Fuzzy
 import stream.cliamp.mobile.ui.search.SearchHit
 import stream.cliamp.mobile.ui.theme.CliampShape
@@ -113,8 +113,8 @@ fun SearchScreen(
                     .padding(top = 10.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Mono("‹", CliampType.screenTitle, p.ink, Modifier.microPress { onBack() })
-                Spacer(Modifier.width(6.dp))
+                BackChevron(onBack)
+                Spacer(Modifier.width(8.dp))
                 CliampTextField(
                     value = query,
                     onValueChange = onQueryChange,

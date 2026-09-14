@@ -79,6 +79,7 @@ import stream.cliamp.mobile.data.sortedStations
 import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.data.provider.ProviderCatalog
 import stream.cliamp.mobile.data.provider.ProviderSpec
+import stream.cliamp.mobile.ui.components.BackChevron
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.ChipDropdown
 import stream.cliamp.mobile.ui.components.ChipOption
@@ -1816,10 +1817,11 @@ private fun SongInfoView(
             ScreenHeader {
                 Row(
                     Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Mono("‹ Info", CliampType.screenTitle, p.ink, Modifier.microPress { onDismiss() }, maxLines = 1)
+                    BackChevron(onDismiss)
+                    Mono("Info", CliampType.screenTitle, p.ink, maxLines = 1)
                 }
             }
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
