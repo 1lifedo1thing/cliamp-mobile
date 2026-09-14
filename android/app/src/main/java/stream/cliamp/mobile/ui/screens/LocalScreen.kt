@@ -451,13 +451,12 @@ fun LibrarySmartPlaylistPane(
 }
 
 /**
- * The "providers" playlist: every connected account's songs in one flat
- * list. The chips lead with "all providers" and then one chip per account
- * to narrow it down; the + in the section header opens the providers pane
- * to connect another account - the add-playlist button's counterpart for
- * accounts. Rows play exactly like smart-playlist rows, favourites
- * included; provider tracks carry their own cover URLs and fall back to
- * the same plate local songs wear.
+ * The "providers" playlist: one chip per connected account, each showing
+ * that account's songs in one flat list. The + in the section header opens
+ * the providers pane to connect another account - the add-playlist
+ * button's counterpart for accounts. Rows play exactly like
+ * smart-playlist rows, favourites included; provider tracks carry their
+ * own cover URLs and fall back to the same plate local songs wear.
  */
 @Composable
 fun ProviderSongsPane(
@@ -473,17 +472,13 @@ fun ProviderSongsPane(
     val p = LocalPalette.current
     val ui by vm.state.collectAsState()
     val accounts = ui.accounts
-    var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    var selected by rememberSaveable { mutableStateOf(accounts.firstOrNull()?.id) }
     // A removed account must not leave the filter pointing at nothing.
     LaunchedEffect(accounts) {
-        if (selected != null && accounts.none { it.id == selected }) selected = null
+        if (accounts.none { it.id == selected }) selected = accounts.firstOrNull()?.id
     }
-    val pool = if (selected == null) {
-        accounts.flatMap { ui.songsByAccount[it.id].orEmpty() }
-    } else {
-        ui.songsByAccount[selected].orEmpty()
-    }
-    val visible = remember(pool, ui.sort) { sortedStations(pool, ui.sort) }
+    val pool = ui.songsByAccount[selected].orEmpty()
+    val visible = remember(pool) { sortedStations(pool, PlaylistSort.Title) }
     val favorites = ui.favorites.map { it.url }.toSet()
     val failedLabels = ui.failures.keys.mapNotNull { id ->
         accounts.firstOrNull { it.id == id }?.label?.ifBlank { null }
@@ -507,7 +502,6 @@ fun ProviderSongsPane(
                             .padding(start = Gutter, end = Gutter, top = 4.dp, bottom = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
-                        Chip("all providers", selected == null, onClick = { selected = null })
                         accounts.forEach { a ->
                             Chip(
                                 a.label.ifBlank { "provider" },
@@ -531,21 +525,6 @@ fun ProviderSongsPane(
                         }
                     }
                 } else {
-                    item {
-                        Row(
-                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                                .padding(start = Gutter, end = Gutter, top = 4.dp, bottom = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(7.dp),
-                        ) {
-                            PlaylistSort.entries.forEach { t ->
-                                Chip(
-                                    t.label,
-                                    ui.sort == t,
-                                    onClick = { vm.onEvent(ProviderSongsViewModel.Event.SetSort(t)) },
-                                )
-                            }
-                        }
-                    }
                     item {
                         SectionLabel("songs — ${visible.size}") {
                             Box(

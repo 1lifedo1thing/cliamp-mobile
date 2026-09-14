@@ -6,7 +6,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
-import stream.cliamp.mobile.data.PlaylistSort
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.provider.ProviderAccount
@@ -35,7 +34,6 @@ class ProviderSongsViewModel(
         val songsByAccount: Map<String, List<Station>> = emptyMap(),
         val loading: Boolean = false,
         val failures: Map<String, String> = emptyMap(),
-        val sort: PlaylistSort = PlaylistSort.Title,
         val favorites: List<Station> = emptyList(),
     ) {
         val totalSongs: Int get() = songsByAccount.values.sumOf { it.size }
@@ -43,7 +41,6 @@ class ProviderSongsViewModel(
 
     sealed interface Event {
         data object Refresh : Event
-        data class SetSort(val sort: PlaylistSort) : Event
         data class ToggleFavorite(val station: Station) : Event
     }
 
@@ -59,24 +56,19 @@ class ProviderSongsViewModel(
             loading,
             ::SongsState,
         ),
-        combine(
-            prefs.playlistSort("providers"),
-            prefs.favorites,
-            ::PrefsState,
-        ),
-    ) { songs, prefsState ->
+        prefs.favorites,
+    ) { songs, favorites ->
         UiState(
             accounts = songs.accounts,
             songsByAccount = songs.songs,
             loading = songs.loading,
             failures = songs.failures,
-            sort = prefsState.sort,
-            favorites = prefsState.favorites,
+            favorites = favorites,
         )
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
-        UiState(sort = prefs.playlistSortValue("providers")),
+        UiState(),
     )
 
     private data class SongsState(
@@ -84,11 +76,6 @@ class ProviderSongsViewModel(
         val songs: Map<String, List<Station>> = emptyMap(),
         val failures: Map<String, String> = emptyMap(),
         val loading: Boolean = false,
-    )
-
-    private data class PrefsState(
-        val sort: PlaylistSort = PlaylistSort.Title,
-        val favorites: List<Station> = emptyList(),
     )
 
     init {
@@ -100,7 +87,6 @@ class ProviderSongsViewModel(
     fun onEvent(e: Event) {
         when (e) {
             Event.Refresh -> viewModelScope.launch { load(store.read()) }
-            is Event.SetSort -> prefs.setPlaylistSort("providers", e.sort)
             is Event.ToggleFavorite -> viewModelScope.launch { prefs.toggleFavorite(e.station) }
         }
     }
