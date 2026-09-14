@@ -19,9 +19,25 @@ object Http {
 
     @Volatile private var cacheDir: java.io.File? = null
 
+    /**
+     * Stable per-device id for servers that key sessions by device. Jellyfin
+     * 12 refuses password login without one (`request.DeviceId` is mandatory
+     * in `AuthenticateNewSessionInternal`), and a fresh random id per launch
+     * would pile up a new device row on every login - so this is read once
+     * from ANDROID_ID rather than generated.
+     */
+    @Volatile var deviceId: String = "unknown-device"
+        private set
+
     /** Called once from Application so artwork lookups can be cached on disk. */
     fun init(context: android.content.Context) {
         cacheDir = java.io.File(context.cacheDir, "http")
+        runCatching {
+            android.provider.Settings.Secure.getString(
+                context.contentResolver,
+                android.provider.Settings.Secure.ANDROID_ID,
+            )?.takeIf { it.isNotBlank() }?.let { deviceId = it }
+        }
     }
 
     /**

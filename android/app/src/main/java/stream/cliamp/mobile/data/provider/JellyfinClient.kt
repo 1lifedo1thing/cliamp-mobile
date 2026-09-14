@@ -1,24 +1,39 @@
 package stream.cliamp.mobile.data.provider
 
+import android.os.Build
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import stream.cliamp.mobile.BuildConfig
 import stream.cliamp.mobile.net.Http
 import stream.cliamp.mobile.playback.ResolvedStream
 
 /**
  * Jellyfin speaks the Emby HTTP API, so this one client also covers emby
- * servers (a [providerKey] flag picks the auth header scheme). Tracks are
- * served as files, exactly as [SubsonicClient] does, but authentication lives
- * in an `X-Emby-Token` header rather than in the URL - which is why the
- * stream resolution returns [ResolvedStream] with headers and the playback
- * path knows how to attach them.
+ * servers (a [providerKey] flag picks the auth scheme). Tracks are
+ * served as files, exactly as [SubsonicClient] does; API calls authenticate
+ * with a header while stream and artwork URLs carry the token as a query
+ * parameter, because the player and the image loader fetch those without
+ * custom headers.
+ *
+ * Jellyfin and Emby have diverged on auth. Jellyfin 12 removed the legacy
+ * methods (`?api_key=`, `X-Emby-Token`) that older servers accept, so
+ * Jellyfin uses the modern scheme throughout: an
+ * `Authorization: MediaBrowser Token="…"` header on API calls and `?ApiKey=`
+ * (capital A) on bare URLs the player and image loader fetch without headers.
+ * Both forms also work on older Jellyfin (the header since forever, `ApiKey`
+ * since 10.8), while Emby keeps the legacy parameter it has always taken.
+ * Branching on [providerKey] rather than probing keeps the first request
+ * working against either server with no extra round trip.
  *
  * Two sign-in modes mirror the desktop app:
  *  - an API token, used directly as the auth header;
  *  - a username + password, exchanged once for a token via
  *    `POST /Users/AuthenticateByName` and cached per server for the session.
+ *    Jellyfin 12 rejects that exchange without client identification
+ *    (`request.App/DeviceId/DeviceName/AppVersion` are all mandatory), so the
+ *    login carries the full `MediaBrowser Client=…, Device=…, …` header.
  */
 class JellyfinClient(
     rawUrl: String,
@@ -29,36 +44,62 @@ class JellyfinClient(
 ) {
     private val base = SubsonicClient.normalise(rawUrl)
 
+    /** Jellyfin 12 takes the modern scheme; Emby keeps the legacy parameter. */
+    private val modernAuth: Boolean get() = providerKey != "emby"
+
+    /** Query parameter carrying the token on bare URLs (stream, cover art). */
+    private val tokenParam: String get() = if (modernAuth) "ApiKey" else "api_key"
+
     private val authToken: String
-        get() = token.ifBlank { cachedToken(base) }.ifBlank { "" }
+        // Pasted keys routinely carry a trailing newline from the dashboard's
+        // copy button. OkHttp rejects control chars in header values
+        // ("Unexpected char 0x0a …"), so trim here rather than failing the
+        // probe on invisible whitespace. Passwords stay byte-exact.
+        get() = token.trim().ifBlank { cachedToken(base) }.ifBlank { "" }
+
+    /** Modern header for API calls; empty when there is nothing to send yet. */
+    private fun authHeaders(): Map<String, String> {
+        val t = authToken
+        if (!modernAuth || t.isBlank()) return emptyMap()
+        return mapOf("Authorization" to "MediaBrowser Token=\"$t\"")
+    }
+
+    /**
+     * Client identification for the password exchange. Jellyfin 12 throws
+     * when any of these is missing, and the values can only travel in the
+     * header - the JSON body carries just the username and password.
+     */
+    private fun loginHeaders(): Map<String, String> {
+        if (!modernAuth) return emptyMap()
+        val device = "${Build.MANUFACTURER} ${Build.MODEL}".trim().replace("\"", "")
+        return mapOf(
+            "Authorization" to
+                "MediaBrowser Client=\"cliamp\", " +
+                "Device=\"$device\", " +
+                "DeviceId=\"${Http.deviceId}\", " +
+                "Version=\"${BuildConfig.VERSION_NAME}\"",
+        )
+    }
 
     /** Returns a short label for the wizard: server name + version. */
     suspend fun ping(): Result<ProviderIdentity> = withContext(Dispatchers.IO) {
         runCatching {
             if (authToken.isBlank()) login()
             // The public info endpoint answers without credentials, so it
-            // cannot validate a token. Ping the authenticated endpoint the
-            // desktop app uses instead: /Users/Me for Jellyfin,
-            // /System/Info for Emby.
-            if (providerKey == "emby") {
-                val body = Http.text(get("System/Info"))
-                val info = Http.json.decodeFromString<PublicSystemInfo>(body)
-                ProviderIdentity(
-                    name = info.serverName.orEmpty().ifBlank { providerKey },
-                    detail = info.version.orEmpty(),
-                )
-            } else {
-                val me = Http.text(get("Users/Me"))
-                val user = Http.json.decodeFromString<UserMe>(me)
-                if (user.id.isBlank() && user.name.isBlank()) error("jellyfin rejected the credentials")
-                val info = runCatching {
-                    Http.json.decodeFromString<PublicSystemInfo>(Http.text("$base/System/Info/Public"))
-                }.getOrNull()
-                ProviderIdentity(
-                    name = info?.serverName.orEmpty().ifBlank { providerKey },
-                    detail = info?.version.orEmpty(),
-                )
+            // cannot validate a token. Ping the authenticated `/System/Info`
+            // instead: it needs a working credential and still reports the
+            // server name and version for the wizard label. (`/Users/Me`
+            // looks tempting but API keys carry no user context, so it
+            // answers 400 even for a valid key.)
+            val body = Http.text(get("System/Info"), authHeaders())
+            val info = Http.json.decodeFromString<PublicSystemInfo>(body)
+            if (info.serverName.isBlank() && info.version.isNullOrBlank()) {
+                error("jellyfin rejected the credentials")
             }
+            ProviderIdentity(
+                name = info.serverName.ifBlank { providerKey },
+                detail = info.version.orEmpty(),
+            )
         }
     }
 
@@ -77,7 +118,8 @@ class JellyfinClient(
                         "sortOrder" to "Ascending",
                         "limit" to "200",
                     ),
-                )
+                ),
+                authHeaders(),
             )
             Http.json.decodeFromString<ItemsResult<JellyfinAlbumItem>>(body).items.map {
                 JellyfinAlbum(
@@ -98,7 +140,8 @@ class JellyfinClient(
                 get(
                     "Artists",
                     mapOf("limit" to "200", "sortBy" to "SortName", "sortOrder" to "Ascending"),
-                )
+                ),
+                authHeaders(),
             )
             Http.json.decodeFromString<ItemsResult<JellyfinArtistItem>>(body).items.map {
                 JellyfinArtist(it.id, it.name, 0)
@@ -119,7 +162,8 @@ class JellyfinClient(
                         "sortBy" to "SortName",
                         "sortOrder" to "Ascending",
                     ),
-                )
+                ),
+                authHeaders(),
             )
             Http.json.decodeFromString<ItemsResult<JellyfinAlbumItem>>(body).items.map {
                 JellyfinAlbum(
@@ -146,7 +190,8 @@ class JellyfinClient(
                         "sortBy" to "ParentIndexNumber,IndexNumber,SortName",
                         "fields" to "RunTimeTicks",
                     ),
-                )
+                ),
+                authHeaders(),
             )
             Http.json.decodeFromString<ItemsResult<JellyfinTrackItem>>(body).items.map {
                 JellyfinTrack(
@@ -163,20 +208,25 @@ class JellyfinClient(
     }
 
     /**
-     * The stream to play: the original file. Jellyfin accepts the token as an
-     * `api_key` query parameter (the same route the desktop app uses), so the
-     * signed URL carries the credential and the default data source plays it
-     * without needing custom headers.
+     * The stream to play: the original file. The token rides the URL because
+     * the player fetches it without custom headers - `?ApiKey=` on Jellyfin
+     * (the lowercase `api_key` died with the legacy auth in 12), `?api_key=`
+     * on Emby, which still takes it.
      */
     suspend fun stream(id: String): ResolvedStream {
         ensureAuth()
         val t = authToken
-        val q = if (t.isBlank()) "" else "api_key=${enc(t)}"
+        val q = if (t.isBlank()) "" else "$tokenParam=${enc(t)}"
         return ResolvedStream("$base/Items/$id/Download${if (q.isEmpty()) "" else "?$q"}")
     }
 
-    fun coverUrl(id: String, size: Int = 512): String =
-        "$base/Items/$id/Images/Primary?maxWidth=$size"
+    fun coverUrl(id: String, size: Int = 512): String {
+        val url = "$base/Items/$id/Images/Primary?maxWidth=$size"
+        val t = authToken
+        // Artwork loads without headers too, so the token goes in the URL -
+        // but only where the scheme wants it; Emby's form is untouched.
+        return if (modernAuth && t.isNotBlank()) "$url&$tokenParam=${enc(t)}" else url
+    }
 
     private suspend fun ensureAuth() {
         if (authToken.isBlank()) login()
@@ -185,7 +235,8 @@ class JellyfinClient(
     private suspend fun login() {
         val body = Http.postJson(
             "$base/Users/AuthenticateByName",
-            """{"Username":"${esc(user)}","Pw":"${esc(password)}"}""",
+            """{"Username":"${esc(user.trim())}","Pw":"${esc(password)}"}""",
+            loginHeaders(),
         )
         val res = Http.json.decodeFromString<AuthenticateResult>(body)
         val t = res.accessToken.orEmpty()
@@ -196,7 +247,8 @@ class JellyfinClient(
     private fun get(path: String, params: Map<String, String> = emptyMap()): String {
         val all = buildMap {
             putAll(params)
-            authToken.takeIf { it.isNotBlank() }?.let { put("api_key", it) }
+            // Emby only: Jellyfin carries the token in the header instead.
+            if (!modernAuth) authToken.takeIf { it.isNotBlank() }?.let { put("api_key", it) }
         }
         val query = all.entries.joinToString("&") { (k, v) ->
             "$k=" + enc(v)
@@ -217,49 +269,45 @@ class JellyfinClient(
     }
 }
 
-/** Authenticated user: `GET /Users/Me` on Jellyfin. */
-@Serializable
-private data class UserMe(
-    @SerialName("Name") val name: String = "",
-    @SerialName("Id") val id: String = "",
-)
-
 /** A Jellyfin/Emby item collection: `{ "Items": [...] }`. */
 @Serializable
-private data class ItemsResult<T>(val items: List<T> = emptyList())
+private data class ItemsResult<T>(@SerialName("Items") val items: List<T> = emptyList())
 
 @Serializable
 private data class PublicSystemInfo(
     @SerialName("ServerName") val serverName: String = "",
-    val version: String = "",
+    @SerialName("Version") val version: String = "",
 )
 
 @Serializable
 private data class AuthenticateResult(
-    val accessToken: String = "",
+    @SerialName("AccessToken") val accessToken: String = "",
 )
 
 @Serializable
 private data class JellyfinAlbumItem(
-    val id: String = "",
-    val name: String = "",
+    @SerialName("Id") val id: String = "",
+    @SerialName("Name") val name: String = "",
     @SerialName("AlbumArtist") val albumArtist: String? = null,
-    val childCount: Int = 0,
-    val productionYear: Int? = null,
+    @SerialName("ChildCount") val childCount: Int = 0,
+    @SerialName("ProductionYear") val productionYear: Int? = null,
 )
 
 @Serializable
-private data class JellyfinArtistItem(val id: String = "", val name: String = "")
+private data class JellyfinArtistItem(
+    @SerialName("Id") val id: String = "",
+    @SerialName("Name") val name: String = "",
+)
 
 @Serializable
 private data class JellyfinTrackItem(
-    val id: String = "",
-    val name: String = "",
-    val artists: List<String> = emptyList(),
-    val album: String = "",
-    val runTimeTicks: Long = 0L,
-    val bitRate: Int = 0,
-    val container: String = "",
+    @SerialName("Id") val id: String = "",
+    @SerialName("Name") val name: String = "",
+    @SerialName("Artists") val artists: List<String> = emptyList(),
+    @SerialName("Album") val album: String = "",
+    @SerialName("RunTimeTicks") val runTimeTicks: Long = 0L,
+    @SerialName("BitRate") val bitRate: Int = 0,
+    @SerialName("Container") val container: String = "",
 )
 
 data class JellyfinAlbum(
