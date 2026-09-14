@@ -742,8 +742,8 @@ private fun ProvidersView(
 ) {
     val p = LocalPalette.current
     val connectedKeys = providers.map { it.providerKey }.toSet()
-    // A Subsonic server holds one library and there is no point adding it
-    // twice; SSH hosts are machines, and a nas and a seedbox are two of them.
+    // Every provider allows several accounts - two servers of one kind are
+    // as ordinary as two SSH hosts - so all specs stay addable.
     val available = ProviderCatalog.all.filter { it.multiple || it.key !in connectedKeys }
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
         item {

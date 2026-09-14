@@ -74,9 +74,9 @@ data class ProviderSpec(
     /** Cross-field rules, run before [validate]. Returns an error or null. */
     val extraValidate: ((Map<String, String>) -> String?)? = null,
     /**
-     * Whether more than one account of this type makes sense. A Subsonic
-     * server holds one library and the app only wants one of it; SSH hosts are
-     * machines, and people have several.
+     * Whether more than one account of this type makes sense. Every provider
+     * allows it: people run two Navidromes or two Jellyfins as easily as two
+     * SSH hosts, and accounts are keyed by id throughout.
      */
     val multiple: Boolean = false,
     /** The line under a configured account's name in the providers list. */

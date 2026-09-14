@@ -23,6 +23,7 @@ object ProviderCatalog {
             FieldSpec(key = "user", label = "Username"),
             FieldSpec(key = "password", label = "Password", secret = true),
         ),
+        multiple = true,
         validate = { v ->
             SubsonicClient(v["url"].orEmpty(), v["user"].orEmpty(), v["password"].orEmpty()).ping()
         },
@@ -45,6 +46,7 @@ object ProviderCatalog {
             FieldSpec(key = "user", label = "Username"),
             FieldSpec(key = "password", label = "Password", secret = true),
         ),
+        multiple = true,
         validate = { v ->
             SubsonicClient(v["url"].orEmpty(), v["user"].orEmpty(), v["password"].orEmpty()).ping()
         },
@@ -97,6 +99,7 @@ object ProviderCatalog {
                 else -> if (v["token"].isNullOrBlank()) "api token is required" else null
             }
         },
+        multiple = true,
         validate = { v ->
             JellyfinClient(
                 v["url"].orEmpty(),
@@ -155,6 +158,7 @@ object ProviderCatalog {
                 else -> if (v["token"].isNullOrBlank()) "api key is required" else null
             }
         },
+        multiple = true,
         validate = { v ->
             JellyfinClient(
                 v["url"].orEmpty(),
@@ -182,6 +186,7 @@ object ProviderCatalog {
             ),
             FieldSpec(key = "token", label = "X-Plex-Token", secret = true),
         ),
+        multiple = true,
         validate = { v ->
             PlexClient(v["url"].orEmpty(), v["token"].orEmpty()).ping()
         },
@@ -234,6 +239,7 @@ object ProviderCatalog {
                 else -> if (v["token"].isNullOrBlank()) "api key is required" else null
             }
         },
+        multiple = true,
         validate = { v ->
             AudiobookshelfClient(
                 v["url"].orEmpty(),
@@ -261,6 +267,7 @@ object ProviderCatalog {
             FieldSpec(key = "user", label = "Username", required = false),
             FieldSpec(key = "password", label = "Password", secret = true, required = false),
         ),
+        multiple = true,
         validate = { v ->
             LyrionClient(
                 v["url"].orEmpty(),
