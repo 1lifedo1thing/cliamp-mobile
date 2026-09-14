@@ -26,6 +26,13 @@ class AudiobookshelfClient(
     /** The bearer token is a config API key or a login-session token. */
     @Volatile private var bearer: String = token
 
+    /**
+     * A fresh client at play time has never logged in, so a password-mode
+     * account would stream with an empty token and get a 401. Like
+     * Jellyfin, fall back to the session's exchanged token for this server.
+     */
+    private val auth: String get() = bearer.ifBlank { cachedToken(base) }
+
     suspend fun ping(): Result<ProviderIdentity> = withContext(Dispatchers.IO) {
         runCatching {
             if (bearer.isBlank()) login()
@@ -80,23 +87,24 @@ class AudiobookshelfClient(
         }
     }
 
-    fun stream(ref: String): ResolvedStream {
+    suspend fun stream(ref: String): ResolvedStream {
+        ensureAuth()
         val itemId = ref.substringBefore("::")
         val ino = ref.substringAfter("::", "")
-        return ResolvedStream("$base/api/items/$itemId/file/$ino?token=${enc(bearer)}")
+        return ResolvedStream("$base/api/items/$itemId/file/$ino?token=${enc(auth)}")
     }
 
     fun coverUrl(itemId: String, size: Int = 512): String {
-        val t = bearer.ifBlank { token }
+        val t = auth.ifBlank { token }
         return if (t.isBlank()) "" else "$base/api/items/$itemId/cover?token=${enc(t)}"
     }
 
     private suspend fun ensureAuth() {
-        if (bearer.isBlank()) login()
+        if (auth.isBlank()) login()
     }
 
     private fun headers(): Map<String, String> =
-        if (bearer.isBlank()) emptyMap() else mapOf("Authorization" to "Bearer $bearer")
+        if (auth.isBlank()) emptyMap() else mapOf("Authorization" to "Bearer $auth")
 
     private suspend fun login() {
         val body = Http.postJson(
@@ -107,6 +115,7 @@ class AudiobookshelfClient(
         val t = res.user?.token.orEmpty()
         if (t.isBlank()) error("audiobookshelf rejected the credentials")
         bearer = t
+        cachedToken[base] = t
     }
 
     private suspend fun firstLibrary(): String {
@@ -120,6 +129,12 @@ class AudiobookshelfClient(
     private fun esc(s: String): String = s
         .replace("\\", "\\\\")
         .replace("\"", "\\\"")
+
+    companion object {
+        /** Tokens are exchanged for passwords per server and cached for the session. */
+        private val cachedToken = java.util.concurrent.ConcurrentHashMap<String, String>()
+        private fun cachedToken(base: String): String = cachedToken[base].orEmpty()
+    }
 }
 
 @Serializable
