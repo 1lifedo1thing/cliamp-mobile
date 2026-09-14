@@ -97,7 +97,8 @@ class JellyfinClient(
                 error("jellyfin rejected the credentials")
             }
             ProviderIdentity(
-                name = info.serverName.ifBlank { providerKey },
+                name = info.serverName.ifBlank { providerKey } +
+                    " · " + SubsonicClient.shortHost(base),
                 detail = info.version.orEmpty(),
             )
         }

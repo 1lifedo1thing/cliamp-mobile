@@ -40,7 +40,10 @@ class LyrionClient(
     suspend fun ping(): Result<ProviderIdentity> = withContext(Dispatchers.IO) {
         runCatching {
             val r = rpc(listOf("version", "?"))
-            ProviderIdentity(name = "lyrion", detail = r.string().takeIf { it.isNotBlank() }.orEmpty())
+            ProviderIdentity(
+                name = "lyrion · " + SubsonicClient.shortHost(base),
+                detail = r.string().takeIf { it.isNotBlank() }.orEmpty(),
+            )
         }
     }
 

@@ -34,7 +34,8 @@ class SubsonicClient(
             val res = Http.json.decodeFromString<SubsonicEnvelope>(body).response
             if (!res.isOk) error(res.error?.message ?: "server refused the credentials")
             ProviderIdentity(
-                name = res.type?.takeIf { it.isNotBlank() } ?: "subsonic",
+                name = (res.type?.takeIf { it.isNotBlank() } ?: "subsonic") +
+                    " · " + shortHost(base),
                 detail = res.serverVersion?.takeIf { it.isNotBlank() }.orEmpty(),
             )
         }
@@ -114,6 +115,18 @@ class SubsonicClient(
             if (t.isEmpty()) return t
             return if (t.startsWith("http://") || t.startsWith("https://")) t else "https://$t"
         }
+
+        /**
+         * The host as typed, for account labels: "music.example.com" or
+         * "127.0.0.1:8096". Two servers of one kind would otherwise share a
+         * label - two "audiobookshelf" rows with nothing to tell them apart.
+         */
+        fun shortHost(normalisedBase: String): String =
+            normalisedBase.trim()
+                .removePrefix("https://")
+                .removePrefix("http://")
+                .substringBefore('/')
+                .ifBlank { normalisedBase.trim() }
     }
 }
 

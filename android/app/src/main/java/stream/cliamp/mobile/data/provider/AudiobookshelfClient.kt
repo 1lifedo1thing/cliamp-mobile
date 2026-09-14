@@ -32,7 +32,7 @@ class AudiobookshelfClient(
             val body = Http.text("$base/api/libraries", headers())
             val libs = Http.json.decodeFromString<Libraries>(body).libraries
             ProviderIdentity(
-                name = "audiobookshelf",
+                name = "audiobookshelf · " + SubsonicClient.shortHost(base),
                 detail = libs.joinToString(" · ") { it.name }.takeIf { it.isNotBlank() }.orEmpty(),
             )
         }

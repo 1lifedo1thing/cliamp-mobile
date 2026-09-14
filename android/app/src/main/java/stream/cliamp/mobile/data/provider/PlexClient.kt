@@ -45,7 +45,9 @@ class PlexClient(
         runCatching {
             val body = Http.text(get("", emptyMap()), jsonHeaders)
             val title = Http.json.decodeFromString<RootContainer>(body).mediaContainer.title.orEmpty()
-            ProviderIdentity(name = title.ifBlank { "plex" })
+            ProviderIdentity(
+                name = title.ifBlank { "plex" } + " · " + SubsonicClient.shortHost(base),
+            )
         }
     }
 
