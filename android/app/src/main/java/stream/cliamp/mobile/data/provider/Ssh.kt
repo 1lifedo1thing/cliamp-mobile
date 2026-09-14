@@ -9,6 +9,7 @@ import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.sftp.SFTPClient
 import net.schmizz.sshj.transport.verification.HostKeyVerifier
 import net.schmizz.sshj.userauth.method.AuthMethod
+import net.schmizz.sshj.userauth.keyprovider.KeyProvider
 import net.schmizz.sshj.userauth.method.AuthNone
 import net.schmizz.sshj.userauth.method.AuthPassword
 import net.schmizz.sshj.userauth.method.AuthPublickey
@@ -319,11 +320,34 @@ object SshPool {
         }
     }
 
-    private fun keyProvider(client: SSHClient, cfg: SshConfig) = client.loadKeys(
-        cfg.privateKey.trim() + "\n",
-        null,
-        cfg.passphrase.takeIf { it.isNotEmpty() }?.let { PasswordUtils.createOneOff(it.toCharArray()) },
-    )
+    private fun keyProvider(client: SSHClient, cfg: SshConfig): KeyProvider {
+        val passfinder = cfg.passphrase.takeIf { it.isNotEmpty() }
+            ?.let { PasswordUtils.createOneOff(it.toCharArray()) }
+        // sshj needs the -----BEGIN/-----END header lines to know what format
+        // the key is; pasting just the base64 body gives it nothing to look at.
+        // Try what was pasted, then re-wrapped for the two common headers, and
+        // keep whichever actually loads.
+        val raw = cfg.privateKey.trim()
+        val attempts = buildList {
+            add(raw)
+            if (!raw.startsWith("-----BEGIN")) {
+                val body = raw.lines().joinToString("") { it.trim() }
+                if (body.isNotBlank()) {
+                    add("-----BEGIN OPENSSH PRIVATE KEY-----\n$body\n-----END OPENSSH PRIVATE KEY-----")
+                    add("-----BEGIN PRIVATE KEY-----\n$body\n-----END PRIVATE KEY-----")
+                }
+            }
+        }.distinct()
+        var last: Throwable? = null
+        for (attempt in attempts) {
+            try {
+                return client.loadKeys(attempt + "\n", null, passfinder)
+            } catch (t: Throwable) {
+                last = t
+            }
+        }
+        throw last ?: IOException("no private key given")
+    }
 
     /**
      * Android ships a cut-down BouncyCastle under the name `BC`, and it is
