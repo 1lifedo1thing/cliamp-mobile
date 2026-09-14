@@ -160,7 +160,7 @@ fun foldersOf(songs: List<Station>): List<SongFolder> {
 @Composable
 fun LocalScreen(
     vm: LocalViewModel,
-    onOpenProviders: () -> Unit = {},
+    onOpenProviderSongs: () -> Unit = {},
     onOpenSmart: (String) -> Unit = {},
     onOpenPlaylist: (String) -> Unit = {},
     onOpenSearch: () -> Unit = {},
@@ -243,10 +243,6 @@ fun LocalScreen(
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
-            chips = {
-                Chip("playlists", selected = true, onClick = {})
-                Chip("providers", selected = false, onClick = onOpenProviders)
-            },
         ) {
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -256,6 +252,8 @@ fun LocalScreen(
                 else -> PlaylistList(
                     listState = listState,
                     smart = smartPlaylists,
+                    providerAccounts = ui.providerAccounts,
+                    onOpenProviderSongs = onOpenProviderSongs,
                     pinnedPlaylists = pinnedPlaylists,
                     playlists = unpinnedPlaylists,
                     songs = songs,
@@ -452,6 +450,165 @@ fun LibrarySmartPlaylistPane(
     }
 }
 
+/**
+ * The "providers" playlist: every connected account's songs in one flat
+ * list. The chips lead with "all providers" and then one chip per account
+ * to narrow it down; the + in the section header opens the providers pane
+ * to connect another account - the add-playlist button's counterpart for
+ * accounts. Rows play exactly like smart-playlist rows, favourites
+ * included; provider tracks carry their own cover URLs and fall back to
+ * the same plate local songs wear.
+ */
+@Composable
+fun ProviderSongsPane(
+    vm: ProviderSongsViewModel,
+    current: Station?,
+    playing: Boolean,
+    onPlay: (Station, List<Station>) -> Unit,
+    onBack: () -> Unit,
+    onAddProvider: () -> Unit,
+    onOpenSearch: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+) {
+    val p = LocalPalette.current
+    val ui by vm.state.collectAsState()
+    val accounts = ui.accounts
+    var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    // A removed account must not leave the filter pointing at nothing.
+    LaunchedEffect(accounts) {
+        if (selected != null && accounts.none { it.id == selected }) selected = null
+    }
+    val pool = if (selected == null) {
+        accounts.flatMap { ui.songsByAccount[it.id].orEmpty() }
+    } else {
+        ui.songsByAccount[selected].orEmpty()
+    }
+    val visible = remember(pool, ui.sort) { sortedStations(pool, ui.sort) }
+    val favorites = ui.favorites.map { it.url }.toSet()
+    val failedLabels = ui.failures.keys.mapNotNull { id ->
+        accounts.firstOrNull { it.id == id }?.label?.ifBlank { null }
+    }
+    Box(Modifier.fillMaxSize().background(p.ground)) {
+        val scope = rememberCoroutineScope()
+        val listState = rememberLazyListState()
+        MainLayout(
+            title = "providers",
+            onOpenSearch = onOpenSearch,
+            onOpenSettings = onOpenSettings,
+            onTitleClick = { scope.scrollToTop(listState) },
+            chips = {
+                BackChip(onClick = onBack)
+            },
+        ) {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                            .padding(start = Gutter, end = Gutter, top = 4.dp, bottom = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        Chip("all providers", selected == null, onClick = { selected = null })
+                        accounts.forEach { a ->
+                            Chip(
+                                a.label.ifBlank { "provider" },
+                                selected == a.id,
+                                onClick = { selected = a.id },
+                            )
+                        }
+                    }
+                }
+                if (visible.isEmpty()) {
+                    item {
+                        Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                            Mono(
+                                when {
+                                    accounts.isEmpty() -> "no providers yet — add one with +"
+                                    ui.loading -> "loading provider songs…"
+                                    else -> "nothing here"
+                                },
+                                CliampType.rowSecondary, p.inkFaint,
+                            )
+                        }
+                    }
+                } else {
+                    item {
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                                .padding(start = Gutter, end = Gutter, top = 4.dp, bottom = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        ) {
+                            PlaylistSort.entries.forEach { t ->
+                                Chip(
+                                    t.label,
+                                    ui.sort == t,
+                                    onClick = { vm.onEvent(ProviderSongsViewModel.Event.SetSort(t)) },
+                                )
+                            }
+                        }
+                    }
+                    item {
+                        SectionLabel("songs — ${visible.size}") {
+                            Box(
+                                Modifier
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(CliampShape.small))
+                                    .background(if (p.dark) p.keyFace else p.ground)
+                                    .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.small))
+                                    .microPress(onClick = onAddProvider),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(CliampIcons.Plus, "add provider", Modifier.size(16.dp), tint = p.accent)
+                            }
+                        }
+                    }
+                    items(visible, key = { it.id }, contentType = { "provider-song" }) { s ->
+                        ListRow(
+                            rail = current?.url == s.url,
+                            onClick = { onPlay(s, visible) },
+                            verticalPadding = 9.dp,
+                            leading = {
+                                SongCover(s = s, current = current, playing = playing)
+                            },
+                            trailing = {
+                                Icon(
+                                    if (s.url in favorites) CliampIcons.StarFilled else CliampIcons.Star,
+                                    "favourite",
+                                    Modifier.size(15.dp).microPress {
+                                        vm.onEvent(ProviderSongsViewModel.Event.ToggleFavorite(s))
+                                    },
+                                    tint = if (s.url in favorites) p.accent else p.inkFaint,
+                                )
+                            },
+                        ) {
+                            Mono(s.name, CliampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
+                            Mono(
+                                s.artistAlbum.ifBlank { s.meta.ifBlank { "provider" } },
+                                CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
+                            )
+                        }
+                    }
+                }
+                if (failedLabels.isNotEmpty()) {
+                    item {
+                        Box(
+                            Modifier.fillMaxWidth()
+                                .padding(horizontal = Gutter, vertical = 8.dp)
+                                .microPress { vm.onEvent(ProviderSongsViewModel.Event.Refresh) },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Mono(
+                                "couldn't reach ${failedLabels.joinToString(", ")} — tap to retry",
+                                CliampType.rowSecondary, p.destructiveInk,
+                            )
+                        }
+                    }
+                }
+                item { Spacer(Modifier.height(20.dp)) }
+            }
+        }
+    }
+}
+
 /** One user playlist as a navigation pane, with add-songs and cover editing. */
 @Composable
 fun LibraryPlaylistPane(
@@ -613,6 +770,8 @@ private fun PermissionNote() {
 private fun PlaylistList(
     listState: LazyListState,
     smart: List<SmartPlaylist>,
+    providerAccounts: List<ProviderAccount> = emptyList(),
+    onOpenProviderSongs: () -> Unit = {},
     pinnedPlaylists: List<PlaylistStore.Playlist>,
     playlists: List<PlaylistStore.Playlist>,
     songs: List<Station>,
@@ -666,7 +825,17 @@ private fun PlaylistList(
                     )
                 }
             }
-            items(smart, key = { it.key }) { sp ->
+            // Providers sits second: recently played keeps the top spot for
+            // daily muscle memory, and the servers list follows it.
+            smart.firstOrNull()?.let { first ->
+                item(key = first.key) {
+                    SmartPlaylistRow(sp = first, onOpen = { onOpenSmart(first) })
+                }
+            }
+            item {
+                ProvidersRow(count = providerAccounts.size, onOpen = onOpenProviderSongs)
+            }
+            items(smart.drop(1), key = { it.key }) { sp ->
                 SmartPlaylistRow(sp = sp, onOpen = { onOpenSmart(sp) })
             }
 
@@ -902,6 +1071,38 @@ private fun SmartPlaylistRow(
         Mono(sp.label, CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
         if (sp.stations.isEmpty()) {
             Mono("nothing here yet", CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+        }
+    }
+}
+
+/**
+ * The providers entry in the pinned list: one row standing in for every
+ * connected account's songs. The count reads accounts, not songs - songs
+ * load when the row opens, so the row stays instant like the smart rows
+ * around it.
+ */
+@Composable
+private fun ProvidersRow(count: Int, onOpen: () -> Unit) {
+    val p = LocalPalette.current
+    ListRow(
+        onClick = onOpen,
+        verticalPadding = 8.dp,
+        leading = {
+            PlaylistGlyph(CliampIcons.Server, "providers")
+        },
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Mono(
+                    if (count == 0) "none yet" else "$count account${if (count == 1) "" else "s"}",
+                    CliampType.meta, p.inkFaint,
+                )
+                Icon(CliampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary)
+            }
+        },
+    ) {
+        Mono("providers", CliampType.rowPrimaryMedium, p.ink, maxLines = 1)
+        if (count == 0) {
+            Mono("connect one to fill this", CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
         }
     }
 }
@@ -1504,8 +1705,8 @@ private fun SmartPlaylistDetail(
  * art for local files, the known artwork URL for episodes and provider
  * tracks, branding discovery for radio - so a row never shows a
  * generic note where its home shows real art. Coverless rows wear their
- * home placeholder: the show's PodRow, the provider's PlayRow, the themed
- * plate (note for local files, broadcast mark for live stations).
+ * home placeholder: the show's PodRow, the themed plate (note for local
+ * files and provider tracks, broadcast mark for live stations).
  *
  * Shared with folder rows so they wear exactly what list rows wear.
  */
@@ -1534,10 +1735,11 @@ internal fun SongCover(s: Station, current: Station?, playing: Boolean) {
             ?.asImageBitmap()
     }
     val active = current?.url == s.url
-    // Coverless local files and live stations wear the themed plate - the
-    // same accent glyph plate the playlist rows wear - instead of a faint
-    // outline box, so the fallback follows the theme like everything else.
-    if (art == null && (s.source == StationSource.Local || !s.isTrack)) {
+    // Coverless local files, provider tracks and live stations wear the
+    // themed plate - the same accent glyph plate the playlist rows wear -
+    // instead of a faint outline box, so the fallback follows the theme
+    // like everything else.
+    if (art == null && (s.source == StationSource.Local || s.source == StationSource.Provider || !s.isTrack)) {
         Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
             GlyphPlate(
                 if (s.isTrack) CliampIcons.MusicNote else CliampIcons.StationsTab,
@@ -1561,8 +1763,8 @@ internal fun SongCover(s: Station, current: Station?, playing: Boolean) {
         if (art != null) {
             Image(art!!, s.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
-            // Coverless episodes and provider tracks keep their home mark in
-            // the row box; local files and stations take the plate above.
+            // Coverless episodes keep their home mark in the row box; local
+            // files, provider tracks and stations take the plate above.
             Icon(
                 when (s.source) {
                     StationSource.Podcast -> CliampIcons.PodRow

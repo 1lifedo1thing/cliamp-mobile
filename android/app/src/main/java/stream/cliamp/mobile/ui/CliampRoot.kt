@@ -74,6 +74,8 @@ import stream.cliamp.mobile.ui.screens.StationsViewModel
 import stream.cliamp.mobile.ui.screens.PodcastsViewModel
 import stream.cliamp.mobile.ui.screens.PodcastShowViewModel
 import stream.cliamp.mobile.ui.screens.LocalViewModel
+import stream.cliamp.mobile.ui.screens.ProviderSongsPane
+import stream.cliamp.mobile.ui.screens.ProviderSongsViewModel
 import stream.cliamp.mobile.ui.screens.ProvidersPaneViewModel
 import stream.cliamp.mobile.ui.screens.SmartPlaylistViewModel
 import stream.cliamp.mobile.ui.screens.PlaylistDetailViewModel
@@ -400,9 +402,9 @@ fun CliampRoot(
                     Box(contentModifier) {
                         LocalScreen(
                             vm = appViewModel { app ->
-                                LocalViewModel(app.localLibrary, app.playlists, app.prefs)
+                                LocalViewModel(app.localLibrary, app.playlists, app.prefs, app.providers)
                             },
-                            onOpenProviders = { navController.navigate(LibraryProviders) },
+                            onOpenProviderSongs = { navController.navigate(LibraryProviderSongs) },
                             onOpenSmart = { kind -> navController.navigate(LibrarySmartPlaylist(kind)) },
                             onOpenPlaylist = { slug -> navController.navigate(LibraryPlaylist(slug)) },
                             onOpenSearch = { navController.navigate(Search) },
@@ -420,6 +422,22 @@ fun CliampRoot(
                             onAddProvider = { spec ->
                                 navController.navigate(ProviderWizardRoute(spec.key))
                             },
+                            onOpenSearch = { navController.navigate(Search) },
+                            onOpenSettings = { navController.navigate(Settings) },
+                        )
+                    }
+                }
+                composable<LibraryProviderSongs> {
+                    Box(contentModifier) {
+                        ProviderSongsPane(
+                            vm = appViewModel { app ->
+                                ProviderSongsViewModel(app.providers, app.prefs)
+                            },
+                            current = station,
+                            playing = playerState.playing,
+                            onPlay = onPlay,
+                            onBack = { navController.popBackStack() },
+                            onAddProvider = { navController.navigate(LibraryProviders) },
                             onOpenSearch = { navController.navigate(Search) },
                             onOpenSettings = { navController.navigate(Settings) },
                         )

@@ -10,11 +10,14 @@ import stream.cliamp.mobile.data.PlaylistSort
 import stream.cliamp.mobile.data.PlaylistStore
 import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Station
+import stream.cliamp.mobile.data.provider.ProviderAccount
+import stream.cliamp.mobile.data.provider.ProviderStore
 
 class LocalViewModel(
     private val localLibrary: LocalLibrary,
     private val playlists: PlaylistStore,
     private val prefs: Prefs,
+    private val providers: ProviderStore,
 ) : ViewModel() {
     data class UiState(
         val songs: List<Station> = emptyList(),
@@ -28,6 +31,7 @@ class LocalViewModel(
         val fetched: Map<String, DownloadEntry> = emptyMap(),
         val favorites: List<Station> = emptyList(),
         val recent: List<Station> = emptyList(),
+        val providerAccounts: List<ProviderAccount> = emptyList(),
     )
 
     sealed interface Event {
@@ -54,6 +58,7 @@ class LocalViewModel(
     private data class SocialState(
         val favorites: List<Station> = emptyList(),
         val recent: List<Station> = emptyList(),
+        val providerAccounts: List<ProviderAccount> = emptyList(),
     )
 
     val state: StateFlow<UiState> = combine(
@@ -73,6 +78,7 @@ class LocalViewModel(
         combine(
             prefs.favorites,
             prefs.history,
+            providers.accounts,
             ::SocialState,
         ),
     ) { device, lists, social ->
@@ -88,6 +94,7 @@ class LocalViewModel(
             fetched = lists.fetched,
             favorites = social.favorites,
             recent = social.recent,
+            providerAccounts = social.providerAccounts,
         )
     }.stateIn(
         viewModelScope,

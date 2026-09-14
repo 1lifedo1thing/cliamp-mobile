@@ -24,6 +24,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class PodcastShowRoute(val podcastId: String)
 
 @Serializable data object LibraryProviders
+@Serializable data object LibraryProviderSongs
 @Serializable data class LibrarySmartPlaylist(val kind: String)
 @Serializable data class LibraryPlaylist(val slug: String)
 @Serializable data class LibrarySongInfo(val stationUrl: String)
