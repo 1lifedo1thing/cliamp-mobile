@@ -220,7 +220,11 @@ class JellyfinClient(
         val t = authToken
         val q = if (t.isBlank()) "" else "$tokenParam=${enc(t)}"
         val path = if (modernAuth) "$base/Items/$id/Download" else "$base/Audio/$id/stream.mp3?static=true"
-        return ResolvedStream("$path${if (q.isEmpty()) "" else "&$q"}")
+        // The token starts the query on Download and extends it on the
+        // static Emby path; joining with & unconditionally folds it into
+        // the path and the server 404s.
+        val sep = if ('?' in path) "&" else "?"
+        return ResolvedStream("$path${if (q.isEmpty()) "" else "$sep$q"}")
     }
 
     fun coverUrl(id: String, size: Int = 512): String {
