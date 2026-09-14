@@ -26,12 +26,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
+import stream.cliamp.mobile.data.PlaylistSort
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.provider.toStation
 import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
+import stream.cliamp.mobile.ui.components.CliampTextField
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.scrollToTop
 import stream.cliamp.mobile.ui.components.ListRow
@@ -43,11 +46,13 @@ import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
 
 /**
- * Browses one provider's library: albums, artists, starred tracks, drilling
- * into an album's track list. Playing a track queues the whole album.
+ * Browses one provider's library: albums, artists, drilling into an album's
+ * track list. Playing a track queues the whole album.
  *
- * The screen only knows the generic browse client behind [vm]; Subsonic and
- * Jellyfin/Emby behind it. Roots some providers do not offer are just hidden.
+ * The screen only knows the generic browse client behind [vm]. Sorting wears
+ * exactly the local-songs chips; the chips pick both the server query and
+ * the client-side order. A filter row narrows whatever list is showing
+ * by name.
  */
 @Composable
 fun ProviderBrowseScreen(
@@ -99,30 +104,30 @@ fun ProviderBrowseScreen(
                     modifier = Modifier.microPress { scope.scrollToTop(browseListState) },
                 )
             }
-            if (here == Node.Home) {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                        .padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    uiState.roots.forEach { r ->
-                        Chip(
-                            r.label,
-                            uiState.root == r,
-                            onClick = { vm.onEvent(ProviderBrowseViewModel.Event.SelectRoot(r)) },
-                        )
-                    }
-                    if (uiState.hasIndex) {
-                        Chip(
-                            if (uiState.indexState.scanning) "scanning" else "rescan",
-                            selected = false,
-                            onClick = { vm.onEvent(ProviderBrowseViewModel.Event.Reindex) },
-                        )
-                    }
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                    .padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                PlaylistSort.entries.forEach { s ->
+                    Chip(
+                        s.label,
+                        uiState.sort == s,
+                        onClick = { vm.onEvent(ProviderBrowseViewModel.Event.SortChanged(s)) },
+                    )
                 }
-            } else {
-                Spacer(Modifier.height(10.dp))
+                if (here == Node.Home && uiState.hasIndex) {
+                    Chip(
+                        if (uiState.indexState.scanning) "scanning" else "rescan",
+                        selected = false,
+                        onClick = { vm.onEvent(ProviderBrowseViewModel.Event.Reindex) },
+                    )
+                }
             }
+            FilterRow(
+                value = uiState.filter,
+                onValue = { vm.onEvent(ProviderBrowseViewModel.Event.FilterChanged(it)) },
+            )
         }
 
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = browseListState) {
@@ -246,3 +251,23 @@ fun ProviderBrowseScreen(
 
 private fun clockOf(seconds: Int): String =
     if (seconds <= 0) "" else "%d:%02d".format(seconds / 60, seconds % 60)
+
+/**
+ * Narrows whatever list is on screen by name, the same job the folder
+ * picker does on local songs. Client-side: the server already sent the
+ * page, so typing never fires a request per keystroke.
+ */
+@Composable
+private fun FilterRow(value: String, onValue: (String) -> Unit) {
+    val focus = LocalFocusManager.current
+    Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 4.dp)) {
+        CliampTextField(
+            value = value,
+            onValueChange = onValue,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = "filter",
+            textStyle = CliampType.rowSecondary,
+            onAction = { focus.clearFocus() },
+        )
+    }
+}

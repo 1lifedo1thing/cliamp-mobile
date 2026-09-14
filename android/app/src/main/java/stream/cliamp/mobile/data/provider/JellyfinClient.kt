@@ -208,16 +208,18 @@ class JellyfinClient(
     }
 
     /**
-     * The stream to play: the original file. The token rides the URL because
-     * the player fetches it without custom headers - `?ApiKey=` on Jellyfin
-     * (the lowercase `api_key` died with the legacy auth in 12), `?api_key=`
-     * on Emby, which still takes it.
+     * The stream to play. The token rides the URL because the player fetches
+     * it without custom headers - `?ApiKey=` on Jellyfin (the lowercase
+     * `api_key` died with the legacy auth in 12), `?api_key=` on Emby, which
+     * still takes it. Emby has no `/Items/{id}/Download`: it streams the
+     * original file through its audio endpoint instead.
      */
     suspend fun stream(id: String): ResolvedStream {
         ensureAuth()
         val t = authToken
         val q = if (t.isBlank()) "" else "$tokenParam=${enc(t)}"
-        return ResolvedStream("$base/Items/$id/Download${if (q.isEmpty()) "" else "?$q"}")
+        val path = if (modernAuth) "$base/Items/$id/Download" else "$base/Audio/$id/stream.mp3?static=true"
+        return ResolvedStream("$path${if (q.isEmpty()) "" else "&$q"}")
     }
 
     fun coverUrl(id: String, size: Int = 512): String {
