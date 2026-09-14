@@ -24,11 +24,15 @@ class PlexClient(
     private val base = SubsonicClient.normalise(rawUrl)
     private val auth = "X-Plex-Token=$token"
 
+    // Plex answers XML unless told otherwise. The models below are JSON, so
+    // every request asks for JSON up front rather than parsing XML.
+    private val jsonHeaders = mapOf("Accept" to "application/json")
+
     @Volatile private var musicSection: String? = null
 
     private suspend fun sectionKey(): String {
         musicSection?.let { return it }
-        val body = Http.text(get("library/sections"))
+        val body = Http.text(get("library/sections"), jsonHeaders)
         val dirs = Http.json.decodeFromString<SectionContainer>(body).mediaContainer.directory
         val key = dirs.firstOrNull { it.type == "artist" }?.key
             ?: dirs.firstOrNull()?.key.orEmpty()
@@ -39,7 +43,7 @@ class PlexClient(
 
     suspend fun ping(): Result<ProviderIdentity> = withContext(Dispatchers.IO) {
         runCatching {
-            val body = Http.text(get("", emptyMap()))
+            val body = Http.text(get("", emptyMap()), jsonHeaders)
             val title = Http.json.decodeFromString<RootContainer>(body).mediaContainer.title.orEmpty()
             ProviderIdentity(name = title.ifBlank { "plex" })
         }
@@ -48,7 +52,7 @@ class PlexClient(
     suspend fun albums(style: String): Result<List<ProviderAlbum>> = withContext(Dispatchers.IO) {
         runCatching {
             val key = sectionKey()
-            val body = Http.text(get("library/sections/$key/all", mapOf("type" to "9")))
+            val body = Http.text(get("library/sections/$key/all", mapOf("type" to "9")), jsonHeaders)
             Http.json.decodeFromString<MetadataContainer<AlbumMeta>>(body).mediaContainer.metadata.map {
                 ProviderAlbum(
                     id = it.ratingKey,
@@ -64,7 +68,7 @@ class PlexClient(
     suspend fun artists(): Result<List<ProviderArtist>> = withContext(Dispatchers.IO) {
         runCatching {
             val key = sectionKey()
-            val body = Http.text(get("library/sections/$key/all", mapOf("type" to "8")))
+            val body = Http.text(get("library/sections/$key/all", mapOf("type" to "8")), jsonHeaders)
             Http.json.decodeFromString<MetadataContainer<ArtistMeta>>(body).mediaContainer.metadata.map {
                 ProviderArtist(it.ratingKey, it.title.orEmpty(), 0)
             }
@@ -75,7 +79,8 @@ class PlexClient(
         runCatching {
             val key = sectionKey()
             val body = Http.text(
-                get("library/sections/$key/all", mapOf("type" to "9", "artist.id" to artistId))
+                get("library/sections/$key/all", mapOf("type" to "9", "artist.id" to artistId)),
+                jsonHeaders,
             )
             Http.json.decodeFromString<MetadataContainer<AlbumMeta>>(body).mediaContainer.metadata.map {
                 ProviderAlbum(
@@ -91,7 +96,7 @@ class PlexClient(
 
     suspend fun albumTracks(albumId: String): Result<List<ProviderTrack>> = withContext(Dispatchers.IO) {
         runCatching {
-            val body = Http.text(get("library/metadata/$albumId/children"))
+            val body = Http.text(get("library/metadata/$albumId/children"), jsonHeaders)
             Http.json.decodeFromString<MetadataContainer<TrackMeta>>(body).mediaContainer.metadata.map { t ->
                 val part = t.media.firstOrNull()?.part.orEmpty()
                 ProviderTrack(
@@ -124,25 +129,25 @@ class PlexClient(
 }
 
 @Serializable
-private data class SectionContainer(val mediaContainer: Sections)
+private data class SectionContainer(@SerialName("MediaContainer") val mediaContainer: Sections)
 
 @Serializable
-private data class Sections(val directory: List<Section> = emptyList())
+private data class Sections(@SerialName("Directory") val directory: List<Section> = emptyList())
 
 @Serializable
 private data class Section(val key: String = "", val type: String = "", val title: String = "")
 
 @Serializable
-private data class RootContainer(val mediaContainer: Root)
+private data class RootContainer(@SerialName("MediaContainer") val mediaContainer: Root)
 
 @Serializable
 private data class Root(val title: String = "")
 
 @Serializable
-private data class MetadataContainer<T>(val mediaContainer: Metadata<T>)
+private data class MetadataContainer<T>(@SerialName("MediaContainer") val mediaContainer: Metadata<T>)
 
 @Serializable
-private data class Metadata<T>(val metadata: List<T> = emptyList())
+private data class Metadata<T>(@SerialName("Metadata") val metadata: List<T> = emptyList())
 
 @Serializable
 private data class AlbumMeta(
@@ -163,11 +168,11 @@ private data class TrackMeta(
     val grandparentTitle: String? = null,
     val originalTitle: String? = null,
     val duration: Int? = null,
-    val media: List<MediaMeta> = emptyList(),
+    @SerialName("Media") val media: List<MediaMeta> = emptyList(),
 )
 
 @Serializable
-private data class MediaMeta(val part: List<PartMeta> = emptyList())
+private data class MediaMeta(@SerialName("Part") val part: List<PartMeta> = emptyList())
 
 @Serializable
 private data class PartMeta(val key: String = "", val container: String = "")
