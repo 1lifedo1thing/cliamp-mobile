@@ -123,17 +123,18 @@ fun PodcastShowScreen(
         onOpenSettings = onOpenSettings,
         onTitleClick = { scope.scrollToTop(listState) },
         onBack = onBack,
-        chips = {
-            Chip(
-                if (subscribed) "subscribed" else "subscribe",
-                selected = subscribed,
-                onClick = { show?.let { s -> vm.onEvent(PodcastShowViewModel.Event.ToggleSubscription(s)) } },
-            )
-        },
     ) {
 
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
-            item { ShowHeader(show) }
+            item {
+                ShowHeader(
+                    show = show,
+                    subscribed = subscribed,
+                    onToggleSubscribe = {
+                        show?.let { s -> vm.onEvent(PodcastShowViewModel.Event.ToggleSubscription(s)) }
+                    },
+                )
+            }
 
             state.error?.let {
                 item {
@@ -190,7 +191,11 @@ fun PodcastShowScreen(
 }
 
 @Composable
-private fun ShowHeader(show: PodcastShow?) {
+private fun ShowHeader(
+    show: PodcastShow?,
+    subscribed: Boolean,
+    onToggleSubscribe: () -> Unit,
+) {
     val p = LocalPalette.current
     if (show == null) return
     var art by remember(show.artwork) { mutableStateOf<ImageBitmap?>(null) }
@@ -227,6 +232,12 @@ private fun ShowHeader(show: PodcastShow?) {
                 if (show.meta.isNotBlank()) {
                     Mono(show.meta, CliampType.meta, p.inkTertiary, maxLines = 1)
                 }
+                Spacer(Modifier.height(3.dp))
+                Chip(
+                    if (subscribed) "subscribed" else "subscribe",
+                    selected = subscribed,
+                    onClick = onToggleSubscribe,
+                )
             }
         }
         if (show.description.isNotBlank()) {
