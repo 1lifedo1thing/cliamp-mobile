@@ -33,7 +33,6 @@ import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.playback.EqPresets
 import stream.cliamp.mobile.playback.PlaybackBus
-import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.BrickMeter
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampToggle
@@ -42,6 +41,7 @@ import stream.cliamp.mobile.ui.components.HairlineDivider
 import stream.cliamp.mobile.ui.components.MechSliderVertical
 import stream.cliamp.mobile.ui.components.MeterSize
 import stream.cliamp.mobile.ui.components.SectionLabel
+import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.rememberMeter
 import stream.cliamp.mobile.ui.theme.CliampType
 import stream.cliamp.mobile.ui.theme.LocalPalette
@@ -81,7 +81,12 @@ fun ScopeScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BackChip(onClick = onBack)
+            Mono(
+                "‹",
+                CliampType.sectionLabel,
+                if (spectrumLive) p.accent else p.inkTertiary,
+                Modifier.microPress { onBack() },
+            )
             Mono(
                 when {
                     visualizer == "off" -> "VISUALIZER OFF"

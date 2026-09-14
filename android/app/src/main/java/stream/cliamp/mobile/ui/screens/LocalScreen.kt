@@ -79,7 +79,6 @@ import stream.cliamp.mobile.data.sortedStations
 import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.data.provider.ProviderCatalog
 import stream.cliamp.mobile.data.provider.ProviderSpec
-import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.ChipDropdown
 import stream.cliamp.mobile.ui.components.ChipOption
@@ -307,9 +306,7 @@ fun LibraryProvidersPane(
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
-            chips = {
-                BackChip(onClick = onBack)
-            },
+            onBack = onBack,
         ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 ProvidersView(
@@ -411,9 +408,7 @@ fun LibrarySmartPlaylistPane(
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
-            chips = {
-                BackChip(onClick = onBack)
-            },
+            onBack = onBack,
         ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (pl == null) {
@@ -491,9 +486,7 @@ fun ProviderSongsPane(
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
-            chips = {
-                BackChip(onClick = onBack)
-            },
+            onBack = onBack,
         ) {
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
                 item {
@@ -621,8 +614,8 @@ fun LibraryPlaylistPane(
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
+            onBack = onBack,
             chips = {
-                BackChip(onClick = onBack)
                 if (pl != null) {
                     Chip("add", selected = false, onClick = { adding = true })
                     Chip("set cover", selected = false, onClick = { coverLauncher.launch("image/*") })
@@ -1826,14 +1819,7 @@ private fun SongInfoView(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Mono("Info", CliampType.screenTitle, p.ink, maxLines = 1)
-                }
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                        .padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    BackChip(onClick = onDismiss)
+                    Mono("‹ Info", CliampType.screenTitle, p.ink, Modifier.microPress { onDismiss() }, maxLines = 1)
                 }
             }
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {

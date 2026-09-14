@@ -35,7 +35,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import stream.cliamp.mobile.BuildConfig
 import stream.cliamp.mobile.R
-import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampToggle
@@ -100,9 +99,7 @@ fun SettingsScreen(
         title = "Settings",
         onOpenSearch = onOpenSearch,
         onOpenSettings = null,
-        chips = {
-            BackChip(onClick = onBack)
-        },
+        onBack = onBack,
         onTitleClick = { scope.scrollToTop(scrollState) },
     ) {
         Column(

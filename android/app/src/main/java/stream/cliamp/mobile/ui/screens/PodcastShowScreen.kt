@@ -42,7 +42,6 @@ import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.toStation
-import stream.cliamp.mobile.ui.components.BackChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.EmptyNote
@@ -123,8 +122,8 @@ fun PodcastShowScreen(
         onOpenSearch = onOpenSearch,
         onOpenSettings = onOpenSettings,
         onTitleClick = { scope.scrollToTop(listState) },
+        onBack = onBack,
         chips = {
-            BackChip(onClick = onBack)
             Chip(
                 if (subscribed) "subscribed" else "subscribe",
                 selected = subscribed,

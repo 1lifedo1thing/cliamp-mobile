@@ -56,7 +56,6 @@ import stream.cliamp.mobile.playback.PlayerState
 import stream.cliamp.mobile.ui.clock
 import stream.cliamp.mobile.ui.compact
 import stream.cliamp.mobile.ui.components.BrickMeter
-import stream.cliamp.mobile.ui.components.BackIconChip
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.Gutter
@@ -204,7 +203,7 @@ private fun PortraitPlayer(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            BackIconChip(onClick = actions.onBack, modifier = Modifier.offset(x = -8.dp))
+            Mono("‹", CliampType.screenTitle, p.ink, Modifier.offset(x = -8.dp).microPress { actions.onBack() })
         }
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
         // it is the first thing to give way. Compose has no shrink factor, so
@@ -310,7 +309,7 @@ private fun LandscapePlayer(
                 Modifier.fillMaxWidth().padding(end = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                BackIconChip(onClick = actions.onBack, modifier = Modifier.offset(x = -8.dp))
+                Mono("‹", CliampType.screenTitle, p.ink, Modifier.offset(x = -8.dp).microPress { actions.onBack() })
                 Spacer(Modifier.width(10.dp))
                 PlayerStatusRow(
                     model = model,

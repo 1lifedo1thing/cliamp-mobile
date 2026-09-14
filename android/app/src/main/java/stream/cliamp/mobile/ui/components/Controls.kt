@@ -268,38 +268,7 @@ fun ChipDropdown(
     }
 }
 
-/**
- * The back chip every secondary page wears: podcast shows, playlist panes,
- * provider pages, the player, settings and search all return through this.
- */
-@Composable
-fun BackChip(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Chip("‹ back", selected = false, onClick = onClick, modifier = modifier)
-}
 
-/**
- * The icon-only back chip: a left arrow with no label. Search keeps this
- * denser variant; every other secondary page wears [BackChip].
- */
-@Composable
-fun BackIconChip(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val p = LocalPalette.current
-    Box(
-        modifier
-            .microPress(onClick = onClick)
-            .clip(RoundedCornerShape(CliampShape.small))
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(CliampIcons.Left, "back", Modifier.size(width = 16.dp, height = 16.dp), tint = p.ink)
-    }
-}
 
 /** 44x26 pill, 20dp knob, accent when on. */
 @Composable

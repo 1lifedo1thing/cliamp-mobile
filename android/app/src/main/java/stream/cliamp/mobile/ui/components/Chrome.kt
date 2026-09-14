@@ -169,6 +169,12 @@ fun MainLayout(
     modifier: Modifier = Modifier,
     chips: (@Composable RowScope.() -> Unit)? = null,
     onTitleClick: (() -> Unit)? = null,
+    /**
+     * BackChevron lives in the title row, Queue-style: a chevron before the
+     * title that returns, while the title itself keeps whatever [onTitleClick]
+     * does. Two hit areas, one row, no back chip underneath.
+     */
+    onBack: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val p = LocalPalette.current
@@ -183,11 +189,20 @@ fun MainLayout(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Mono(
-                title, CliampType.screenTitle, p.ink,
-                modifier = if (onTitleClick != null) Modifier.microPress(onClick = onTitleClick) else Modifier,
-                maxLines = 1,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onBack != null) {
+                    Mono(
+                        "‹", CliampType.screenTitle, p.ink,
+                        Modifier.microPress(onClick = onBack),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Mono(
+                    title, CliampType.screenTitle, p.ink,
+                    modifier = if (onTitleClick != null) Modifier.microPress(onClick = onTitleClick) else Modifier,
+                    maxLines = 1,
+                )
+            }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
                 verticalAlignment = Alignment.CenterVertically,
