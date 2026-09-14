@@ -58,7 +58,7 @@ class LyrionClient(
                     songCount = 0,
                     year = field(e, "year")?.toIntOrNull() ?: 0,
                 )
-            }
+            }.filter { it.id.isNotBlank() }
         }
     }
 
@@ -71,7 +71,7 @@ class LyrionClient(
                     name = field(e, "name") ?: field(e, "artist").orEmpty(),
                     albumCount = 0,
                 )
-            }
+            }.filter { it.id.isNotBlank() }
         }
     }
 
@@ -86,7 +86,7 @@ class LyrionClient(
                     songCount = 0,
                     year = field(e, "year")?.toIntOrNull() ?: 0,
                 )
-            }
+            }.filter { it.id.isNotBlank() }
         }
     }
 
@@ -103,7 +103,7 @@ class LyrionClient(
                     codec = "",
                     bitrate = 0,
                 )
-            }
+            }.filter { it.id.isNotBlank() }
         }
     }
 
@@ -140,7 +140,11 @@ class LyrionClient(
         Http.json.parseToJsonElement(body).jsonObject["result"] ?: JsonNull
     }
 
-    /** Finds the largest nested array of objects inside [result]. */
+    /**
+     * Finds the largest nested array of objects inside [result]. The envelope
+     * itself is an object too, so callers drop blank ids - it has none, and
+     * querying tracks for a blank album id returns the whole library.
+     */
     private fun itemArray(result: JsonElement): List<JsonElement> {
         // Collect all object elements from arrays in traversal order (dedup by identity).
         val seen = LinkedHashSet<JsonElement>()
