@@ -201,11 +201,11 @@ private fun PortraitPlayer(
     val p = LocalPalette.current
     Column(modifier.fillMaxSize().background(p.ground).statusBarsPadding().navigationBarsPadding()) {
         Row(
-            Modifier.fillMaxWidth().padding(start = Gutter, top = 6.dp, end = 16.dp, bottom = 2.dp),
+            Modifier.fillMaxWidth().padding(start = Gutter, top = 0.dp, end = 16.dp, bottom = 0.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            BackChevron(actions.onBack, Modifier.offset(x = -8.dp))
+            BackChevron(actions.onBack, Modifier.offset(x = -8.dp, y = (-2).dp))
         }
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
         // it is the first thing to give way. Compose has no shrink factor, so
@@ -228,17 +228,20 @@ private fun PortraitPlayer(
                 // The art plate and the text block below it share a flexed block
                 // that absorbs however tall a long station name or stream title
                 // grows, so the meter and the transport beneath stay pinned and
-                // never shrink or shift when the names change length.
+                // never shrink or shift when the names change length. Pinned to
+                // the top (not centred) so the cover sits higher and the source
+                // line under the artist can never be pushed off the bottom.
                 Column(
                     Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterVertically),
+                    verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.Top),
                 ) {
                     StationArt(
                         station = model.shownStation,
                         modifier = Modifier
                             .align(Alignment.CenterHorizontally)
+                            .offset(y = (-6).dp)
                             .size(artSide),
                     )
 
