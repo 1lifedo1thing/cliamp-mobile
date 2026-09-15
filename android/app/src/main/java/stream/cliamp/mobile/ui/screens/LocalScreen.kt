@@ -167,6 +167,8 @@ fun LocalScreen(
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     favScope: FavScope = FavScope.All,
+    /** False while the pager sits on another tab: the naming field hides. */
+    visible: Boolean = true,
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
@@ -195,6 +197,21 @@ fun LocalScreen(
     // The media permission is requested once at app launch. Recheck it whenever
     // this screen resumes, so granting it in system Settings (without another
     // in-app dialog) is picked up here.
+    // The naming field never survives a page change: leaving for another tab
+    // or pushing anything above hides it (and drops its text), so coming back
+    // always lands on the plain list.
+    LaunchedEffect(visible) {
+        if (!visible) {
+            creatingName = false
+            renamingSlug = null
+        }
+    }
+    LifecycleResumeEffect(Unit) {
+        onPauseOrDispose {
+            creatingName = false
+            renamingSlug = null
+        }
+    }
     LifecycleResumeEffect(Unit) {
         haveAudio = checkAudio(context, audioPerm)
         onPauseOrDispose { }

@@ -383,6 +383,7 @@ fun CliampRoot(
                                 onOpenSearch = { navController.navigate(Search) },
                                 onOpenSettings = { navController.navigate(Settings) },
                                 favScope = favScope,
+                                visible = pagerState.currentPage == Tab.Lib.ordinal,
                             )
                         }
                     }
