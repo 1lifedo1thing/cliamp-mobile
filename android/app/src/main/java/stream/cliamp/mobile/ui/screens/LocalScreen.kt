@@ -419,6 +419,19 @@ fun LibrarySmartPlaylistPane(
         )
     }
     val pl = smartPlaylists.firstOrNull { it.kind == kind }
+    // Local songs filter by folder through a picker dropdown that leads the
+    // sort row - one scrollable header row, no mode switching, no drill state.
+    val folders = remember(pl?.stations) {
+        if (pl?.kind == SmartKind.LocalSongs) foldersOf(pl.stations) else emptyList()
+    }
+    var folder by rememberSaveable(pl?.key ?: "playlist") { mutableStateOf<String?>(null) }
+    // A deleted folder must not leave the filter pointing at nothing.
+    LaunchedEffect(folders) {
+        if (folder != null && folders.none { it.path == folder }) folder = null
+    }
+    val members = if (pl?.kind == SmartKind.LocalSongs && folder != null) {
+        folders.firstOrNull { it.path == folder }?.songs.orEmpty()
+    } else pl?.stations.orEmpty()
     Box(Modifier.fillMaxSize().background(p.ground)) {
         val scope = rememberCoroutineScope()
         val listState = rememberLazyListState()
@@ -428,6 +441,39 @@ fun LibrarySmartPlaylistPane(
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
             onBack = onBack,
+            chips = {
+                if (pl != null) {
+                    when (pl.kind) {
+                        // Favourites mix local songs, radio stations and
+                        // podcasts, so they earn their own type sub-tabs.
+                        SmartKind.Favorites -> FavScope.entries.forEach { f ->
+                            Chip(f.label, favScope == f, onClick = { onFavScopeChange(f) })
+                        }
+                        // The on-device lists sort; local songs also filter by
+                        // folder through a picker dropdown that leads the row.
+                        SmartKind.LocalSongs, SmartKind.Downloads -> {
+                            PlaylistSort.entries.forEach { t ->
+                                Chip(
+                                    t.label, detailSort == t,
+                                    onClick = { vm.onEvent(SmartPlaylistViewModel.Event.SetSort(t)) },
+                                )
+                            }
+                            if (pl.kind == SmartKind.LocalSongs && folders.isNotEmpty()) {
+                                ChipDropdown(
+                                    label = folders.firstOrNull { it.path == folder }?.name ?: "all folders",
+                                    selected = folder != null,
+                                    options = listOf(
+                                        ChipOption("all folders") { folder = null },
+                                    ) + folders.map { f ->
+                                        ChipOption(f.name) { folder = f.path }
+                                    },
+                                )
+                            }
+                        }
+                        else -> {}
+                    }
+                }
+            },
         ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (pl == null) {
@@ -436,6 +482,7 @@ fun LibrarySmartPlaylistPane(
                     SmartPlaylistDetail(
                         listState = listState,
                         pl = pl,
+                        members = members,
                         current = current,
                         playing = playing,
                         onPlay = onPlay,
@@ -443,7 +490,6 @@ fun LibrarySmartPlaylistPane(
                         favorites = favorites.map { it.url }.toSet(),
                         loading = loading,
                         favScope = favScope,
-                        onFavScopeChange = onFavScopeChange,
                         onInfo = onOpenSongInfo,
                         // Removing from downloads deletes the fetched file and
                         // untracks the URL; anywhere else it drops the song.
@@ -456,7 +502,6 @@ fun LibrarySmartPlaylistPane(
                         showResume = showResume,
                         sort = detailSort,
                         fetchedBytes = fetched.mapValues { it.value.bytes },
-                        onSortChange = { vm.onEvent(SmartPlaylistViewModel.Event.SetSort(it)) },
                     )
                 }
             }
@@ -506,23 +551,17 @@ fun ProviderSongsPane(
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
             onBack = onBack,
+            chips = {
+                accounts.forEach { a ->
+                    Chip(
+                        a.label.ifBlank { "provider" },
+                        selected == a.id,
+                        onClick = { selected = a.id },
+                    )
+                }
+            },
         ) {
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
-                item {
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                            .padding(start = Gutter, end = Gutter, top = 4.dp, bottom = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    ) {
-                        accounts.forEach { a ->
-                            Chip(
-                                a.label.ifBlank { "provider" },
-                                selected == a.id,
-                                onClick = { selected = a.id },
-                            )
-                        }
-                    }
-                }
                 item {
                     SectionLabel("songs — ${visible.size}") {
                         Box(
@@ -1522,6 +1561,7 @@ private fun PodcastGroups(
 private fun SmartPlaylistDetail(
     listState: LazyListState,
     pl: SmartPlaylist,
+    members: List<Station>,
     current: Station?,
     playing: Boolean,
     onPlay: (Station, List<Station>) -> Unit,
@@ -1529,38 +1569,23 @@ private fun SmartPlaylistDetail(
     favorites: Set<String>,
     loading: Boolean = false,
     favScope: FavScope = FavScope.All,
-    onFavScopeChange: (FavScope) -> Unit = {},
     onInfo: (Station) -> Unit = {},
     onRemove: (Station) -> Unit = {},
     progress: Map<String, EpisodeProgress> = emptyMap(),
     showResume: Boolean = false,
     sort: PlaylistSort = PlaylistSort.Title,
     fetchedBytes: Map<String, Long> = emptyMap(),
-    onSortChange: (PlaylistSort) -> Unit = {},
 ) {
     val p = LocalPalette.current
     // Only the on-device smart lists sort; favourites and recent have their
-    // own fixed orders (recent is already time-sorted).
+    // own fixed orders (recent is already time-sorted). Local songs arrive
+    // already folder-filtered when a folder chip is active.
     val local = pl.kind == SmartKind.LocalSongs || pl.kind == SmartKind.Downloads
     // Favourites mix local songs, radio stations and podcasts, so they get
     // their own type sub-tabs: all / local / stations / podcasts.
     val isFav = pl.kind == SmartKind.Favorites
-    val members = pl.stations
-    // Local songs filter by folder through a picker dropdown that leads the
-    // sort row - one scrollable row, no mode switching, no drill state.
-    val folders = remember(members) {
-        if (pl.kind == SmartKind.LocalSongs) foldersOf(members) else emptyList()
-    }
-    var folder by rememberSaveable(pl.key) { mutableStateOf<String?>(null) }
-    // A deleted folder must not leave the filter pointing at nothing.
-    LaunchedEffect(folders) {
-        if (folder != null && folders.none { it.path == folder }) folder = null
-    }
-    val pool = if (pl.kind == SmartKind.LocalSongs && folder != null) {
-        folders.firstOrNull { it.path == folder }?.songs.orEmpty()
-    } else members
-    val visible = remember(pool, local, sort, isFav, favScope) {
-        val base = if (local) sortedStations(pool, sort) else pool
+    val visible = remember(members, local, sort, isFav, favScope) {
+        val base = if (local) sortedStations(members, sort) else members
         if (!isFav || favScope == FavScope.All) base
         else base.filter { s ->
             when (favScope) {
@@ -1572,19 +1597,6 @@ private fun SmartPlaylistDetail(
         }
     }
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
-        if (isFav) {
-            item {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                        .padding(start = Gutter, end = Gutter, top = 4.dp, bottom = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    FavScope.entries.forEach { f ->
-                        Chip(f.label, favScope == f, onClick = { onFavScopeChange(f) })
-                    }
-                }
-            }
-        }
         if (visible.isEmpty()) {
             item {
                 Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
@@ -1605,30 +1617,6 @@ private fun SmartPlaylistDetail(
                 }
             }
         } else {
-            if (local) {
-                item {
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                            .padding(start = Gutter, end = Gutter, top = 4.dp, bottom = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    ) {
-                        PlaylistSort.entries.forEach { t ->
-                            Chip(t.label, sort == t, onClick = { onSortChange(t) })
-                        }
-                        if (pl.kind == SmartKind.LocalSongs && folders.isNotEmpty()) {
-                            ChipDropdown(
-                                label = folders.firstOrNull { it.path == folder }?.name ?: "all folders",
-                                selected = folder != null,
-                                options = listOf(
-                                    ChipOption("all folders") { folder = null },
-                                ) + folders.map { f ->
-                                    ChipOption(f.name) { folder = f.path }
-                                },
-                            )
-                        }
-                    }
-                }
-            }
             item { SectionLabel("${pl.label} — ${visible.size}") }
             items(visible, key = { it.url }, contentType = { "local-song" }) { s ->
                 ListRow(
