@@ -770,7 +770,9 @@ private fun PlaylistList(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             state = listState,
         ) {
-            val pinnedCount = smart.size + pinnedPlaylists.size
+            // The providers row below is pinned too, so it counts: 4 smart +
+            // providers + whatever the user pinned themselves.
+            val pinnedCount = smart.size + 1 + pinnedPlaylists.size
             item {
                 SectionLabel("pinned — $pinnedCount") {
                     if (!creating) {
