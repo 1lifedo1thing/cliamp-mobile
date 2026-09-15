@@ -46,7 +46,7 @@ its own terms, and nothing at the top level has to know about any of them.
 | --- | --- |
 | [`android/`](android) | The app. Kotlin, Compose, Media3. Shipping. Its README has the build instructions and the decisions behind the code. |
 | [`ios/`](ios) | Nothing yet. |
-| [`desktop/`](desktop) | Nothing yet. A separate Go program already carries the desktop TUI. |
+| [`desktop/`](desktop) | Nothing yet. The desktop player is [cliamp](https://github.com/bjarneo/cliamp) itself. |
 | [`docs/`](docs) | [`design.md`](docs/design.md) is the design system the clients build to. [`concept.md`](docs/concept.md) and the artboards are where it started. |
 
 The clients share a design system, a palette set and a vocabulary of screens.
