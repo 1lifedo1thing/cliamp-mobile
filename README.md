@@ -56,8 +56,9 @@ place to notice when a client grows something the others should have too.
 
 ## Licence
 
-Free to use, copy, modify and share. You may not sell it or sublicense it.
-Read [`LICENSE`](LICENSE). It is the MIT License with those two rights removed.
+Free to use, copy and modify for yourself. You may not distribute it, sell it
+or sublicense it. Read [`LICENSE`](LICENSE). It is the MIT License with those
+three rights removed.
 
 Bundled third-party components keep their own terms, listed in
 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) and [`licenses/`](licenses).
