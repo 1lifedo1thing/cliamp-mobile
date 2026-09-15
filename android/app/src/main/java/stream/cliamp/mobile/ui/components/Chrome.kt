@@ -208,15 +208,18 @@ fun MainLayout(
             .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
     ) {
         // The title row carries the chevron in-row, Queue-style: a separated
-        // back key, a gap, then the title. The header stays a fixed 48dp on
-        // every page so heights never shift; titles on back pages sit right
-        // of tab titles by the chevron's width, like every other header.
+        // back key, a gap, then the title. The header wraps its content - no
+        // fixed height - so a bold title's full glyph box always clears the
+        // box and descenders (g, y) render complete. Every page title is the
+        // same 24sp face, so the height lands identical on every page: no
+        // shift, and titles on back pages sit right of tab titles by the
+        // chevron's width, like every other header.
         Box(
-            Modifier.fillMaxWidth().height(48.dp).padding(horizontal = Gutter),
+            Modifier.fillMaxWidth().padding(horizontal = Gutter),
             contentAlignment = Alignment.CenterStart,
         ) {
             Row(
-                Modifier.fillMaxSize().padding(top = 12.dp, bottom = 8.dp),
+                Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
