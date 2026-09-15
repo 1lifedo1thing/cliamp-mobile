@@ -54,9 +54,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.em
 import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
@@ -165,29 +163,25 @@ fun ScreenHeader(
  * search/settings corners keep their own taps - only the title text itself
  * is the hit area. */
 /**
- * The back chevron every secondary page wears, Queue-style: set a touch
- * larger than title text so the thin glyph reads at a glance. One shared
- * size and colour everywhere instead of drifting per screen.
- *
- * Measured, not eyeballed: Poppins' ‹ ink sits ~5.5% of the em below the
- * line-box centre, so the glyph rides [nudge] high to land optically
- * centred beside the title. It scales with [size].
+ * The back key every secondary page wears: a left arrow in a 32dp hit box,
+ * centred in-row beside the title. A vector icon, not a text glyph, so it
+ * centres exactly and can never clip on font metrics. One shared size and
+ * colour everywhere instead of drifting per screen.
  */
 @Composable
 fun BackChevron(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    size: TextUnit = 36.sp,
 ) {
     val p = LocalPalette.current
-    Mono(
-        "‹",
-        CliampType.screenTitle.copy(fontSize = size, lineHeight = size),
-        p.ink,
+    Box(
         modifier
-            .offset(y = -(1.5f * size.value / 28f).dp)
+            .size(28.dp)
             .microPress(onClick = onBack),
-    )
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(CliampIcons.Left, "back", Modifier.size(16.dp), tint = p.ink)
+    }
 }
 
 @Composable
@@ -213,45 +207,56 @@ fun MainLayout(
             .background(p.ground)
             .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
     ) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+        // The title row carries the chevron in-row, Queue-style: a separated
+        // back key, a gap, then the title. The header stays a fixed 48dp on
+        // every page so heights never shift; titles on back pages sit right
+        // of tab titles by the chevron's width, like every other header.
+        Box(
+            Modifier.fillMaxWidth().height(48.dp).padding(horizontal = Gutter),
+            contentAlignment = Alignment.CenterStart,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (onBack != null) {
-                    BackChevron(onBack)
-                    Spacer(Modifier.width(8.dp))
-                }
-                Mono(
-                    title, CliampType.screenTitle, p.ink,
-                    modifier = if (onTitleClick != null) Modifier.microPress(onClick = onTitleClick) else Modifier,
-                    maxLines = 1,
-                )
-            }
             Row(
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                Modifier.fillMaxSize().padding(top = 12.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Null hides the corner: the settings page wears this same
-                // header but must not offer a gear that opens itself.
-                if (onOpenSearch != null) {
-                    Icon(
-                        CliampIcons.Search, "search",
-                        Modifier
-                            .size(22.dp)
-                            .microPress(enabled = true, onClick = onOpenSearch),
-                        tint = p.accent,
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (onBack != null) {
+                        // +2dp optical ride-down: title caps with descenders read
+                        // lower than the line-box centre the row aligns to.
+                        BackChevron(onBack, Modifier.offset(y = 2.dp))
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    Mono(
+                        title, CliampType.screenTitle, p.ink,
+                        modifier = if (onTitleClick != null) Modifier.microPress(onClick = onTitleClick) else Modifier,
+                        maxLines = 1,
                     )
                 }
-                if (onOpenSettings != null) {
-                    Icon(
-                        CliampIcons.Gear, "settings",
-                        Modifier
-                            .size(22.dp)
-                            .microPress(enabled = true, onClick = onOpenSettings),
-                        tint = p.accent,
-                    )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Null hides the corner: the settings page wears this same
+                    // header but must not offer a gear that opens itself.
+                    if (onOpenSearch != null) {
+                        Icon(
+                            CliampIcons.Search, "search",
+                            Modifier
+                                .size(22.dp)
+                                .microPress(enabled = true, onClick = onOpenSearch),
+                            tint = p.accent,
+                        )
+                    }
+                    if (onOpenSettings != null) {
+                        Icon(
+                            CliampIcons.Gear, "settings",
+                            Modifier
+                                .size(22.dp)
+                                .microPress(enabled = true, onClick = onOpenSettings),
+                            tint = p.accent,
+                        )
+                    }
                 }
             }
         }

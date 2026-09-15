@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -30,6 +31,7 @@ import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.data.durationLabel
 import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.ui.components.CliampIcons
+import stream.cliamp.mobile.ui.components.BackChevron
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.ScreenHeader
@@ -65,11 +67,12 @@ fun QueueScreen(
     Column(Modifier.fillMaxSize().background(p.ground).navigationBarsPadding()) {
         ScreenHeader {
             Row(
-                Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom,
+                Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 12.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Mono("‹ Queue", CliampType.screenTitle, p.ink, Modifier.microPress { onBack() })
+                BackChevron(onBack, Modifier.offset(y = 2.dp))
+                Mono("Queue", CliampType.screenTitle, p.ink, maxLines = 1)
             }
         }
 

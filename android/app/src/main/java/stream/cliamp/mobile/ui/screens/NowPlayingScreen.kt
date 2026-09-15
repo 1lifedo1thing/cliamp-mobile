@@ -201,11 +201,11 @@ private fun PortraitPlayer(
     val p = LocalPalette.current
     Column(modifier.fillMaxSize().background(p.ground).statusBarsPadding().navigationBarsPadding()) {
         Row(
-            Modifier.fillMaxWidth().padding(start = Gutter, top = 0.dp, end = 16.dp, bottom = 0.dp),
+            Modifier.fillMaxWidth().padding(start = Gutter, top = 0.dp, end = 16.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            BackChevron(actions.onBack, Modifier.offset(x = -8.dp, y = (-2).dp))
+            BackChevron(actions.onBack)
         }
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
         // it is the first thing to give way. Compose has no shrink factor, so
@@ -314,7 +314,7 @@ private fun LandscapePlayer(
                 Modifier.fillMaxWidth().padding(end = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                BackChevron(actions.onBack, Modifier.offset(x = -8.dp))
+                BackChevron(actions.onBack)
                 Spacer(Modifier.width(10.dp))
                 PlayerStatusRow(
                     model = model,
