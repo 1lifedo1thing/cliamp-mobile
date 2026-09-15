@@ -4,6 +4,8 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -90,9 +92,14 @@ import stream.cliamp.mobile.ui.screens.ScrobbleWizardViewModel
 import stream.cliamp.mobile.ui.theme.LocalPalette
 
 /**
- * Forward push: instant, no transition. Only the way back animates.
+ * Forward push: the new page slides in from the right edge while the page
+ * beneath scales down slightly - the mirror of the pop return, so going
+ * somewhere feels like swiping there.
  */
-private val NoPush = EnterTransition.None
+private val PagePushEnter =
+    slideInHorizontally(tween(280)) { it }
+private val PagePushExit =
+    scaleOut(tween(280), targetScale = 0.92f)
 
 /**
  * Back pop: the front page slides back out to the right (finger-driven on a
@@ -136,9 +143,9 @@ fun CliampRoot(
     val tab: Tab? = if (tabVisited) Tab.entries[pagerState.currentPage] else null
     var focusDirectory by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    // True for a beat after any tab-bar tap: pop transitions go flat so a
+    // True for a beat after any tab-bar tap: pushes and pops go flat so a
     // switch never flashes the intermediate page's slide+scale. Tab-bar
-    // travel is always instant; only a real back animates.
+    // travel is always instant; only a real push or back animates.
     var calmNav by remember { mutableStateOf(false) }
     var calmJob by remember { mutableStateOf<Job?>(null) }
     // The favourites type filter, shared by the library list and the
@@ -291,8 +298,9 @@ fun CliampRoot(
         }
 
         // Single navigation owner: tab roots, tab panes and full overlays all
-        // live in this host, so every back - overlay or pane - plays the same
-        // slide-out + scale-in transition, finger-driven on a gesture.
+        // live in this host, so every push slides a page in and every back -
+        // overlay or pane - plays the same slide-out + scale-in return,
+        // finger-driven on a gesture.
         NavHost(
             navController = navController,
             // A search-widget launch starts directly on Search: no one-frame
@@ -302,8 +310,8 @@ fun CliampRoot(
             // Transparent: the chrome underneath shows through the padded
             // zone; every overlay paints its own opaque cover instead.
             modifier = Modifier.fillMaxSize(),
-            enterTransition = { NoPush },
-            exitTransition = { ExitTransition.None },
+            enterTransition = { if (calmNav) EnterTransition.None else PagePushEnter },
+            exitTransition = { if (calmNav) ExitTransition.None else PagePushExit },
             popEnterTransition = { if (calmNav) EnterTransition.None else PagePopEnter },
             popExitTransition = { if (calmNav) ExitTransition.None else PagePopExit },
         ) {
