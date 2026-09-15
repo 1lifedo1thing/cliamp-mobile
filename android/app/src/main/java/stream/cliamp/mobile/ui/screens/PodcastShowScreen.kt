@@ -118,7 +118,7 @@ fun PodcastShowScreen(
     }
 
     MainLayout(
-        title = show?.title ?: "podcasts",
+        title = "Podcast",
         onOpenSearch = onOpenSearch,
         onOpenSettings = onOpenSettings,
         onTitleClick = { scope.scrollToTop(listState) },
