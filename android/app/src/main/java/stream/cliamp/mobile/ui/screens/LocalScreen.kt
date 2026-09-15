@@ -432,6 +432,11 @@ fun LibrarySmartPlaylistPane(
     val members = if (pl?.kind == SmartKind.LocalSongs && folder != null) {
         folders.firstOrNull { it.path == folder }?.songs.orEmpty()
     } else pl?.stations.orEmpty()
+    // Only the playlists that actually filter earn a header chip row; the
+    // others (recently played) get no chips at all so the header hugs the
+    // divider like a plain page instead of leaving an empty chip band.
+    val headerChips = pl?.kind == SmartKind.Favorites ||
+        pl?.kind == SmartKind.LocalSongs || pl?.kind == SmartKind.Downloads
     Box(Modifier.fillMaxSize().background(p.ground)) {
         val scope = rememberCoroutineScope()
         val listState = rememberLazyListState()
@@ -441,39 +446,20 @@ fun LibrarySmartPlaylistPane(
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
             onBack = onBack,
-            chips = {
-                if (pl != null) {
-                    when (pl.kind) {
-                        // Favourites mix local songs, radio stations and
-                        // podcasts, so they earn their own type sub-tabs.
-                        SmartKind.Favorites -> FavScope.entries.forEach { f ->
-                            Chip(f.label, favScope == f, onClick = { onFavScopeChange(f) })
-                        }
-                        // The on-device lists sort; local songs also filter by
-                        // folder through a picker dropdown that leads the row.
-                        SmartKind.LocalSongs, SmartKind.Downloads -> {
-                            PlaylistSort.entries.forEach { t ->
-                                Chip(
-                                    t.label, detailSort == t,
-                                    onClick = { vm.onEvent(SmartPlaylistViewModel.Event.SetSort(t)) },
-                                )
-                            }
-                            if (pl.kind == SmartKind.LocalSongs && folders.isNotEmpty()) {
-                                ChipDropdown(
-                                    label = folders.firstOrNull { it.path == folder }?.name ?: "all folders",
-                                    selected = folder != null,
-                                    options = listOf(
-                                        ChipOption("all folders") { folder = null },
-                                    ) + folders.map { f ->
-                                        ChipOption(f.name) { folder = f.path }
-                                    },
-                                )
-                            }
-                        }
-                        else -> {}
-                    }
+            chips = if (headerChips) {
+                @Composable {
+                    SmartHeaderChips(
+                        kind = pl.kind,
+                        favScope = favScope,
+                        onFavScopeChange = onFavScopeChange,
+                        detailSort = detailSort,
+                        onSort = { vm.onEvent(SmartPlaylistViewModel.Event.SetSort(it)) },
+                        folders = folders,
+                        folder = folder,
+                        onFolder = { folder = it },
+                    )
                 }
-            },
+            } else null,
         ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (pl == null) {
@@ -551,15 +537,17 @@ fun ProviderSongsPane(
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
             onBack = onBack,
-            chips = {
-                accounts.forEach { a ->
-                    Chip(
-                        a.label.ifBlank { "provider" },
-                        selected == a.id,
-                        onClick = { selected = a.id },
-                    )
+            chips = if (accounts.isNotEmpty()) {
+                @Composable {
+                    accounts.forEach { a ->
+                        Chip(
+                            a.label.ifBlank { "provider" },
+                            selected == a.id,
+                            onClick = { selected = a.id },
+                        )
+                    }
                 }
-            },
+            } else null,
         ) {
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
                 item {
@@ -639,6 +627,50 @@ fun ProviderSongsPane(
     }
 }
 
+/** The header filter chips for a smart playlist, one row per kind. */
+@Composable
+private fun SmartHeaderChips(
+    kind: SmartKind,
+    favScope: FavScope,
+    onFavScopeChange: (FavScope) -> Unit,
+    detailSort: PlaylistSort,
+    onSort: (PlaylistSort) -> Unit,
+    folders: List<SongFolder>,
+    folder: String?,
+    onFolder: (String?) -> Unit,
+) {
+    when (kind) {
+        // Favourites mix local songs, radio stations and podcasts, so they
+        // earn their own type sub-tabs.
+        SmartKind.Favorites -> FavScope.entries.forEach { f ->
+            Chip(f.label, favScope == f, onClick = { onFavScopeChange(f) })
+        }
+        // The on-device lists sort; local songs also filter by folder through
+        // a picker dropdown that leads the sort row.
+        SmartKind.LocalSongs -> {
+            PlaylistSort.entries.forEach { t ->
+                Chip(t.label, detailSort == t, onClick = { onSort(t) })
+            }
+            if (folders.isNotEmpty()) {
+                ChipDropdown(
+                    label = folders.firstOrNull { it.path == folder }?.name ?: "all folders",
+                    selected = folder != null,
+                    options = listOf(
+                        ChipOption("all folders") { onFolder(null) },
+                    ) + folders.map { f ->
+                        ChipOption(f.name) { onFolder(f.path) }
+                    },
+                )
+            }
+        }
+        SmartKind.Downloads -> PlaylistSort.entries.forEach { t ->
+            Chip(t.label, detailSort == t, onClick = { onSort(t) })
+        }
+        // Recently played keeps its fixed time order - no filter chips.
+        SmartKind.RecentlyPlayed -> {}
+    }
+}
+
 /** One user playlist as a navigation pane, with add-songs and cover editing. */
 @Composable
 fun LibraryPlaylistPane(
@@ -673,12 +705,12 @@ fun LibraryPlaylistPane(
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
             onBack = onBack,
-            chips = {
-                if (pl != null) {
+            chips = if (pl != null) {
+                @Composable {
                     Chip("add", selected = false, onClick = { adding = true })
                     Chip("set cover", selected = false, onClick = { coverLauncher.launch("image/*") })
                 }
-            },
+            } else null,
         ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (pl == null) {
