@@ -67,11 +67,11 @@ fun QueueScreen(
     Column(Modifier.fillMaxSize().background(p.ground).navigationBarsPadding()) {
         ScreenHeader {
             Row(
-                Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 12.dp, bottom = 8.dp),
+                Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                BackChevron(onBack, Modifier.offset(y = 2.dp))
+                BackChevron(onBack)
                 Mono("Queue", CliampType.screenTitle, p.ink, maxLines = 1)
             }
         }

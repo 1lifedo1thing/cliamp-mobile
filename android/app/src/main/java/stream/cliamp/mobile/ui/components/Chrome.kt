@@ -225,9 +225,9 @@ fun MainLayout(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (onBack != null) {
-                        // +2dp optical ride-down: title caps with descenders read
-                        // lower than the line-box centre the row aligns to.
-                        BackChevron(onBack, Modifier.offset(y = 2.dp))
+                        // Centred exactly on the row axis with the title, so
+                        // the arrow reads level against the caps beside it.
+                        BackChevron(onBack)
                         Spacer(Modifier.width(4.dp))
                     }
                     Mono(

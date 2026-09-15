@@ -1860,7 +1860,7 @@ private fun SongInfoView(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    BackChevron(onDismiss, Modifier.offset(y = 2.dp))
+                    BackChevron(onDismiss)
                     Mono("Info", CliampType.screenTitle, p.ink, maxLines = 1)
                 }
             }
