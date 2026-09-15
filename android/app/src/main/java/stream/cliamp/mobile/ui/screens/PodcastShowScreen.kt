@@ -329,7 +329,7 @@ private fun EpisodeRow(
             }
         },
         trailing = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 // Fetch state lives left of the ⋮: idle offers the download,
                 // active reads percent (tap cancels), done wears accent (the
                 // ⋮ removes it), failed offers a retry.
