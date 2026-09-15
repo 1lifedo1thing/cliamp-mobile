@@ -2,8 +2,8 @@ cliamp mobile License
 
 Copyright © 2026, Bjarne Øverli.
 
-This licence is based on the O’Saasy License (https://osaasy.dev/). The rights
-to sell and to sublicense are removed. It is not the O’Saasy License.
+This licence is the MIT License with the rights to sell and to sublicense
+removed.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the “Software”), to use, copy,
@@ -15,14 +15,8 @@ copies or substantial portions of the Software.
 
 No licensee or downstream recipient may sell the Software, or any modified or
 derivative version of it, either on its own or as part of a larger work. No
-licensee or downstream recipient may sublicense the Software. Every copy must
-be passed on free of charge under this same licence.
-
-No licensee or downstream recipient may use the Software (including any modified
-or derivative versions) to directly compete with the original Licensor by
-offering it to third parties as a hosted, managed, or Software-as-a-Service
-(SaaS) product or cloud service where the primary value of the service is the
-functionality of the Software itself.
+licensee or downstream recipient may sublicense the Software. Every copy must be
+passed on free of charge under this same licence.
 
 THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS

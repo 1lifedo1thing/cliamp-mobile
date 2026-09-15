@@ -267,8 +267,8 @@ Where the build departs from the document, and why:
 
 ## Licence
 
-Free to use, copy, modify and share, see `../LICENSE`. You may not sell it,
-sublicense it, or offer it as a hosted service.
+Free to use, copy, modify and share, see `../LICENSE`. You may not sell it or
+sublicense it.
 
 Bundled third-party components keep their own terms, listed in
 `../THIRD-PARTY-NOTICES.md`. JetBrains Mono ships under the SIL Open Font License,
