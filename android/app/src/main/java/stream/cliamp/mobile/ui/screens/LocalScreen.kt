@@ -506,6 +506,21 @@ fun ProviderSongsPane(
                         }
                     }
                 }
+                item {
+                    SectionLabel("songs — ${visible.size}") {
+                        Box(
+                            Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(CliampShape.small))
+                                .background(if (p.dark) p.keyFace else p.ground)
+                                .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.small))
+                                .microPress(onClick = onAddProvider),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(CliampIcons.Plus, "add provider", Modifier.size(16.dp), tint = p.accent)
+                        }
+                    }
+                }
                 if (visible.isEmpty()) {
                     item {
                         Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
@@ -520,21 +535,6 @@ fun ProviderSongsPane(
                         }
                     }
                 } else {
-                    item {
-                        SectionLabel("songs — ${visible.size}") {
-                            Box(
-                                Modifier
-                                    .size(34.dp)
-                                    .clip(RoundedCornerShape(CliampShape.small))
-                                    .background(if (p.dark) p.keyFace else p.ground)
-                                    .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.small))
-                                    .microPress(onClick = onAddProvider),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(CliampIcons.Plus, "add provider", Modifier.size(16.dp), tint = p.accent)
-                            }
-                        }
-                    }
                     items(visible, key = { it.id }, contentType = { "provider-song" }) { s ->
                         ListRow(
                             rail = current?.url == s.url,
@@ -1156,8 +1156,9 @@ private fun MenuItem(label: String, color: androidx.compose.ui.graphics.Color, a
     }
 }
 
-/** A monospace, palette-styled input row for naming playlists. The keyboard
- * The platform IME handles entry; the field takes focus on appearing. */
+/** A monospace, palette-styled input row for naming playlists. It never grabs
+ * focus on its own: the keyboard only comes up when the user taps the field.
+ * The platform IME handles entry. */
 @Composable
 private fun InlineNameField(
     text: String,
@@ -1181,7 +1182,6 @@ private fun InlineNameField(
             placeholder = placeholder,
             textStyle = CliampType.rowPrimary,
             onAction = { onDone(text) },
-            autoFocus = true,
         )
         Mono("SAVE", CliampType.tabLabel, p.accent,
             Modifier.clip(RoundedCornerShape(CliampShape.tiny)).background(p.accent.copy(alpha = 0.14f))

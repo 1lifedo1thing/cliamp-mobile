@@ -641,7 +641,7 @@ private fun CustomAddForm(onAdd: (String, String) -> Unit, onCancel: () -> Unit)
             placeholder = "name",
             keyboard = KeyboardType.Text,
             imeAction = ImeAction.Next,
-            autoFocus = true,
+            autoFocus = false,
             onAction = { focus.moveFocus(FocusDirection.Next) },
         )
         CustomField(
