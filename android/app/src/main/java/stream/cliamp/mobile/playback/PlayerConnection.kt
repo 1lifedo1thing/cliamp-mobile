@@ -1144,7 +1144,10 @@ class PlayerConnection(
      * manual edit the arranged [_queue] IS the navigable source, so [_source] is
      * collapsed to it too: prev / next keep walking the list the user built.
      */
-    private fun applyQueueToPlayer() {
+    private fun applyQueueToPlayer(
+        previousQueue: List<Station>? = null,
+        edit: ((MediaController) -> Unit)? = null,
+    ) {
         val q = _queue.value
         if (q.isEmpty()) return
         _ringFallback = false
@@ -1155,9 +1158,16 @@ class PlayerConnection(
         _queueIndex.value = idx
         scope.launch(Dispatchers.Main) {
             val c = controller ?: return@launch
-            if (q.size > 1 && q.all { it.isTrack }) {
+            val canEdit = previousQueue != null && edit != null &&
+                c.mediaItemCount == previousQueue.size &&
+                previousQueue.indices.all { c.getMediaItemAt(it).mediaId == previousQueue[it].id }
+            if (canEdit) {
+                // Media3 moves/removes upcoming items without restarting the current track.
+                edit(c)
+            } else if (q.size > 1 && q.all { it.isTrack }) {
                 val items = q.map { buildItem(it) }
-                c.setMediaItems(items, idx.coerceIn(0, items.lastIndex), 0L)
+                val position = if (c.currentMediaItem?.mediaId == q[idx].id) c.currentPosition else 0L
+                c.setMediaItems(items, idx.coerceIn(0, items.lastIndex), position)
             }
             sync()
         }
@@ -1203,7 +1213,7 @@ class PlayerConnection(
             index == qi -> qi
             else -> qi
         }
-        applyQueueToPlayer()
+        applyQueueToPlayer(previousQueue = q, edit = { it.removeMediaItem(index) })
     }
 
     /** Move the station at [from] to [to], keeping the playing item stable. */
@@ -1218,8 +1228,8 @@ class PlayerConnection(
         }
         _queue.value = moved
         // the playing station follows its item through the move
-        _queueIndex.value = moved.indexOfFirst { it.url == item.url }.let { if (qi == from) it else qi }
-        applyQueueToPlayer()
+        _queueIndex.value = queueIndexAfterMove(qi, from, to)
+        applyQueueToPlayer(previousQueue = q, edit = { it.moveMediaItem(from, to) })
     }
 
     fun clearQueue() {
