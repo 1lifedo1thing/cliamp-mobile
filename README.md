@@ -56,6 +56,8 @@ place to notice when a client grows something the others should have too.
 
 ## Licence
 
-Proprietary. All rights reserved. Read [`LICENSE`](LICENSE). Bundled third-party
-components keep their own terms, listed in
+Free to use, copy, modify and share. You may not sell it, sublicense it, or
+offer it as a hosted service. Read [`LICENSE`](LICENSE).
+
+Bundled third-party components keep their own terms, listed in
 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) and [`licenses/`](licenses).

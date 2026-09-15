@@ -1,31 +1,32 @@
-Copyright (c) 2026 Bjarne Øverli. All rights reserved.
+cliamp mobile License
 
-This software, its source code, assets and documentation (the "Software") are
-proprietary and confidential.
+Copyright © 2026, Bjarne Øverli.
 
-No licence, express or implied, is granted to any person or entity to use,
-copy, reproduce, modify, adapt, merge, publish, distribute, sublicense, sell,
-lease, transmit, host, or create derivative works of the Software or any
-portion of it, in source or object form, by any means, whether or not for
-commercial purpose.
+This licence is based on the O’Saasy License (https://osaasy.dev/). The rights
+to sell and to sublicense are removed. It is not the O’Saasy License.
 
-No licence is granted to train, fine-tune, evaluate or otherwise incorporate
-the Software into any machine learning or artificial intelligence model or
-dataset.
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the “Software”), to use, copy,
+modify, merge, publish and distribute copies of the Software, subject to the
+following conditions:
 
-Access to this repository, whether public or otherwise, does not grant any
-licence to the Software. Absence of a technical access restriction is not
-permission.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-Third-party components distributed with the Software remain under their own
-licences. See THIRD-PARTY-NOTICES.md.
+No licensee or downstream recipient may sell the Software, or any modified or
+derivative version of it, either on its own or as part of a larger work. No
+licensee or downstream recipient may sublicense the Software. Every copy must
+be passed on free of charge under this same licence.
 
-Permission may be granted only by a separate written agreement signed by the
-copyright holder. Enquiries: bjarne@omarchy.org
+No licensee or downstream recipient may use the Software (including any modified
+or derivative versions) to directly compete with the original Licensor by
+offering it to third parties as a hosted, managed, or Software-as-a-Service
+(SaaS) product or cloud service where the primary value of the service is the
+functionality of the Software itself.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

@@ -1,7 +1,7 @@
 # Third-party notices
 
-cliamp mobile is proprietary (see `LICENSE`). The components below are not, and
-are redistributed under their own terms.
+cliamp mobile ships under the licence in `LICENSE`. The components below do
+not. They are redistributed under their own terms.
 
 ## Bundled in the APK
 
