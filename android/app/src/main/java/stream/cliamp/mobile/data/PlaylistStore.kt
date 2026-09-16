@@ -51,11 +51,17 @@ class PlaylistStore(private val context: Context) {
     val pinnedSlugs: Flow<Set<String>> =
         dao.playlists().map { rows -> rows.filter { it.pinned }.map { it.slug }.toSet() }
 
-    suspend fun create(name: String, cover: String = "") {
-        val clean = name.trim().ifEmpty { return }
+    /**
+     * Creates a playlist, returning its slug (or null for a blank name). An
+     * already-taken name returns the existing playlist's slug instead of a
+     * duplicate, so callers can select what the name points at either way.
+     */
+    suspend fun create(name: String, cover: String = ""): String? {
+        val clean = name.trim().ifEmpty { return null }
         val slug = slugify(clean)
-        if (dao.find(slug) != null) return
+        if (dao.find(slug) != null) return slug
         dao.upsert(PlaylistEntity(slug = slug, name = clean, cover = cover))
+        return slug
     }
 
     suspend fun rename(slug: String, name: String) {

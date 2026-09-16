@@ -42,6 +42,7 @@ class AddToPlaylistViewModel(
 
     sealed interface Event {
         data class Toggle(val slug: String) : Event
+        data class Create(val name: String) : Event
         data object Save : Event
     }
 
@@ -109,6 +110,14 @@ class AddToPlaylistViewModel(
                 _selected.value =
                     if (e.slug in _selected.value) _selected.value - e.slug
                     else _selected.value + e.slug
+            }
+            // A fresh playlist arrives already selected, so creating one is
+            // immediately followed by Done (or by creating another, which
+            // joins the selection the same way) with no extra taps.
+            is Event.Create -> viewModelScope.launch {
+                playlists.create(e.name)?.let { slug ->
+                    _selected.value = _selected.value + slug
+                }
             }
             Event.Save -> {
                 if (_saving.value || _saved.value || _selected.value.isEmpty()) return

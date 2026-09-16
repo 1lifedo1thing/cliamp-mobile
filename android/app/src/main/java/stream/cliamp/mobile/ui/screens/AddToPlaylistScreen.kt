@@ -21,7 +21,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,10 +33,12 @@ import stream.cliamp.mobile.data.PlaylistStore
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
+import stream.cliamp.mobile.ui.components.CliampTextField
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.MainLayout
 import stream.cliamp.mobile.ui.components.SectionLabel
+import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.scrollToTop
 import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
@@ -58,6 +63,8 @@ fun LibraryAddToPlaylistPane(
     val ui by vm.state.collectAsState()
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    var creating by rememberSaveable { mutableStateOf(false) }
+    var nameText by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(ui.saved) {
         if (ui.saved) onDone()
@@ -87,6 +94,15 @@ fun LibraryAddToPlaylistPane(
                         saving = ui.saving,
                         onToggle = { vm.onEvent(AddToPlaylistViewModel.Event.Toggle(it)) },
                         onDone = { vm.onEvent(AddToPlaylistViewModel.Event.Save) },
+                        creating = creating,
+                        nameText = nameText,
+                        onNameChange = { nameText = it },
+                        onBeginCreate = { creating = true; nameText = "" },
+                        onCancelCreate = { creating = false },
+                        onCreate = { name ->
+                            vm.onEvent(AddToPlaylistViewModel.Event.Create(name))
+                            creating = false
+                        },
                     )
                 }
             }
@@ -112,6 +128,12 @@ private fun PickerList(
     saving: Boolean,
     onToggle: (String) -> Unit,
     onDone: () -> Unit,
+    creating: Boolean,
+    nameText: String,
+    onNameChange: (String) -> Unit,
+    onBeginCreate: () -> Unit,
+    onCancelCreate: () -> Unit,
+    onCreate: (String) -> Unit,
 ) {
     val p = LocalPalette.current
     Column(Modifier.fillMaxSize()) {
@@ -128,7 +150,34 @@ private fun PickerList(
             Chip(if (saving) "saving" else "done", selected = false, onClick = onDone)
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
-            item { SectionLabel("playlists — ${playlists.size}") }
+            item {
+                SectionLabel("playlists — ${playlists.size}") {
+                    if (!creating) {
+                        Box(
+                            Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(CliampShape.small))
+                                .background(if (p.dark) p.keyFace else p.ground)
+                                .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.small))
+                                .microPress(onClick = onBeginCreate),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(CliampIcons.Plus, "new playlist", Modifier.size(16.dp), tint = p.accent)
+                        }
+                    }
+                }
+            }
+            if (creating) {
+                item {
+                    PlaylistNameField(
+                        text = nameText,
+                        onTextChange = onNameChange,
+                        placeholder = "name this playlist",
+                        onDone = onCreate,
+                        onCancel = onCancelCreate,
+                    )
+                }
+            }
             items(playlists, key = { it.station.slug }) { pl ->
                 val slug = pl.station.slug
                 val isSelected = slug in selected
@@ -160,5 +209,43 @@ private fun PickerList(
             }
             item { Spacer(Modifier.height(20.dp)) }
         }
+    }
+}
+
+/**
+ * The inline playlist naming row, the same shape as the library list's: a
+ * field plus SAVE/CANCEL. It never grabs focus on its own; the keyboard only
+ * comes up when the user taps the field.
+ */
+@Composable
+private fun PlaylistNameField(
+    text: String,
+    placeholder: String,
+    onTextChange: (String) -> Unit,
+    onDone: (String) -> Unit,
+    onCancel: () -> Unit,
+) {
+    val p = LocalPalette.current
+    Row(
+        Modifier.fillMaxWidth().padding(Gutter)
+            .clip(RoundedCornerShape(CliampShape.small)).border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small))
+            .background(p.panel).padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        CliampTextField(
+            value = text,
+            onValueChange = { onTextChange(it.take(48)) },
+            modifier = Modifier.weight(1f),
+            placeholder = placeholder,
+            textStyle = CliampType.rowPrimary,
+            onAction = { onDone(text) },
+        )
+        Mono("SAVE", CliampType.tabLabel, p.accent,
+            Modifier.clip(RoundedCornerShape(CliampShape.tiny)).background(p.accent.copy(alpha = 0.14f))
+                .microPress { onDone(text) }.padding(horizontal = 9.dp, vertical = 7.dp))
+        Mono("CANCEL", CliampType.tabLabel, p.inkTertiary,
+            Modifier.clip(RoundedCornerShape(CliampShape.tiny)).border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny))
+                .microPress(onClick = onCancel).padding(horizontal = 9.dp, vertical = 7.dp))
     }
 }
