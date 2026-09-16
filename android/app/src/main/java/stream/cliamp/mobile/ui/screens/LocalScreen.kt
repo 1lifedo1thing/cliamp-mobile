@@ -360,6 +360,7 @@ fun LibrarySmartPlaylistPane(
     onOpenSettings: () -> Unit = {},
     /** Saved positions by station URL, for the resume readout on local rows. */
     progress: Map<String, EpisodeProgress> = emptyMap(),
+    onAddToPlaylist: (Station) -> Unit = {},
 ) {
     val p = LocalPalette.current
     val ui by vm.state.collectAsState()
@@ -488,6 +489,7 @@ fun LibrarySmartPlaylistPane(
                         showResume = showResume,
                         sort = detailSort,
                         fetchedBytes = fetched.mapValues { it.value.bytes },
+                        onAddToPlaylist = onAddToPlaylist,
                     )
                 }
             }
@@ -682,6 +684,7 @@ fun LibraryPlaylistPane(
     onBack: () -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    onAddToPlaylist: (Station) -> Unit = {},
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -737,6 +740,7 @@ fun LibraryPlaylistPane(
                         },
                         adding = adding,
                         doneAdding = { adding = false },
+                        onAddToPlaylist = onAddToPlaylist,
                     )
                 }
             }
@@ -1314,6 +1318,7 @@ private fun PlaylistDetailShown(
     onToggle: (Station, Boolean) -> Unit,
     adding: Boolean,
     doneAdding: () -> Unit,
+    onAddToPlaylist: (Station) -> Unit = {},
 ) {
     val p = LocalPalette.current
 
@@ -1364,9 +1369,17 @@ private fun PlaylistDetailShown(
                         SongCover(s = s, current = current, playing = playing)
                     },
                     trailing = {
-                        Mono("DROP", CliampType.tabLabel, p.destructiveInk,
-                            Modifier.clip(RoundedCornerShape(CliampShape.tiny)).microPress { onToggle(s, false) }
-                                .padding(horizontal = 8.dp, vertical = 6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OverflowMenu(
+                                trigger = { open -> OverflowButton(open, size = 16) },
+                                items = listOf(
+                                    OverflowItem("add to playlist", color = p.ink, action = { onAddToPlaylist(s) }),
+                                ),
+                            )
+                            Mono("DROP", CliampType.tabLabel, p.destructiveInk,
+                                Modifier.clip(RoundedCornerShape(CliampShape.tiny)).microPress { onToggle(s, false) }
+                                    .padding(horizontal = 8.dp, vertical = 6.dp))
+                        }
                     },
                 ) {
                     Mono(s.name, CliampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
@@ -1607,6 +1620,7 @@ private fun SmartPlaylistDetail(
     showResume: Boolean = false,
     sort: PlaylistSort = PlaylistSort.Title,
     fetchedBytes: Map<String, Long> = emptyMap(),
+    onAddToPlaylist: (Station) -> Unit = {},
 ) {
     val p = LocalPalette.current
     // Only the on-device smart lists sort; favourites and recent have their
@@ -1667,6 +1681,7 @@ private fun SmartPlaylistDetail(
                                 OverflowMenu(
                                     trigger = { open -> OverflowButton(open, size = 16) },
                                     items = listOf(
+                                        OverflowItem("add to playlist", color = p.ink, action = { onAddToPlaylist(s) }),
                                         OverflowItem("info", color = p.ink, action = { onInfo(s) }),
                                         OverflowItem("remove", color = p.destructiveInk, action = { onRemove(s) }),
                                     ),

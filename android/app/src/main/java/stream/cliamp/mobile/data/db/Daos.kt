@@ -22,6 +22,10 @@ interface StationDao {
     /** Resolve snapshot stations (radio/podcast playlist members) back by station id. */
     @Query("SELECT * FROM stations WHERE stationId IN (:ids)")
     suspend fun byStationIds(ids: List<String>): List<StationEntity>
+
+    /** A single persisted station by its playback URL (favourites, history, snapshots). */
+    @Query("SELECT * FROM stations WHERE url = :url")
+    suspend fun byUrl(url: String): StationEntity?
 }
 
 @Dao

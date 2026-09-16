@@ -28,3 +28,4 @@ import kotlinx.serialization.Serializable
 @Serializable data class LibrarySmartPlaylist(val kind: String)
 @Serializable data class LibraryPlaylist(val slug: String)
 @Serializable data class LibrarySongInfo(val stationUrl: String)
+@Serializable data class LibraryAddToPlaylist(val stationUrl: String)

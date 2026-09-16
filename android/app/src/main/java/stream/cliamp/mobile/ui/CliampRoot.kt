@@ -57,6 +57,7 @@ import stream.cliamp.mobile.ui.components.Tab
 import stream.cliamp.mobile.ui.screens.SearchScreen
 import stream.cliamp.mobile.ui.screens.FavScope
 import stream.cliamp.mobile.ui.screens.LibraryPlaylistPane
+import stream.cliamp.mobile.ui.screens.LibraryAddToPlaylistPane
 import stream.cliamp.mobile.ui.screens.LibraryProvidersPane
 import stream.cliamp.mobile.ui.screens.LibrarySmartPlaylistPane
 import stream.cliamp.mobile.ui.screens.LibrarySongInfoPane
@@ -81,6 +82,7 @@ import stream.cliamp.mobile.ui.screens.ProviderSongsPane
 import stream.cliamp.mobile.ui.screens.ProviderSongsViewModel
 import stream.cliamp.mobile.ui.screens.ProvidersPaneViewModel
 import stream.cliamp.mobile.ui.screens.SmartPlaylistViewModel
+import stream.cliamp.mobile.ui.screens.AddToPlaylistViewModel
 import stream.cliamp.mobile.ui.screens.PlaylistDetailViewModel
 import stream.cliamp.mobile.ui.screens.SongInfoViewModel
 import stream.cliamp.mobile.ui.screens.NowPlayingViewModel
@@ -456,6 +458,7 @@ fun CliampRoot(
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenSettings = { navController.navigate(Settings) },
                         progress = progress,
+                        onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
                     )
                 }
             }
@@ -481,6 +484,7 @@ fun CliampRoot(
                         onBack = { navController.popBackStack() },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenSettings = { navController.navigate(Settings) },
+                        onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
                     )
                 }
             }
@@ -494,6 +498,26 @@ fun CliampRoot(
                         stationUrl = stationUrl,
                         repository = repository,
                         onBack = { navController.popBackStack() },
+                    )
+                }
+            }
+            composable<LibraryAddToPlaylist> { entry ->
+                val stationUrl = entry.toRoute<LibraryAddToPlaylist>().stationUrl
+                Box(contentModifier) {
+                    LibraryAddToPlaylistPane(
+                        vm = appViewModel(key = "add:$stationUrl") { app ->
+                            AddToPlaylistViewModel(
+                                stationUrl,
+                                app.localLibrary,
+                                app.playlists,
+                                app.prefs,
+                                app.repository,
+                            )
+                        },
+                        onBack = { navController.popBackStack() },
+                        onDone = { navController.popBackStack() },
+                        onOpenSearch = { navController.navigate(Search) },
+                        onOpenSettings = { navController.navigate(Settings) },
                     )
                 }
             }

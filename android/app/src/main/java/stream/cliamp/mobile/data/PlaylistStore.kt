@@ -91,6 +91,29 @@ class PlaylistStore(private val context: Context) {
     suspend fun setOrder(slug: String, songIds: List<String>) = dao.replaceMembers(slug, songIds)
 
     /**
+     * Adds one station to several playlists at once (the add-to-playlist
+     * picker's Done action). Returns how many playlists actually gained the
+     * song; playlists that already held it are left untouched.
+     */
+    suspend fun addToPlaylists(station: Station, slugs: Collection<String>): Int {
+        var added = 0
+        slugs.forEach { slug ->
+            if (addStation(slug, station)) added += 1
+        }
+        return added
+    }
+
+    /**
+     * A persisted non-local station by playback URL. This is how the
+     * add-to-playlist page re-finds a song that is only reachable as a
+     * playlist member snapshot (a podcast episode or a provider track that was
+     * never favourited or played): local songs come from the live library
+     * instead, since they are never snapshotted here.
+     */
+    suspend fun snapshotByUrl(url: String): Station? =
+        runCatching { stationsDao.byUrl(url)?.toStation() }.getOrNull()
+
+    /**
      * Resolves ordered playlist member ids to their playable stations, against
      * the live local library plus any snapshot stations (radio/podcast). Local
      * members are matched by `local:<id>`; everything else by station id.
