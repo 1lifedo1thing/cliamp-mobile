@@ -37,10 +37,12 @@ class PlaylistDetailViewModel(
         val radioStations: List<Station> = emptyList(),
         val subscribedShows: List<PodcastShow> = emptyList(),
         val showState: ShowState = ShowState(),
+        val favorites: List<Station> = emptyList(),
     )
 
     sealed interface Event {
         data class ToggleMember(val station: Station, val add: Boolean) : Event
+        data class ToggleFavorite(val station: Station) : Event
         data class SetCover(val cover: String) : Event
         data class SetSort(val sort: PlaylistSort) : Event
         data class OpenShow(val show: PodcastShow) : Event
@@ -92,6 +94,7 @@ class PlaylistDetailViewModel(
             radioStations = (col.cliamp + meta.directory.stations + favRadio).distinctBy { it.id },
             subscribedShows = col.subscriptions,
             showState = meta.showState,
+            favorites = meta.favorites,
         )
     }.stateIn(
         viewModelScope,
@@ -109,6 +112,7 @@ class PlaylistDetailViewModel(
                 if (e.add) playlists.addStation(slug, e.station)
                 else playlists.removeSong(slug, e.station.id)
             }
+            is Event.ToggleFavorite -> viewModelScope.launch { prefs.toggleFavorite(e.station) }
             is Event.SetCover -> viewModelScope.launch { playlists.setCover(slug, e.cover) }
             is Event.SetSort -> prefs.setPlaylistSort(slug, e.sort)
             is Event.OpenShow -> podcasts.openShow(e.show)

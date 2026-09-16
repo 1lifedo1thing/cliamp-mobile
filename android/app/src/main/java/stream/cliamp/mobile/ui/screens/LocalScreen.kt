@@ -741,6 +741,8 @@ fun LibraryPlaylistPane(
                         adding = adding,
                         doneAdding = { adding = false },
                         onAddToPlaylist = onAddToPlaylist,
+                        favorites = ui.favorites.map { it.url }.toSet(),
+                        onToggleFavorite = { vm.onEvent(PlaylistDetailViewModel.Event.ToggleFavorite(it)) },
                     )
                 }
             }
@@ -1319,6 +1321,8 @@ private fun PlaylistDetailShown(
     adding: Boolean,
     doneAdding: () -> Unit,
     onAddToPlaylist: (Station) -> Unit = {},
+    favorites: Set<String> = emptySet(),
+    onToggleFavorite: (Station) -> Unit = {},
 ) {
     val p = LocalPalette.current
 
@@ -1369,13 +1373,21 @@ private fun PlaylistDetailShown(
                         SongCover(s = s, current = current, playing = playing)
                     },
                     trailing = {
-                        OverflowMenu(
-                            trigger = { open -> OverflowButton(open, size = 16) },
-                            items = listOf(
-                                OverflowItem("add to playlist", color = p.ink, action = { onAddToPlaylist(s) }),
-                                OverflowItem("drop", color = p.destructiveInk, action = { onToggle(s, false) }),
-                            ),
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OverflowMenu(
+                                trigger = { open -> OverflowButton(open, size = 16) },
+                                items = listOf(
+                                    OverflowItem("add to playlist", color = p.ink, action = { onAddToPlaylist(s) }),
+                                    OverflowItem("drop", color = p.destructiveInk, action = { onToggle(s, false) }),
+                                ),
+                            )
+                            Icon(
+                                if (s.url in favorites) CliampIcons.StarFilled else CliampIcons.Star,
+                                "favourite",
+                                Modifier.size(15.dp).microPress { onToggleFavorite(s) },
+                                tint = if (s.url in favorites) p.accent else p.inkFaint,
+                            )
+                        }
                     },
                 ) {
                     Mono(s.name, CliampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
