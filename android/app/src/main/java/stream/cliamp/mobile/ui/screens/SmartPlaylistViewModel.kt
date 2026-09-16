@@ -3,6 +3,7 @@ package stream.cliamp.mobile.ui.screens
 import android.app.PendingIntent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.DownloadEntry
@@ -59,7 +60,6 @@ class SmartPlaylistViewModel(
 
     sealed interface Event {
         data class ToggleFavorite(val station: Station) : Event
-        data class SetFavorite(val station: Station, val add: Boolean) : Event
         data class DeleteLocal(val station: Station) : Event
         data class RemoveDownload(val station: Station) : Event
         data class SetSort(val sort: PlaylistSort) : Event
@@ -151,10 +151,8 @@ class SmartPlaylistViewModel(
 
     fun onEvent(e: Event) {
         when (e) {
-            is Event.ToggleFavorite -> viewModelScope.launch { prefs.toggleFavorite(e.station) }
-            is Event.SetFavorite -> viewModelScope.launch {
-                if (e.add) prefs.addFavorite(e.station)
-                else prefs.removeFavorite(e.station)
+            is Event.ToggleFavorite -> viewModelScope.launch(NonCancellable) {
+                prefs.toggleFavorite(e.station)
             }
             is Event.DeleteLocal -> viewModelScope.launch {
                 localLibrary.removeLocal(e.station)

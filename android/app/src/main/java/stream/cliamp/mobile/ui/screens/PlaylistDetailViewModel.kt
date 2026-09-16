@@ -2,6 +2,7 @@ package stream.cliamp.mobile.ui.screens
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.DirectoryState
@@ -41,7 +42,8 @@ class PlaylistDetailViewModel(
     )
 
     sealed interface Event {
-        data class ToggleMember(val station: Station, val add: Boolean) : Event
+        data class ToggleMember(val station: Station) : Event
+        data class RemoveMember(val station: Station) : Event
         data class ToggleFavorite(val station: Station) : Event
         data class SetCover(val cover: String) : Event
         data class SetSort(val sort: PlaylistSort) : Event
@@ -108,9 +110,14 @@ class PlaylistDetailViewModel(
 
     fun onEvent(e: Event) {
         when (e) {
-            is Event.ToggleMember -> viewModelScope.launch {
-                if (e.add) playlists.addStation(slug, e.station)
-                else playlists.removeSong(slug, e.station.id)
+            // Direction resolves store-side from fresh state, and the write
+            // is not cancellable by navigating away: a tap is user intent
+            // that must land, not screen-owned work.
+            is Event.ToggleMember -> viewModelScope.launch(NonCancellable) {
+                playlists.toggleStation(slug, e.station)
+            }
+            is Event.RemoveMember -> viewModelScope.launch(NonCancellable) {
+                playlists.removeSong(slug, e.station.id)
             }
             is Event.ToggleFavorite -> viewModelScope.launch { prefs.toggleFavorite(e.station) }
             is Event.SetCover -> viewModelScope.launch { playlists.setCover(slug, e.cover) }

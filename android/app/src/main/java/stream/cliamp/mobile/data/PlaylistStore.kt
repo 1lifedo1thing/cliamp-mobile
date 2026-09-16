@@ -4,6 +4,8 @@ import android.content.Context
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import stream.cliamp.mobile.data.db.CliampDatabase
 import stream.cliamp.mobile.data.db.PlaylistEntity
 import stream.cliamp.mobile.data.db.PlaylistMemberEntity
@@ -79,6 +81,26 @@ class PlaylistStore(private val context: Context) {
         if (dao.hasSong(slug, songId)) return false
         dao.addMember(PlaylistMemberEntity(slug, songId, dao.nextMemberPosition(slug)))
         return true
+    }
+
+    /**
+     * Flips one membership, reading fresh state inside the lock. Checkbox
+     * taps resolve direction here — not from the composition-time snapshot
+     * that may predate an in-flight write — so rapid taps invert strictly in
+     * order instead of collapsing into a single effect. Returns true when
+     * the song ends up in the playlist.
+     */
+    private val toggleMutex = Mutex()
+
+    suspend fun toggleStation(slug: String, station: Station): Boolean = toggleMutex.withLock {
+        if (dao.hasSong(slug, station.id)) {
+            dao.removeMember(slug, station.id)
+            false
+        } else {
+            if (station.source != StationSource.Local) stationsDao.upsert(station.toEntity())
+            dao.addMember(PlaylistMemberEntity(slug, station.id, dao.nextMemberPosition(slug)))
+            true
+        }
     }
 
     /**

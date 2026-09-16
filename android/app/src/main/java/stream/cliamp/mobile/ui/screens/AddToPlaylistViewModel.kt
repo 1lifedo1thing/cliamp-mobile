@@ -2,6 +2,7 @@ package stream.cliamp.mobile.ui.screens
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import stream.cliamp.mobile.data.LocalLibrary
@@ -48,13 +49,8 @@ class AddToPlaylistViewModel(
         data object ToggleFavorites : Event
     }
 
-    companion object {
-        const val FavoritesKey: String = "favorites"
-    }
-
     private val _snapshot = MutableStateFlow<Station?>(null)
     private val _snapshotReady = MutableStateFlow(false)
-    private val _busy = MutableStateFlow<Set<String>>(emptySet())
 
     init {
         viewModelScope.launch {
@@ -107,49 +103,32 @@ class AddToPlaylistViewModel(
 
     fun onEvent(e: Event) {
         when (e) {
-            // Membership is read from the tap-time snapshot and guarded by
-            // [_busy], so a double-tap cannot add-then-remove on stale state.
+            // Every tap applies: direction resolves store-side from fresh
+            // state under a lock, so rapid taps invert strictly in order
+            // instead of racing on a stale snapshot — and nothing is ever
+            // silently dropped while a write is in flight. Writes are not
+            // cancellable by navigating away: a tap is user intent that
+            // must land, not screen-owned work.
             is Event.Toggle -> {
-                val cur = state.value
-                val song = cur.song ?: return
-                if (e.slug in _busy.value) return
-                if (cur.allPlaylists.none { it.station.slug == e.slug }) return
-                viewModelScope.launch {
-                    _busy.value = _busy.value + e.slug
-                    try {
-                        if (e.slug in cur.memberOf) playlists.removeSong(e.slug, song.id)
-                        else playlists.addStation(e.slug, song)
-                    } finally {
-                        _busy.value = _busy.value - e.slug
-                    }
+                val song = state.value.song ?: return
+                if (state.value.allPlaylists.none { it.station.slug == e.slug }) return
+                viewModelScope.launch(NonCancellable) {
+                    playlists.toggleStation(e.slug, song)
                 }
             }
             // A fresh playlist gains the song straight away, matching the
             // ticked row it arrives with.
             is Event.Create -> {
                 val song = state.value.song ?: return
-                viewModelScope.launch {
+                viewModelScope.launch(NonCancellable) {
                     val slug = playlists.create(e.name) ?: return@launch
-                    _busy.value = _busy.value + slug
-                    try {
-                        playlists.addStation(slug, song)
-                    } finally {
-                        _busy.value = _busy.value - slug
-                    }
+                    playlists.addStation(slug, song)
                 }
             }
             Event.ToggleFavorites -> {
-                val cur = state.value
-                val song = cur.song ?: return
-                if (FavoritesKey in _busy.value) return
-                viewModelScope.launch {
-                    _busy.value = _busy.value + FavoritesKey
-                    try {
-                        if (cur.isFavorite) prefs.removeFavorite(song)
-                        else prefs.addFavorite(song)
-                    } finally {
-                        _busy.value = _busy.value - FavoritesKey
-                    }
+                val song = state.value.song ?: return
+                viewModelScope.launch(NonCancellable) {
+                    prefs.toggleFavorite(song)
                 }
             }
         }

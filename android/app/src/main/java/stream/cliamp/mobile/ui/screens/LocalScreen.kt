@@ -479,9 +479,7 @@ fun LibrarySmartPlaylistPane(
                         subscribedShows = ui.subscribedShows,
                         showState = ui.showState,
                         onOpenShow = { vm.onEvent(SmartPlaylistViewModel.Event.OpenShow(it)) },
-                        onToggle = { s, add ->
-                            vm.onEvent(SmartPlaylistViewModel.Event.SetFavorite(s, add))
-                        },
+                        onToggle = { vm.onEvent(SmartPlaylistViewModel.Event.ToggleFavorite(it)) },
                     )
                 } else {
                     SmartPlaylistDetail(
@@ -760,9 +758,8 @@ fun LibraryPlaylistPane(
                         current = current,
                         playing = playing,
                         onPlay = onPlay,
-                        onToggle = { s, add ->
-                            vm.onEvent(PlaylistDetailViewModel.Event.ToggleMember(s, add))
-                        },
+                        onToggle = { vm.onEvent(PlaylistDetailViewModel.Event.ToggleMember(it)) },
+                        onRemoveMember = { vm.onEvent(PlaylistDetailViewModel.Event.RemoveMember(it)) },
                         adding = adding,
                         onAddToPlaylist = onAddToPlaylist,
                         onBeginAdd = { adding = true },
@@ -1342,9 +1339,10 @@ private fun PlaylistDetailShown(
     current: Station?,
     playing: Boolean,
     onPlay: (Station, List<Station>) -> Unit,
-    onToggle: (Station, Boolean) -> Unit,
+    onToggle: (Station) -> Unit,
     adding: Boolean,
     onAddToPlaylist: (Station) -> Unit = {},
+    onRemoveMember: (Station) -> Unit = {},
     onBeginAdd: () -> Unit = {},
     favorites: Set<String> = emptySet(),
     onToggleFavorite: (Station) -> Unit = {},
@@ -1410,13 +1408,13 @@ private fun PlaylistDetailShown(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            OverflowMenu(
-                                trigger = { open -> OverflowButton(open, size = 16) },
-                                items = listOf(
-                                    OverflowItem("add to playlist", color = p.ink, action = { onAddToPlaylist(s) }),
-                                    OverflowItem("drop", color = p.destructiveInk, action = { onToggle(s, false) }),
-                                ),
-                            )
+                                    OverflowMenu(
+                                        trigger = { open -> OverflowButton(open, size = 16) },
+                                        items = listOf(
+                                            OverflowItem("add to playlist", color = p.ink, action = { onAddToPlaylist(s) }),
+                                            OverflowItem("drop", color = p.destructiveInk, action = { onRemoveMember(s) }),
+                                        ),
+                                    )
                             Icon(
                                 if (s.url in favorites) CliampIcons.StarFilled else CliampIcons.Star,
                                 "favourite",
@@ -1478,17 +1476,16 @@ private fun AddSongsPicker(
     subscribedShows: List<PodcastShow>,
     showState: ShowState,
     onOpenShow: (PodcastShow) -> Unit,
-    onToggle: (Station, Boolean) -> Unit,
+    onToggle: (Station) -> Unit,
 ) {
     val p = LocalPalette.current
     var tab by remember { mutableStateOf(AddTab.Local) }
     var openShow by remember { mutableStateOf<PodcastShow?>(null) }
 
-    // Checked state reads the live membership, so rotation or a write from
-    // elsewhere can never desync the boxes from the database.
-    fun toggle(s: Station) {
-        onToggle(s, s.id !in selected)
-    }
+    // Taps carry the song only: direction resolves store-side from fresh
+    // state, so a tap can never add-then-remove on a stale snapshot.
+    // Checked state still reads the live membership, so rotation or a write
+    // from elsewhere can never desync the boxes from the database.
 
     Column(Modifier.fillMaxSize()) {
         Mono(
@@ -1511,14 +1508,14 @@ private fun AddSongsPicker(
                 subtitle = { s ->
                     s.artistAlbum.ifBlank { durationLabel(s.durationMs) }
                 },
-                onToggle = ::toggle,
+                onToggle = onToggle,
                 empty = "no local songs yet",
             )
             AddTab.Stations -> GroupList(
                 items = radioStations,
                 picked = selected,
                 subtitle = { s -> s.meta },
-                onToggle = ::toggle,
+                onToggle = onToggle,
                 empty = "no stations to add",
             )
             AddTab.Podcasts -> PodcastGroups(
@@ -1531,7 +1528,7 @@ private fun AddSongsPicker(
                 onBackToShows = { openShow = null },
                 showState = showState,
                 picked = selected,
-                onToggle = ::toggle,
+                onToggle = onToggle,
             )
         }
     }

@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import stream.cliamp.mobile.data.db.CliampDatabase
 import stream.cliamp.mobile.data.db.CustomStationEntity
 import stream.cliamp.mobile.data.db.FavoriteEntity
@@ -334,28 +336,35 @@ class Prefs(private val context: Context) {
     suspend fun setLastStation(s: Station) =
         put(K.lastStation, Http.json.encodeToString(s))
 
-    suspend fun toggleFavorite(s: Station): Boolean {
+    /**
+     * Serializes favourite writes. The check and the write happen inside one
+     * lock so rapid taps invert strictly in order instead of racing on a
+     * stale membership read and collapsing into a single effect.
+     */
+    private val favMutex = Mutex()
+
+    suspend fun toggleFavorite(s: Station): Boolean = favMutex.withLock {
         if (db.favorites().contains(s.url)) {
             db.favorites().remove(s.url)
-            return false
+            false
+        } else {
+            addFavoriteLocked(s)
         }
-        return addFavorite(s)
     }
 
     /**
-     * Ensures [s] is a favourite, leaving an existing one untouched. Unlike
-     * [toggleFavorite] this never removes: the add-to-playlist picker selects
-     * favourites the way it selects playlists, so Done must be a no-op for a
-     * song that is already there rather than an un-favourite.
+     * Ensures [s] is a favourite, leaving an existing one untouched.
      */
-    suspend fun addFavorite(s: Station): Boolean {
+    suspend fun addFavorite(s: Station): Boolean = favMutex.withLock { addFavoriteLocked(s) }
+
+    suspend fun removeFavorite(s: Station) = favMutex.withLock { db.favorites().remove(s.url) }
+
+    private suspend fun addFavoriteLocked(s: Station): Boolean {
         if (db.favorites().contains(s.url)) return false
         db.stations().upsert(s.toEntity())
         db.favorites().add(FavoriteEntity(s.url, db.favorites().nextTopPosition()))
         return true
     }
-
-    suspend fun removeFavorite(s: Station) = db.favorites().remove(s.url)
 
     suspend fun pushHistory(s: Station) {
         db.stations().upsert(s.toEntity())
