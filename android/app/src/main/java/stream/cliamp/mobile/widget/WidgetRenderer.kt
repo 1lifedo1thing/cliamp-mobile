@@ -27,6 +27,7 @@ import stream.cliamp.mobile.MainActivity
 import stream.cliamp.mobile.R
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationSource
+import stream.cliamp.mobile.data.visualizer.MeterCore
 import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.ui.clock
 import stream.cliamp.mobile.ui.theme.CliampPalette
@@ -116,6 +117,21 @@ object WidgetRenderer {
     private var scopeCanvas: Canvas? = null
     private val scopePeaks = FloatArray(SCOPE_COLS)
     private val scopeLevels = FloatArray(SCOPE_COLS)
+
+    /**
+     * Idle dance source for phones with no live FFT frames. Same band count
+     * AudioFx publishes and the same smoothing engine the in-app meter
+     * uses, so the fallback moves like the real thing.
+     */
+    private val idleMeter = MeterCore(64)
+
+    /** Last spectrum array seen, and when it changed. A frame that stops
+     * changing while playing means the capture died mid-stream. */
+    @Volatile private var lastSpectrumRef: FloatArray? = null
+    @Volatile private var lastSpectrumAt = 0L
+
+    /** Missed ticks before a live-looking array counts as dead (500ms each). */
+    private const val SPECTRUM_STALE_MS = 2500L
 
     /** Palette of the last full render, for ticks that carry no theme. */
     @Volatile private var lastPalette: CliampPalette? = null
@@ -227,18 +243,37 @@ object WidgetRenderer {
     /**
      * One visualizer frame: paints the latest FFT into the shared bitmap and
      * partially updates standard instances. No-ops when the family shows
-     * nothing, without a rendered palette, or without spectrum - so the
-     * service fires it on a dumb cadence while playing and it costs nothing
-     * otherwise. Which family paints is [WidgetViz]'s decision, read from
-     * the last full render.
+     * nothing or without a rendered palette - so the service fires it on a
+     * dumb cadence while playing and it costs nothing otherwise. Which
+     * family paints is [WidgetViz]'s decision, read from the last full
+     * render.
+     *
+     * With no FFT frames (record-audio permission denied, effect
+     * unavailable) or a capture that died mid-play (same frozen array while
+     * the song plays on), a playing widget dances the synthesized idle
+     * instead of freezing - the same fallback the in-app meter uses.
+     * Paused stays on the settled grid as before.
      */
     fun pushVisualizer(context: Context) {
         if (!lastViz.showsScope) return
-        val spectrum = PlaybackBus.spectrum.value
-        if (spectrum.isEmpty()) return
         val p = lastPalette ?: return
+        val now = SystemClock.elapsedRealtime()
+        val spectrum = PlaybackBus.spectrum.value
+        if (spectrum.isNotEmpty() && spectrum !== lastSpectrumRef) {
+            lastSpectrumRef = spectrum
+            lastSpectrumAt = now
+        }
+        val live = spectrum.isNotEmpty() && now - lastSpectrumAt < SPECTRUM_STALE_MS
+        val bands = when {
+            live -> spectrum
+            lastKnown?.playing != true -> return
+            else -> {
+                idleMeter.pushIdle(now / 1000.0)
+                idleMeter.snapshotLevels()
+            }
+        }
         val frame: Bitmap = synchronized(scopeDrawLock) {
-            drawScope(spectrum, p)
+            drawScope(bands, p)
         }
         scopeSettled = false
         val ctx = context.applicationContext
