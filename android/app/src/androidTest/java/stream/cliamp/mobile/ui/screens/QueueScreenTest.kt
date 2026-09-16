@@ -84,6 +84,14 @@ class QueueScreenTest {
         }
     }
 
+    @Test fun currentTrackStaysPinnedWhileQueueScrolls() {
+        show(count = 60)
+        compose.onNode(hasScrollAction()).performScrollToIndex(30)
+        compose.onNodeWithText("Track 0").assertIsDisplayed()
+        compose.onNodeWithText("PAUSED").assertIsDisplayed()
+        compose.onNodeWithText("Up next").assertIsDisplayed()
+    }
+
     @Test fun rightSwipeDoesNotRemoveAndTapStillPlays() {
         show()
         compose.onNodeWithText("Track 2").performTouchInput { swipeRight() }

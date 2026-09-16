@@ -15,11 +15,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,9 +45,12 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import stream.cliamp.mobile.data.Station
-import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.data.durationLabel
 import stream.cliamp.mobile.playback.PlayerConnection
+import stream.cliamp.mobile.ui.components.BrickMeter
+import stream.cliamp.mobile.ui.components.CliampIcons
+import stream.cliamp.mobile.ui.components.HairlineDivider
+import stream.cliamp.mobile.ui.components.rememberMeter
 import stream.cliamp.mobile.ui.components.BackChevron
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
@@ -132,9 +137,13 @@ internal fun QueueContent(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                BackChevron(onBack)
-                Mono("Queue", CliampType.screenTitle, p.ink, maxLines = 1)
+                BackChevron(onBack, Modifier.offset(y = 2.dp))
+                Mono("Up next", CliampType.screenTitle, p.ink, maxLines = 1)
             }
+        }
+
+        if (current != null && activeIndex >= 0) {
+            NowPlayingCard(current, playing, p)
         }
 
         LazyColumn(
@@ -152,21 +161,11 @@ internal fun QueueContent(
                 }
             }
 
-            if (current != null && activeIndex >= 0) {
-                item { SectionLabel("now playing") }
-                item { NowPlayingCard(current, playing, p) }
-                item { Spacer(Modifier.height(22.dp)) }
-            }
-
             if (drag.entries.isNotEmpty()) {
                 item(key = "up-next-header") {
-                    SectionLabel("up next — ${drag.entries.size}")
-                    Mono(
-                        "Hold to reorder · Swipe left to remove",
-                        CliampType.rowSecondary,
-                        p.inkFaint,
-                        modifier = Modifier.padding(start = Gutter, end = Gutter, bottom = 12.dp),
-                    )
+                    SectionLabel("up next — ${drag.entries.size}", trailing = {
+                        Mono("hold to reorder", CliampType.meta, p.inkFaint)
+                    })
                 }
                 itemsIndexed(drag.entries, key = { _, entry -> entry.key }) { index, entry ->
                     val dragging = drag.draggingKey == entry.key
@@ -221,26 +220,50 @@ internal fun QueueContent(
 
 @Composable
 private fun NowPlayingCard(s: Station, playing: Boolean, p: CliampPalette) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Gutter)
-            .clip(RoundedCornerShape(CliampShape.medium))
-            .background(p.panelRaised)
-            .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.medium))
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(
-                Modifier.size(7.dp).clip(RoundedCornerShape(CliampShape.tiny)).background(if (playing) p.accent else p.inkFaint),
-            )
-            Mono(if (playing) "playing" else "paused", CliampType.chip, if (playing) p.accent else p.inkTertiary)
-            Spacer(Modifier.weight(1f))
-            SourceBadge(s, p)
+    Column(Modifier.fillMaxWidth().background(p.panel)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            QueueArtwork(Modifier.size(50.dp), active = true)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    BrickMeter(
+                        frame = rememberMeter(columns = 16, live = playing),
+                        modifier = Modifier.size(width = 62.dp, height = 18.dp),
+                        brick = 2.dp,
+                        gap = 2.dp,
+                        columnGap = 2.dp,
+                    )
+                    Mono(if (playing) "PLAYING" else "PAUSED", CliampType.tabLabel,
+                        if (playing) p.accent else p.inkTertiary)
+                }
+                Mono(s.name.ifBlank { "unknown" }, CliampType.trackTitleSmall, p.ink, maxLines = 1)
+                Mono(
+                    if (s.isTrack) "${sourceSubtitle(s)} · ${queueDuration(s)}" else sourceSubtitle(s),
+                    CliampType.meta, p.inkTertiary, maxLines = 1,
+                )
+            }
         }
-        Spacer(Modifier.height(9.dp))
-        Mono(if (s.name.isBlank()) "unknown" else s.name, CliampType.trackTitleCompact, p.ink, maxLines = 1)
-        Mono(sourceSubtitle(s), CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+        HairlineDivider(region = true)
+    }
+}
+
+@Composable
+private fun QueueArtwork(modifier: Modifier = Modifier, active: Boolean = false) {
+    val p = LocalPalette.current
+    Box(
+        modifier
+            .clip(RoundedCornerShape(CliampShape.small))
+            .background(p.panelRaised)
+            .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(CliampIcons.MusicNote, null, Modifier.size(16.dp), tint = if (active) p.accent else p.inkFaint)
     }
 }
 
@@ -263,8 +286,25 @@ private fun QueueRow(
                 .semantics { customActions = accessibilityActions }
                 .microPress(onClick = onPlay),
             rail = dragging,
-            verticalPadding = 16.dp,
-            trailing = { SourceBadge(s, p) },
+            verticalPadding = 8.dp,
+            leading = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(CliampIcons.DragHandle, null, Modifier.size(16.dp),
+                        tint = if (dragging) p.accent else p.inkFaint)
+                    QueueArtwork(Modifier.size(42.dp))
+                }
+            },
+            trailing = {
+                if (!s.isTrack) {
+                    Spacer(Modifier.width(6.dp))
+                    LiveBadge(p)
+                }
+                Spacer(Modifier.width(12.dp))
+                Mono(queueDuration(s), CliampType.timeSmall, p.inkFaint, maxLines = 1)
+            },
         ) {
             Mono(s.name.ifBlank { "unknown" }, CliampType.rowPrimary, p.ink, maxLines = 1)
             Mono(sourceSubtitle(s), CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
@@ -272,39 +312,23 @@ private fun QueueRow(
     }
 }
 
-/** A tight source/type label: LOCAL, LIVE, RADIO, etc. */
+/** Only live sources need a type badge; finite tracks use their duration. */
 @Composable
-private fun SourceBadge(s: Station, p: CliampPalette) {
-    val label = when {
-        !s.isTrack -> {
-            when (s.source) {
-                StationSource.Cliamp -> "cliamp"
-                StationSource.Directory -> "radio"
-                else -> "live"
-            }
-        }
-        s.source == StationSource.Local -> "local"
-        s.source == StationSource.Podcast -> "pod"
-        else -> "track"
-    }
+private fun LiveBadge(p: CliampPalette) {
     Box(
         Modifier
-            .clip(RoundedCornerShape(CliampShape.tiny))
             .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny))
-            .padding(horizontal = 5.dp, vertical = 1.dp),
+            .padding(horizontal = 4.dp, vertical = 1.dp),
     ) {
-        Mono(label.uppercase(), CliampType.tabLabel, p.inkTertiary)
+        Mono("LIVE", CliampType.tabLabel, p.inkTertiary)
     }
 }
 
-private fun sourceSubtitle(s: Station): String {
-    val parts = mutableListOf<String>()
-    // An episode's show belongs on this line as much as a song's artist
-    if ((s.source == StationSource.Local || s.source == StationSource.Podcast) &&
-        s.artist.isNotBlank()
-    ) parts.add(s.artist)
-    else if (s.meta.isNotBlank()) parts.add(s.meta)
-    if (s.isTrack && s.durationMs > 0) parts.add(durationLabel(s.durationMs))
-    if (parts.isEmpty()) parts.add(if (s.isTrack) "–:––" else "live stream")
-    return parts.joinToString(" · ")
+private fun queueDuration(s: Station): String =
+    if (s.isTrack && s.durationMs > 0) durationLabel(s.durationMs) else "–:––"
+
+private fun sourceSubtitle(s: Station): String = when {
+    !s.isTrack -> "live stream"
+    s.artist.isNotBlank() -> s.artist
+    else -> "<unknown>"
 }
