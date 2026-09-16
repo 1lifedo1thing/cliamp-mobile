@@ -1697,6 +1697,14 @@ private fun SmartPlaylistDetail(
     }
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
         if (visible.isEmpty()) {
+            // Growable lists keep their + on empty too, like playlists do.
+            if (onBeginAdd != null) {
+                item {
+                    SectionLabel("${pl.label} — 0") {
+                        AddSongsButton(onClick = onBeginAdd)
+                    }
+                }
+            }
             item {
                 Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
                     Mono(
