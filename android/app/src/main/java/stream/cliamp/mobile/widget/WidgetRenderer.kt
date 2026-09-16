@@ -78,6 +78,16 @@ object WidgetRenderer {
     private const val COMPACT_MAX_WIDTH_DP = 200
     private const val COMPACT_MAX_HEIGHT_DP = 84
 
+    /**
+     * Below this height the full row (transport plus scope/seek chrome,
+     * ~106dp fixed) cannot fit centered without nibbling the title's top
+     * and the toggle's bottom — that is exactly the one-row cell. Those
+     * instances get the same transport row laid out horizontally instead
+     * (titles left, keys right, no scope/seek rows), so everything stays
+     * fully visible.
+     */
+    private const val MINIMAL_MAX_HEIGHT_DP = 110
+
     /** At or above this height a stopped widget keeps the scope strip (as
      * the flat stopped visualizer); below it - the shrunk one-row cell -
      * only a playing widget earns the strip. */
@@ -166,7 +176,8 @@ object WidgetRenderer {
         val ctx = context.applicationContext
         scope.launch {
             val mgr = AppWidgetManager.getInstance(ctx)
-            // The compact layout has no seek row; only full instances tick.
+            // Only the centered compact card has no seek row; full and
+            // min-height instances both tick.
             val ids = mgr.getAppWidgetIds(ComponentName(ctx, CliampWidgetProvider::class.java))
                 .filterNot { isCompact(mgr, it) }
             if (ids.isEmpty()) return@launch
@@ -203,7 +214,7 @@ object WidgetRenderer {
         scope.launch {
             val mgr = AppWidgetManager.getInstance(ctx)
             val ids = mgr.getAppWidgetIds(ComponentName(ctx, CliampWidgetProvider::class.java))
-                .filterNot { isCompact(mgr, it) }
+                .filterNot { isCompact(mgr, it) || isMinimal(mgr, it) }
             if (ids.isEmpty()) return@launch
             val rv = RemoteViews(ctx.packageName, R.layout.widget_cliamp)
             rv.setImageViewBitmap(R.id.w_scope, frame)
@@ -234,7 +245,7 @@ object WidgetRenderer {
         scope.launch {
             val mgr = AppWidgetManager.getInstance(ctx)
             val ids = mgr.getAppWidgetIds(ComponentName(ctx, CliampWidgetProvider::class.java))
-                .filterNot { isCompact(mgr, it) }
+                .filterNot { isCompact(mgr, it) || isMinimal(mgr, it) }
             if (ids.isEmpty()) return@launch
             val rv = RemoteViews(ctx.packageName, R.layout.widget_cliamp)
             rv.setImageViewBitmap(R.id.w_scope, frame)
@@ -364,14 +375,16 @@ object WidgetRenderer {
 
         val mgr = AppWidgetManager.getInstance(ctx)
         val ids = mgr.getAppWidgetIds(ComponentName(ctx, CliampWidgetProvider::class.java))
-        // Per instance: a tiny cell gets the centered compact row, anything
+        // Per instance: a short cell gets the horizontal titles-plus-keys
+        // row, a narrow-but-tall one the centered compact card, anything
         // roomier the transport row with the flexing scope and seek.
         for (id in ids) {
             val (w, h) = cellSize(mgr, id)
-            val compact = w < COMPACT_MAX_WIDTH_DP || h < COMPACT_MAX_HEIGHT_DP
+            val minimal = h < MINIMAL_MAX_HEIGHT_DP
+            val compact = !minimal && (w < COMPACT_MAX_WIDTH_DP || h < COMPACT_MAX_HEIGHT_DP)
             val tall = h >= SCOPE_TALL_MIN_HEIGHT_DP
-            Log.d("cliamp/wid", "widget layout id=$id cell=${w}x${h} compact=$compact tall=$tall viz=${viz.settingId}")
-            mgr.updateAppWidget(id, buildViews(ctx, row, p, compact, viz, tall))
+            Log.d("cliamp/wid", "widget layout id=$id cell=${w}x${h} minimal=$minimal compact=$compact tall=$tall viz=${viz.settingId}")
+            mgr.updateAppWidget(id, buildViews(ctx, row, p, compact, viz, tall, minimal))
         }
         lastPalette = p
         lastViz = viz
@@ -382,10 +395,19 @@ object WidgetRenderer {
      * of width for title + keys and ~90dp of height with the seek row). Sizes
      * come from the host in dp; the minimum across orientations wins so the
      * layout fits however the phone is held.
+     *
+     * Only the seek tick path uses this: progress bars exist in every layout
+     * except the centered compact card.
      */
     private fun isCompact(mgr: AppWidgetManager, id: Int): Boolean {
         val (w, h) = cellSize(mgr, id)
-        return w < COMPACT_MAX_WIDTH_DP || h < COMPACT_MAX_HEIGHT_DP
+        return h >= MINIMAL_MAX_HEIGHT_DP && (w < COMPACT_MAX_WIDTH_DP || h < COMPACT_MAX_HEIGHT_DP)
+    }
+
+    /** True for the horizontal tier: one-row cells with no room to center. */
+    private fun isMinimal(mgr: AppWidgetManager, id: Int): Boolean {
+        val (_, h) = cellSize(mgr, id)
+        return h < MINIMAL_MAX_HEIGHT_DP
     }
 
     private fun cellSize(mgr: AppWidgetManager, id: Int): Pair<Int, Int> {
@@ -408,11 +430,20 @@ object WidgetRenderer {
         compact: Boolean = false,
         viz: WidgetViz = WidgetViz.SPECTRUM,
         tall: Boolean = false,
+        minimal: Boolean = false,
     ): RemoteViews {
         val rv = RemoteViews(
             ctx.packageName,
-            if (compact) R.layout.widget_cliamp_compact else R.layout.widget_cliamp,
+            when {
+                minimal -> R.layout.widget_cliamp_minimal
+                compact -> R.layout.widget_cliamp_compact
+                else -> R.layout.widget_cliamp
+            },
         )
+        // Titles exist in every layout (the min-height tier is the same
+        // card, bottom-shifted); seek and scope only exist outside it.
+        // The tints and tap wiring below run for all three: every layout
+        // shares those view IDs.
         rv.setTextViewText(R.id.w_title, row.station?.name ?: "nothing tuned")
         rv.setTextViewText(R.id.w_subtitle, widgetSubtitle(row.track, row.station))
         rv.setTextColor(R.id.w_title, p.ink.toArgb())
@@ -435,8 +466,9 @@ object WidgetRenderer {
         // Seekable sources (local files, provider tracks, episodes) get the
         // live position row - elapsed, bar, remaining - mirroring the
         // expanded player's scrubber readout. Live radio gets the streaming
-        // rule instead. Neither shows before anything has played, and neither
-        // exists in the compact layout, which has no room for a second row.
+        // rule instead. Neither shows before anything has played. Only the
+        // centered compact card lacks these rows; the min-height tier
+        // carries the same seek/streaming row as the full layout.
         val showSeek = !compact && row.seekable && row.durationMs > 0 && row.station != null
         rv.setViewVisibility(R.id.w_seek_row, if (showSeek) View.VISIBLE else View.GONE)
         rv.setViewVisibility(
@@ -481,8 +513,8 @@ object WidgetRenderer {
         // bitmap arrives separately (pushVisualizer flipbook); the current
         // frame is painted inline here so a full re-render never blanks it
         // mid-animation.
-        val showScope = !compact && viz.showsScope && (row.playing || tall)
-        if (!compact) {
+        val showScope = !compact && !minimal && viz.showsScope && (row.playing || tall)
+        if (!compact && !minimal) {
             rv.setViewVisibility(R.id.w_scope, if (showScope) View.VISIBLE else View.GONE)
             if (showScope) {
                 val frame = synchronized(scopeDrawLock) {
