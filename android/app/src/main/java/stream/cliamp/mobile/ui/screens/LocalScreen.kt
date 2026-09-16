@@ -1406,7 +1406,10 @@ private fun PlaylistDetailShown(
                         SongCover(s = s, current = current, playing = playing)
                     },
                     trailing = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
                             OverflowMenu(
                                 trigger = { open -> OverflowButton(open, size = 16) },
                                 items = listOf(
@@ -1738,9 +1741,12 @@ private fun SmartPlaylistDetail(
                         SongCover(s = s, current = current, playing = playing)
                     },
                     trailing = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            // ⋮ menu sits immediately to the left of the star,
-                            // only on the on-device lists: favourites and
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            // ⋮ menu 12dp left of the star, like episode rows:
+                            // only on the on-device lists, favourites and
                             // recently-played are read-only views.
                             if (local) {
                                 OverflowMenu(
