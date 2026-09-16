@@ -91,6 +91,10 @@ fun LibraryAddToPlaylistPane(
                         playlists = ui.allPlaylists,
                         alreadyIn = ui.alreadyIn,
                         selected = ui.selected,
+                        favoritesCount = ui.favoritesCount,
+                        alreadyFavorite = ui.alreadyFavorite,
+                        favoritesSelected = ui.favoritesSelected,
+                        onToggleFavorites = { vm.onEvent(AddToPlaylistViewModel.Event.ToggleFavorites) },
                         saving = ui.saving,
                         onToggle = { vm.onEvent(AddToPlaylistViewModel.Event.Toggle(it)) },
                         onDone = { vm.onEvent(AddToPlaylistViewModel.Event.Save) },
@@ -125,6 +129,10 @@ private fun PickerList(
     playlists: List<PlaylistStore.Playlist>,
     alreadyIn: Set<String>,
     selected: Set<String>,
+    favoritesCount: Int,
+    alreadyFavorite: Boolean,
+    favoritesSelected: Boolean,
+    onToggleFavorites: () -> Unit,
     saving: Boolean,
     onToggle: (String) -> Unit,
     onDone: () -> Unit,
@@ -136,6 +144,7 @@ private fun PickerList(
     onCreate: (String) -> Unit,
 ) {
     val p = LocalPalette.current
+    val totalSelected = selected.size + if (favoritesSelected) 1 else 0
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp),
@@ -144,12 +153,39 @@ private fun PickerList(
         ) {
             Mono(song.name, CliampType.chip, p.accent, maxLines = 1, modifier = Modifier.weight(1f))
             Mono(
-                if (saving) "saving…" else "${selected.size} selected",
+                if (saving) "saving…" else "$totalSelected selected",
                 CliampType.meta, p.inkTertiary,
             )
             Chip(if (saving) "saving" else "done", selected = false, onClick = onDone)
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
+            item {
+                ListRow(
+                    onClick = onToggleFavorites,
+                    verticalPadding = 9.dp,
+                    leading = {
+                        Box(
+                            Modifier.size(24.dp).clip(RoundedCornerShape(CliampShape.tiny))
+                                .then(
+                                    if (favoritesSelected) Modifier.background(p.accent)
+                                    else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny))
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (favoritesSelected) Icon(CliampIcons.Check, null, Modifier.size(10.dp), tint = p.onAccent)
+                        }
+                    },
+                ) {
+                    Mono("favorites", CliampType.rowPrimary, p.ink, maxLines = 1)
+                    Mono(
+                        buildList {
+                            add("$favoritesCount items")
+                            if (alreadyFavorite) add("already added")
+                        }.joinToString(" · "),
+                        CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
+                    )
+                }
+            }
             item {
                 SectionLabel("playlists — ${playlists.size}") {
                     if (!creating) {

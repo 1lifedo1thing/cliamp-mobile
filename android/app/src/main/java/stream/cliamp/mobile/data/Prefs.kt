@@ -339,6 +339,17 @@ class Prefs(private val context: Context) {
             db.favorites().remove(s.url)
             return false
         }
+        return addFavorite(s)
+    }
+
+    /**
+     * Ensures [s] is a favourite, leaving an existing one untouched. Unlike
+     * [toggleFavorite] this never removes: the add-to-playlist picker selects
+     * favourites the way it selects playlists, so Done must be a no-op for a
+     * song that is already there rather than an un-favourite.
+     */
+    suspend fun addFavorite(s: Station): Boolean {
+        if (db.favorites().contains(s.url)) return false
         db.stations().upsert(s.toEntity())
         db.favorites().add(FavoriteEntity(s.url, db.favorites().nextTopPosition()))
         return true

@@ -36,6 +36,9 @@ class AddToPlaylistViewModel(
         /** Slugs that already hold the song, shown as "already added". */
         val alreadyIn: Set<String> = emptySet(),
         val selected: Set<String> = emptySet(),
+        val favoritesCount: Int = 0,
+        val alreadyFavorite: Boolean = false,
+        val favoritesSelected: Boolean = false,
         val saving: Boolean = false,
         val saved: Boolean = false,
     )
@@ -43,12 +46,14 @@ class AddToPlaylistViewModel(
     sealed interface Event {
         data class Toggle(val slug: String) : Event
         data class Create(val name: String) : Event
+        data object ToggleFavorites : Event
         data object Save : Event
     }
 
     private val _snapshot = MutableStateFlow<Station?>(null)
     private val _snapshotReady = MutableStateFlow(false)
     private val _selected = MutableStateFlow<Set<String>>(emptySet())
+    private val _favoritesSelected = MutableStateFlow(false)
     private val _saving = MutableStateFlow(false)
     private val _saved = MutableStateFlow(false)
 
@@ -75,12 +80,12 @@ class AddToPlaylistViewModel(
             _snapshotReady,
             _selected,
         ) { snapshot, snapshotReady, selected -> Triple(snapshot, snapshotReady, selected) },
-        combine(_saving, _saved) { saving, saved -> saving to saved },
+        combine(_saving, _saved, _favoritesSelected) { saving, saved, fav -> Triple(saving, saved, fav) },
     ) { social, catalog, selection, finishing ->
         val (songs, favorites, recent) = social
         val (cliamp, directory, all) = catalog
         val (snapshot, snapshotReady, selected) = selection
-        val (saving, saved) = finishing
+        val (saving, saved, favoritesSelected) = finishing
         val song = songs.firstOrNull { it.url == stationUrl }
             ?: favorites.firstOrNull { it.url == stationUrl }
             ?: recent.firstOrNull { it.url == stationUrl }
@@ -95,6 +100,9 @@ class AddToPlaylistViewModel(
                 all.filter { s.id in it.songIds }.map { it.station.slug }.toSet()
             }.orEmpty(),
             selected = selected,
+            favoritesCount = favorites.size,
+            alreadyFavorite = song?.let { s -> favorites.any { it.url == s.url } } ?: false,
+            favoritesSelected = favoritesSelected,
             saving = saving,
             saved = saved,
         )
@@ -119,11 +127,17 @@ class AddToPlaylistViewModel(
                     _selected.value = _selected.value + slug
                 }
             }
+            Event.ToggleFavorites -> {
+                _favoritesSelected.value = !_favoritesSelected.value
+            }
             Event.Save -> {
-                if (_saving.value || _saved.value || _selected.value.isEmpty()) return
+                if (_saving.value || _saved.value ||
+                    (_selected.value.isEmpty() && !_favoritesSelected.value)
+                ) return
                 val song = state.value.song ?: return
                 viewModelScope.launch {
                     _saving.value = true
+                    if (_favoritesSelected.value) prefs.addFavorite(song)
                     val known = state.value.allPlaylists.map { it.station.slug }.toSet()
                     playlists.addToPlaylists(song, _selected.value.intersect(known))
                     _saving.value = false
