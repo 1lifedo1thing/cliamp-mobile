@@ -83,8 +83,8 @@ fun LibraryAddToPlaylistPane(
                 when {
                     !ui.songReady -> Note("finding that song…")
                     song == null -> Note("song gone")
-                    ui.allPlaylists.isEmpty() ->
-                        Note("no playlists yet — make one in the library first")
+                    // The picker always renders, even with no playlists yet:
+                    // the + button is how the first one gets made.
                     else -> PickerList(
                         listState = listState,
                         song = song,
