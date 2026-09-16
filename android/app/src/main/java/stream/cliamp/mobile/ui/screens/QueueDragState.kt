@@ -9,18 +9,20 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import stream.cliamp.mobile.playback.upNextIndices
 import stream.cliamp.mobile.data.Station
 
 internal data class QueueEntry(val key: String, val queueIndex: Int, val station: Station)
 
 /** An occurrence key allows the same song to appear in the queue more than once. */
 internal fun queueEntries(queue: List<Station>, activeIndex: Int): List<QueueEntry> {
+    val upcoming = upNextIndices(queue.size, activeIndex)
     val occurrences = mutableMapOf<String, Int>()
     return queue.mapIndexed { index, station ->
         val occurrence = occurrences.getOrDefault(station.url, 0)
         occurrences[station.url] = occurrence + 1
         QueueEntry("${station.url}#$occurrence", index, station)
-    }.filter { it.queueIndex != activeIndex }
+    }.filter { it.queueIndex in upcoming }
 }
 
 /** A drag previews the new order locally; only dropping commits an edit to playback. */

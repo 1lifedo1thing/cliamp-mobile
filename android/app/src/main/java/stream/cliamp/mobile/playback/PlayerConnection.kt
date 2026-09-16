@@ -358,7 +358,8 @@ class PlayerConnection(
             live = c.isCurrentMediaItemLive,
             speed = c.playbackParameters.speed,
             hasPrev = if (ring) true else _pastIdx > 0 || (nav.isNotEmpty() && navIdx > 0),
-            hasNext = if (ring) true else _pastIdx < _past.lastIndex || (nav.size > 1 && navIdx in 0 until nav.lastIndex),
+            hasNext = if (ring) true else (_source.isEmpty() && _pastIdx < _past.lastIndex) ||
+                (nav.size > 1 && navIdx in 0 until nav.lastIndex),
         )
 
         // Track positions are written from here because this is the only
@@ -936,10 +937,14 @@ class PlayerConnection(
     }
 
     /**
-     * Next walks the current context forward, but replays the history tail
-     * first when Prev stepped back - the redo half of the stack.
+     * Next follows the active queue, including edits made after stepping back.
+     * A history redo is only a fallback when no active source exists.
      */
     fun next() {
+        if (_source.isNotEmpty()) {
+            step(+1)
+            return
+        }
         // Claimed under lock so the goto's own record sees its tip and no-ops.
         val fwd = synchronized(_past) {
             if (_pastIdx < _past.lastIndex) _past[++_pastIdx] else null

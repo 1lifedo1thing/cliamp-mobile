@@ -11,6 +11,7 @@ import stream.cliamp.mobile.data.Prefs
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.playback.PlayerConnection
+import stream.cliamp.mobile.playback.upNextIndices
 import stream.cliamp.mobile.playback.PlayerState
 
 /** Tap-steps through the speed ladder, wrapping back to normal. */
@@ -85,11 +86,12 @@ class NowPlayingViewModel(
         // station, so fall back to the last-played station from history - the same
         // fallback the mini bar uses - rather than showing an empty "no track".
         val shownStation = bus.station ?: lib.recent.firstOrNull()
+        val activeIndex = queueIndex.takeIf { bus.station != null && queue.getOrNull(it)?.url == bus.station.url } ?: -1
         UiState(
             playerState = bus.playerState,
             shownStation = shownStation,
             streamTitle = bus.streamTitle,
-            upNextCount = queue.size - if (bus.station != null && queue.getOrNull(queueIndex)?.url == bus.station.url) 1 else 0,
+            upNextCount = upNextIndices(queue.size, activeIndex).count(),
             reconnect = bus.reconnect,
             error = bus.error,
             isFav = shownStation != null && lib.favorites.any { it.url == shownStation.url },

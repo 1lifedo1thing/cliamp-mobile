@@ -84,6 +84,18 @@ class QueueScreenTest {
         }
     }
 
+    @Test fun upNextStartsAfterCurrentTrackAndShrinksAsPlaybackAdvances() {
+        show(active = 2)
+        compose.onNodeWithText("Track 0").assertDoesNotExist()
+        compose.onNodeWithText("Track 1").assertDoesNotExist()
+        compose.onNodeWithText("Track 3").assertIsDisplayed()
+        compose.onNodeWithText("UP NEXT — 2").assertIsDisplayed()
+        compose.runOnIdle { currentIndex = 3 }
+        compose.onNodeWithText("Track 2").assertDoesNotExist()
+        compose.onNodeWithText("Track 4").assertIsDisplayed()
+        compose.onNodeWithText("UP NEXT — 1").assertIsDisplayed()
+    }
+
     @Test fun currentTrackStaysPinnedWhileQueueScrolls() {
         show(count = 60)
         compose.onNode(hasScrollAction()).performScrollToIndex(30)
@@ -180,11 +192,11 @@ class QueueScreenTest {
         }
     }
 
-    @Test fun draggingUpAcrossPinnedCurrentKeepsCurrentTrack() {
+    @Test fun reorderingUpcomingTracksKeepsCurrentTrack() {
         show(active = 2)
-        dragRow("Track 3", "Track 1")
+        dragRow("Track 4", "Track 3")
         compose.runOnIdle {
-            assertEquals(listOf(3 to 1), moves)
+            assertEquals(listOf(4 to 3), moves)
             assertEquals("Track 2", queue[currentIndex].name)
         }
     }
