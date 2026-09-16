@@ -79,7 +79,7 @@ fun QueueScreen(
     player: PlayerConnection,
     current: Station?,
     playing: Boolean,
-    onPlay: (Station, List<Station>) -> Unit,
+    onPlay: (Int) -> Unit,
     onBack: () -> Unit,
 ) {
     val queue by player.queue.collectAsStateWithLifecycle()
@@ -89,7 +89,8 @@ fun QueueScreen(
         activeIndex = queueIndex.takeIf { queue.getOrNull(it)?.url == current?.url } ?: -1,
         current = current,
         playing = playing,
-        onPlay = { onPlay(it, queue) },
+        onPlay = { if (player.queue.value == queue) onPlay(it) },
+        onClear = player::clearQueue,
         onMove = { from, to ->
             if (player.queue.value == queue) player.reorderQueue(from, to)
         },
@@ -106,10 +107,11 @@ internal fun QueueContent(
     activeIndex: Int,
     current: Station?,
     playing: Boolean,
-    onPlay: (Station) -> Unit,
+    onPlay: (Int) -> Unit,
     onMove: (Int, Int) -> Unit,
     onRemove: (Int) -> Unit,
     onBack: () -> Unit,
+    onClear: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val listState = rememberLazyListState()
@@ -143,6 +145,11 @@ internal fun QueueContent(
             ) {
                 BackChevron(onBack, Modifier.offset(y = 2.dp))
                 Mono("Up next", CliampType.screenTitle, p.ink, maxLines = 1)
+                Spacer(Modifier.weight(1f))
+                if (queueEntries(queue, activeIndex).isNotEmpty()) {
+                    Mono("CLEAR", CliampType.sectionLabel, p.inkTertiary,
+                        Modifier.microPress(onClick = onClear).padding(12.dp))
+                }
             }
         }
 
@@ -182,7 +189,7 @@ internal fun QueueContent(
                     QueueRow(
                         s = entry.station,
                         dragging = dragging,
-                        onPlay = { onPlay(entry.station) },
+                        onPlay = { onPlay(entry.queueIndex) },
                         onRemove = { onRemove(entry.queueIndex) },
                         dragModifier = Modifier.pointerInput(drag, entry.key) {
                             detectDragGesturesAfterLongPress(

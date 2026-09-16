@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import stream.cliamp.mobile.data.PlaylistSort
 import stream.cliamp.mobile.data.Station
+import stream.cliamp.mobile.playback.PlaybackContext
 import stream.cliamp.mobile.data.provider.toStation
 import stream.cliamp.mobile.ui.components.BackChevron
 import stream.cliamp.mobile.ui.components.Chip
@@ -59,7 +60,7 @@ fun ProviderBrowseScreen(
     vm: ProviderBrowseViewModel,
     onBack: () -> Unit,
     onEdit: () -> Unit,
-    onPlay: (Station, List<Station>) -> Unit,
+    onPlay: (Station, List<Station>, PlaybackContext) -> Unit,
     onOpenPlayer: () -> Unit,
 ) {
     val p = LocalPalette.current
@@ -204,7 +205,8 @@ fun ProviderBrowseScreen(
                     ListRow(
                         onClick = {
                             val queue = uiState.tracks.map { it.toStation(vm.account, vm.coverOf(it.id)) }
-                            onPlay(queue[i], queue)
+                            val album = here as? Node.Album ?: return@ListRow
+                            onPlay(queue[i], queue, PlaybackContext.ProviderAlbum(vm.account.id, album.id))
                             onOpenPlayer()
                         },
                         verticalPadding = 11.dp,

@@ -54,7 +54,7 @@ class QueueScreenTest {
             CliampTheme(haptics = false) {
                 QueueContent(
                     queue, currentIndex, queue.getOrNull(currentIndex), false,
-                    onPlay = { played = it },
+                    onPlay = { played = queue[it] },
                     onMove = { from, to ->
                         moves += from to to
                         currentIndex = queueIndexAfterMove(currentIndex, from, to)
@@ -66,9 +66,18 @@ class QueueScreenTest {
                         queue = queue.filterIndexed { i, _ -> i != index }
                     },
                     onBack = {},
+                    onClear = { queue = queue.take(currentIndex + 1) },
                 )
             }
         }
+    }
+
+    @Test fun clearRemovesUpcomingRowsAndKeepsCurrentVisible() {
+        show()
+        compose.onNodeWithText("CLEAR").performClick()
+        compose.onNodeWithText("Track 0").assertIsDisplayed()
+        compose.onNodeWithText("Track 1").assertDoesNotExist()
+        compose.onNodeWithText("CLEAR").assertDoesNotExist()
     }
 
     @Test fun leftSwipeRemovesOnlyTheSwipedRow() {

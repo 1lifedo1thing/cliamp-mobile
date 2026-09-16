@@ -97,6 +97,15 @@ object WidgetControl {
 
     suspend fun step(context: Context, delta: Int) {
         val app = context.applicationContext as CliampApp
+        // A running session owns occurrence indices and the edited queue.
+        // Re-finding a URL in the persisted ring loses duplicate occurrences.
+        val handled = withContext(Dispatchers.Main) {
+            if (app.player.currentQueue.isEmpty()) false else {
+                if (delta < 0) app.player.prev() else app.player.next()
+                true
+            }
+        }
+        if (handled) return
         val t0 = System.currentTimeMillis()
         // Walk the persisted window of the current list (local / radio /
         // podcast) rather than the in-memory PlaybackBus, which is empty when

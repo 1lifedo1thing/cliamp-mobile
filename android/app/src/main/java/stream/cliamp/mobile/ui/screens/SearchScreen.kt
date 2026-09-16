@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.Station
+import stream.cliamp.mobile.playback.PlaybackContext
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.ui.components.BackChevron
@@ -75,7 +76,7 @@ fun SearchScreen(
     vm: SearchViewModel,
     current: Station? = null,
     playing: Boolean = false,
-    onPlay: (Station, List<Station>) -> Unit,
+    onPlay: (Station, List<Station>, PlaybackContext) -> Unit,
     onOpenProvider: (ProviderAccount) -> Unit,
     onOpenShow: (PodcastShow) -> Unit,
     onOpenTag: (String) -> Unit,
@@ -99,7 +100,7 @@ fun SearchScreen(
             is SearchHit.Show -> onOpenShow(hit.show)
             is SearchHit.Tag -> onOpenTag(hit.name)
             else -> hit.playable?.let { s ->
-                onPlay(s, queue.mapNotNull { it.playable })
+                onPlay(s, queue.mapNotNull { it.playable }, PlaybackContext.Search(term, filter.name))
             }
         }
     }

@@ -25,6 +25,9 @@ Playback runs in a `MediaSessionService`, so the lockscreen, the notification,
 the home screen widget and Bluetooth all drive the same player. There is a real
 FFT spectrum, a 7-band equaliser, ListenBrainz scrobbling and 27 themes.
 
+See [Playback and Up next](docs/queue-behavior.md) for queue ordering, switching
+lists, podcasts, radio, and clearing the queue.
+
 ## Install
 
 Get the APK from [releases](https://github.com/cliamp/kleeamp/releases),

@@ -48,6 +48,7 @@ import stream.cliamp.mobile.data.PodcastRepository
 import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.data.Station
+import stream.cliamp.mobile.playback.PlaybackContext
 import stream.cliamp.mobile.playback.PlaybackBus
 import stream.cliamp.mobile.playback.PlayerConnection
 import stream.cliamp.mobile.ui.components.CliampTabBar
@@ -182,8 +183,8 @@ fun CliampRoot(
         }
     }
 
-    val onPlay: (Station, List<Station>) -> Unit = { s, from ->
-        player.play(s, from)
+    val onPlay: (Station, List<Station>, PlaybackContext) -> Unit = { s, from, context ->
+        player.playFromList(s, from, context)
         repository.reportPlay(s)
     }
 
@@ -543,7 +544,10 @@ fun CliampRoot(
                     player = player,
                     current = station,
                     playing = playerState.playing,
-                    onPlay = onPlay,
+                    onPlay = { index ->
+                        player.currentQueue.getOrNull(index)?.let(repository::reportPlay)
+                        player.playQueueEntry(index)
+                    },
                     onBack = { navController.popBackStack() },
                 )
                 }
