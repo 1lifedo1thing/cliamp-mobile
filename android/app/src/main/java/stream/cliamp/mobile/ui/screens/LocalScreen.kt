@@ -164,6 +164,7 @@ fun LocalScreen(
     onOpenProviderSongs: () -> Unit = {},
     onOpenSmart: (String) -> Unit = {},
     onOpenPlaylist: (String) -> Unit = {},
+    onPickSongs: (String) -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     favScope: FavScope = FavScope.All,
@@ -294,7 +295,7 @@ fun LocalScreen(
                         vm.onEvent(LocalViewModel.Event.Delete(slug))
                         if (renamingSlug == slug) renamingSlug = null
                     },
-                    onAddSongs = { slug -> onOpenPlaylist(slug) },
+                    onAddSongs = { slug -> onPickSongs(slug) },
                     onPin = { slug, pinned -> vm.onEvent(LocalViewModel.Event.SetPinned(slug, pinned)) },
                     onOpen = { onOpenPlaylist(it.station.slug) },
                     onOpenSmart = { onOpenSmart(it.kind.name) },
@@ -441,6 +442,10 @@ fun LibrarySmartPlaylistPane(
     Box(Modifier.fillMaxSize().background(p.ground)) {
         val scope = rememberCoroutineScope()
         val listState = rememberLazyListState()
+        // Favorites grows through the same song picker playlists use; back
+        // closes it, writes already landed per tap.
+        var adding by rememberSaveable(pl?.key ?: "playlist") { mutableStateOf(false) }
+        BackHandler(enabled = adding) { adding = false }
         MainLayout(
             title = pl?.label ?: "playlist",
             onOpenSearch = onOpenSearch,
@@ -465,6 +470,19 @@ fun LibrarySmartPlaylistPane(
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (pl == null) {
                     CenterNote("no such playlist", p.inkTertiary)
+                } else if (adding && pl.kind == SmartKind.Favorites) {
+                    AddSongsPicker(
+                        selected = favorites.map { it.id }.toSet(),
+                        playlistName = pl.label,
+                        localSongs = songs,
+                        radioStations = ui.radioStations,
+                        subscribedShows = ui.subscribedShows,
+                        showState = ui.showState,
+                        onOpenShow = { vm.onEvent(SmartPlaylistViewModel.Event.OpenShow(it)) },
+                        onToggle = { s, add ->
+                            vm.onEvent(SmartPlaylistViewModel.Event.SetFavorite(s, add))
+                        },
+                    )
                 } else {
                     SmartPlaylistDetail(
                         listState = listState,
@@ -490,6 +508,9 @@ fun LibrarySmartPlaylistPane(
                         sort = detailSort,
                         fetchedBytes = fetched.mapValues { it.value.bytes },
                         onAddToPlaylist = onAddToPlaylist,
+                        onBeginAdd = if (pl.kind == SmartKind.Favorites) {
+                            { adding = true }
+                        } else null,
                     )
                 }
             }
@@ -685,11 +706,16 @@ fun LibraryPlaylistPane(
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onAddToPlaylist: (Station) -> Unit = {},
+    /** True when opened from a playlist row's add menu: lands in the song picker. */
+    startAdding: Boolean = false,
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
-    var adding by rememberSaveable(slug) { mutableStateOf(false) }
+    var adding by rememberSaveable(slug) { mutableStateOf(startAdding) }
     val ui by vm.state.collectAsState()
+    // Back closes the picker first; writes already landed per tap, so there
+    // is nothing to save — a second back leaves the page.
+    BackHandler(enabled = adding) { adding = false }
     val songs = ui.localSongs
     val radioStations = ui.radioStations
     val subscriptions = ui.subscribedShows
@@ -710,7 +736,6 @@ fun LibraryPlaylistPane(
             onBack = onBack,
             chips = if (pl != null) {
                 @Composable {
-                    Chip("add", selected = false, onClick = { adding = true })
                     Chip("set cover", selected = false, onClick = { coverLauncher.launch("image/*") })
                 }
             } else null,
@@ -739,8 +764,8 @@ fun LibraryPlaylistPane(
                             vm.onEvent(PlaylistDetailViewModel.Event.ToggleMember(s, add))
                         },
                         adding = adding,
-                        doneAdding = { adding = false },
                         onAddToPlaylist = onAddToPlaylist,
+                        onBeginAdd = { adding = true },
                         favorites = ui.favorites.map { it.url }.toSet(),
                         onToggleFavorite = { vm.onEvent(PlaylistDetailViewModel.Event.ToggleFavorite(it)) },
                     )
@@ -1319,8 +1344,8 @@ private fun PlaylistDetailShown(
     onPlay: (Station, List<Station>) -> Unit,
     onToggle: (Station, Boolean) -> Unit,
     adding: Boolean,
-    doneAdding: () -> Unit,
     onAddToPlaylist: (Station) -> Unit = {},
+    onBeginAdd: () -> Unit = {},
     favorites: Set<String> = emptySet(),
     onToggleFavorite: (Station) -> Unit = {},
 ) {
@@ -1339,7 +1364,6 @@ private fun PlaylistDetailShown(
             showState = showState,
             onOpenShow = onOpenShow,
             onToggle = onToggle,
-            doneAdding = doneAdding,
         )
         return
     }
@@ -1347,8 +1371,13 @@ private fun PlaylistDetailShown(
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
         if (members.isEmpty()) {
             item {
+                SectionLabel("songs — 0") {
+                    AddSongsButton(onClick = onBeginAdd)
+                }
+            }
+            item {
                 Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
-                    Mono("empty — tap add", CliampType.rowSecondary, p.inkFaint)
+                    Mono("empty — tap +", CliampType.rowSecondary, p.inkFaint)
                 }
             }
         } else {
@@ -1363,7 +1392,11 @@ private fun PlaylistDetailShown(
                     }
                 }
             }
-            item { SectionLabel("songs — ${members.size}") }
+            item {
+                SectionLabel("songs — ${members.size}") {
+                    AddSongsButton(onClick = onBeginAdd)
+                }
+            }
             items(visible, key = { it.id }) { s ->
                 ListRow(
                     rail = current?.url == s.url,
@@ -1410,10 +1443,28 @@ private fun PlaylistDetailShown(
 
 private enum class AddTab(val label: String) { Local("local"), Stations("stations"), Podcasts("podcasts") }
 
+/** The boxed + that opens a song picker, shared by every songs section. */
+@Composable
+private fun AddSongsButton(onClick: () -> Unit) {
+    val p = LocalPalette.current
+    Box(
+        Modifier
+            .size(34.dp)
+            .clip(RoundedCornerShape(CliampShape.small))
+            .background(if (p.dark) p.keyFace else p.ground)
+            .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.small))
+            .microPress(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(CliampIcons.Plus, "add songs", Modifier.size(16.dp), tint = p.accent)
+    }
+}
+
 /**
- * The "add songs" picker: local songs, radio stations and podcast episodes in
+ * A song picker over local songs, radio stations and podcast episodes in
  * their own sub-tabs, with one shared selection carried across all of them.
- * The header keeps the done control and a live count always in view.
+ * Every tap writes through immediately; leaving (back or another page) keeps
+ * everything, so there is no done control.
  */
 @Composable
 private fun AddSongsPicker(
@@ -1425,30 +1476,22 @@ private fun AddSongsPicker(
     showState: ShowState,
     onOpenShow: (PodcastShow) -> Unit,
     onToggle: (Station, Boolean) -> Unit,
-    doneAdding: () -> Unit,
 ) {
     val p = LocalPalette.current
     var tab by remember { mutableStateOf(AddTab.Local) }
     var openShow by remember { mutableStateOf<PodcastShow?>(null) }
-    var picked by remember { mutableStateOf(selected) }
 
+    // Checked state reads the live membership, so rotation or a write from
+    // elsewhere can never desync the boxes from the database.
     fun toggle(s: Station) {
-        val add = s.id !in picked
-        picked = if (add) picked + s.id else picked - s.id
-        onToggle(s, add)
+        onToggle(s, s.id !in selected)
     }
 
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Mono(playlistName, CliampType.chip, p.accent, maxLines = 1)
-            Spacer(Modifier.weight(1f))
-            Mono("${picked.size} selected", CliampType.meta, p.inkTertiary)
-            Chip("done", selected = false, onClick = doneAdding)
-        }
+        Mono(
+            playlistName, CliampType.chip, p.accent, maxLines = 1,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp),
+        )
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                 .padding(start = Gutter, end = Gutter, bottom = 4.dp),
@@ -1461,7 +1504,7 @@ private fun AddSongsPicker(
         when (tab) {
             AddTab.Local -> GroupList(
                 items = localSongs,
-                picked = picked,
+                picked = selected,
                 subtitle = { s ->
                     s.artistAlbum.ifBlank { durationLabel(s.durationMs) }
                 },
@@ -1470,7 +1513,7 @@ private fun AddSongsPicker(
             )
             AddTab.Stations -> GroupList(
                 items = radioStations,
-                picked = picked,
+                picked = selected,
                 subtitle = { s -> s.meta },
                 onToggle = ::toggle,
                 empty = "no stations to add",
@@ -1484,7 +1527,7 @@ private fun AddSongsPicker(
                 },
                 onBackToShows = { openShow = null },
                 showState = showState,
-                picked = picked,
+                picked = selected,
                 onToggle = ::toggle,
             )
         }
@@ -1629,6 +1672,8 @@ private fun SmartPlaylistDetail(
     sort: PlaylistSort = PlaylistSort.Title,
     fetchedBytes: Map<String, Long> = emptyMap(),
     onAddToPlaylist: (Station) -> Unit = {},
+    /** Non-null on lists that can grow: renders the section + button. */
+    onBeginAdd: (() -> Unit)? = null,
 ) {
     val p = LocalPalette.current
     // Only the on-device smart lists sort; favourites and recent have their
@@ -1671,7 +1716,11 @@ private fun SmartPlaylistDetail(
                 }
             }
         } else {
-            item { SectionLabel("${pl.label} — ${visible.size}") }
+            item {
+                SectionLabel("${pl.label} — ${visible.size}") {
+                    onBeginAdd?.let { AddSongsButton(onClick = it) }
+                }
+            }
             items(visible, key = { it.url }, contentType = { "local-song" }) { s ->
                 ListRow(
                     rail = current?.url == s.url,

@@ -382,6 +382,9 @@ fun CliampRoot(
                                 onOpenProviderSongs = { navController.navigate(LibraryProviderSongs) },
                                 onOpenSmart = { kind -> navController.navigate(LibrarySmartPlaylist(kind)) },
                                 onOpenPlaylist = { slug -> navController.navigate(LibraryPlaylist(slug)) },
+                                onPickSongs = { slug ->
+                                    navController.navigate(LibraryPlaylist(slug, pickSongs = true))
+                                },
                                 onOpenSearch = { navController.navigate(Search) },
                                 onOpenSettings = { navController.navigate(Settings) },
                                 favScope = favScope,
@@ -445,7 +448,7 @@ fun CliampRoot(
                 Box(contentModifier) {
                     LibrarySmartPlaylistPane(
                         vm = appViewModel(key = kind) { app ->
-                            SmartPlaylistViewModel(kind, app.localLibrary, app.prefs, app.downloads)
+                            SmartPlaylistViewModel(kind, app.localLibrary, app.prefs, app.downloads, app.repository, app.podcasts)
                         },
                         kindName = kind,
                         current = station,
@@ -463,7 +466,8 @@ fun CliampRoot(
                 }
             }
             composable<LibraryPlaylist> { entry ->
-                val slug = entry.toRoute<LibraryPlaylist>().slug
+                val route = entry.toRoute<LibraryPlaylist>()
+                val slug = route.slug
                 Box(contentModifier) {
                     LibraryPlaylistPane(
                         vm = appViewModel(key = slug) { app ->
@@ -485,6 +489,7 @@ fun CliampRoot(
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenSettings = { navController.navigate(Settings) },
                         onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
+                        startAdding = route.pickSongs,
                     )
                 }
             }
