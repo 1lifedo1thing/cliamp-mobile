@@ -515,7 +515,6 @@ fun CliampRoot(
                             )
                         },
                         onBack = { navController.popBackStack() },
-                        onDone = { navController.popBackStack() },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenSettings = { navController.navigate(Settings) },
                     )

@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,7 +30,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import stream.cliamp.mobile.data.PlaylistStore
 import stream.cliamp.mobile.data.Station
-import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.CliampTextField
 import stream.cliamp.mobile.ui.components.Gutter
@@ -46,16 +44,14 @@ import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
 
 /**
- * The add-to-playlist page: one song, every user playlist, multi-select.
- * Rows toggle on tap (tap again to unselect); Done fans the song out to all
- * selected playlists and pops. Playlists that already hold the song say so
- * and stay toggleable — Done simply leaves them untouched.
+ * The add-to-playlist page: one song, favourites plus every user playlist.
+ * There is no Done — every tap adds or removes immediately, and back just
+ * leaves. A ticked row means the song is in there right now.
  */
 @Composable
 fun LibraryAddToPlaylistPane(
     vm: AddToPlaylistViewModel,
     onBack: () -> Unit,
-    onDone: () -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
 ) {
@@ -65,10 +61,6 @@ fun LibraryAddToPlaylistPane(
     val listState = rememberLazyListState()
     var creating by rememberSaveable { mutableStateOf(false) }
     var nameText by rememberSaveable { mutableStateOf("") }
-
-    LaunchedEffect(ui.saved) {
-        if (ui.saved) onDone()
-    }
 
     Box(Modifier.fillMaxSize().background(p.ground)) {
         MainLayout(
@@ -89,15 +81,11 @@ fun LibraryAddToPlaylistPane(
                         listState = listState,
                         song = song,
                         playlists = ui.allPlaylists,
-                        alreadyIn = ui.alreadyIn,
-                        selected = ui.selected,
+                        memberOf = ui.memberOf,
                         favoritesCount = ui.favoritesCount,
-                        alreadyFavorite = ui.alreadyFavorite,
-                        favoritesSelected = ui.favoritesSelected,
+                        isFavorite = ui.isFavorite,
                         onToggleFavorites = { vm.onEvent(AddToPlaylistViewModel.Event.ToggleFavorites) },
-                        saving = ui.saving,
                         onToggle = { vm.onEvent(AddToPlaylistViewModel.Event.Toggle(it)) },
-                        onDone = { vm.onEvent(AddToPlaylistViewModel.Event.Save) },
                         creating = creating,
                         nameText = nameText,
                         onNameChange = { nameText = it },
@@ -127,15 +115,11 @@ private fun PickerList(
     listState: androidx.compose.foundation.lazy.LazyListState,
     song: Station,
     playlists: List<PlaylistStore.Playlist>,
-    alreadyIn: Set<String>,
-    selected: Set<String>,
+    memberOf: Set<String>,
     favoritesCount: Int,
-    alreadyFavorite: Boolean,
-    favoritesSelected: Boolean,
+    isFavorite: Boolean,
     onToggleFavorites: () -> Unit,
-    saving: Boolean,
     onToggle: (String) -> Unit,
-    onDone: () -> Unit,
     creating: Boolean,
     nameText: String,
     onNameChange: (String) -> Unit,
@@ -144,7 +128,6 @@ private fun PickerList(
     onCreate: (String) -> Unit,
 ) {
     val p = LocalPalette.current
-    val totalSelected = selected.size + if (favoritesSelected) 1 else 0
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp),
@@ -152,11 +135,6 @@ private fun PickerList(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Mono(song.name, CliampType.chip, p.accent, maxLines = 1, modifier = Modifier.weight(1f))
-            Mono(
-                if (saving) "saving…" else "$totalSelected selected",
-                CliampType.meta, p.inkTertiary,
-            )
-            Chip(if (saving) "saving" else "done", selected = false, onClick = onDone)
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
             item {
@@ -167,21 +145,18 @@ private fun PickerList(
                         Box(
                             Modifier.size(24.dp).clip(RoundedCornerShape(CliampShape.tiny))
                                 .then(
-                                    if (favoritesSelected) Modifier.background(p.accent)
+                                    if (isFavorite) Modifier.background(p.accent)
                                     else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny))
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
-                            if (favoritesSelected) Icon(CliampIcons.Check, null, Modifier.size(10.dp), tint = p.onAccent)
+                            if (isFavorite) Icon(CliampIcons.Check, null, Modifier.size(10.dp), tint = p.onAccent)
                         }
                     },
                 ) {
                     Mono("favorites", CliampType.rowPrimary, p.ink, maxLines = 1)
                     Mono(
-                        buildList {
-                            add("$favoritesCount items")
-                            if (alreadyFavorite) add("already added")
-                        }.joinToString(" · "),
+                        "$favoritesCount items",
                         CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
                     )
                 }
@@ -216,7 +191,7 @@ private fun PickerList(
             }
             items(playlists, key = { it.station.slug }) { pl ->
                 val slug = pl.station.slug
-                val isSelected = slug in selected
+                val isMember = slug in memberOf
                 ListRow(
                     onClick = { onToggle(slug) },
                     verticalPadding = 9.dp,
@@ -224,21 +199,18 @@ private fun PickerList(
                         Box(
                             Modifier.size(24.dp).clip(RoundedCornerShape(CliampShape.tiny))
                                 .then(
-                                    if (isSelected) Modifier.background(p.accent)
+                                    if (isMember) Modifier.background(p.accent)
                                     else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny))
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
-                            if (isSelected) Icon(CliampIcons.Check, null, Modifier.size(10.dp), tint = p.onAccent)
+                            if (isMember) Icon(CliampIcons.Check, null, Modifier.size(10.dp), tint = p.onAccent)
                         }
                     },
                 ) {
                     Mono(pl.station.name, CliampType.rowPrimary, p.ink, maxLines = 1)
                     Mono(
-                        buildList {
-                            add("${pl.songIds.size} songs")
-                            if (slug in alreadyIn) add("already added")
-                        }.joinToString(" · "),
+                        "${pl.songIds.size} songs",
                         CliampType.rowSecondary, p.inkTertiary, maxLines = 1,
                     )
                 }
