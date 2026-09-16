@@ -80,6 +80,7 @@ import stream.cliamp.mobile.data.sortedStations
 import stream.cliamp.mobile.data.provider.ProviderAccount
 import stream.cliamp.mobile.data.provider.ProviderCatalog
 import stream.cliamp.mobile.data.provider.ProviderSpec
+import stream.cliamp.mobile.ui.components.rememberStationThumbnail
 import stream.cliamp.mobile.ui.components.BackChevron
 import stream.cliamp.mobile.ui.components.Chip
 import stream.cliamp.mobile.ui.components.ChipDropdown
@@ -1809,27 +1810,7 @@ private fun SmartPlaylistDetail(
 @Composable
 internal fun SongCover(s: Station, current: Station?, playing: Boolean) {
     val p = LocalPalette.current
-    val context = LocalContext.current
-    val resolver = context.contentResolver
-    // Paint the memory hit synchronously so scrolling back over seen rows
-    // never flashes the placeholder; the async lookup below only runs on a
-    // real miss and lands on the same bitmap.
-    var art by remember(s.id) {
-        mutableStateOf(
-            (LocalArt.cachedSmall(s.cover) ?: StationArtSource.cachedSmall(s))?.asImageBitmap()
-        )
-    }
-    LaunchedEffect(s.id) {
-        if (art != null) return@LaunchedEffect
-        art = (LocalArt.bitmapForSmall(s.cover, resolver)
-            // Episodes and provider tracks carry their real artwork as a URL;
-            // the discovery path below scrapes homepages and would never find
-            // it. Keyed by station id like branding, because signed provider
-            // URLs rotate and a URL key would never hit twice.
-            ?: StationArtSource.bitmapForKnownSmall(s)
-            ?: StationArtSource.bitmapForSmall(s))
-            ?.asImageBitmap()
-    }
+    val art = rememberStationThumbnail(s)
     val active = current?.url == s.url
     // Coverless local files, provider tracks and live stations wear the
     // themed plate - the same accent glyph plate the playlist rows wear -
@@ -1857,7 +1838,7 @@ internal fun SongCover(s: Station, current: Station?, playing: Boolean) {
         contentAlignment = Alignment.Center,
     ) {
         if (art != null) {
-            Image(art!!, s.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            Image(art, s.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
             // Coverless episodes keep their home mark in the row box; local
             // files, provider tracks and stations take the plate above.

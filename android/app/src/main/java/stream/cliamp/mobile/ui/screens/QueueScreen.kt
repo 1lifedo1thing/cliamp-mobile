@@ -1,5 +1,6 @@
 package stream.cliamp.mobile.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -29,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,8 +47,10 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import stream.cliamp.mobile.data.Station
+import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.data.durationLabel
 import stream.cliamp.mobile.playback.PlayerConnection
+import stream.cliamp.mobile.ui.components.rememberStationThumbnail
 import stream.cliamp.mobile.ui.components.BrickMeter
 import stream.cliamp.mobile.ui.components.CliampIcons
 import stream.cliamp.mobile.ui.components.HairlineDivider
@@ -226,7 +230,7 @@ private fun NowPlayingCard(s: Station, playing: Boolean, p: CliampPalette) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            QueueArtwork(Modifier.size(50.dp), active = true)
+            QueueArtwork(s, Modifier.size(50.dp), active = true)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -254,8 +258,9 @@ private fun NowPlayingCard(s: Station, playing: Boolean, p: CliampPalette) {
 }
 
 @Composable
-private fun QueueArtwork(modifier: Modifier = Modifier, active: Boolean = false) {
+private fun QueueArtwork(station: Station, modifier: Modifier = Modifier, active: Boolean = false) {
     val p = LocalPalette.current
+    val art = rememberStationThumbnail(station)
     Box(
         modifier
             .clip(RoundedCornerShape(CliampShape.small))
@@ -263,7 +268,16 @@ private fun QueueArtwork(modifier: Modifier = Modifier, active: Boolean = false)
             .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small)),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(CliampIcons.MusicNote, null, Modifier.size(16.dp), tint = if (active) p.accent else p.inkFaint)
+        if (art != null) {
+            Image(art, "Cover art for ${station.name}", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        } else {
+            val icon = when {
+                station.source == StationSource.Podcast -> CliampIcons.PodRow
+                !station.isTrack -> CliampIcons.StationsTab
+                else -> CliampIcons.MusicNote
+            }
+            Icon(icon, null, Modifier.size(16.dp), tint = if (active) p.accent else p.inkFaint)
+        }
     }
 }
 
@@ -294,7 +308,7 @@ private fun QueueRow(
                 ) {
                     Icon(CliampIcons.DragHandle, null, Modifier.size(16.dp),
                         tint = if (dragging) p.accent else p.inkFaint)
-                    QueueArtwork(Modifier.size(42.dp))
+                    QueueArtwork(s, Modifier.size(42.dp))
                 }
             },
             trailing = {
