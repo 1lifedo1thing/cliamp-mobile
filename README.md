@@ -27,11 +27,11 @@ FFT spectrum, a 7-band equaliser, ListenBrainz scrobbling and 27 themes.
 
 ## Install
 
-Get the APK from [releases](https://github.com/bjarneo/cliamp-mobile/releases),
+Get the APK from [releases](https://github.com/cliamp/kleeamp/releases),
 or:
 
 ```sh
-gh release download --repo bjarneo/cliamp-mobile --pattern "*.apk"
+gh release download --repo cliamp/kleeamp --pattern "*.apk"
 adb install -r cliamp-*.apk
 ```
 

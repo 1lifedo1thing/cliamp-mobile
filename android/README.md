@@ -10,10 +10,10 @@ mechanical travel.
 
 ## Install
 
-Grab the APK from [releases](https://github.com/bjarneo/cliamp-mobile/releases), or:
+Grab the APK from [releases](https://github.com/cliamp/kleeamp/releases), or:
 
 ```sh
-gh release download --repo bjarneo/cliamp-mobile --pattern "*.apk"
+gh release download --repo cliamp/kleeamp --pattern "*.apk"
 adb install -r cliamp-*.apk
 ```
 
