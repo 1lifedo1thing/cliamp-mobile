@@ -532,6 +532,7 @@ fun CliampRoot(
                 NowPlayingScreen(
                     vm = appViewModel { app -> NowPlayingViewModel(app.player, app.prefs) },
                     onOpenScope = { navController.navigate(Scope) },
+                    onOpenQueue = openQueue,
                     onBack = { navController.popBackStack() },
                 )
                 }
