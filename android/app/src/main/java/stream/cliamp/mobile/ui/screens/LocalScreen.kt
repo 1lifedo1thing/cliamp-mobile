@@ -1369,17 +1369,13 @@ private fun PlaylistDetailShown(
                         SongCover(s = s, current = current, playing = playing)
                     },
                     trailing = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            OverflowMenu(
-                                trigger = { open -> OverflowButton(open, size = 16) },
-                                items = listOf(
-                                    OverflowItem("add to playlist", color = p.ink, action = { onAddToPlaylist(s) }),
-                                ),
-                            )
-                            Mono("DROP", CliampType.tabLabel, p.destructiveInk,
-                                Modifier.clip(RoundedCornerShape(CliampShape.tiny)).microPress { onToggle(s, false) }
-                                    .padding(horizontal = 8.dp, vertical = 6.dp))
-                        }
+                        OverflowMenu(
+                            trigger = { open -> OverflowButton(open, size = 16) },
+                            items = listOf(
+                                OverflowItem("add to playlist", color = p.ink, action = { onAddToPlaylist(s) }),
+                                OverflowItem("drop", color = p.destructiveInk, action = { onToggle(s, false) }),
+                            ),
+                        )
                     },
                 ) {
                     Mono(s.name, CliampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
