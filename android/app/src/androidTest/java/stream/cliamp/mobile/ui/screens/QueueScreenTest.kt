@@ -110,7 +110,7 @@ class QueueScreenTest {
         compose.onNode(hasScrollAction()).performScrollToIndex(30)
         compose.onNodeWithText("Track 0").assertIsDisplayed()
         compose.onNodeWithText("PAUSED").assertIsDisplayed()
-        compose.onNodeWithText("Up next").assertIsDisplayed()
+        compose.onNodeWithText("Up Next").assertIsDisplayed()
     }
 
     @Test fun rightSwipeDoesNotRemoveAndTapStillPlays() {

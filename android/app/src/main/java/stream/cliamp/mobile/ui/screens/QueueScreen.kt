@@ -144,7 +144,7 @@ internal fun QueueContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 BackChevron(onBack, Modifier.offset(y = 2.dp))
-                Mono("Up next", CliampType.screenTitle, p.ink, maxLines = 1)
+                Mono("Up Next", CliampType.screenTitle, p.ink, maxLines = 1)
                 Spacer(Modifier.weight(1f))
                 if (queueEntries(queue, activeIndex).isNotEmpty()) {
                     Mono("CLEAR", CliampType.sectionLabel, p.inkTertiary,
@@ -322,9 +322,10 @@ private fun QueueRow(
                 if (!s.isTrack) {
                     Spacer(Modifier.width(6.dp))
                     LiveBadge(p)
+                } else {
+                    Spacer(Modifier.width(12.dp))
+                    Mono(queueDuration(s), CliampType.timeSmall, p.inkFaint, maxLines = 1)
                 }
-                Spacer(Modifier.width(12.dp))
-                Mono(queueDuration(s), CliampType.timeSmall, p.inkFaint, maxLines = 1)
             },
         ) {
             Mono(s.name.ifBlank { "unknown" }, CliampType.rowPrimary, p.ink, maxLines = 1)
