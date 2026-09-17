@@ -220,57 +220,61 @@ private fun PortraitPlayer(
         Spacer(Modifier.height(8.dp))
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
         // it is the first thing to give way. Compose has no shrink factor, so
-        // we measure the column and hand the plate whatever is left over -
-        // otherwise the FAV row silently walks off the bottom of the frame.
-        BoxWithConstraints(
+        // the plate is given whatever height is left once the text block below
+        // it has been measured - it shrinks on short frames or large font
+        // scales instead of pushing the source line under the meter.
+        Column(
             Modifier
                 .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .padding(horizontal = Gutter),
+            verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterVertically),
         ) {
-            val reserved = 356.dp
-            val artSide = minOf(maxWidth - Gutter * 2, (maxHeight - reserved)).coerceIn(96.dp, 340.dp)
-
+            // The art plate and the text block below it share a flexed block
+            // that absorbs however tall a long station name or stream title
+            // grows, so the meter and the transport beneath stay pinned and
+            // never shrink or shift when the names change length. Pinned to
+            // the top (not centred) so the cover sits higher and the source
+            // line under the artist can never be pushed off the bottom.
             Column(
                 Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = Gutter),
-                verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterVertically),
+                    .weight(1f)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.Top),
             ) {
-                // The art plate and the text block below it share a flexed block
-                // that absorbs however tall a long station name or stream title
-                // grows, so the meter and the transport beneath stay pinned and
-                // never shrink or shift when the names change length. Pinned to
-                // the top (not centred) so the cover sits higher and the source
-                // line under the artist can never be pushed off the bottom.
-                Column(
+                // Weights are measured after the text, so maxHeight is the
+                // real leftover; fill = false keeps the plate hugging the
+                // top and leaves the slack under the text, as before.
+                BoxWithConstraints(
                     Modifier
-                        .weight(1f)
+                        .weight(1f, fill = false)
                         .fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.Top),
+                    contentAlignment = Alignment.Center,
                 ) {
+                    val side = minOf(maxWidth, maxHeight, 340.dp)
                     StationArt(
                         station = model.shownStation,
-                        modifier = Modifier.align(Alignment.CenterHorizontally).size(artSide),
+                        modifier = Modifier.size(side),
                     )
-
-                    // The station name, stream title and meta line below the
-                    // plate are gesture-inert: taps and swipes on them (or
-                    // anywhere around the centre of the expanded player) can
-                    // never advance or restart the song. Only the small action
-                    // icons in the strip above stay live.
-                    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        PlayerStatusRow(
-                            model = model,
-                            actions = actions,
-                        )
-                        PlayerMeta(model)
-                    }
                 }
 
-                PlayerTransport(model, actions)
-
-                TransportKeys(model, actions)
+                // The station name, stream title and meta line below the
+                // plate are gesture-inert: taps and swipes on them (or
+                // anywhere around the centre of the expanded player) can
+                // never advance or restart the song. Only the small action
+                // icons in the strip above stay live.
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    PlayerStatusRow(
+                        model = model,
+                        actions = actions,
+                    )
+                    PlayerMeta(model)
+                }
             }
+
+            PlayerTransport(model, actions)
+
+            TransportKeys(model, actions)
         }
         Spacer(Modifier.height(10.dp))
     }
