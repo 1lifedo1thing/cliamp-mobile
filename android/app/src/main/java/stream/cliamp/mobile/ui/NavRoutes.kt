@@ -11,7 +11,7 @@ import kotlinx.serialization.Serializable
 @Serializable data object Home
 
 @Serializable data object Player
-@Serializable data object Queue
+@Serializable data object UpNext
 @Serializable data object Scope
 @Serializable data object Settings
 @Serializable data object Search

@@ -69,41 +69,41 @@ import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
 
 /**
- * The always-available queue panel: a pinned "now playing" card on top, then
- * the rest as up-next with reorder / remove. Works like a music player's queue
+ * The always-available Up Next panel: a pinned "now playing" card on top, then
+ * the rest as up-next with reorder / remove. Works like a music player's list
  * — a live radio stream is one LIVE item, a local song shows its duration.
  */
 @UnstableApi
 @Composable
-fun QueueScreen(
+fun UpNextScreen(
     player: PlayerConnection,
     current: Station?,
     playing: Boolean,
     onPlay: (Int) -> Unit,
     onBack: () -> Unit,
 ) {
-    val queue by player.queue.collectAsStateWithLifecycle()
-    val queueIndex by player.queueIndex.collectAsStateWithLifecycle()
-    QueueContent(
-        queue = queue,
-        activeIndex = queueIndex.takeIf { queue.getOrNull(it)?.url == current?.url } ?: -1,
+    val upNext by player.upNext.collectAsStateWithLifecycle()
+    val upNextIndex by player.upNextIndex.collectAsStateWithLifecycle()
+    UpNextContent(
+        upNext = upNext,
+        activeIndex = upNextIndex.takeIf { upNext.getOrNull(it)?.url == current?.url } ?: -1,
         current = current,
         playing = playing,
-        onPlay = { if (player.queue.value == queue) onPlay(it) },
-        onClear = player::clearQueue,
+        onPlay = { if (player.upNext.value == upNext) onPlay(it) },
+        onClear = player::clearUpNext,
         onMove = { from, to ->
-            if (player.queue.value == queue) player.reorderQueue(from, to)
+            if (player.upNext.value == upNext) player.reorderUpNext(from, to)
         },
         onRemove = { index ->
-            if (player.queue.value == queue) player.removeFromQueue(index)
+            if (player.upNext.value == upNext) player.removeFromUpNext(index)
         },
         onBack = onBack,
     )
 }
 
 @Composable
-internal fun QueueContent(
-    queue: List<Station>,
+internal fun UpNextContent(
+    upNext: List<Station>,
     activeIndex: Int,
     current: Station?,
     playing: Boolean,
@@ -116,8 +116,8 @@ internal fun QueueContent(
     val p = LocalPalette.current
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val drag = remember(queue, activeIndex, listState) {
-        QueueDragState(queueEntries(queue, activeIndex), listState, scope)
+    val drag = remember(upNext, activeIndex, listState) {
+        UpNextDragState(upNextEntries(upNext, activeIndex), listState, scope)
     }
     val latestOnMove by rememberUpdatedState(onMove)
     val haptics = LocalHapticFeedback.current
@@ -146,7 +146,7 @@ internal fun QueueContent(
                 BackChevron(onBack, Modifier.offset(y = 2.dp))
                 Mono("Up Next", CliampType.screenTitle, p.ink, maxLines = 1)
                 Spacer(Modifier.weight(1f))
-                if (queueEntries(queue, activeIndex).isNotEmpty()) {
+                if (upNextEntries(upNext, activeIndex).isNotEmpty()) {
                     Mono("CLEAR", CliampType.sectionLabel, p.inkTertiary,
                         Modifier.microPress(onClick = onClear).padding(12.dp))
                 }
@@ -161,11 +161,11 @@ internal fun QueueContent(
             state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
         ) {
-            if (queue.isEmpty()) {
+            if (upNext.isEmpty()) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 28.dp)) {
                         Mono(
-                            "nothing queued — play a station and its list follows it here",
+                            "nothing up next — play a station and its list follows it here",
                             CliampType.rowSecondary, p.inkFaint,
                         )
                     }
@@ -186,11 +186,11 @@ internal fun QueueContent(
                         settling -> Modifier.zIndex(1f).graphicsLayer { translationY = drag.settlingOffset.value }
                         else -> Modifier.animateItem()
                     }
-                    QueueRow(
+                    UpNextRow(
                         s = entry.station,
                         dragging = dragging,
-                        onPlay = { onPlay(entry.queueIndex) },
-                        onRemove = { onRemove(entry.queueIndex) },
+                        onPlay = { onPlay(entry.upNextIndex) },
+                        onRemove = { onRemove(entry.upNextIndex) },
                         dragModifier = Modifier.pointerInput(drag, entry.key) {
                             detectDragGesturesAfterLongPress(
                                 onDragStart = { position ->
@@ -209,15 +209,15 @@ internal fun QueueContent(
                         modifier = motion,
                         accessibilityActions = buildList {
                             if (index > 0) add(CustomAccessibilityAction("Move up") {
-                                onMove(entry.queueIndex, drag.entries[index - 1].queueIndex)
+                                onMove(entry.upNextIndex, drag.entries[index - 1].upNextIndex)
                                 true
                             })
                             if (index < drag.entries.lastIndex) add(CustomAccessibilityAction("Move down") {
-                                onMove(entry.queueIndex, drag.entries[index + 1].queueIndex)
+                                onMove(entry.upNextIndex, drag.entries[index + 1].upNextIndex)
                                 true
                             })
-                            add(CustomAccessibilityAction("Remove from queue") {
-                                onRemove(entry.queueIndex)
+                            add(CustomAccessibilityAction("Remove from Up Next") {
+                                onRemove(entry.upNextIndex)
                                 true
                             })
                         },
@@ -237,7 +237,7 @@ private fun NowPlayingCard(s: Station, playing: Boolean, p: CliampPalette) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            QueueArtwork(s, Modifier.size(50.dp), active = true)
+            UpNextArtwork(s, Modifier.size(50.dp), active = true)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -255,7 +255,7 @@ private fun NowPlayingCard(s: Station, playing: Boolean, p: CliampPalette) {
                 }
                 Mono(s.name.ifBlank { "unknown" }, CliampType.trackTitleSmall, p.ink, maxLines = 1)
                 Mono(
-                    if (s.isTrack) "${sourceSubtitle(s)} · ${queueDuration(s)}" else sourceSubtitle(s),
+                    if (s.isTrack) "${sourceSubtitle(s)} · ${upNextDuration(s)}" else sourceSubtitle(s),
                     CliampType.meta, p.inkTertiary, maxLines = 1,
                 )
             }
@@ -265,7 +265,7 @@ private fun NowPlayingCard(s: Station, playing: Boolean, p: CliampPalette) {
 }
 
 @Composable
-private fun QueueArtwork(station: Station, modifier: Modifier = Modifier, active: Boolean = false) {
+private fun UpNextArtwork(station: Station, modifier: Modifier = Modifier, active: Boolean = false) {
     val p = LocalPalette.current
     val art = rememberStationThumbnail(station)
     Box(
@@ -289,7 +289,7 @@ private fun QueueArtwork(station: Station, modifier: Modifier = Modifier, active
 }
 
 @Composable
-private fun QueueRow(
+private fun UpNextRow(
     s: Station,
     dragging: Boolean,
     onPlay: () -> Unit,
@@ -299,7 +299,7 @@ private fun QueueRow(
     dragModifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
-    QueueSwipeToRemove(onRemove = onRemove, modifier = modifier) {
+    UpNextSwipeToRemove(onRemove = onRemove, modifier = modifier) {
         ListRow(
             modifier = Modifier
                 .background(if (dragging) p.panelRaised else p.ground)
@@ -315,7 +315,7 @@ private fun QueueRow(
                 ) {
                     Icon(CliampIcons.DragHandle, null, Modifier.size(16.dp),
                         tint = if (dragging) p.accent else p.inkFaint)
-                    QueueArtwork(s, Modifier.size(42.dp))
+                    UpNextArtwork(s, Modifier.size(42.dp))
                 }
             },
             trailing = {
@@ -324,7 +324,7 @@ private fun QueueRow(
                     LiveBadge(p)
                 } else {
                     Spacer(Modifier.width(12.dp))
-                    Mono(queueDuration(s), CliampType.timeSmall, p.inkFaint, maxLines = 1)
+                    Mono(upNextDuration(s), CliampType.timeSmall, p.inkFaint, maxLines = 1)
                 }
             },
         ) {
@@ -346,7 +346,7 @@ private fun LiveBadge(p: CliampPalette) {
     }
 }
 
-private fun queueDuration(s: Station): String =
+private fun upNextDuration(s: Station): String =
     if (s.isTrack && s.durationMs > 0) durationLabel(s.durationMs) else "–:––"
 
 private fun sourceSubtitle(s: Station): String = when {

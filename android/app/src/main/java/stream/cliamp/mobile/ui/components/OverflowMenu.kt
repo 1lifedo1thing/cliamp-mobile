@@ -39,7 +39,7 @@ data class OverflowItem(
 /**
  * A compact ⋮ overflow menu (a `Popup` whose trigger is the trigger composable
  * passed in). Used on rows/tracks to surface things like play next, add to
- * queue and replace queue without cluttering the row itself.
+ * Up Next and replacing the list without cluttering the row itself.
  */
 @Composable
 fun OverflowMenu(

@@ -34,7 +34,7 @@ import stream.cliamp.mobile.widget.WidgetControl
 /** Real Media3 playback with local silent WAV fixtures; no remote audio dependency. */
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
-class QueuePlaybackTest {
+class UpNextPlaybackTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val connection get() = (context.applicationContext as CliampApp).player
     private lateinit var activity: ActivityScenario<MainActivity>
@@ -51,8 +51,8 @@ class QueuePlaybackTest {
             }
         } catch (error: TimeoutCancellationException) {
             val detail = withContext(Dispatchers.Main) {
-                "bus=${PlaybackBus.station.value?.name}, index=${connection.queueIndex.value}, " +
-                    "queue=${connection.currentQueue.size}, media=${controller?.currentMediaItem?.mediaMetadata?.title}, " +
+                "bus=${PlaybackBus.station.value?.name}, index=${connection.upNextIndex.value}, " +
+                    "upNext=${connection.currentUpNext.size}, media=${controller?.currentMediaItem?.mediaMetadata?.title}, " +
                     "state=${controller?.playbackState}, playing=${controller?.isPlaying}, " +
                     "position=${controller?.currentPosition}, duration=${controller?.duration}, " +
                     "suppression=${controller?.playbackSuppressionReason}, error=${controller?.playerError}"
@@ -99,7 +99,7 @@ class QueuePlaybackTest {
         bytes.put("RIFF".toByteArray()).putInt(36 + samples * 2).put("WAVEfmt ".toByteArray())
             .putInt(16).putShort(1).putShort(1).putInt(16_000).putInt(32_000)
             .putShort(2).putShort(16).put("data".toByteArray()).putInt(samples * 2)
-        val file = File(context.cacheDir, "queue-$id.wav").also { it.writeBytes(bytes.array()); files += it }
+        val file = File(context.cacheDir, "upnext-$id.wav").also { it.writeBytes(bytes.array()); files += it }
         return Station(id, name, file.toURI().toString(), kind, durationMs = 30_000)
     }
 
@@ -122,22 +122,22 @@ class QueuePlaybackTest {
         val tracks = listOf("A", "B", "C", "D", "E").map { track(it) }
         onMain { connection.play(tracks[0], tracks) }
         awaitPlaying(tracks[0])
-        onMain { connection.reorderQueue(3, 1) }
+        onMain { connection.reorderUpNext(3, 1) }
         awaitCondition { controller?.getMediaItemAt(1)?.mediaId == tracks[3].id }
         for (i in listOf(3, 1, 2, 4)) finishCurrent(tracks[i])
         onMain {
-            assertEquals(connection.currentQueue.lastIndex, connection.queueIndex.value)
+            assertEquals(connection.currentUpNext.lastIndex, connection.upNextIndex.value)
             controller!!.seekTo(controller!!.duration - 50)
         }
         awaitCondition { controller?.playbackState == Player.STATE_ENDED }
         onMain { assertEquals(tracks[4], PlaybackBus.station.value) }
     }
 
-    @Test fun playingAnotherSongRebuildsTheQueueFromTheListOrder() {
+    @Test fun playingAnotherSongRebuildsUpNextFromTheListOrder() {
         val tracks = listOf("A", "B", "C", "D", "E").map { track(it) }
         onMain { connection.play(tracks[0], tracks) }
         awaitPlaying(tracks[0])
-        onMain { connection.reorderQueue(3, 1) }
+        onMain { connection.reorderUpNext(3, 1) }
         awaitCondition { controller?.getMediaItemAt(1)?.mediaId == tracks[3].id }
         onMain { connection.play(tracks[2], tracks) }
         awaitPlaying(tracks[2])
@@ -173,10 +173,10 @@ class QueuePlaybackTest {
         val tracks = List(90) { audio.copy(id = "${audio.id}-$it", name = "Track $it") }
         onMain { connection.play(tracks[0], tracks) }
         awaitPlaying(tracks[0])
-        onMain { connection.playQueueEntry(58) }
+        onMain { connection.playUpNextEntry(58) }
         awaitPlaying(tracks[58])
         onMain { controller!!.seekTo(5_000) }
-        awaitCondition("window at Track 58") { connection.currentQueue.firstOrNull()?.id == tracks[58].id }
+        awaitCondition("window at Track 58") { connection.currentUpNext.firstOrNull()?.id == tracks[58].id }
         awaitCondition("seek to 5 seconds") { (controller?.currentPosition ?: 0) >= 5_000 }
         onMain {
             assertEquals(tracks[58].id, controller!!.currentMediaItem?.mediaId)
@@ -190,14 +190,14 @@ class QueuePlaybackTest {
         onMain { connection.play(tracks[0], tracks) }
         awaitPlaying(tracks[0])
         onMain {
-            connection.reorderQueue(3, 1)
+            connection.reorderUpNext(3, 1)
             connection.play(tracks[1], tracks)
             connection.play(tracks[2], tracks)
         }
         awaitPlaying(tracks[2])
         runBlocking { WidgetControl.step(context, 1) }
         awaitPlaying(tracks[3])
-        onMain { assertEquals(tracks[3].id, connection.currentQueue[connection.queueIndex.value].id) }
+        onMain { assertEquals(tracks[3].id, connection.currentUpNext[connection.upNextIndex.value].id) }
     }
 
     @Test fun clearKeepsPlaybackPositionAndStopsAfterCurrentItem() {
@@ -206,7 +206,7 @@ class QueuePlaybackTest {
         awaitPlaying(tracks[0])
         onMain { controller!!.seekTo(5_000) }
         awaitCondition("seek reaches app controller") { connection.state.value.positionMs >= 5_000 }
-        onMain { connection.clearQueue() }
+        onMain { connection.clearUpNext() }
         awaitCondition { controller?.mediaItemCount == 1 }
         awaitPlaying(tracks[0])
         onMain {

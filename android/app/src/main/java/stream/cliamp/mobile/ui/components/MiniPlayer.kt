@@ -50,7 +50,7 @@ fun MiniPlayer(
     hasNext: Boolean = false,
     onPrev: () -> Unit = {},
     onNext: () -> Unit = {},
-    onOpenQueue: () -> Unit,
+    onOpenUpNext: () -> Unit,
     onToggle: () -> Unit,
     onOpen: () -> Unit,
 ) {
@@ -101,11 +101,11 @@ fun MiniPlayer(
             }
             // Queue sits before the transport cluster on the right edge.
             Icon(
-                CliampIcons.QueueTabLines,
-                "queue",
+                CliampIcons.UpNextTabLines,
+                "up next",
                 Modifier
                     .size(16.dp)
-                    .microPress(onClick = onOpenQueue),
+                    .microPress(onClick = onOpenUpNext),
                 tint = p.ink,
             )
             Row(

@@ -79,19 +79,19 @@ class NowPlayingViewModel(
             player.shuffle,
             ::LibState,
         ),
-        player.queue,
-        player.queueIndex,
-    ) { bus, lib, queue, queueIndex ->
+        player.upNext,
+        player.upNextIndex,
+    ) { bus, lib, upNext, upNextIndex ->
         // Before anything has been played this session the live bus carries no
         // station, so fall back to the last-played station from history - the same
         // fallback the mini bar uses - rather than showing an empty "no track".
         val shownStation = bus.station ?: lib.recent.firstOrNull()
-        val activeIndex = queueIndex.takeIf { bus.station != null && queue.getOrNull(it)?.url == bus.station.url } ?: -1
+        val activeIndex = upNextIndex.takeIf { bus.station != null && upNext.getOrNull(it)?.url == bus.station.url } ?: -1
         UiState(
             playerState = bus.playerState,
             shownStation = shownStation,
             streamTitle = bus.streamTitle,
-            upNextCount = upNextIndices(queue.size, activeIndex).count(),
+            upNextCount = upNextIndices(upNext.size, activeIndex).count(),
             reconnect = bus.reconnect,
             error = bus.error,
             isFav = shownStation != null && lib.favorites.any { it.url == shownStation.url },

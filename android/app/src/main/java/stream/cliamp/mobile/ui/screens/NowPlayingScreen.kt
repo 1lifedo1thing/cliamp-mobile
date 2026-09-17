@@ -125,7 +125,7 @@ private data class PlayerModel(
 /** Every control the player screen can take, so both layouts share one set. */
 private data class PlayerActions(
     val onBack: () -> Unit,
-    val onOpenQueue: () -> Unit,
+    val onOpenUpNext: () -> Unit,
     val onToggleShuffle: () -> Unit,
     val onCycleSpeed: () -> Unit,
     val onOpenScope: () -> Unit,
@@ -141,7 +141,7 @@ private data class PlayerActions(
 fun NowPlayingScreen(
     vm: NowPlayingViewModel,
     onOpenScope: () -> Unit,
-    onOpenQueue: () -> Unit,
+    onOpenUpNext: () -> Unit,
     onBack: () -> Unit,
 ) {
     val p = LocalPalette.current
@@ -165,7 +165,7 @@ fun NowPlayingScreen(
     )
     val actions = PlayerActions(
         onBack = onBack,
-        onOpenQueue = onOpenQueue,
+        onOpenUpNext = onOpenUpNext,
         onToggleShuffle = { vm.player.toggleShuffle() },
         onCycleSpeed = { vm.onEvent(NowPlayingViewModel.Event.CycleSpeed) },
         onOpenScope = onOpenScope,
@@ -215,7 +215,7 @@ private fun PortraitPlayer(
         ) {
             BackChevron(actions.onBack)
             Spacer(Modifier.weight(1f))
-            UpNextButton(model.upNextCount, actions.onOpenQueue)
+            UpNextButton(model.upNextCount, actions.onOpenUpNext)
         }
         Spacer(Modifier.height(8.dp))
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
@@ -325,7 +325,7 @@ private fun LandscapePlayer(
             ) {
                 BackChevron(actions.onBack)
                 Spacer(Modifier.weight(1f))
-                UpNextButton(model.upNextCount, actions.onOpenQueue)
+                UpNextButton(model.upNextCount, actions.onOpenUpNext)
             }
             PlayerMeta(model)
             Spacer(Modifier.weight(1f))
@@ -357,7 +357,7 @@ private fun UpNextButton(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(CliampIcons.QueueTabLines, null, Modifier.size(14.dp), tint = p.accent)
+            Icon(CliampIcons.UpNextTabLines, null, Modifier.size(14.dp), tint = p.accent)
             Mono("UP NEXT", CliampType.chip, p.ink, maxLines = 1)
             Mono(count.toString(), CliampType.chip, p.inkFaint, maxLines = 1)
         }

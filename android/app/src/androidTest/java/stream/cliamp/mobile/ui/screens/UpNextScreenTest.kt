@@ -33,40 +33,40 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationSource
-import stream.cliamp.mobile.playback.queueIndexAfterMove
+import stream.cliamp.mobile.playback.upNextIndexAfterMove
 import stream.cliamp.mobile.ui.theme.CliampTheme
 
 @RunWith(AndroidJUnit4::class)
-class QueueScreenTest {
+class UpNextScreenTest {
     @get:Rule val compose = createComposeRule()
-    private var queue by mutableStateOf(emptyList<Station>())
+    private var upNext by mutableStateOf(emptyList<Station>())
     private var currentIndex by mutableStateOf(0)
     private val moves = mutableListOf<Pair<Int, Int>>()
     private val removed = mutableListOf<Int>()
     private var played: Station? = null
 
     private fun show(count: Int = 5, active: Int = 0, duplicate: Boolean = false) {
-        queue = List(count) { index ->
+        upNext = List(count) { index ->
             Station("$index", "Track $index", "https://example.test/$index.mp3", StationSource.Local)
         }.let { if (duplicate) it + it[1] else it }
         currentIndex = active
         compose.setContent {
             CliampTheme(haptics = false) {
-                QueueContent(
-                    queue, currentIndex, queue.getOrNull(currentIndex), false,
-                    onPlay = { played = queue[it] },
+                UpNextContent(
+                    upNext, currentIndex, upNext.getOrNull(currentIndex), false,
+                    onPlay = { played = upNext[it] },
                     onMove = { from, to ->
                         moves += from to to
-                        currentIndex = queueIndexAfterMove(currentIndex, from, to)
-                        queue = queue.toMutableList().apply { add(to, removeAt(from)) }
+                        currentIndex = upNextIndexAfterMove(currentIndex, from, to)
+                        upNext = upNext.toMutableList().apply { add(to, removeAt(from)) }
                     },
                     onRemove = { index ->
                         removed += index
                         if (index < currentIndex) currentIndex--
-                        queue = queue.filterIndexed { i, _ -> i != index }
+                        upNext = upNext.filterIndexed { i, _ -> i != index }
                     },
                     onBack = {},
-                    onClear = { queue = queue.take(currentIndex + 1) },
+                    onClear = { upNext = upNext.take(currentIndex + 1) },
                 )
             }
         }
@@ -83,13 +83,13 @@ class QueueScreenTest {
     @Test fun leftSwipeRemovesOnlyTheSwipedRow() {
         show()
         val image = compose.onRoot().captureToImage().asAndroidBitmap()
-        File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "queue-gestures.png")
+        File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "upnext-gestures.png")
             .outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
         compose.onNodeWithText("Track 2").performTouchInput { swipeLeft() }
         compose.onNodeWithText("Track 2").assertDoesNotExist()
         compose.runOnIdle {
             assertEquals(listOf(2), removed)
-            assertEquals("Track 0", queue[currentIndex].name)
+            assertEquals("Track 0", upNext[currentIndex].name)
         }
     }
 
@@ -105,7 +105,7 @@ class QueueScreenTest {
         compose.onNodeWithText("UP NEXT — 1").assertIsDisplayed()
     }
 
-    @Test fun currentTrackStaysPinnedWhileQueueScrolls() {
+    @Test fun currentTrackStaysPinnedWhileUpNextScrolls() {
         show(count = 60)
         compose.onNode(hasScrollAction()).performScrollToIndex(30)
         compose.onNodeWithText("Track 0").assertIsDisplayed()
@@ -143,7 +143,7 @@ class QueueScreenTest {
         compose.runOnIdle {
             assertTrue(removed.isEmpty())
             assertTrue(moves.isEmpty())
-            assertEquals(60, queue.size)
+            assertEquals(60, upNext.size)
             assertEquals(null, played)
         }
     }
@@ -196,7 +196,7 @@ class QueueScreenTest {
         dragRow("Track 1", "Track 3")
         compose.runOnIdle {
             assertEquals(listOf(1 to 3), moves)
-            assertEquals(listOf("0", "2", "3", "1", "4"), queue.map { it.id })
+            assertEquals(listOf("0", "2", "3", "1", "4"), upNext.map { it.id })
             assertEquals(null, played)
         }
     }
@@ -206,11 +206,11 @@ class QueueScreenTest {
         dragRow("Track 4", "Track 3")
         compose.runOnIdle {
             assertEquals(listOf(4 to 3), moves)
-            assertEquals("Track 2", queue[currentIndex].name)
+            assertEquals("Track 2", upNext[currentIndex].name)
         }
     }
 
-    @Test fun cancelledDragDoesNotEditPlaybackQueue() {
+    @Test fun cancelledDragDoesNotEditPlaybackUpNext() {
         show()
         dragRow("Track 1", "Track 3", cancelDrag = true)
         compose.runOnIdle { assertTrue(moves.isEmpty()) }
@@ -249,7 +249,7 @@ class QueueScreenTest {
         ).fetchSemanticsNode()
         compose.runOnIdle {
             val actions = row.config[SemanticsActions.CustomActions]
-            assertEquals(listOf("Move up", "Move down", "Remove from queue"), actions.map { it.label })
+            assertEquals(listOf("Move up", "Move down", "Remove from Up Next"), actions.map { it.label })
             actions.first().action()
             assertEquals(listOf(2 to 1), moves)
         }
@@ -259,7 +259,7 @@ class QueueScreenTest {
         show(duplicate = true)
         compose.onNodeWithText("Track 2").performTouchInput { swipeLeft() }
         compose.runOnIdle {
-            assertEquals(2, queue.count { it.name == "Track 1" })
+            assertEquals(2, upNext.count { it.name == "Track 1" })
         }
     }
 }

@@ -32,7 +32,7 @@ import stream.cliamp.mobile.ui.theme.Mono
 
 /** Leave vertical/diagonal touches to the list before claiming a deliberate left swipe. */
 @Composable
-internal fun QueueSwipeToRemove(
+internal fun UpNextSwipeToRemove(
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,

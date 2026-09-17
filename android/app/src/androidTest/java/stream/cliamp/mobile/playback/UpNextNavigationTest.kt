@@ -19,16 +19,16 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationSource
-import stream.cliamp.mobile.ui.screens.queueEntries
+import stream.cliamp.mobile.ui.screens.upNextEntries
 
 /** Checks navigation selection against the same entries rendered by Up next, without audio I/O. */
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
-class QueueNavigationTest {
+class UpNextNavigationTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var player: PlayerConnection
     private val tracks = List(5) {
-        Station("queue-test-$it", "Track $it", "file:///queue-test-$it.wav", StationSource.Local)
+        Station("upnext-test-$it", "Track $it", "file:///upnext-test-$it.wav", StationSource.Local)
     }
 
     @Before fun setUp() = onMain {
@@ -53,13 +53,13 @@ class QueueNavigationTest {
     private fun nextMatchesTop() {
         lateinit var expected: Station
         onMain {
-            expected = queueEntries(player.currentQueue, player.queueIndex.value).first().station
+            expected = upNextEntries(player.currentUpNext, player.upNextIndex.value).first().station
             player.next()
         }
         awaitCurrent(expected)
     }
 
-    private fun upcoming() = queueEntries(player.currentQueue, player.queueIndex.value).map { it.station }
+    private fun upcoming() = upNextEntries(player.currentUpNext, player.upNextIndex.value).map { it.station }
 
     @Test fun nextSelectsTheFirstVisibleUpcomingTrack() {
         onMain { player.play(tracks[2], tracks) }
@@ -69,22 +69,22 @@ class QueueNavigationTest {
         onMain { assertEquals(tracks[4], PlaybackBus.station.value) }
     }
 
-    @Test fun nextUsesReorderedQueueAfterPreviousInsteadOfHistoryRedo() {
+    @Test fun nextUsesReorderedUpNextAfterPreviousInsteadOfHistoryRedo() {
         onMain { player.play(tracks[1], tracks) }
         nextMatchesTop()
         onMain { player.prev() }
         awaitCurrent(tracks[1])
-        onMain { player.reorderQueue(4, 2) }
+        onMain { player.reorderUpNext(4, 2) }
         nextMatchesTop()
         onMain { assertEquals(tracks[4], PlaybackBus.station.value) }
     }
 
-    @Test fun nextUsesQueueAfterRemovingHistoryRedoTrack() {
+    @Test fun nextUsesUpNextAfterRemovingHistoryRedoTrack() {
         onMain { player.play(tracks[1], tracks) }
         nextMatchesTop()
         onMain { player.prev() }
         awaitCurrent(tracks[1])
-        onMain { player.removeFromQueue(2) }
+        onMain { player.removeFromUpNext(2) }
         nextMatchesTop()
         onMain { assertEquals(tracks[3], PlaybackBus.station.value) }
     }
@@ -92,7 +92,7 @@ class QueueNavigationTest {
     @Test fun playingAnotherSongRebuildsUpNextFromTheListOrder() {
         onMain {
             player.play(tracks[0], tracks)
-            player.reorderQueue(3, 1)
+            player.reorderUpNext(3, 1)
             assertEquals(listOf(tracks[3], tracks[1], tracks[2], tracks[4]), upcoming())
             // Tapping the list again starts it at the tapped item; the arranged
             // tail is replaced by the list's own continuation.
@@ -112,20 +112,20 @@ class QueueNavigationTest {
         val extra = tracks[0].copy(id = "extra", url = "file:///extra.wav")
         onMain {
             player.play(tracks[0], tracks)
-            player.removeFromQueue(2)
+            player.removeFromUpNext(2)
             player.playNext(extra)
-            player.addToQueue(extra)
+            player.addToUpNext(extra)
             player.play(tracks[3], tracks)
             assertEquals(tracks, PlaybackBus.source.value)
             assertEquals(listOf(tracks[4]), upcoming())
-            assertTrue(player.currentQueue.none { it.id == extra.id })
+            assertTrue(player.currentUpNext.none { it.id == extra.id })
         }
     }
 
     @Test fun returningToAListAlwaysStartsItsOrderAgain() {
         onMain {
             player.play(tracks[0], tracks)
-            player.reorderQueue(4, 1)
+            player.reorderUpNext(4, 1)
             // A different list (same songs, reversed) replaces the arrangement.
             player.play(tracks[2], tracks.reversed())
             assertEquals(tracks.reversed().drop(3), upcoming())
@@ -135,16 +135,16 @@ class QueueNavigationTest {
         }
     }
 
-    @Test fun queueTapJumpsToTheOccurrenceAndKeepsTheRestUpcoming() {
+    @Test fun upNextTapJumpsToTheOccurrenceAndKeepsTheRestUpcoming() {
         onMain {
             player.play(tracks[0], tracks)
-            player.reorderQueue(4, 1)
+            player.reorderUpNext(4, 1)
             assertEquals(listOf(tracks[4], tracks[1], tracks[2], tracks[3]), upcoming())
-            player.playQueueEntry(3)
+            player.playUpNextEntry(3)
         }
         awaitCurrent(tracks[2])
         onMain {
-            assertEquals(3, player.queueIndex.value)
+            assertEquals(3, player.upNextIndex.value)
             assertEquals(listOf(tracks[3]), upcoming())
         }
         nextMatchesTop()
@@ -156,7 +156,7 @@ class QueueNavigationTest {
         onMain {
             player.play(tracks[0], tracks)
             player.playNext(extra)
-            player.addToQueue(extra)
+            player.addToUpNext(extra)
             val arranged = upcoming()
             assertEquals(listOf(extra, tracks[1], tracks[2], tracks[3], tracks[4], extra), arranged)
             player.play(tracks[0], tracks)
@@ -167,7 +167,7 @@ class QueueNavigationTest {
     @Test fun clearKeepsCurrentAndALaterListTapRepopulates() {
         onMain {
             player.play(tracks[0], tracks)
-            player.clearQueue()
+            player.clearUpNext()
             assertEquals(tracks[0], PlaybackBus.station.value)
             assertEquals(emptyList<Station>(), upcoming())
             assertEquals(emptyList<Station>(), player.upcomingStations())
@@ -182,9 +182,9 @@ class QueueNavigationTest {
         val extra = tracks[1]
         onMain {
             player.play(long[0], long)
-            player.reorderQueue(4, 1)
-            player.removeFromQueue(3)
-            player.addToQueue(extra)
+            player.reorderUpNext(4, 1)
+            player.removeFromUpNext(3)
+            player.addToUpNext(extra)
             val expected = long.toMutableList().apply {
                 add(1, removeAt(4))
                 removeAt(3)
@@ -193,7 +193,7 @@ class QueueNavigationTest {
             assertEquals(expected, PlaybackBus.source.value)
             player.play(long[20], long)
             assertEquals(long, PlaybackBus.source.value)
-            player.clearQueue()
+            player.clearUpNext()
             assertEquals(listOf(long[20]), PlaybackBus.source.value)
         }
     }
@@ -203,15 +203,15 @@ class QueueNavigationTest {
             player.toggleShuffle()
             player.play(tracks[0], tracks)
             assertEquals(tracks[0], PlaybackBus.station.value)
-            assertEquals(tracks[0], player.currentQueue.first())
-            assertEquals(tracks.toSet(), player.currentQueue.toSet())
+            assertEquals(tracks[0], player.currentUpNext.first())
+            assertEquals(tracks.toSet(), player.currentUpNext.toSet())
 
             // A later tap re-shuffles the same list around the tapped song
             // instead of riding the first arrangement.
             player.play(tracks[3], tracks)
             assertEquals(tracks[3], PlaybackBus.station.value)
-            assertEquals(tracks[3], player.currentQueue.first())
-            assertEquals(tracks.toSet(), player.currentQueue.toSet())
+            assertEquals(tracks[3], player.currentUpNext.first())
+            assertEquals(tracks.toSet(), player.currentUpNext.toSet())
             assertTrue(player.shuffle.value)
         }
     }

@@ -80,7 +80,7 @@ fun PodcastShowScreen(
     playing: Boolean,
     onBack: () -> Unit,
     onPlay: (Station, List<Station>) -> Unit,
-    onAddToQueue: (Station) -> Unit = {},
+    onAddToUpNext: (Station) -> Unit = {},
     onPlayNext: (Station) -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
@@ -175,7 +175,7 @@ fun PodcastShowScreen(
                         downloadedBytes = fetched?.bytes ?: 0L,
                         onPlay = { onPlay(station, queue) },
                         onPlayNext = { onPlayNext(station) },
-                        onAddToQueue = { onAddToQueue(station) },
+                        onAddToUpNext = { onAddToUpNext(station) },
                         onMarkPlayed = { vm.onEvent(PodcastShowViewModel.Event.MarkCompleted(station)) },
                         onForget = { vm.onEvent(PodcastShowViewModel.Event.ClearProgress(station)) },
                         onDownload = { vm.onEvent(PodcastShowViewModel.Event.Download(station)) },
@@ -258,7 +258,7 @@ private fun EpisodeRow(
     playing: Boolean,
     onPlay: () -> Unit,
     onPlayNext: () -> Unit,
-    onAddToQueue: () -> Unit,
+    onAddToUpNext: () -> Unit,
     onMarkPlayed: () -> Unit,
     onForget: () -> Unit,
     dlState: DownloadState = DownloadState.Idle,
@@ -358,7 +358,7 @@ private fun EpisodeRow(
                     trigger = { open -> OverflowButton(open) },
                     items = buildList {
                         add(OverflowItem("play next", onPlayNext))
-                        add(OverflowItem("add to queue", onAddToQueue))
+                        add(OverflowItem("add to Up Next", onAddToUpNext))
                         when {
                             fetched -> add(
                                 OverflowItem("remove download", color = p.destructiveInk, action = onRemoveDownload)

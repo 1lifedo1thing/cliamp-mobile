@@ -34,9 +34,9 @@ import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.ui.theme.CliampTheme
 
 @RunWith(AndroidJUnit4::class)
-class QueueArtworkTest {
+class UpNextArtworkTest {
     @get:Rule val compose = createComposeRule()
-    private var queue by mutableStateOf(emptyList<Station>())
+    private var upNext by mutableStateOf(emptyList<Station>())
     private val covers = mutableListOf<File>()
     private lateinit var server: ArtworkServer
 
@@ -62,7 +62,7 @@ class QueueArtworkTest {
 
     private fun localCover(color: Int): String {
         val cache = InstrumentationRegistry.getInstrumentation().targetContext.cacheDir
-        return File.createTempFile("queue-art-", ".png", cache).also {
+        return File.createTempFile("upnext-art-", ".png", cache).also {
             it.writeBytes(png(color))
             covers += it
         }.toURI().toString()
@@ -74,10 +74,10 @@ class QueueArtworkTest {
     }
 
     private fun show(vararg stations: Station) {
-        queue = stations.toList()
+        upNext = stations.toList()
         compose.setContent {
             CliampTheme(haptics = false) {
-                QueueContent(queue, 0, queue.first(), false, {}, { _, _ -> }, {}, {})
+                UpNextContent(upNext, 0, upNext.first(), false, {}, { _, _ -> }, {}, {})
             }
         }
     }
@@ -104,7 +104,7 @@ class QueueArtworkTest {
         compose.onNodeWithText("No cover").assertIsDisplayed()
         compose.onNodeWithContentDescription("Cover art for No cover", useUnmergedTree = true).assertDoesNotExist()
         val updated = localCover(Color.GREEN)
-        compose.runOnIdle { queue = queue.mapIndexed { i, s -> if (i == 1) s.copy(cover = updated) else s } }
+        compose.runOnIdle { upNext = upNext.mapIndexed { i, s -> if (i == 1) s.copy(cover = updated) else s } }
         compose.waitUntil(5_000) {
             val nodes = compose.onAllNodesWithContentDescription("Cover art for Next song", useUnmergedTree = true)
             if (nodes.fetchSemanticsNodes().isEmpty()) false

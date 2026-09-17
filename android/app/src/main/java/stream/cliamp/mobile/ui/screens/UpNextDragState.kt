@@ -12,22 +12,22 @@ import kotlinx.coroutines.launch
 import stream.cliamp.mobile.playback.upNextIndices
 import stream.cliamp.mobile.data.Station
 
-internal data class QueueEntry(val key: String, val queueIndex: Int, val station: Station)
+internal data class UpNextEntry(val key: String, val upNextIndex: Int, val station: Station)
 
-/** An occurrence key allows the same song to appear in the queue more than once. */
-internal fun queueEntries(queue: List<Station>, activeIndex: Int): List<QueueEntry> {
-    val upcoming = upNextIndices(queue.size, activeIndex)
+/** An occurrence key allows the same song to appear in Up Next more than once. */
+internal fun upNextEntries(upNext: List<Station>, activeIndex: Int): List<UpNextEntry> {
+    val upcoming = upNextIndices(upNext.size, activeIndex)
     val occurrences = mutableMapOf<String, Int>()
-    return queue.mapIndexed { index, station ->
+    return upNext.mapIndexed { index, station ->
         val occurrence = occurrences.getOrDefault(station.url, 0)
         occurrences[station.url] = occurrence + 1
-        QueueEntry("${station.url}#$occurrence", index, station)
-    }.filter { it.queueIndex in upcoming }
+        UpNextEntry("${station.url}#$occurrence", index, station)
+    }.filter { it.upNextIndex in upcoming }
 }
 
 /** A drag previews the new order locally; only dropping commits an edit to playback. */
-internal class QueueDragState(
-    private val initialEntries: List<QueueEntry>,
+internal class UpNextDragState(
+    private val initialEntries: List<UpNextEntry>,
     private val listState: LazyListState,
     private val scope: CoroutineScope,
 ) {
@@ -95,8 +95,8 @@ internal class QueueDragState(
     fun finish(onMove: (Int, Int) -> Unit) {
         val key = draggingKey ?: return
         val destination = entries.indexOfFirst { it.key == key }
-        val source = initialEntries.first { it.key == key }.queueIndex
-        val target = initialEntries[destination].queueIndex
+        val source = initialEntries.first { it.key == key }.upNextIndex
+        val target = initialEntries[destination].upNextIndex
         val offset = dragOffset
         draggingKey = null
         settlingKey = key

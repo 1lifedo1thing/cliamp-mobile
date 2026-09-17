@@ -65,7 +65,7 @@ import stream.cliamp.mobile.ui.screens.LocalScreen
 import stream.cliamp.mobile.ui.screens.NowPlayingScreen
 import stream.cliamp.mobile.ui.screens.PodcastShowScreen
 import stream.cliamp.mobile.ui.screens.PodcastsScreen
-import stream.cliamp.mobile.ui.screens.QueueScreen
+import stream.cliamp.mobile.ui.screens.UpNextScreen
 import stream.cliamp.mobile.ui.screens.ScopeScreen
 import stream.cliamp.mobile.ui.screens.ScrobbleWizard as ScrobbleWizardScreen
 import stream.cliamp.mobile.data.provider.ProviderCatalog
@@ -236,9 +236,9 @@ fun CliampRoot(
             navController.navigate(Player)
         }
     }
-    val openQueue: () -> Unit = {
-        if (currentRoute?.startsWith(Queue::class.qualifiedName!!) != true) {
-            navController.navigate(Queue)
+    val openUpNext: () -> Unit = {
+        if (currentRoute?.startsWith(UpNext::class.qualifiedName!!) != true) {
+            navController.navigate(UpNext)
         }
     }
 
@@ -278,7 +278,7 @@ fun CliampRoot(
                 hasNext = playerState.hasNext,
                 onPrev = { player.prev() },
                 onNext = { player.next() },
-                onOpenQueue = openQueue,
+                onOpenUpNext = openUpNext,
                 onToggle = { player.toggle(station ?: recent.firstOrNull()) },
                 onOpen = openPlayer,
             )
@@ -406,7 +406,7 @@ fun CliampRoot(
                         playing = playerState.playing,
                         onBack = { navController.popBackStack() },
                         onPlay = onPlay,
-                        onAddToQueue = { player.addToQueue(it) },
+                        onAddToUpNext = { player.addToUpNext(it) },
                         onPlayNext = { player.playNext(it) },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenSettings = { navController.navigate(Settings) },
@@ -532,20 +532,20 @@ fun CliampRoot(
                 NowPlayingScreen(
                     vm = appViewModel { app -> NowPlayingViewModel(app.player, app.prefs) },
                     onOpenScope = { navController.navigate(Scope) },
-                    onOpenQueue = openQueue,
+                    onOpenUpNext = openUpNext,
                     onBack = { navController.popBackStack() },
                 )
                 }
             }
-            composable<Queue> {
+            composable<UpNext> {
                 OverlayCover {
-                QueueScreen(
+                UpNextScreen(
                     player = player,
                     current = station,
                     playing = playerState.playing,
                     onPlay = { index ->
-                        player.currentQueue.getOrNull(index)?.let(repository::reportPlay)
-                        player.playQueueEntry(index)
+                        player.currentUpNext.getOrNull(index)?.let(repository::reportPlay)
+                        player.playUpNextEntry(index)
                     },
                     onBack = { navController.popBackStack() },
                 )

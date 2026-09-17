@@ -376,7 +376,7 @@ class PlaybackService : MediaSessionService() {
      */
     private fun widgetUpNext(source: List<Station>, station: Station?): List<Station> {
         val connection = (application as CliampApp).player
-        if (connection.currentQueue.isNotEmpty()) return connection.upcomingStations()
+        if (connection.currentUpNext.isNotEmpty()) return connection.upcomingStations()
         if (source.isEmpty() || station == null) return emptyList()
         val i = source.indexOfFirst { it.url == station.url }
         if (i < 0) return emptyList()
@@ -418,7 +418,7 @@ class PlaybackService : MediaSessionService() {
         // updateAlls - concurrent RemoteViews the launcher can apply out of
         // order, leaving the glyph stuck on a stale frame.
         val sourceKey = (source.map { it.url } + (station?.url.orEmpty()) +
-            (application as CliampApp).player.queueIndex.value.toString()).joinToString("|")
+            (application as CliampApp).player.upNextIndex.value.toString()).joinToString("|")
         val upNext = widgetUpNext(source, station)
         if (next == lastWidgetState && sourceKey == lastWidgetSourceKey) return
         lastWidgetState = next

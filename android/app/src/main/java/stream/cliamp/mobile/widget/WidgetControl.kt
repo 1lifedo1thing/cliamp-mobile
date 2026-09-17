@@ -100,7 +100,7 @@ object WidgetControl {
         // A running session owns occurrence indices and the edited queue.
         // Re-finding a URL in the persisted ring loses duplicate occurrences.
         val handled = withContext(Dispatchers.Main) {
-            if (app.player.currentQueue.isEmpty()) false else {
+            if (app.player.currentUpNext.isEmpty()) false else {
                 if (delta < 0) app.player.prev() else app.player.next()
                 true
             }
