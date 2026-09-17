@@ -59,7 +59,7 @@ with `sdk.dir`. Release builds are signed with the debug key; swap `signingConfi
 | Screen | What is on it |
 | --- | --- |
 | PLAY | Station, live ICY track title, brick meter, `--- STREAMING ---` rule, transport |
-| LIB | cliamp's 12 channels with live listener counts, then the directory, paged 60 at a time |
+| LIB | cliamp's 15 channels with live listener counts, then the directory, paged 60 at a time |
 | QUEUE | Up next, favourites, history |
 | :CMD | Command bar with its own keyboard: `:play`, `:tag`, `:country`, `:eq`, `:random` |
 | SCOPE | 32-column spectrum off the real FFT, 7-band equaliser, presets |

@@ -11,7 +11,7 @@ the desktop player. Compose draws them instead of a TTY.
 
 ## What it plays
 
-- **Radio.** The 12 channels of [cliamp radio](https://radio.cliamp.stream) with
+- **Radio.** The 15 channels of [cliamp radio](https://radio.cliamp.stream) with
   live listener counts, plus the 53,000-station
   [Radio Browser](https://www.radio-browser.info/) directory.
 - **Podcasts.** Search the iTunes directory, subscribe, download episodes for
