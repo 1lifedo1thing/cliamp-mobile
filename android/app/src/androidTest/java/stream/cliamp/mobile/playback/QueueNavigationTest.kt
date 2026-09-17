@@ -13,6 +13,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -58,6 +59,8 @@ class QueueNavigationTest {
         awaitCurrent(expected)
     }
 
+    private fun upcoming() = queueEntries(player.currentQueue, player.queueIndex.value).map { it.station }
+
     @Test fun nextSelectsTheFirstVisibleUpcomingTrack() {
         onMain { player.play(tracks[2], tracks) }
         nextMatchesTop()
@@ -85,174 +88,131 @@ class QueueNavigationTest {
         nextMatchesTop()
         onMain { assertEquals(tracks[3], PlaybackBus.station.value) }
     }
-    private val playlist = PlaybackContext.Playlist("my-playlist")
-    private fun upcoming() = queueEntries(player.currentQueue, player.queueIndex.value).map { it.station }
 
-    @Test fun samePlaylistPreservesReorderingAndKeepsSelectedSongPending() {
+    @Test fun playingAnotherSongRebuildsUpNextFromTheListOrder() {
         onMain {
-            player.playFromList(tracks[0], tracks, playlist)
+            player.play(tracks[0], tracks)
             player.reorderQueue(3, 1)
             assertEquals(listOf(tracks[3], tracks[1], tracks[2], tracks[4]), upcoming())
-            assertEquals(upcoming(), player.upcomingStations())
-            player.playFromList(tracks[2], tracks, playlist)
+            // Tapping the list again starts it at the tapped item; the arranged
+            // tail is replaced by the list's own continuation.
+            player.play(tracks[2], tracks)
             assertEquals(tracks[2], PlaybackBus.station.value)
-            assertEquals(listOf(tracks[3], tracks[1], tracks[2], tracks[4]), upcoming())
-            assertEquals(upcoming(), player.upcomingStations())
+            assertEquals(tracks.drop(3), upcoming())
+            assertEquals(tracks.drop(3), player.upcomingStations())
         }
-        for (expected in listOf(tracks[3], tracks[1], tracks[2], tracks[4])) {
+        for (expected in listOf(tracks[3], tracks[4])) {
             nextMatchesTop()
             onMain { assertEquals(expected, PlaybackBus.station.value) }
         }
         onMain { assertEquals(emptyList<Station>(), upcoming()) }
     }
 
-    @Test fun sameIdentitySurvivesSortRefreshRemovalAndAddedItems() {
+    @Test fun listTapDropsManualInsertionsAndRemovals() {
         val extra = tracks[0].copy(id = "extra", url = "file:///extra.wav")
         onMain {
-            player.playFromList(tracks[0], tracks, playlist)
+            player.play(tracks[0], tracks)
             player.removeFromQueue(2)
             player.playNext(extra)
-            val arranged = upcoming()
-            player.playFromList(tracks[2], tracks.reversed(), PlaybackContext.Playlist("my-playlist"))
-            assertEquals(arranged, upcoming())
-            player.playFromList(tracks[2], tracks, playlist)
-            assertEquals(arranged, upcoming())
+            player.addToQueue(extra)
+            player.play(tracks[3], tracks)
+            assertEquals(tracks, PlaybackBus.source.value)
+            assertEquals(listOf(tracks[4]), upcoming())
+            assertTrue(player.currentQueue.none { it.id == extra.id })
         }
-        nextMatchesTop()
-        onMain { assertEquals(extra, PlaybackBus.station.value) }
     }
 
-    @Test fun differentListReplacesEvenWithIdenticalContentsAndReturningDoesNotRestoreOldOrder() {
-        val second = PlaybackContext.Playlist("second")
+    @Test fun returningToAListAlwaysStartsItsOrderAgain() {
         onMain {
-            player.playFromList(tracks[0], tracks, playlist)
+            player.play(tracks[0], tracks)
             player.reorderQueue(4, 1)
-            player.playFromList(tracks[2], tracks, second)
-            assertEquals(tracks.drop(3), upcoming())
-            player.playFromList(tracks[0], tracks, playlist)
+            // A different list (same songs, reversed) replaces the arrangement.
+            player.play(tracks[2], tracks.reversed())
+            assertEquals(tracks.reversed().drop(3), upcoming())
+            // Returning to the first list starts it afresh from the tapped song.
+            player.play(tracks[0], tracks)
             assertEquals(tracks.drop(1), upcoming())
         }
     }
 
-    @Test fun podcastSwitchReplacesMusicButEpisodeInsertionKeepsMusicContext() {
-        val episodes = tracks.map { it.copy(id = "pod-${it.id}", url = "file:///pod-${it.id}.wav", source = StationSource.Podcast) }
-        val show = PlaybackContext.Podcast("https://example.test/show.xml")
+    @Test fun queueTapJumpsToTheOccurrenceAndKeepsTheRestUpcoming() {
         onMain {
-            player.playFromList(tracks[0], tracks, playlist)
+            player.play(tracks[0], tracks)
             player.reorderQueue(4, 1)
-            player.playNext(episodes[0])
-            player.addToQueue(episodes[1])
-            val arranged = upcoming()
-            player.playFromList(tracks[2], tracks, playlist)
-            assertEquals(arranged, upcoming())
-            player.playFromList(episodes[1], episodes, show)
-            assertEquals(episodes.drop(2), upcoming())
-            player.reorderQueue(4, 2)
-            val episodeOrder = upcoming()
-            player.playFromList(episodes[3], episodes, show)
-            assertEquals(episodeOrder, upcoming())
-            player.playFromList(tracks[1], tracks, playlist)
-            assertEquals(tracks.drop(2), upcoming())
-        }
-    }
-
-    @Test fun distinctAlbumsAccountsFoldersShowsAndRadioListsStartFresh() {
-        val contexts = listOf(
-            PlaybackContext.ProviderAlbum("account-a", "album-a"),
-            PlaybackContext.ProviderAlbum("account-a", "album-b"),
-            PlaybackContext.ProviderAlbum("account-b", "album-b"),
-            PlaybackContext.ProviderSongs("account-b"),
-            PlaybackContext.Library("local", "folder-a"),
-            PlaybackContext.Library("local", "folder-b"),
-            PlaybackContext.Podcast("https://example.test/a.xml"),
-            PlaybackContext.Podcast("https://example.test/b.xml"),
-            PlaybackContext.CliampRadio,
-            PlaybackContext.CustomRadio,
-            PlaybackContext.Search("one", "All"),
-            PlaybackContext.Search("two", "All"),
-        )
-        onMain {
-            contexts.forEach { context ->
-                player.playFromList(tracks[0], tracks, context)
-                assertEquals(tracks.drop(1), upcoming())
-                player.reorderQueue(4, 1)
-                val arranged = upcoming()
-                player.playFromList(tracks[2], tracks, context)
-                assertEquals(arranged, upcoming())
-            }
-        }
-    }
-
-    @Test fun radioNextUsesArrangedOrderWithRepeatedStation() {
-        val radio = tracks.map { it.copy(source = StationSource.Custom) }
-        onMain {
-            player.playFromList(radio[0], radio, PlaybackContext.CustomRadio)
-            player.reorderQueue(4, 1)
-            player.playFromList(radio[2], radio, PlaybackContext.CustomRadio)
-            assertEquals(listOf(radio[4], radio[1], radio[2], radio[3]), upcoming())
-        }
-        nextMatchesTop()
-        onMain { assertEquals(radio[4], PlaybackBus.station.value) }
-    }
-
-    @Test fun queueTapSelectsAnOccurrenceAndDoesNotChangeTheOriginatingList() {
-        onMain {
-            player.playFromList(tracks[0], tracks, playlist)
-            player.playFromList(tracks[2], tracks, playlist)
-            // [A, C (current), B, C, D, E]: select the pending C explicitly.
+            assertEquals(listOf(tracks[4], tracks[1], tracks[2], tracks[3]), upcoming())
             player.playQueueEntry(3)
         }
         awaitCurrent(tracks[2])
         onMain {
             assertEquals(3, player.queueIndex.value)
-            assertEquals(tracks.drop(3), upcoming())
-            player.playFromList(tracks[1], tracks, playlist)
-            assertEquals(tracks.drop(3), upcoming())
+            assertEquals(listOf(tracks[3]), upcoming())
         }
         nextMatchesTop()
         onMain { assertEquals(tracks[3], PlaybackBus.station.value) }
     }
 
-    @Test fun clearKeepsCurrentAndSameListTapDoesNotRepopulate() {
+    @Test fun insertionsPersistUntilTheNextListTap() {
+        val extra = tracks[1]
         onMain {
-            player.playFromList(tracks[0], tracks, playlist)
+            player.play(tracks[0], tracks)
+            player.playNext(extra)
+            player.addToQueue(extra)
+            val arranged = upcoming()
+            assertEquals(listOf(extra, tracks[1], tracks[2], tracks[3], tracks[4], extra), arranged)
+            player.play(tracks[0], tracks)
+            assertEquals(tracks.drop(1), upcoming())
+        }
+    }
+
+    @Test fun clearKeepsCurrentAndALaterListTapRepopulates() {
+        onMain {
+            player.play(tracks[0], tracks)
             player.clearQueue()
             assertEquals(tracks[0], PlaybackBus.station.value)
             assertEquals(emptyList<Station>(), upcoming())
             assertEquals(emptyList<Station>(), player.upcomingStations())
-            player.playFromList(tracks[3], tracks, playlist)
-            assertEquals(emptyList<Station>(), upcoming())
-            player.next()
+            player.play(tracks[3], tracks)
             assertEquals(tracks[3], PlaybackBus.station.value)
-            player.playFromList(tracks[1], tracks, PlaybackContext.Playlist("other"))
-            assertEquals(tracks.drop(2), upcoming())
+            assertEquals(listOf(tracks[4]), upcoming())
         }
     }
 
-    @Test fun editingALongListKeepsItsUnloadedTailAndAppendGoesToTheEnd() {
+    @Test fun editingALongListKeepsItsUnloadedTailAndAListTapResetsIt() {
         val long = List(90) { tracks[0].copy(id = "long-$it", url = "file:///long-$it.wav") }
         val extra = tracks[1]
         onMain {
-            player.playFromList(long[0], long, playlist)
+            player.play(long[0], long)
             player.reorderQueue(4, 1)
             player.removeFromQueue(3)
             player.addToQueue(extra)
-            player.playFromList(long[20], long, playlist)
-            val expected = long.toMutableList().apply { add(1, removeAt(4)); removeAt(3); add(extra); add(1, long[20]) }
+            val expected = long.toMutableList().apply {
+                add(1, removeAt(4))
+                removeAt(3)
+                add(extra)
+            }
             assertEquals(expected, PlaybackBus.source.value)
+            player.play(long[20], long)
+            assertEquals(long, PlaybackBus.source.value)
             player.clearQueue()
             assertEquals(listOf(long[20]), PlaybackBus.source.value)
         }
     }
 
-    @Test fun shuffleDoesNotReshuffleASameSourceTap() {
+    @Test fun shuffleBuildsAFreshOrderHeadedByTheTappedTrack() {
         onMain {
             player.toggleShuffle()
-            player.playFromList(tracks[0], tracks, playlist)
-            val arranged = upcoming()
-            player.playFromList(tracks[3], tracks, playlist)
-            assertEquals(arranged, upcoming())
+            player.play(tracks[0], tracks)
+            assertEquals(tracks[0], PlaybackBus.station.value)
+            assertEquals(tracks[0], player.currentQueue.first())
+            assertEquals(tracks.toSet(), player.currentQueue.toSet())
+
+            // A later tap re-shuffles the same list around the tapped song
+            // instead of riding the first arrangement.
+            player.play(tracks[3], tracks)
+            assertEquals(tracks[3], PlaybackBus.station.value)
+            assertEquals(tracks[3], player.currentQueue.first())
+            assertEquals(tracks.toSet(), player.currentQueue.toSet())
+            assertTrue(player.shuffle.value)
         }
     }
-
 }

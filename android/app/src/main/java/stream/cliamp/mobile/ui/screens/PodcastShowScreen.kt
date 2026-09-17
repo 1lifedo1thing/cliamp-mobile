@@ -40,7 +40,6 @@ import stream.cliamp.mobile.data.EpisodeProgress
 import stream.cliamp.mobile.data.PodcastEpisode
 import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.Station
-import stream.cliamp.mobile.playback.PlaybackContext
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.toStation
 import stream.cliamp.mobile.ui.components.Chip
@@ -80,7 +79,7 @@ fun PodcastShowScreen(
     current: Station?,
     playing: Boolean,
     onBack: () -> Unit,
-    onPlay: (Station, List<Station>, PlaybackContext) -> Unit,
+    onPlay: (Station, List<Station>) -> Unit,
     onAddToQueue: (Station) -> Unit = {},
     onPlayNext: (Station) -> Unit = {},
     onOpenSearch: () -> Unit = {},
@@ -174,7 +173,7 @@ fun PodcastShowScreen(
                         playing = playing && current?.url == station.url,
                         dlState = dl,
                         downloadedBytes = fetched?.bytes ?: 0L,
-                        onPlay = { show?.let { onPlay(station, queue, PlaybackContext.Podcast(it.feedUrl)) } },
+                        onPlay = { onPlay(station, queue) },
                         onPlayNext = { onPlayNext(station) },
                         onAddToQueue = { onAddToQueue(station) },
                         onMarkPlayed = { vm.onEvent(PodcastShowViewModel.Event.MarkCompleted(station)) },

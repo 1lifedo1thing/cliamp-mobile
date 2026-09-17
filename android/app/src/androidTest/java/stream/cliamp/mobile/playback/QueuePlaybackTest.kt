@@ -40,7 +40,6 @@ class QueuePlaybackTest {
     private lateinit var activity: ActivityScenario<MainActivity>
     private var controller: MediaController? = null
     private val files = mutableListOf<File>()
-    private val source = PlaybackContext.Playlist("playback-fixture-${UUID.randomUUID()}")
 
     private fun onMain(action: () -> Unit) =
         InstrumentationRegistry.getInstrumentation().runOnMainSync(action)
@@ -119,19 +118,32 @@ class QueuePlaybackTest {
         awaitPlaying(expected)
     }
 
-    @Test fun automaticAdvanceFollowsArrangedOrderIncludingTheRepeatedOccurrence() {
+    @Test fun automaticAdvanceFollowsArrangedUpNextOrder() {
         val tracks = listOf("A", "B", "C", "D", "E").map { track(it) }
-        onMain { connection.playFromList(tracks[0], tracks, source) }
+        onMain { connection.play(tracks[0], tracks) }
         awaitPlaying(tracks[0])
         onMain { connection.reorderQueue(3, 1) }
         awaitCondition { controller?.getMediaItemAt(1)?.mediaId == tracks[3].id }
-        onMain { connection.playFromList(tracks[2], tracks, source) }
-        awaitPlaying(tracks[2])
         for (i in listOf(3, 1, 2, 4)) finishCurrent(tracks[i])
         onMain {
             assertEquals(connection.currentQueue.lastIndex, connection.queueIndex.value)
             controller!!.seekTo(controller!!.duration - 50)
         }
+        awaitCondition { controller?.playbackState == Player.STATE_ENDED }
+        onMain { assertEquals(tracks[4], PlaybackBus.station.value) }
+    }
+
+    @Test fun playingAnotherSongRebuildsTheQueueFromTheListOrder() {
+        val tracks = listOf("A", "B", "C", "D", "E").map { track(it) }
+        onMain { connection.play(tracks[0], tracks) }
+        awaitPlaying(tracks[0])
+        onMain { connection.reorderQueue(3, 1) }
+        awaitCondition { controller?.getMediaItemAt(1)?.mediaId == tracks[3].id }
+        onMain { connection.play(tracks[2], tracks) }
+        awaitPlaying(tracks[2])
+        finishCurrent(tracks[3])
+        finishCurrent(tracks[4])
+        onMain { controller!!.seekTo(controller!!.duration - 50) }
         awaitCondition { controller?.playbackState == Player.STATE_ENDED }
         onMain { assertEquals(tracks[4], PlaybackBus.station.value) }
     }
@@ -142,7 +154,7 @@ class QueuePlaybackTest {
         val radio = track("Radio", StationSource.Custom)
         val last = track("Last")
         val tracks = listOf(music, podcast, radio, last)
-        onMain { connection.playFromList(music, tracks, source) }
+        onMain { connection.play(music, tracks) }
         awaitPlaying(music)
         finishCurrent(podcast)
         finishCurrent(radio)
@@ -159,7 +171,7 @@ class QueuePlaybackTest {
     @Test fun longListWindowExtensionKeepsTheAudibleTrackAndPosition() {
         val audio = track("Fixture")
         val tracks = List(90) { audio.copy(id = "${audio.id}-$it", name = "Track $it") }
-        onMain { connection.playFromList(tracks[0], tracks, source) }
+        onMain { connection.play(tracks[0], tracks) }
         awaitPlaying(tracks[0])
         onMain { connection.playQueueEntry(58) }
         awaitPlaying(tracks[58])
@@ -173,24 +185,24 @@ class QueuePlaybackTest {
         finishCurrent(tracks[59])
     }
 
-    @Test fun rapidSameListTapsAndWidgetNextKeepTheArrangedTail() {
+    @Test fun rapidSameListTapsFollowTheLastTappedSong() {
         val tracks = listOf("A", "B", "C", "D").map { track(it) }
-        onMain { connection.playFromList(tracks[0], tracks, source) }
+        onMain { connection.play(tracks[0], tracks) }
         awaitPlaying(tracks[0])
         onMain {
             connection.reorderQueue(3, 1)
-            connection.playFromList(tracks[1], tracks, source)
-            connection.playFromList(tracks[2], tracks, source)
+            connection.play(tracks[1], tracks)
+            connection.play(tracks[2], tracks)
         }
         awaitPlaying(tracks[2])
         runBlocking { WidgetControl.step(context, 1) }
         awaitPlaying(tracks[3])
-        onMain { assertEquals(tracks[1].id, connection.currentQueue[connection.queueIndex.value + 1].id) }
+        onMain { assertEquals(tracks[3].id, connection.currentQueue[connection.queueIndex.value].id) }
     }
 
     @Test fun clearKeepsPlaybackPositionAndStopsAfterCurrentItem() {
         val tracks = listOf(track("A"), track("B"))
-        onMain { connection.playFromList(tracks[0], tracks, source) }
+        onMain { connection.play(tracks[0], tracks) }
         awaitPlaying(tracks[0])
         onMain { controller!!.seekTo(5_000) }
         awaitCondition("seek reaches app controller") { connection.state.value.positionMs >= 5_000 }

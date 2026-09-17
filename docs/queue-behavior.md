@@ -6,56 +6,34 @@ it does not rebuild the queue after each track.
 
 ## Playing from a list
 
-The player remembers which list started the queue for the current session.
+Playing an item from any list starts that list at the tapped item: Up next is
+rebuilt from the items following it in that list, in the order the list
+shows. This holds for playlists, library collections, provider albums,
+podcast shows, radio lists and search results alike.
 
 | Action | Result |
 | --- | --- |
+| Play an item from a list | Replace Up next with the items following it in that list. |
 | Browse another screen or list | Playback and Up next stay unchanged. |
-| Play an item from the same list | Play it now; keep every pending entry in its existing order. |
-| Play an item from a different list | Replace Up next with the items following the selected item in that list. No confirmation. |
 | Tap an entry inside Up next | Jump to that occurrence; entries after it remain upcoming. |
+| Drag, remove, Play next, Add to queue | Edit the pending entries in place. |
 | Next, or a finite item finishes | Play the first upcoming entry. At the end, stop. |
 
-Selecting from the same list is independent of selecting inside Up next.
-For example:
-
-1. A is playing from a playlist. You arrange Up next as **D → B → C → E**.
-2. You tap C in that original playlist.
-3. C plays now. Up next is still **D → B → C → E**.
-4. Next plays D. C will play again when its queued turn arrives.
-
-This also preserves removals, manual additions, and an intentionally empty
-queue. Tapping the already playing item does not add another pending copy.
-
-## What counts as the same list?
-
-Identity belongs to the list, not its current songs or its screen instance:
-
-- A user playlist uses its stable playlist ID.
-- A provider album uses the account ID and album ID; each account's all-songs
-  list has its own identity.
-- A library collection uses its kind and membership filter (for example, a
-  local folder or a favourites category).
-- A podcast show uses its feed URL.
-- Radio uses the section and, for directory results, the directory query.
-- Search uses its query and category filter.
-
-Reopening a list, renaming a playlist, changing its sort, or refreshing its
-contents does not overwrite an active queue. Selecting a different folder,
-album, playlist, show, or search result set starts a different list. Merely
-browsing any of them never does.
+Edits to Up next survive browsing. A play from a list always rebuilds Up next
+from the items following the tapped item in that list, discarding the previous
+arrangement. Removals, manual additions and an intentionally empty queue
+persist until the next list tap.
 
 ## Podcasts and radio
 
-Playing an episode from a show while music is playing switches the source to
-that show. The following episodes are queued in the order displayed by the
-show screen. Playing another episode from that same show preserves Up next.
-Switching back to a music playlist starts a fresh music queue; the previous
-music arrangement is not saved as a second queue.
+Playing an episode from a show queues the following episodes in the order
+displayed by the show screen. Playing another episode from that show restarts
+the queue from that episode, the same as any other list. Switching between
+music, podcasts and radio always starts the tapped list afresh.
 
-Radio follows the same source rules. A live station plays until you stop it or
-press Next; it has no natural end. Finite songs and episodes in a mixed queue
-still advance to the next entry, including a live station.
+Radio follows the same rules. A live station plays until you stop it or press
+Next; it has no natural end. Finite songs and episodes in a mixed queue still
+advance to the next entry, including a live station.
 
 ## Editing and clearing
 
@@ -66,22 +44,20 @@ still advance to the next entry, including a live station.
   changing the originating list or replacing its order.
 - **Clear** in Up next removes all pending entries, including the continuation
   of a long list. The current item keeps playing. No confirmation.
-- Playing from another list replaces the queue immediately. Returning later
-  to the old list and playing starts it afresh.
+- Playing from a list replaces the queue immediately. Returning later to the
+  old list and playing starts it afresh.
 
 Shuffle is an explicit change of order. With shuffle already enabled, playing
-from a different list creates a shuffled queue; playing from the same list
-still preserves the existing order. Previous remains playback-history
-navigation; Next always follows the current Up next order.
+from a list creates a shuffled queue headed by the tapped item. Previous
+remains playback-history navigation; Next always follows the current Up next
+order.
 
 ## Implementation contract
 
-`PlayerConnection` owns the source identity and playback sequence. Screens
-provide an explicit `PlaybackContext` only on a play action. Queue taps target
-an occurrence index, since the same song can appear more than once.
-
-Media3 and transport navigation must use that sequence. Long-list edits must
-retain entries beyond the loaded playback window, and advancing the window
-must preserve the current item's playback position. Queue/source identity is
-session state; this change does not add full queue restoration after process
-death.
+`PlayerConnection` owns the playback sequence. Screens provide the list on a
+play action. Queue taps target an occurrence index, since the same song can
+appear more than once. Media3 and transport navigation must use that sequence.
+Long-list edits must retain entries beyond the loaded playback window, and
+advancing the window must preserve the current item's playback position. The
+queue is session state; this change does not add full queue restoration after
+process death.

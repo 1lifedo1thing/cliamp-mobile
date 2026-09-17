@@ -69,7 +69,6 @@ import stream.cliamp.mobile.data.PodcastShow
 import stream.cliamp.mobile.data.Repository
 import stream.cliamp.mobile.data.ShowState
 import stream.cliamp.mobile.data.Station
-import stream.cliamp.mobile.playback.PlaybackContext
 import stream.cliamp.mobile.data.DirectoryState
 import stream.cliamp.mobile.data.EpisodeProgress
 import stream.cliamp.mobile.data.StationSource
@@ -354,7 +353,7 @@ fun LibrarySmartPlaylistPane(
     kindName: String,
     current: Station?,
     playing: Boolean,
-    onPlay: (Station, List<Station>, PlaybackContext) -> Unit,
+    onPlay: (Station, List<Station>) -> Unit,
     favScope: FavScope = FavScope.All,
     onFavScopeChange: (FavScope) -> Unit = {},
     onOpenSongInfo: (Station) -> Unit = {},
@@ -490,12 +489,7 @@ fun LibrarySmartPlaylistPane(
                         members = members,
                         current = current,
                         playing = playing,
-                        onPlay = { station, list ->
-                            onPlay(station, list, PlaybackContext.Library(
-                                kindName, folder,
-                                if (pl.kind == SmartKind.Favorites) favScope.name else null,
-                            ))
-                        },
+                        onPlay = onPlay,
                         onToggleFavorite = { vm.onEvent(SmartPlaylistViewModel.Event.ToggleFavorite(it)) },
                         favorites = favorites.map { it.url }.toSet(),
                         loading = loading,
@@ -536,7 +530,7 @@ fun ProviderSongsPane(
     vm: ProviderSongsViewModel,
     current: Station?,
     playing: Boolean,
-    onPlay: (Station, List<Station>, PlaybackContext) -> Unit,
+    onPlay: (Station, List<Station>) -> Unit,
     onBack: () -> Unit,
     onAddProvider: () -> Unit,
     onOpenSearch: () -> Unit = {},
@@ -610,7 +604,7 @@ fun ProviderSongsPane(
                     items(visible, key = { it.id }, contentType = { "provider-song" }) { s ->
                         ListRow(
                             rail = current?.url == s.url,
-                            onClick = { selected?.let { onPlay(s, visible, PlaybackContext.ProviderSongs(it)) } },
+                            onClick = { onPlay(s, visible) },
                             verticalPadding = 9.dp,
                             leading = {
                                 SongCover(s = s, current = current, playing = playing)
@@ -706,7 +700,7 @@ fun LibraryPlaylistPane(
     slug: String,
     current: Station?,
     playing: Boolean,
-    onPlay: (Station, List<Station>, PlaybackContext) -> Unit,
+    onPlay: (Station, List<Station>) -> Unit,
     onBack: () -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
@@ -764,7 +758,7 @@ fun LibraryPlaylistPane(
                         onOpenShow = { vm.onEvent(PlaylistDetailViewModel.Event.OpenShow(it)) },
                         current = current,
                         playing = playing,
-                        onPlay = { station, list -> onPlay(station, list, PlaybackContext.Playlist(slug)) },
+                        onPlay = onPlay,
                         onToggle = { vm.onEvent(PlaylistDetailViewModel.Event.ToggleMember(it)) },
                         onRemoveMember = { vm.onEvent(PlaylistDetailViewModel.Event.RemoveMember(it)) },
                         adding = adding,

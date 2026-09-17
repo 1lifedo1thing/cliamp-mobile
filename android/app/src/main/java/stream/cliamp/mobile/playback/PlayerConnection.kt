@@ -54,7 +54,6 @@ class PlayerConnection(
      * [_source] and [_queue] are the same list.
      */
     private var _source: List<Station> = emptyList()
-    private var playbackContext: PlaybackContext? = null
 
     /** The linear list a play originated from, before any shuffle reordering.
      * Shuffle reorders a copy of it into [_source]; turning shuffle off restores
@@ -470,23 +469,6 @@ class PlayerConnection(
         return if (_ringFallback) _source.wrapNext(index, count) else _source.drop(index + 1).take(count)
     }
 
-    /** A list tap either preserves the arranged tail or starts a different source. */
-    fun playFromList(station: Station, from: List<Station>, context: PlaybackContext) {
-        if (playbackContext != context || _source.isEmpty()) {
-            play(station, from)
-            playbackContext = context
-            return
-        }
-        // A new current occurrence leaves even an identical pending occurrence intact.
-        val current = (windowBase + _queueIndex.value).coerceIn(0, _source.lastIndex)
-        val sameCurrent = _source[current].url == station.url
-        val index = if (sameCurrent) current else current + 1
-        val order = if (sameCurrent) _source else
-            _source.take(index) + station + _source.drop(index)
-        _baseSource = order
-        startPlayback(station, order, preserveOrder = true, sourceIndex = index)
-    }
-
     /** A queue tap targets this occurrence, including when a URL occurs twice. */
     fun playQueueEntry(index: Int) {
         if (index !in _queue.value.indices) return
@@ -495,9 +477,13 @@ class PlayerConnection(
         applyNavigation()
     }
 
-    fun play(station: Station, from: List<Station> = emptyList(), preserveOrder: Boolean = false) {
-        if (!preserveOrder) playbackContext = null
-        startPlayback(station, from, preserveOrder)
+    /**
+     * A list tap always starts that list at the tapped item: Up next is
+     * rebuilt from the items that follow it in the list, in the list's order.
+     * Manual Up next edits survive until the next list tap, never past it.
+     */
+    fun play(station: Station, from: List<Station> = emptyList()) {
+        startPlayback(station, from, preserveOrder = false)
     }
 
     private fun startPlayback(

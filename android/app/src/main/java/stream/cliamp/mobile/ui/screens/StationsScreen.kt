@@ -50,7 +50,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import stream.cliamp.mobile.data.DirectoryQuery
 import stream.cliamp.mobile.data.Station
-import stream.cliamp.mobile.playback.PlaybackContext
 import stream.cliamp.mobile.data.StationArtSource
 import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.ui.compact
@@ -88,7 +87,7 @@ fun StationsScreen(
     current: Station?,
     playing: Boolean,
     favorites: List<Station>,
-    onPlay: (Station, List<Station>, PlaybackContext) -> Unit,
+    onPlay: (Station, List<Station>) -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     focusDirectory: Boolean = false,
@@ -222,7 +221,7 @@ fun StationsScreen(
                                 active = current?.url == s.url,
                                 playing = playing && current?.url == s.url,
                                 favorite = favorites.any { it.url == s.url },
-                                onPlay = { onPlay(s, cliamp, PlaybackContext.CliampRadio) },
+                                onPlay = { onPlay(s, cliamp) },
                                 onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                             )
                         } else {
@@ -231,7 +230,7 @@ fun StationsScreen(
                                 active = current?.url == s.url,
                                 playing = playing && current?.url == s.url,
                                 favorite = favorites.any { it.url == s.url },
-                                onPlay = { onPlay(s, cliamp, PlaybackContext.CliampRadio) },
+                                onPlay = { onPlay(s, cliamp) },
                                 onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                             )
                         }
@@ -284,7 +283,7 @@ fun StationsScreen(
                                 active = current?.url == s.url,
                                 playing = playing && current?.url == s.url,
                                 favorite = favorites.any { it.url == s.url },
-                                onPlay = { onPlay(s, custom, PlaybackContext.CustomRadio) },
+                                onPlay = { onPlay(s, custom) },
                                 onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                                 onRemove = { vm.onEvent(StationsViewModel.Event.RemoveCustom(s)) },
                             )
@@ -294,7 +293,7 @@ fun StationsScreen(
                                 active = current?.url == s.url,
                                 playing = playing && current?.url == s.url,
                                 favorite = favorites.any { it.url == s.url },
-                                onPlay = { onPlay(s, custom, PlaybackContext.CustomRadio) },
+                                onPlay = { onPlay(s, custom) },
                                 onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                                 onRemove = { vm.onEvent(StationsViewModel.Event.RemoveCustom(s)) },
                             )
@@ -360,7 +359,7 @@ fun StationsScreen(
                                 active = current?.url == s.url,
                                 playing = playing && current?.url == s.url,
                                 favorite = favorites.any { it.url == s.url },
-                                onPlay = { onPlay(s, directory.stations, PlaybackContext.RadioDirectory(directory.query)) },
+                                onPlay = { onPlay(s, directory.stations) },
                                 onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                             )
                         } else {
@@ -369,7 +368,7 @@ fun StationsScreen(
                                 active = current?.url == s.url,
                                 playing = playing && current?.url == s.url,
                                 favorite = favorites.any { it.url == s.url },
-                                onPlay = { onPlay(s, directory.stations, PlaybackContext.RadioDirectory(directory.query)) },
+                                onPlay = { onPlay(s, directory.stations) },
                                 onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                             )
                         }
