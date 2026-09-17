@@ -34,6 +34,7 @@ android {
         applicationId = "stream.cliamp.mobile"
         minSdk = 26
         targetSdk = 36
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // A tagged release overrides both; a local build keeps the defaults.
         versionCode = (System.getenv("CLIAMP_VERSION_CODE")?.toIntOrNull()) ?: 1
         versionName = System.getenv("CLIAMP_VERSION")?.removePrefix("v") ?: "0.0.1"
@@ -111,6 +112,13 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     debugImplementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    testImplementation(libs.junit)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.androidx.test.espresso)
 
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.exoplayer.hls)

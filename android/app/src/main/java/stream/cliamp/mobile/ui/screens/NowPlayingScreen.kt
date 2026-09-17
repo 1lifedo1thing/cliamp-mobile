@@ -7,6 +7,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -47,6 +47,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.util.UnstableApi
@@ -110,6 +113,7 @@ private data class PlayerModel(
     val state: PlayerState,
     val shownStation: Station?,
     val streamTitle: String,
+    val upNextCount: Int,
     val reconnect: Int,
     val error: String?,
     val isFav: Boolean,
@@ -121,6 +125,7 @@ private data class PlayerModel(
 /** Every control the player screen can take, so both layouts share one set. */
 private data class PlayerActions(
     val onBack: () -> Unit,
+    val onOpenQueue: () -> Unit,
     val onToggleShuffle: () -> Unit,
     val onCycleSpeed: () -> Unit,
     val onOpenScope: () -> Unit,
@@ -136,6 +141,7 @@ private data class PlayerActions(
 fun NowPlayingScreen(
     vm: NowPlayingViewModel,
     onOpenScope: () -> Unit,
+    onOpenQueue: () -> Unit,
     onBack: () -> Unit,
 ) {
     val p = LocalPalette.current
@@ -149,6 +155,7 @@ fun NowPlayingScreen(
         state = uiState.playerState,
         shownStation = uiState.shownStation,
         streamTitle = uiState.streamTitle,
+        upNextCount = uiState.upNextCount,
         reconnect = uiState.reconnect,
         error = uiState.error,
         isFav = uiState.isFav,
@@ -158,6 +165,7 @@ fun NowPlayingScreen(
     )
     val actions = PlayerActions(
         onBack = onBack,
+        onOpenQueue = onOpenQueue,
         onToggleShuffle = { vm.player.toggleShuffle() },
         onCycleSpeed = { vm.onEvent(NowPlayingViewModel.Event.CycleSpeed) },
         onOpenScope = onOpenScope,
@@ -201,68 +209,72 @@ private fun PortraitPlayer(
     val p = LocalPalette.current
     Column(modifier.fillMaxSize().background(p.ground).statusBarsPadding().navigationBarsPadding()) {
         Row(
-            Modifier.fillMaxWidth().padding(start = Gutter, top = 0.dp, end = 16.dp, bottom = 8.dp),
+            Modifier.fillMaxWidth().padding(horizontal = Gutter).height(48.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             BackChevron(actions.onBack)
+            Spacer(Modifier.weight(1f))
+            UpNextButton(model.upNextCount, actions.onOpenQueue)
         }
+        Spacer(Modifier.height(8.dp))
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
         // it is the first thing to give way. Compose has no shrink factor, so
-        // we measure the column and hand the plate whatever is left over -
-        // otherwise the FAV row silently walks off the bottom of the frame.
-        BoxWithConstraints(
+        // the plate is given whatever height is left once the text block below
+        // it has been measured - it shrinks on short frames or large font
+        // scales instead of pushing the source line under the meter.
+        Column(
             Modifier
                 .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .padding(horizontal = Gutter),
+            verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterVertically),
         ) {
-            val reserved = 356.dp
-            val artSide = minOf(maxWidth - Gutter * 2, (maxHeight - reserved)).coerceIn(96.dp, 340.dp)
-
+            // The art plate and the text block below it share a flexed block
+            // that absorbs however tall a long station name or stream title
+            // grows, so the meter and the transport beneath stay pinned and
+            // never shrink or shift when the names change length. Pinned to
+            // the top (not centred) so the cover sits higher and the source
+            // line under the artist can never be pushed off the bottom.
             Column(
                 Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = Gutter),
-                verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterVertically),
+                    .weight(1f)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.Top),
             ) {
-                // The art plate and the text block below it share a flexed block
-                // that absorbs however tall a long station name or stream title
-                // grows, so the meter and the transport beneath stay pinned and
-                // never shrink or shift when the names change length. Pinned to
-                // the top (not centred) so the cover sits higher and the source
-                // line under the artist can never be pushed off the bottom.
-                Column(
+                // Weights are measured after the text, so maxHeight is the
+                // real leftover; fill = false keeps the plate hugging the
+                // top and leaves the slack under the text, as before.
+                BoxWithConstraints(
                     Modifier
-                        .weight(1f)
+                        .weight(1f, fill = false)
                         .fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.Top),
+                    contentAlignment = Alignment.Center,
                 ) {
+                    val side = minOf(maxWidth, maxHeight, 340.dp)
                     StationArt(
                         station = model.shownStation,
-                        modifier = Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .offset(y = (-6).dp)
-                            .size(artSide),
+                        modifier = Modifier.size(side),
                     )
-
-                    // The station name, stream title and meta line below the
-                    // plate are gesture-inert: taps and swipes on them (or
-                    // anywhere around the centre of the expanded player) can
-                    // never advance or restart the song. Only the small action
-                    // icons in the strip above stay live.
-                    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        PlayerStatusRow(
-                            model = model,
-                            actions = actions,
-                        )
-                        PlayerMeta(model)
-                    }
                 }
 
-                PlayerTransport(model, actions)
-
-                TransportKeys(model, actions)
+                // The station name, stream title and meta line below the
+                // plate are gesture-inert: taps and swipes on them (or
+                // anywhere around the centre of the expanded player) can
+                // never advance or restart the song. Only the small action
+                // icons in the strip above stay live.
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    PlayerStatusRow(
+                        model = model,
+                        actions = actions,
+                    )
+                    PlayerMeta(model)
+                }
             }
+
+            PlayerTransport(model, actions)
+
+            TransportKeys(model, actions)
         }
         Spacer(Modifier.height(10.dp))
     }
@@ -291,41 +303,63 @@ private fun LandscapePlayer(
             .padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val side = minOf(frameHeight - 24.dp, (frameWidth - Gutter * 2) * 0.44f).coerceIn(96.dp, 340.dp)
-        Box(
-            Modifier
-                .weight(0.95f)
-                .fillMaxHeight(),
-            contentAlignment = Alignment.Center,
+        val side = minOf(frameHeight - 76.dp, (frameWidth - Gutter * 2) * 0.44f).coerceIn(96.dp, 340.dp)
+        Column(
+            Modifier.weight(0.95f).fillMaxHeight(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
         ) {
-            StationArt(
-                station = model.shownStation,
-                modifier = Modifier.size(side),
-            )
+            StationArt(station = model.shownStation, modifier = Modifier.size(side))
+            PlayerStatusRow(model, actions)
         }
         Spacer(Modifier.width(14.dp))
         Column(
             Modifier
                 .weight(1.05f)
                 .fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Row(
-                Modifier.fillMaxWidth().padding(end = 16.dp),
+                Modifier.fillMaxWidth().height(48.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 BackChevron(actions.onBack)
-                Spacer(Modifier.width(10.dp))
-                PlayerStatusRow(
-                    model = model,
-                    actions = actions,
-                    modifier = Modifier.weight(1f),
-                )
+                Spacer(Modifier.weight(1f))
+                UpNextButton(model.upNextCount, actions.onOpenQueue)
             }
             PlayerMeta(model)
             Spacer(Modifier.weight(1f))
             PlayerTransport(model, actions)
             TransportKeys(model, actions)
+        }
+    }
+}
+
+/** Compact outlined header control, with a full-height touch target. */
+@Composable
+private fun UpNextButton(
+    count: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    Box(
+        modifier
+            .height(48.dp)
+            .semantics { role = Role.Button }
+            .microPress(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            Modifier
+                .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small))
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(CliampIcons.QueueTabLines, null, Modifier.size(14.dp), tint = p.accent)
+            Mono("UP NEXT", CliampType.chip, p.ink, maxLines = 1)
+            Mono(count.toString(), CliampType.chip, p.inkFaint, maxLines = 1)
         }
     }
 }

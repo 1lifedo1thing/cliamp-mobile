@@ -139,6 +139,7 @@ object CliampIcons {
      * line-list and STATIONS' broadcast-signal.
      */
     val LibTab = stroked(18f, 18f, 1.7f, rect(1f, 1f, 5f, 16f), rect(8f, 1f, 5f, 16f), "M15 2l2 15")
+    val DragHandle = stroked(16f, 16f, 1.5f, "M1 3h14M1 8h14M1 13h14")
     val QueueTabLines = stroked(18f, 18f, 1.7f, "M1 4h16M1 9h11M1 14h11")
     val Search = stroked(16f, 16f, 1.5f, circle(7.1f, 7.1f, 3.9f), "M9.9 9.9L14 14.2")
 

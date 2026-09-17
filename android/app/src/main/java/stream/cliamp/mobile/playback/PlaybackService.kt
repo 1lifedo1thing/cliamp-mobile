@@ -371,12 +371,12 @@ class PlaybackService : MediaSessionService() {
     private var lastWidgetSourceKey: String? = null
 
     /**
-     * The four stations that come after the current one in the list being
-     * played, wrapping around the end. This is what the widget shows under the
-     * meter as "up next", for local songs, radio directories and podcasts all
-     * alike.
+     * Preview the active queue's next occurrences. A cold widget launch can
+     * still fall back to its persisted radio-style source.
      */
     private fun widgetUpNext(source: List<Station>, station: Station?): List<Station> {
+        val connection = (application as CliampApp).player
+        if (connection.currentQueue.isNotEmpty()) return connection.upcomingStations()
         if (source.isEmpty() || station == null) return emptyList()
         val i = source.indexOfFirst { it.url == station.url }
         if (i < 0) return emptyList()
@@ -417,7 +417,8 @@ class PlaybackService : MediaSessionService() {
         // early return never fired, and every tap emitted 2-3 writes +
         // updateAlls - concurrent RemoteViews the launcher can apply out of
         // order, leaving the glyph stuck on a stale frame.
-        val sourceKey = (source.map { it.url } + (station?.url.orEmpty())).joinToString("|")
+        val sourceKey = (source.map { it.url } + (station?.url.orEmpty()) +
+            (application as CliampApp).player.queueIndex.value.toString()).joinToString("|")
         val upNext = widgetUpNext(source, station)
         if (next == lastWidgetState && sourceKey == lastWidgetSourceKey) return
         lastWidgetState = next
@@ -440,13 +441,9 @@ class PlaybackService : MediaSessionService() {
                 )
             )
             Log.d("cliamp/wid", "nextUp source.size=${source.size} count=${upNext.size} names=${upNext.map { it.name }}")
-            // Only ever write a real, non-empty next-up. When the in-memory
-            // source is empty (playback started/tuned through the widget's
-            // MediaController, which never populates PlayerConnection's source)
-            // an empty write here would clobber the correct list that
-            // persistWidgetWindow / WidgetControl.tune already saved, sinking the
-            // widget back to the built-in radio channels.
-            if (sourceChanged && upNext.isNotEmpty()) {
+            // An active source may intentionally have no upcoming items.
+            // Preserve the persisted fallback only when no session source exists.
+            if (sourceChanged && source.isNotEmpty()) {
                 prefs0.setWidgetNext(upNext)
             }
             // One transaction for the whole widget row, so cold-boot readers

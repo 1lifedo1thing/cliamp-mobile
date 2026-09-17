@@ -1,7 +1,10 @@
 package stream.cliamp.mobile.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,36 +13,58 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import stream.cliamp.mobile.data.Station
 import stream.cliamp.mobile.data.StationSource
 import stream.cliamp.mobile.data.durationLabel
 import stream.cliamp.mobile.playback.PlayerConnection
+import stream.cliamp.mobile.ui.components.rememberStationThumbnail
+import stream.cliamp.mobile.ui.components.BrickMeter
 import stream.cliamp.mobile.ui.components.CliampIcons
+import stream.cliamp.mobile.ui.components.HairlineDivider
+import stream.cliamp.mobile.ui.components.rememberMeter
 import stream.cliamp.mobile.ui.components.BackChevron
 import stream.cliamp.mobile.ui.components.Gutter
 import stream.cliamp.mobile.ui.components.ListRow
 import stream.cliamp.mobile.ui.components.ScreenHeader
-import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.components.SectionLabel
+import stream.cliamp.mobile.ui.components.microPress
 import stream.cliamp.mobile.ui.theme.CliampPalette
 import stream.cliamp.mobile.ui.theme.CliampShape
 import stream.cliamp.mobile.ui.theme.CliampType
+import stream.cliamp.mobile.ui.theme.LocalHapticsEnabled
 import stream.cliamp.mobile.ui.theme.LocalPalette
 import stream.cliamp.mobile.ui.theme.Mono
 
@@ -54,15 +79,62 @@ fun QueueScreen(
     player: PlayerConnection,
     current: Station?,
     playing: Boolean,
-    onPlay: (Station, List<Station>) -> Unit,
+    onPlay: (Int) -> Unit,
     onBack: () -> Unit,
 ) {
-    val p = LocalPalette.current
-    val queue by player.queue.collectAsState(initial = emptyList())
+    val queue by player.queue.collectAsStateWithLifecycle()
+    val queueIndex by player.queueIndex.collectAsStateWithLifecycle()
+    QueueContent(
+        queue = queue,
+        activeIndex = queueIndex.takeIf { queue.getOrNull(it)?.url == current?.url } ?: -1,
+        current = current,
+        playing = playing,
+        onPlay = { if (player.queue.value == queue) onPlay(it) },
+        onClear = player::clearQueue,
+        onMove = { from, to ->
+            if (player.queue.value == queue) player.reorderQueue(from, to)
+        },
+        onRemove = { index ->
+            if (player.queue.value == queue) player.removeFromQueue(index)
+        },
+        onBack = onBack,
+    )
+}
 
-    // Find where the currently-playing item sits so it can be pinned on top and
-    // excluded from the up-next run without disturbing the underlying order.
-    val activeIndex = queue.indexOfFirst { it.url == current?.url }
+@Composable
+internal fun QueueContent(
+    queue: List<Station>,
+    activeIndex: Int,
+    current: Station?,
+    playing: Boolean,
+    onPlay: (Int) -> Unit,
+    onMove: (Int, Int) -> Unit,
+    onRemove: (Int) -> Unit,
+    onBack: () -> Unit,
+    onClear: () -> Unit = {},
+) {
+    val p = LocalPalette.current
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val drag = remember(queue, activeIndex, listState) {
+        QueueDragState(queueEntries(queue, activeIndex), listState, scope)
+    }
+    val latestOnMove by rememberUpdatedState(onMove)
+    val haptics = LocalHapticFeedback.current
+    val hapticsEnabled by rememberUpdatedState(LocalHapticsEnabled.current)
+    val edge = with(LocalDensity.current) { 56.dp.toPx() }
+    LaunchedEffect(drag, drag.draggingKey, edge) {
+        if (drag.draggingKey == null) return@LaunchedEffect
+        var lastFrame = withFrameNanos { it }
+        while (drag.draggingKey != null) {
+            val now = withFrameNanos { it }
+            val seconds = ((now - lastFrame) / 1_000_000_000f).coerceAtMost(0.05f)
+            lastFrame = now
+            val speed = drag.scrollSpeed(edge)
+            if (speed != 0f) listState.scrollBy(speed * seconds)
+            drag.drag(0f)
+        }
+    }
 
     Column(Modifier.fillMaxSize().background(p.ground).navigationBarsPadding()) {
         ScreenHeader {
@@ -71,12 +143,24 @@ fun QueueScreen(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                BackChevron(onBack)
-                Mono("Queue", CliampType.screenTitle, p.ink, maxLines = 1)
+                BackChevron(onBack, Modifier.offset(y = 2.dp))
+                Mono("Up next", CliampType.screenTitle, p.ink, maxLines = 1)
+                Spacer(Modifier.weight(1f))
+                if (queueEntries(queue, activeIndex).isNotEmpty()) {
+                    Mono("CLEAR", CliampType.sectionLabel, p.inkTertiary,
+                        Modifier.microPress(onClick = onClear).padding(12.dp))
+                }
             }
         }
 
-        LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
+        if (current != null && activeIndex >= 0) {
+            NowPlayingCard(current, playing, p)
+        }
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+        ) {
             if (queue.isEmpty()) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 28.dp)) {
@@ -88,26 +172,55 @@ fun QueueScreen(
                 }
             }
 
-            if (current != null && activeIndex >= 0) {
-                item { SectionLabel("now playing") }
-                item { NowPlayingCard(current, playing, p) }
-                item { Spacer(Modifier.height(22.dp)) }
-            }
-
-            val upNext = queue.filterIndexed { i, s -> activeIndex < 0 || i != activeIndex }
-            if (upNext.isNotEmpty()) {
-                item { SectionLabel("up next — ${upNext.size}") }
-                itemsIndexed(upNext.take(200), key = { _, s -> s.url }) { _, s ->
-                    val idx = queue.indexOfFirst { it.url == s.url }
+            if (drag.entries.isNotEmpty()) {
+                item(key = "up-next-header") {
+                    SectionLabel("up next — ${drag.entries.size}", trailing = {
+                        Mono("hold to reorder", CliampType.meta, p.inkFaint)
+                    })
+                }
+                itemsIndexed(drag.entries, key = { _, entry -> entry.key }) { index, entry ->
+                    val dragging = drag.draggingKey == entry.key
+                    val settling = drag.settlingKey == entry.key
+                    val motion = when {
+                        dragging -> Modifier.zIndex(1f).graphicsLayer { translationY = drag.dragOffset }
+                        settling -> Modifier.zIndex(1f).graphicsLayer { translationY = drag.settlingOffset.value }
+                        else -> Modifier.animateItem()
+                    }
                     QueueRow(
-                        s = s,
-                        isNow = current?.url == s.url,
-                        idx = idx,
-                        queueSize = queue.size,
-                        onPlay = { onPlay(s, queue) },
-                        onMoveUp = { player.reorderQueue(from = idx, to = idx - 1) },
-                        onMoveDown = { player.reorderQueue(from = idx, to = idx + 1) },
-                        onRemove = { player.removeFromQueue(idx) },
+                        s = entry.station,
+                        dragging = dragging,
+                        onPlay = { onPlay(entry.queueIndex) },
+                        onRemove = { onRemove(entry.queueIndex) },
+                        dragModifier = Modifier.pointerInput(drag, entry.key) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { position ->
+                                    if (drag.start(entry.key, position.y) && hapticsEnabled) {
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    }
+                                },
+                                onDrag = { change, amount ->
+                                    change.consume()
+                                    drag.drag(amount.y)
+                                },
+                                onDragEnd = { drag.finish(latestOnMove) },
+                                onDragCancel = drag::cancel,
+                            )
+                        },
+                        modifier = motion,
+                        accessibilityActions = buildList {
+                            if (index > 0) add(CustomAccessibilityAction("Move up") {
+                                onMove(entry.queueIndex, drag.entries[index - 1].queueIndex)
+                                true
+                            })
+                            if (index < drag.entries.lastIndex) add(CustomAccessibilityAction("Move down") {
+                                onMove(entry.queueIndex, drag.entries[index + 1].queueIndex)
+                                true
+                            })
+                            add(CustomAccessibilityAction("Remove from queue") {
+                                onRemove(entry.queueIndex)
+                                true
+                            })
+                        },
                     )
                 }
                 item { Spacer(Modifier.height(20.dp)) }
@@ -118,138 +231,125 @@ fun QueueScreen(
 
 @Composable
 private fun NowPlayingCard(s: Station, playing: Boolean, p: CliampPalette) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Gutter)
-            .clip(RoundedCornerShape(CliampShape.medium))
-            .background(p.panelRaised)
-            .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.medium))
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(
-                Modifier.size(7.dp).clip(RoundedCornerShape(CliampShape.tiny)).background(if (playing) p.accent else p.inkFaint),
-            )
-            Mono(if (playing) "playing" else "paused", CliampType.chip, if (playing) p.accent else p.inkTertiary)
-            Spacer(Modifier.weight(1f))
-            SourceBadge(s, p)
+    Column(Modifier.fillMaxWidth().background(p.panel)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            QueueArtwork(s, Modifier.size(50.dp), active = true)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    BrickMeter(
+                        frame = rememberMeter(columns = 16, live = playing),
+                        modifier = Modifier.size(width = 62.dp, height = 18.dp),
+                        brick = 2.dp,
+                        gap = 2.dp,
+                        columnGap = 2.dp,
+                    )
+                    Mono(if (playing) "PLAYING" else "PAUSED", CliampType.tabLabel,
+                        if (playing) p.accent else p.inkTertiary)
+                }
+                Mono(s.name.ifBlank { "unknown" }, CliampType.trackTitleSmall, p.ink, maxLines = 1)
+                Mono(
+                    if (s.isTrack) "${sourceSubtitle(s)} · ${queueDuration(s)}" else sourceSubtitle(s),
+                    CliampType.meta, p.inkTertiary, maxLines = 1,
+                )
+            }
         }
-        Spacer(Modifier.height(9.dp))
-        Mono(if (s.name.isBlank()) "unknown" else s.name, CliampType.trackTitleCompact, p.ink, maxLines = 1)
-        Mono(sourceSubtitle(s), CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
+        HairlineDivider(region = true)
+    }
+}
+
+@Composable
+private fun QueueArtwork(station: Station, modifier: Modifier = Modifier, active: Boolean = false) {
+    val p = LocalPalette.current
+    val art = rememberStationThumbnail(station)
+    Box(
+        modifier
+            .clip(RoundedCornerShape(CliampShape.small))
+            .background(p.panelRaised)
+            .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.small)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (art != null) {
+            Image(art, "Cover art for ${station.name}", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        } else {
+            val icon = when {
+                station.source == StationSource.Podcast -> CliampIcons.PodRow
+                !station.isTrack -> CliampIcons.StationsTab
+                else -> CliampIcons.MusicNote
+            }
+            Icon(icon, null, Modifier.size(16.dp), tint = if (active) p.accent else p.inkFaint)
+        }
     }
 }
 
 @Composable
 private fun QueueRow(
     s: Station,
-    isNow: Boolean,
-    idx: Int,
-    queueSize: Int,
+    dragging: Boolean,
     onPlay: () -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
     onRemove: () -> Unit,
+    accessibilityActions: List<CustomAccessibilityAction>,
+    modifier: Modifier = Modifier,
+    dragModifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
-    val title = if (s.name.isBlank()) "unknown" else s.name
-    val subtitle = sourceSubtitle(s)
-    ListRow(
-        rail = isNow,
-        onClick = onPlay,
-        verticalPadding = 11.dp,
-        leading = {
-            Box(
-                Modifier.size(28.dp).clip(RoundedCornerShape(CliampShape.tiny))
-                    .then(
-                        if (isNow) Modifier.background(p.accent)
-                        else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny))
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (isNow) {
-                    Icon(CliampIcons.Pause, null, Modifier.size(9.dp), tint = p.onAccent)
-                } else {
-                    Icon(CliampIcons.PlayRow, null, Modifier.size(11.dp), tint = p.inkTertiary)
+    QueueSwipeToRemove(onRemove = onRemove, modifier = modifier) {
+        ListRow(
+            modifier = Modifier
+                .background(if (dragging) p.panelRaised else p.ground)
+                .then(dragModifier)
+                .semantics { customActions = accessibilityActions }
+                .microPress(onClick = onPlay),
+            rail = dragging,
+            verticalPadding = 8.dp,
+            leading = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(CliampIcons.DragHandle, null, Modifier.size(16.dp),
+                        tint = if (dragging) p.accent else p.inkFaint)
+                    QueueArtwork(s, Modifier.size(42.dp))
                 }
-            }
-        },
-        trailing = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                SourceBadge(s, p)
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    SquareGlyph("^") { if (idx > 0) onMoveUp() }
-                    SquareGlyph("v") { if (idx < queueSize - 1) onMoveDown() }
-                    SquareGlyph("×") { onRemove() }
+            },
+            trailing = {
+                if (!s.isTrack) {
+                    Spacer(Modifier.width(6.dp))
+                    LiveBadge(p)
                 }
-            }
-        },
-    ) {
-        Mono(
-            title,
-            if (isNow) CliampType.rowPrimaryMedium else CliampType.rowPrimary,
-            if (isNow) p.accent else p.ink,
-            maxLines = 1,
-        )
-        Mono(subtitle, CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
-    }
-}
-
-/** A tight source/type label: LOCAL, LIVE, RADIO, etc. */
-@Composable
-private fun SourceBadge(s: Station, p: CliampPalette) {
-    val label = when {
-        !s.isTrack -> {
-            when (s.source) {
-                StationSource.Cliamp -> "cliamp"
-                StationSource.Directory -> "radio"
-                else -> "live"
-            }
+                Spacer(Modifier.width(12.dp))
+                Mono(queueDuration(s), CliampType.timeSmall, p.inkFaint, maxLines = 1)
+            },
+        ) {
+            Mono(s.name.ifBlank { "unknown" }, CliampType.rowPrimary, p.ink, maxLines = 1)
+            Mono(sourceSubtitle(s), CliampType.rowSecondary, p.inkTertiary, maxLines = 1)
         }
-        s.source == StationSource.Local -> "local"
-        s.source == StationSource.Podcast -> "pod"
-        else -> "track"
-    }
-    Box(
-        Modifier
-            .clip(RoundedCornerShape(CliampShape.tiny))
-            .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny))
-            .padding(horizontal = 5.dp, vertical = 1.dp),
-    ) {
-        Mono(label.uppercase(), CliampType.tabLabel, p.inkTertiary)
     }
 }
 
-private fun sourceSubtitle(s: Station): String {
-    val parts = mutableListOf<String>()
-    // An episode's show belongs on this line as much as a song's artist
-    if ((s.source == StationSource.Local || s.source == StationSource.Podcast) &&
-        s.artist.isNotBlank()
-    ) parts.add(s.artist)
-    else if (s.meta.isNotBlank()) parts.add(s.meta)
-    if (s.isTrack && s.durationMs > 0) parts.add(durationLabel(s.durationMs))
-    if (parts.isEmpty()) parts.add(if (s.isTrack) "–:––" else "live stream")
-    return parts.joinToString(" · ")
-}
-
+/** Only live sources need a type badge; finite tracks use their duration. */
 @Composable
-private fun SquareGlyph(
-    label: String,
-    onClick: () -> Unit,
-) {
-    val p = LocalPalette.current
+private fun LiveBadge(p: CliampPalette) {
     Box(
         Modifier
-            .size(28.dp)
-            .clip(RoundedCornerShape(CliampShape.tiny))
-            .border(1.dp, p.keyBorder, RoundedCornerShape(CliampShape.tiny))
-            .microPress(onClick = onClick),
-        contentAlignment = Alignment.Center,
+            .border(1.dp, p.chipBorder, RoundedCornerShape(CliampShape.tiny))
+            .padding(horizontal = 4.dp, vertical = 1.dp),
     ) {
-        Mono(label, CliampType.tabLabel, p.ink)
+        Mono("LIVE", CliampType.tabLabel, p.inkTertiary)
     }
+}
+
+private fun queueDuration(s: Station): String =
+    if (s.isTrack && s.durationMs > 0) durationLabel(s.durationMs) else "–:––"
+
+private fun sourceSubtitle(s: Station): String = when {
+    !s.isTrack -> "live stream"
+    s.artist.isNotBlank() -> s.artist
+    else -> "<unknown>"
 }
