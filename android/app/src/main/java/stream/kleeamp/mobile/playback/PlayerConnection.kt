@@ -223,16 +223,11 @@ class PlayerConnection(
             controller = c
             c.addListener(object : Player.Listener {
                 override fun onEvents(player: Player, events: Player.Events) = sync()
-                // Auto-advance never passes a commit point, and neither do
-                // widget/tile tunes (they drive the controller directly), so
-                // the history stack learns them here. Manual nav lands through
-                // play() / applyNavigation first, making this a duplicate
-                // no-op for it - only REPEAT is skipped outright.
-                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                    if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) {
-                        mediaItem?.mediaId?.let { stationForMediaId(it)?.let(::recordPlay) }
-                    }
-                }
+                // Deliberately no onMediaItemTransition hook: committed
+                // navigations record synchronously, and a superseded seek's
+                // late transition would fork the heard trail with a ghost
+                // entry - Prev jumps and loops from there. Media3-side moves
+                // (auto-advance) are learned with their index in sync().
             })
             c.setPlaybackSpeed(_speed.value)
             sync()
@@ -296,6 +291,11 @@ class PlayerConnection(
                 _upNextIndex.value = resolvedIndex
                 if (resolved != null && resolved.id != PlaybackBus.station.value?.id) {
                     PlaybackBus.publishStation(resolved)
+                    // The heard trail learns Media3-side moves here - with
+                    // the resolved index - never from raw transitions: a
+                    // superseded seek's late transition would fork the trail
+                    // with a ghost entry, and Prev would jump and loop.
+                    recordPlay(resolved)
                 }
             }
 
@@ -332,7 +332,7 @@ class PlayerConnection(
             seekable = c.isCurrentMediaItemSeekable,
             live = c.isCurrentMediaItemLive,
             speed = c.playbackParameters.speed,
-            hasPrev = if (ring) true else _pastIdx > 0 || (nav.isNotEmpty() && navIdx > 0),
+            hasPrev = if (ring) true else (_source.isEmpty() && _pastIdx > 0) || (nav.isNotEmpty() && navIdx > 0),
             hasNext = if (ring) true else (_source.isEmpty() && _pastIdx < _past.lastIndex) ||
                 (nav.size > 1 && navIdx in 0 until nav.lastIndex),
         )
@@ -970,13 +970,14 @@ class PlayerConnection(
     }
 
     /**
-     * Actual play order this session, oldest to newest, for Prev. The [_source]
-     * list a tap came from is the *context* (what Next walks); this stack is
-     * what was genuinely heard, so Prev returns to the previous song even when
-     * it came from another list entirely - the Spotify/Apple normal. Recents
-     * stays a picker, never Up Next. Capped; consecutive duplicates never
-     * append, which also makes every record site safe to overlap (a tap plus
-     * the transition event for the same switch).
+     * Actual play order this session, oldest to newest. Prev and Next walk
+     * the loaded context; this stack is only their fallback while nothing
+     * is loaded, plus what the UI consults for the transport state. The
+     * [_source] list a tap came from is the *context* (what Next walks);
+     * this stack is what was genuinely heard. Recents stays a picker, never
+     * Up Next. Capped; consecutive duplicates never append, which also makes
+     * every record site safe to overlap (a tap plus the transition event
+     * for the same switch).
      */
     private val _past = ArrayDeque<Station>()
     private var _pastIdx = -1
@@ -1017,10 +1018,17 @@ class PlayerConnection(
     }
 
     /**
-     * Prev walks what was actually heard, across contexts, falling back to
-     * the context walk only at the bottom of the stack.
+     * Prev walks the current context backward - the mirror of [next] - so it
+     * behaves the same in every source and never leaves the list for another
+     * context. Walking back past the first heard song keeps stepping into
+     * earlier items with Up Next following. The heard trail is only a
+     * fallback when nothing is loaded yet.
      */
     fun prev() {
+        if (_source.isNotEmpty()) {
+            step(-1)
+            return
+        }
         val back = synchronized(_past) {
             if (_pastIdx > 0) _past[--_pastIdx] else null
         }

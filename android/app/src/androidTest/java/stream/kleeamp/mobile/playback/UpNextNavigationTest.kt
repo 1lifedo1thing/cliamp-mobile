@@ -61,6 +61,38 @@ class UpNextNavigationTest {
 
     private fun upcoming() = upNextEntries(player.currentUpNext, player.upNextIndex.value).map { it.station }
 
+    @Test fun prevPastFirstTappedKeepsWalkingBackwardAndUpNextFollows() {
+        onMain { player.play(tracks[2], tracks) }
+        nextMatchesTop()
+        nextMatchesTop()
+        onMain { assertEquals(tracks[4], PlaybackBus.station.value) }
+        // Back through everything heard: 4 -> 3 -> 2.
+        onMain { player.prev() }
+        awaitCurrent(tracks[3])
+        onMain { player.prev() }
+        awaitCurrent(tracks[2])
+        // Past the first tapped song the walk continues into earlier items
+        // and Up Next tracks the new position: 2 -> 1 -> 0, then it holds.
+        onMain { player.prev() }
+        awaitCurrent(tracks[1])
+        onMain {
+            assertEquals(1, player.upNextIndex.value)
+            assertEquals(tracks.drop(2), upcoming())
+        }
+        onMain { player.prev() }
+        awaitCurrent(tracks[0])
+        onMain {
+            assertEquals(0, player.upNextIndex.value)
+            assertEquals(tracks.drop(1), upcoming())
+        }
+        onMain { player.prev() }
+        awaitCurrent(tracks[0])
+        onMain {
+            assertEquals(0, player.upNextIndex.value)
+            assertEquals(tracks.drop(1), upcoming())
+        }
+    }
+
     @Test fun nextSelectsTheFirstVisibleUpcomingTrack() {
         onMain { player.play(tracks[2], tracks) }
         nextMatchesTop()
