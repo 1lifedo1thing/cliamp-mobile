@@ -1,4 +1,4 @@
-# cliamp mobile
+# kleeamp mobile
 
 Terminal soul, native body. An Android radio player for
 [cliamp radio](https://radio.cliamp.stream) and the 53,000-station
@@ -14,7 +14,7 @@ Grab the APK from [releases](https://github.com/cliamp/kleeamp/releases), or:
 
 ```sh
 gh release download --repo cliamp/kleeamp --pattern "*.apk"
-adb install -r cliamp-*.apk
+adb install -r kleeamp-*.apk
 ```
 
 ## Releases
@@ -29,7 +29,7 @@ release. Version comes from the tag, `versionCode` from the run number, so each 
 installs over the last.
 
 ```sh
-git tag -a v0.0.2 -m "cliamp 0.0.2"
+git tag -a v0.0.2 -m "kleeamp 0.0.2"
 git push origin v0.0.2
 ```
 
@@ -38,7 +38,7 @@ generates a fresh debug keystore every run, so debug-signed releases would each 
 different key and could never be upgraded over. The workflow refuses to publish an APK
 whose certificate reads `CN=Android Debug`.
 
-`cliamp-release.jks` and `keystore.properties` are gitignored and exist only on the
+`kleeamp-release.jks` and `keystore.properties` are gitignored and exist only on the
 author's machine. Losing both means no future build can install over an existing one.
 
 ## Build
@@ -72,7 +72,7 @@ controls all drive the same player.
 
 ## Providers
 
-Point cliamp at a music server you own. Navidrome first, and because it speaks Subsonic
+Point kleeamp at a music server you own. Navidrome first, and because it speaks Subsonic
 the same client covers gonic, airsonic and other Subsonic servers.
 
 Adding one runs a wizard: server URL, username, password, then a probe against
@@ -122,7 +122,7 @@ type an account was set up with. It does serve the SFTP subsystem, so browsing a
 streaming are unchanged.
 
 Two things to get right on the Tailscale side: the phone needs to be on the tailnet (the
-Tailscale app is a system VPN, so cliamp's socket rides it like any other app's), and the
+Tailscale app is a system VPN, so kleeamp's socket rides it like any other app's), and the
 ACL wants `"action": "accept"` rather than `"check"` - check mode asks for a browser
 re-auth that a background media player has nowhere to show.
 

@@ -35,5 +35,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "cliamp"
+rootProject.name = "kleeamp"
 include(":app")

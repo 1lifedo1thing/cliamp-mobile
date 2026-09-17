@@ -1,6 +1,6 @@
 # Third-party notices
 
-cliamp mobile ships under the licence in `LICENSE`. The components below do
+kleeamp mobile ships under the licence in `LICENSE`. The components below do
 not. They are redistributed under their own terms.
 
 ## Bundled in the APK

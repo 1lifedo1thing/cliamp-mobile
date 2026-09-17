@@ -3,11 +3,11 @@
 # --- kotlinx.serialization ---
 -dontnote kotlinx.serialization.**
 -keepclassmembers class kotlinx.serialization.json.** { *; }
--keep,includedescriptorclasses class stream.cliamp.mobile.**$$serializer { *; }
--keepclassmembers class stream.cliamp.mobile.** {
+-keep,includedescriptorclasses class stream.kleeamp.mobile.**$$serializer { *; }
+-keepclassmembers class stream.kleeamp.mobile.** {
     *** Companion;
 }
--keepclasseswithmembers class stream.cliamp.mobile.** {
+-keepclasseswithmembers class stream.kleeamp.mobile.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
 

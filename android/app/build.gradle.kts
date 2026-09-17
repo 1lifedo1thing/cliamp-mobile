@@ -27,7 +27,7 @@ val hasReleaseSigning = listOf(releaseStore, releaseStorePassword, releaseKeyAli
     .all { it != null } && rootProject.file(releaseStore!!).exists()
 
 android {
-    namespace = "stream.cliamp.mobile"
+    namespace = "stream.kleeamp.mobile"
     compileSdk = 36
 
     defaultConfig {
@@ -36,8 +36,8 @@ android {
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // A tagged release overrides both; a local build keeps the defaults.
-        versionCode = (System.getenv("CLIAMP_VERSION_CODE")?.toIntOrNull()) ?: 1
-        versionName = System.getenv("CLIAMP_VERSION")?.removePrefix("v") ?: "0.0.1"
+        versionCode = (System.getenv("KLEEAMP_VERSION_CODE")?.toIntOrNull()) ?: 1
+        versionName = System.getenv("KLEEAMP_VERSION")?.removePrefix("v") ?: "0.0.1"
     }
 
     signingConfigs {

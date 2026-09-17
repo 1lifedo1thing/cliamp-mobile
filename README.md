@@ -1,13 +1,13 @@
-# cliamp
+# kleeamp
 
-Terminal soul, native body. cliamp is an Android player for internet radio,
+Terminal soul, native body. kleeamp is an Android player for internet radio,
 podcasts and the music servers you host yourself.
 
 This is the phone client of [cliamp](https://github.com/bjarneo/cliamp),
 the terminal music player. It keeps the look and the self-hosted sources of
 the desktop player. Compose draws them instead of a TTY.
 
-<img src="Cliamp.png" alt="cliamp" width="220">
+<img src="Kleeamp.png" alt="kleeamp" width="220">
 
 ## What it plays
 
@@ -35,7 +35,7 @@ or:
 
 ```sh
 gh release download --repo cliamp/kleeamp --pattern "*.apk"
-adb install -r cliamp-*.apk
+adb install -r kleeamp-*.apk
 ```
 
 To build it yourself, read [`android/README.md`](android/README.md).

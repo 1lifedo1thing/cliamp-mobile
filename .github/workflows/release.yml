@@ -95,19 +95,19 @@ jobs:
                  "debug key cannot be installed over a previous release."
             exit 1
           fi
-          printf '%s' "$KEYSTORE_BASE64" | base64 -d > cliamp-release.jks
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > kleeamp-release.jks
 
       - run: chmod +x gradlew
 
       - name: Build signed release
         env:
-          KEYSTORE_FILE: cliamp-release.jks
+          KEYSTORE_FILE: kleeamp-release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          CLIAMP_VERSION: ${{ steps.v.outputs.name }}
+          KLEEAMP_VERSION: ${{ steps.v.outputs.name }}
           # monotonic, so every release installs over the last one
-          CLIAMP_VERSION_CODE: ${{ github.run_number }}
+          KLEEAMP_VERSION_CODE: ${{ github.run_number }}
         run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
       # A debug-signed APK is the failure this whole pipeline exists to avoid,
@@ -131,7 +131,7 @@ jobs:
         env:
           NAME: ${{ steps.v.outputs.name }}
         run: |
-          OUT="cliamp-$NAME.apk"
+          OUT="kleeamp-$NAME.apk"
           cp app/build/outputs/apk/release/app-release.apk "$OUT"
           sha256sum "$OUT" > checksums.txt
           echo "apk=$OUT" >> "$GITHUB_OUTPUT"
@@ -207,7 +207,7 @@ jobs:
             echo ""
             echo "The signing key does not change between releases, so this APK"
             echo "installs over the previous one. Sideload it, or run"
-            echo "\`adb install -r cliamp-${NAME}.apk\`."
+            echo "\`adb install -r kleeamp-${NAME}.apk\`."
             if [ -n "$PREV_TAG" ]; then
               echo ""
               echo "**Full Changelog**: https://github.com/${REPO}/compare/${PREV_TAG}...${TAG}"
@@ -225,7 +225,7 @@ jobs:
           APK: ${{ steps.art.outputs.apk }}
         run: |
           set -euo pipefail
-          TITLE="cliamp $NAME"
+          TITLE="kleeamp $NAME"
           if gh release view "$TAG" > /dev/null 2>&1; then
             # A re-run of the same tag replaces the assets and the notes
             # instead of failing on an existing release.

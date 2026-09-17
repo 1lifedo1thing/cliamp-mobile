@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Search glyph for the home-screen search widget. White so the provider can
     tint it to the palette accent at runtime via setColorFilter. Same geometry
-    as CliampIcons.Search: 16x16 stroked circle + handle. -->
+    as KleeampIcons.Search: 16x16 stroked circle + handle. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="16dp" android:height="16dp"
     android:viewportWidth="16" android:viewportHeight="16">

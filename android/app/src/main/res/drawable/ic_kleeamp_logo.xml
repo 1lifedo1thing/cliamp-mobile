@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The oxide tile icon, matching KleeampIcons.MarkColour: the "Icon 103h"
+     six-band mark in ink cream on the oxide tile. Same geometry as the
+     launcher icon and app chrome - not the old green three-bar logo. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp"
+    android:viewportWidth="48" android:viewportHeight="48">
+    <!-- rx is 15% of the tile, matching the source artwork's 72/480 -->
+    <path android:fillColor="#7F2117"
+        android:pathData="M7.2,0h33.6a7.2,7.2 0 0 1 7.2,7.2v33.6a7.2,7.2 0 0 1 -7.2,7.2h-33.6a7.2,7.2 0 0 1 -7.2,-7.2v-33.6a7.2,7.2 0 0 1 7.2,-7.2z" />
+    <path android:fillColor="#F8E4D4" android:pathData="M5,20h5v8h-5z" />
+    <path android:fillColor="#F8E4D4" android:pathData="M12,12h5v24h-5z" />
+    <path android:fillColor="#F8E4D4" android:pathData="M19,4h5v40h-5z" />
+    <path android:fillColor="#F8E4D4" android:pathData="M26,14h5v20h-5z" />
+    <path android:fillColor="#F8E4D4" android:pathData="M33,18h5v12h-5z" />
+    <path android:fillColor="#F8E4D4" android:pathData="M40,22h3v4h-3z" />
+</vector>

@@ -19,7 +19,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
-        android:name=".CliampApp"
+        android:name=".KleeampApp"
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -29,7 +29,7 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="false"
         android:enableOnBackInvokedCallback="true"
-        android:theme="@style/Theme.Cliamp">
+        android:theme="@style/Theme.Kleeamp">
 
         <activity
             android:name=".MainActivity"
@@ -37,7 +37,7 @@
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
             android:windowSoftInputMode="adjustResize"
-            android:theme="@style/Theme.Cliamp">
+            android:theme="@style/Theme.Kleeamp">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -58,7 +58,7 @@
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/cliamp_widget_info" />
+                android:resource="@xml/kleeamp_widget_info" />
         </receiver>
 
         <receiver

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Pin-dialog preview. Mirrors the real widget (widget_cliamp): station
+<!-- Pin-dialog preview. Mirrors the real widget (widget_kleeamp): station
     title and subtitle on the left, prev / play / next transport keys right,
     the brick scope strip below, then the seek row. Static stand-ins only:
     tinted vector marks and one frozen frame of the scope algorithm. -->

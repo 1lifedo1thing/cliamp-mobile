@@ -1,4 +1,4 @@
-# cliamp mobile — the concept
+# kleeamp mobile — the concept
 
 The design spec for `Cliamp Mobile.dc.html`, in the CSS the artboards are drawn
 in. This is where the app came from, kept verbatim.

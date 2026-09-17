@@ -1,4 +1,4 @@
-# cliamp — design system
+# kleeamp — design system
 
 Terminal soul, native body. Hairline rules instead of cards, one accent hue at a
 time, and controls with real mechanical travel.
@@ -11,12 +11,12 @@ kept beside this as [`concept.md`](concept.md) for the reasoning behind the
 geometry.
 
 Anyone building a second client should be able to work from this file alone.
-Source of record is `android/app/src/main/java/stream/cliamp/mobile/ui/theme/`.
+Source of record is `android/app/src/main/java/stream/kleeamp/mobile/ui/theme/`.
 
 ## Palette is a contract, not a colour scheme
 
 The app never names a colour. It names a **role**, and a palette fills all of
-them — 32 colour roles plus a `dark` flag, in `CliampPalette`:
+them — 32 colour roles plus a `dark` flag, in `KleeampPalette`:
 
 | Group | Roles |
 | --- | --- |
