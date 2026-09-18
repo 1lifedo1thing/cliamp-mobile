@@ -1,7 +1,9 @@
 package stream.kleeamp.mobile.data
 
 import android.content.Context
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,10 +12,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import stream.kleeamp.mobile.data.db.KleeampDatabase
 import stream.kleeamp.mobile.data.db.CacheDao
 import stream.kleeamp.mobile.data.db.KvCacheEntity
 import stream.kleeamp.mobile.net.Http
+import java.io.IOException
 
 /** How the directory list is currently ordered or filtered. */
 sealed interface DirectoryQuery {
@@ -73,6 +77,26 @@ class Repository(
 
     private val pageLock = Mutex()
     private val pageSize = 60
+    private var loadJob: Job? = null
+
+    /**
+     * Hard bound on one directory load, retries included. Per-call timeouts
+     * cannot bound a trickling connection (every byte resets the read
+     * clock), so without this a dead network holds [pageLock] with
+     * `loading = true` for minutes: the footer spins, taps queue behind the
+     * hung fetch, and retry does nothing until it finally lets go.
+     */
+    private val directoryTimeoutMs = 30_000L
+
+    /**
+     * Tag chips when neither the network nor a snapshot has any: the common
+     * genres, so filtering stays usable offline. Never snapshotted - the
+     * live list replaces these on the next successful fetch.
+     */
+    private val builtinTags = listOf(
+        "pop", "rock", "jazz", "classical", "electronic", "hip-hop",
+        "news", "talk", "sports", "chill", "dance", "80s",
+    ).map { NameCount(it, 0) }
 
     fun bootstrap() {
         refreshCliamp()
@@ -84,8 +108,15 @@ class Repository(
             _directoryStats.value?.let { snapshotMeta("meta:stats", it) }
         }
         scope.launch {
-            _tags.value = retryFetch { RadioBrowser.topTags(60) }
-            _tags.value.takeIf { it.isNotEmpty() }?.let { snapshotMeta("meta:tags", it) }
+            val fetched = runCatching { retryFetch { RadioBrowser.topTags(60) } }.getOrNull().orEmpty()
+            if (fetched.isNotEmpty()) {
+                _tags.value = fetched
+                snapshotMeta("meta:tags", fetched)
+            } else if (_tags.value.isEmpty()) {
+                // Snapshot restore (running alongside) may have filled these;
+                // only fall back when nothing did, so offline still has chips.
+                _tags.value = builtinTags
+            }
         }
         scope.launch {
             _countries.value = retryFetch { RadioBrowser.topCountries() }
@@ -111,7 +142,10 @@ class Repository(
     }
 
     fun loadDirectory(query: DirectoryQuery, reset: Boolean) {
-        scope.launch {
+        // A new query supersedes whatever is still loading: cancel it so a
+        // retap never queues minutes behind a hung fetch.
+        if (reset) loadJob?.cancel()
+        loadJob = scope.launch {
             pageLock.withLock {
                 val cur = _directory.value
                 if (!reset && (cur.loading || cur.exhausted || cur.error != null)) return@withLock
@@ -130,16 +164,21 @@ class Repository(
                 if (reset) restore(query)
 
                 val page = runCatching {
-                    retryFetch {
-                        when (query) {
-                            DirectoryQuery.TopVoted -> RadioBrowser.topVoted(offset, pageSize)
-                            DirectoryQuery.Trending -> RadioBrowser.trending(offset, pageSize)
-                            is DirectoryQuery.Search -> RadioBrowser.searchByName(query.text, offset, pageSize)
-                            is DirectoryQuery.Tag -> RadioBrowser.byTag(query.tag, offset, pageSize)
-                            is DirectoryQuery.Country -> RadioBrowser.byCountryCode(query.code, offset, pageSize)
+                    withTimeoutOrNull(directoryTimeoutMs) {
+                        retryFetch {
+                            when (query) {
+                                DirectoryQuery.TopVoted -> RadioBrowser.topVoted(offset, pageSize)
+                                DirectoryQuery.Trending -> RadioBrowser.trending(offset, pageSize)
+                                is DirectoryQuery.Search -> RadioBrowser.searchByName(query.text, offset, pageSize)
+                                is DirectoryQuery.Tag -> RadioBrowser.byTag(query.tag, offset, pageSize)
+                                is DirectoryQuery.Country -> RadioBrowser.byCountryCode(query.code, offset, pageSize)
+                            }
                         }
-                    }
+                    } ?: throw IOException("directory timed out")
                 }
+                // A superseding tap cancelled this load: leave the state alone,
+                // the newer load owns the UI now.
+                if (page.exceptionOrNull() is CancellationException) return@withLock
 
                 _directory.value = page.fold(
                     onSuccess = { list ->

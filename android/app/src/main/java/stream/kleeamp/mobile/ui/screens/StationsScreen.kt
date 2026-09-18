@@ -304,7 +304,8 @@ fun StationsScreen(
                 if (source == Source.All || source == Source.Directory) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         SectionLabel(
-                            "directory — " + (dirStats?.playable?.let { "%,d".format(it) } ?: "loading"),
+                            "directory — " + (dirStats?.playable?.let { "%,d".format(it) }
+                                ?: if (directory.error != null) "unreachable" else "loading"),
                             gutter = 8.dp,
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
