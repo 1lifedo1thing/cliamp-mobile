@@ -5,10 +5,25 @@ import stream.kleeamp.mobile.BuildConfig
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
+
+/**
+ * A URL with secrets removed: userinfo, query and fragment go, host and path
+ * stay for debuggability. Provider stream/cover URLs bake in API keys,
+ * tokens and even passwords, and the raw URL otherwise lands in UI error
+ * strings, logcat and persisted rows.
+ */
+internal fun redactUrl(url: String): String {
+    val clean = runCatching {
+        url.toHttpUrlOrNull()?.newBuilder()?.username("")?.password("")
+            ?.query(null)?.fragment(null)?.build().toString()
+    }.getOrNull()
+    return clean ?: url.substringBefore('?').substringBefore('#')
+}
 
 /**
  * One shared client. radio-browser.info asks every client to identify itself,
@@ -144,7 +159,7 @@ object Http {
         val r = execute(url, headers, method, body)
         return if (!r.isSuccessful) {
             r.close()
-            error("HTTP ${r.code} for $url")
+            error("HTTP ${r.code} for ${redactUrl(url)}")
         } else {
             r.use { block(it) }
         }

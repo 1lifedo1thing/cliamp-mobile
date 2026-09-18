@@ -56,6 +56,7 @@ import stream.kleeamp.mobile.data.StationArtSource
 import stream.kleeamp.mobile.data.StationSource
 import stream.kleeamp.mobile.data.wrapNext
 import stream.kleeamp.mobile.net.Http
+import stream.kleeamp.mobile.net.redactUrl
 import stream.kleeamp.mobile.widget.WidgetRenderer
 
 /**
@@ -410,7 +411,7 @@ class PlaybackService : MediaSessionService() {
             seekable = seekable,
             durationMs = duration,
         )
-        Log.d("kleeamp/wid", "publishWidgetState playing=${next.playing} streamTitle=${next.track} url=${next.url} station=${station?.name} seekable=${next.seekable} duration=${next.durationMs}")
+        Log.d("kleeamp/wid", "publishWidgetState playing=${next.playing} streamTitle=${next.track} url=${redactUrl(next.url)} station=${station?.name} seekable=${next.seekable} duration=${next.durationMs}")
         // Both halves of the cache update synchronously. lastWidgetSourceKey
         // used to be assigned inside the launch below (and only when upNext
         // was non-empty), so after a cold start it stayed null forever, the
