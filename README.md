@@ -1,5 +1,7 @@
 # kleeamp
 
+[![Discord](https://img.shields.io/badge/Discord-join%20the%20server-5865F2?logo=discord&logoColor=white)](https://discord.gg/4VpCzXPuj2)
+
 Terminal soul, native body. kleeamp is an Android player for internet radio,
 podcasts and the music servers you host yourself.
 
