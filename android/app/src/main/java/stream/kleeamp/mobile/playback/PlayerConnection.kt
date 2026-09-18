@@ -162,6 +162,7 @@ class PlayerConnection(
     private var _navTimerJob: Job? = null
     private var _navPending: Int? = null
     private var _lastNavTapMs = 0L
+    private var pollJob: Job? = null
 
     /**
      * Media jobs park unexpected failure as a playback error instead of
@@ -247,7 +248,8 @@ class PlayerConnection(
             onReady?.invoke()
         }, MoreExecutors.directExecutor())
 
-        scope.launch {
+        pollJob?.cancel()
+        pollJob = scope.launch {
             while (true) {
                 delay(500)
                 sync()
@@ -256,6 +258,21 @@ class PlayerConnection(
     }
 
     private fun sync() {
+        // Best-effort reconciliation: runs on a hot poller, Media3 callbacks
+        // and at the end of nav jobs, so it must never take its caller down.
+        // A throw here used to either kill the poller silently or crash the
+        // app (and, inside a nav job, publish a bogus playback error).
+        // Cancellation still propagates.
+        try {
+            syncInternal()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.e("kleeamp/player", "sync failed", e)
+        }
+    }
+
+    private fun syncInternal() {
         val c = controller ?: return
 
         val q = _upNext.value
@@ -1391,6 +1408,8 @@ class PlayerConnection(
     }
 
     fun release() {
+        pollJob?.cancel()
+        pollJob = null
         controller?.release()
         controller = null
     }
