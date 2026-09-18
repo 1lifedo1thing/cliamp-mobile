@@ -310,8 +310,15 @@ private fun LandscapePlayer(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
         ) {
-            StationArt(station = model.shownStation, modifier = Modifier.size(side))
-            PlayerStatusRow(model, actions)
+            // The status badge and keys ride exactly under the cover: same
+            // width, same edges, instead of the full column width.
+            Column(
+                Modifier.width(side),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                StationArt(station = model.shownStation, modifier = Modifier.size(side))
+                PlayerStatusRow(model, actions)
+            }
         }
         Spacer(Modifier.width(14.dp))
         Column(
