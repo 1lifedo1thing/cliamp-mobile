@@ -42,6 +42,10 @@ object LocalArt {
     fun cachedSmall(cover: String?): Bitmap? =
         cover?.takeIf { it.isNotBlank() }?.let { smallBitmaps.get(it) }
 
+    /** Full-size memory peek, the [bitmapFor] counterpart of [cachedSmall]. */
+    fun cached(cover: String?): Bitmap? =
+        cover?.takeIf { it.isNotBlank() }?.let { bitmaps.get(it) }
+
     private suspend fun bitmapForAt(
         cover: String?,
         resolver: ContentResolver,

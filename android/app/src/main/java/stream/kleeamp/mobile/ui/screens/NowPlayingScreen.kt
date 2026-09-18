@@ -73,6 +73,7 @@ import stream.kleeamp.mobile.ui.components.ArtGlow
 import stream.kleeamp.mobile.ui.components.ArtPlate
 import stream.kleeamp.mobile.ui.components.microPress
 import stream.kleeamp.mobile.ui.components.rememberMeter
+import stream.kleeamp.mobile.ui.components.rememberStationThumbnail
 import stream.kleeamp.mobile.ui.theme.KleeampShape
 import stream.kleeamp.mobile.ui.theme.KleeampType
 import stream.kleeamp.mobile.ui.theme.LocalPalette
@@ -605,6 +606,22 @@ private fun sourceLine(shownStation: Station?): String {
     return parts.joinToString(" · ").ifBlank { "15 cliamp channels · 50k+ directory" }
 }
 
+/** Synchronous memory peek behind [StationArt]: the same branches as its async
+ * resolve, but LRU gets only, so a known cover paints on the first frame. */
+private fun peekArt(station: Station?): ImageBitmap? {
+    if (station == null) return null
+    val bmp = when {
+        station.source == StationSource.Local ->
+            stream.kleeamp.mobile.data.LocalArt.cached(station.cover)
+                ?: StationArtSource.cached(station)
+        station.cover.startsWith("http") ->
+            StationArtSource.cachedUrl(station.cover)
+                ?: StationArtSource.cached(station)
+        else -> StationArtSource.cached(station)
+    }
+    return bmp?.asImageBitmap()
+}
+
 /**
  * Art is never invented, but it is not always absent either. Directory stations
  * usually publish an og:image on their homepage, and that is the station's own
@@ -618,9 +635,15 @@ private fun sourceLine(shownStation: Station?): String {
 private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val context = LocalContext.current
-    var art by remember(station?.id) { mutableStateOf<ImageBitmap?>(null) }
+    // Paint what memory already holds synchronously, so a song change shows
+    // its cover on the first frame instead of flashing the empty plate while
+    // the async lookup below re-resolves what is already known. The row
+    // thumbnail doubles as a progressive preview: soft for a frame or two,
+    // then replaced by the full art - still the new item, never empty.
+    var art by remember(station?.id) { mutableStateOf(peekArt(station)) }
+    val preview = station?.let { rememberStationThumbnail(it) }
     LaunchedEffect(station?.id) {
-        art = null
+        if (art != null) return@LaunchedEffect
         val s = station ?: return@LaunchedEffect
         art = when {
             // local files carry a content:// uri, provider covers an http one,
@@ -672,9 +695,9 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
             }
             .consumeAllGestures(),
         radius = KleeampShape.large,
-        caption = if (art == null) caption else null,
+        caption = if (art == null && preview == null) caption else null,
     ) {
-        art?.let { bmp ->
+        (art ?: preview)?.let { bmp ->
             // Real album art is square and fills the plate edge to edge. Radio
             // art does not have to be: og:images are typically 1200x630
             // wordmarks, and cropping one to a square cuts it in half, so
@@ -707,7 +730,7 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
         // No cover at all: the broadcast glyph in accent, the same themed
         // mark the station's list rows wear - one identity in both places,
         // for cliamp channels and directory stations alike.
-        if (art == null && station != null) {
+        if (art == null && preview == null && station != null) {
             Icon(
                 KleeampIcons.StationsTab,
                 null,

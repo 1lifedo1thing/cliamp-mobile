@@ -179,13 +179,37 @@ private fun MiniKey(
  * does it fall back to the brick meter, and that meter only when the
  * visualizer is on; with it off the striped placeholder plate is shown.
  */
+/** Synchronous memory peek behind [MiniArt], mirroring its async resolve. The
+ * full-size caches are included: the notification path warms those, and the
+ * thumbnail downscales them for free - still the new item on frame one. */
+private fun peekSmall(station: Station?): androidx.compose.ui.graphics.ImageBitmap? {
+    if (station == null) return null
+    val bmp = when {
+        station.source == StationSource.Local ->
+            LocalArt.cachedSmall(station.cover)
+                ?: LocalArt.cached(station.cover)
+                ?: StationArtSource.cachedSmall(station)
+                ?: StationArtSource.cached(station)
+        station.cover.startsWith("http") ->
+            StationArtSource.cachedUrl(station.cover)
+                ?: StationArtSource.cachedSmallUrl(station.cover)
+                ?: StationArtSource.cachedSmall(station)
+        else ->
+            StationArtSource.cachedSmall(station)
+                ?: StationArtSource.cached(station)
+    }
+    return bmp?.asImageBitmap()
+}
+
 @Composable
 private fun MiniArt(station: Station?, frame: MeterFrame?) {
     val p = LocalPalette.current
     val context = LocalContext.current
-    var art by remember(station?.id) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    // Same synchronous-first treatment as the player screen: paint a known
+    // cover on the first frame instead of flashing the plate on every change.
+    var art by remember(station?.id) { mutableStateOf(peekSmall(station)) }
     LaunchedEffect(station?.id) {
-        art = null
+        if (art != null) return@LaunchedEffect
         val s = station ?: return@LaunchedEffect
         art = when {
             s.source == StationSource.Local ->

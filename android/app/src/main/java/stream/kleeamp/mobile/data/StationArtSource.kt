@@ -109,19 +109,17 @@ object StationArtSource {
         bitmaps.get(station.id)?.let { return it }
         if (isOut(station.id)) return null
 
-        // Off the caller (usually the main thread, straight out of a row's
-        // LaunchedEffect) and through the shared 4-worker pool: disk decodes
-        // must never run on Main, and capping the parallelism turns a
-        // fast-scroll stampede into a queue instead of a stall.
-        return withContext(CoverIo) {
-            val bmp = if (station.source == StationSource.Local) {
-                embeddedArt(station.url, TARGET)
-            } else {
-                disk(station.id, TARGET) ?: cover(station) { url, save -> download(url, save) }
-            }
-            if (bmp == null) noteMiss(station.id) else bitmaps.put(station.id, bmp)
-            bmp
+        // Disk on the capped pool; the network below must not hold a pool
+        // slot across its suspends, or a few slow scrapes starve every other
+        // decode - including the player art - behind them.
+        val bmp = if (station.source == StationSource.Local) {
+            embeddedArt(station.url, TARGET)
+        } else {
+            withContext(CoverIo) { disk(station.id, TARGET) }
+                ?: cover(station) { url, save -> download(url, save) }
         }
+        if (bmp == null) noteMiss(station.id) else bitmaps.put(station.id, bmp)
+        return bmp
     }
 
     /**
@@ -138,19 +136,17 @@ object StationArtSource {
     suspend fun bitmapForSmall(station: Station): Bitmap? {
         if (station.source == StationSource.Cliamp) return null
         smallBitmaps.get(station.id)?.let { return it }
-        // Same off-main + pooled treatment as [bitmapFor]; row thumbnails
-        // are what a fast scroll resolves dozens of at once.
-        return withContext(CoverIo) {
-            if (station.source == StationSource.Local && isOut(station.id)) return@withContext null
-            val bmp = if (station.source == StationSource.Local) {
-                embeddedArt(station.url, TARGET_SMALL)
-            } else {
-                disk(station.id, TARGET_SMALL) ?: cover(station) { url, save -> download(url, save, TARGET_SMALL) }
-            }
-            if (bmp != null) smallBitmaps.put(station.id, bmp)
-            else if (station.source == StationSource.Local) noteMiss(station.id)
-            bmp
+        if (station.source == StationSource.Local && isOut(station.id)) return null
+        // Same pool discipline as [bitmapFor]: disk on the pool, network off it.
+        val bmp = if (station.source == StationSource.Local) {
+            embeddedArt(station.url, TARGET_SMALL)
+        } else {
+            withContext(CoverIo) { disk(station.id, TARGET_SMALL) }
+                ?: cover(station) { url, save -> download(url, save, TARGET_SMALL) }
         }
+        if (bmp != null) smallBitmaps.put(station.id, bmp)
+        else if (station.source == StationSource.Local) noteMiss(station.id)
+        return bmp
     }
 
     /**
@@ -179,11 +175,9 @@ object StationArtSource {
         if (url.isBlank()) return null
         bitmaps.get(url)?.let { return it }
         if (isOut(url)) return null
-        return withContext(CoverIo) {
-            val bmp = disk(url, TARGET) ?: download(url, save = url)
-            if (bmp == null) noteMiss(url) else bitmaps.put(url, bmp)
-            bmp
-        }
+        val bmp = withContext(CoverIo) { disk(url, TARGET) } ?: download(url, save = url)
+        if (bmp == null) noteMiss(url) else bitmaps.put(url, bmp)
+        return bmp
     }
 
     /** A known URL's low-quality art for tiny surfaces, the [bitmapForSmall]
@@ -209,6 +203,16 @@ object StationArtSource {
      */
     fun cachedSmall(station: Station): Bitmap? = smallBitmaps.get(station.id)
 
+    /** Memory-only peek for full-size art, the [bitmapFor] counterpart of
+     * [cachedSmall]: a plain LRU get, safe on Main, so the player screen can
+     * paint a known cover synchronously on a song change instead of flashing
+     * the empty plate through an async lookup that hits memory anyway. */
+    fun cached(station: Station): Bitmap? = bitmaps.get(station.id)
+
+    /** Full-size version of [cachedSmallUrl] for callers holding only a URL. */
+    fun cachedUrl(url: String): Bitmap? =
+        url.takeIf { it.isNotBlank() }?.let { bitmaps.get(it) }
+
     fun cachedSmallUrl(url: String): Bitmap? =
         url.takeIf { it.isNotBlank() }?.let { smallBitmaps.get(it) }
 
@@ -223,11 +227,10 @@ object StationArtSource {
         val url = station.cover.takeIf { it.startsWith("http") } ?: return bitmapForSmall(station)
         smallBitmaps.get(station.id)?.let { return it }
         if (isOut(station.id)) return null
-        return withContext(CoverIo) {
-            val bmp = disk(station.id, TARGET_SMALL) ?: download(url, save = station.id, target = TARGET_SMALL)
-            if (bmp == null) noteMiss(station.id) else smallBitmaps.put(station.id, bmp)
-            bmp
-        }
+        val bmp = withContext(CoverIo) { disk(station.id, TARGET_SMALL) }
+            ?: download(url, save = station.id, target = TARGET_SMALL)
+        if (bmp == null) noteMiss(station.id) else smallBitmaps.put(station.id, bmp)
+        return bmp
     }
 
     private suspend fun imageUrl(station: Station): String? {
