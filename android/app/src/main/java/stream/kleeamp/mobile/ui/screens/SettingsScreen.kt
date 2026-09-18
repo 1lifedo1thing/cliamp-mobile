@@ -217,7 +217,6 @@ fun SettingsScreen(
                 key = customName ?: "custom",
                 theme = custom,
                 selected = palette == "custom",
-                subtitle = "imported",
                 trailDivider = false,
                 onSelect = { vm.onEvent(SettingsViewModel.Event.SetPalette("custom")) },
             )
