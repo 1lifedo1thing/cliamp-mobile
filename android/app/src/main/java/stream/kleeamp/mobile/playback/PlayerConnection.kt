@@ -11,6 +11,7 @@ import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -162,6 +163,18 @@ class PlayerConnection(
     private var _navPending: Int? = null
     private var _lastNavTapMs = 0L
 
+    /**
+     * Media jobs park unexpected failure as a playback error instead of
+     * reaching the uncaught handler and killing the process. Cancellation
+     * bypasses the handler by contract, so cooperative cancel keeps working;
+     * the UI clears the error on the next successful play. The message stays
+     * generic on purpose: exception text can carry signed stream URLs.
+     */
+    private val mediaFailureHandler = CoroutineExceptionHandler { _, e ->
+        android.util.Log.e("kleeamp/player", "playback job failed", e)
+        PlaybackBus.publishError("couldn't play this station")
+    }
+
     // Shuffle's Media3 rebuild deliberately lives off [_navJob]. A toggle
     // followed immediately by prev/next (or an auto-advance) cancels [_navJob]
     // to stop navigation racing a stale rebuild; routing the shuffle rebuild
@@ -304,7 +317,7 @@ class PlayerConnection(
             if (oneToOne && windowBase + q.size < _source.size &&
                 _upNextIndex.value >= q.size - 2 && _extending?.isActive != true
             ) {
-                _extending = scope.launch(Dispatchers.Main) { extendWindow(c) }
+                _extending = scope.launch(Dispatchers.Main + mediaFailureHandler) { extendWindow(c) }
             }
         }
 
@@ -565,7 +578,7 @@ class PlayerConnection(
         _navJob?.cancel()
         _shuffleJob?.cancel()
         swapping = controller != null
-        val job = scope.launch(Dispatchers.Main) {
+        val job = scope.launch(Dispatchers.Main + mediaFailureHandler) {
             val c = controller ?: return@launch
             // Any queue of finite tracks is a real playlist, so Media3 plays one
             // after another regardless of where they came from: local files and
@@ -809,7 +822,7 @@ class PlayerConnection(
         // its position) untouched, so toggling shuffle never interrupts.
         swapping = true
         val currentId = current.id
-        _shuffleJob = scope.launch(Dispatchers.Main) {
+        _shuffleJob = scope.launch(Dispatchers.Main + mediaFailureHandler) {
             try {
                 ensureActive()
                 var anchorId = currentId
@@ -1165,7 +1178,7 @@ class PlayerConnection(
             val windowIndex = (abs - windowBase)
             _navJob?.cancel()
             swapping = true
-            val job = scope.launch(Dispatchers.Main) {
+            val job = scope.launch(Dispatchers.Main + mediaFailureHandler) {
                 val player = controller ?: return@launch
                 // Only seek in place when the target is actually loaded by Media3;
                 // a bare seekTo clamps to the last loaded item when the index is
@@ -1232,7 +1245,7 @@ class PlayerConnection(
         PlaybackBus.publishSource(_source)
         PlaybackBus.station.value?.let(::persistWidgetWindow)
         swapping = controller != null
-        _navJob = scope.launch(Dispatchers.Main) {
+        _navJob = scope.launch(Dispatchers.Main + mediaFailureHandler) {
             val c = controller ?: return@launch
             try {
                 val canEdit = edit != null && q.all { it.isTrack } &&
