@@ -1,7 +1,12 @@
 package stream.kleeamp.mobile.data
 
 import android.content.Context
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,6 +20,7 @@ import stream.kleeamp.mobile.data.db.CacheDao
 import stream.kleeamp.mobile.data.db.KleeampDatabase
 import stream.kleeamp.mobile.data.db.EpisodeProgressEntity
 import stream.kleeamp.mobile.data.db.KvCacheEntity
+import stream.kleeamp.mobile.data.db.PodcastDao
 import stream.kleeamp.mobile.data.db.PodcastFeedCacheEntity
 import stream.kleeamp.mobile.data.db.toEntity
 import stream.kleeamp.mobile.net.Http
@@ -65,19 +71,30 @@ data class ShowState(
  * the radio one does, with Apple's famous shows up front. Either way the
  * screen sees the same growing list and the same exhausted flag.
  */
-class PodcastRepository(
-    context: Context,
+class PodcastRepository internal constructor(
     private val scope: CoroutineScope,
+    private val dao: PodcastDao,
+    private val cache: CacheDao,
+    private val loadFeed: suspend (PodcastShow) -> Result<PodcastFeed.Loaded> = PodcastFeed::load,
 ) {
-    private val db = KleeampDatabase.get(context)
-    private val dao = db.podcasts()
-    private val cache: CacheDao = db.cache()
+    constructor(context: Context, scope: CoroutineScope) : this(
+        scope = scope,
+        dao = KleeampDatabase.get(context).podcasts(),
+        cache = KleeampDatabase.get(context).cache(),
+    )
 
     private val _directory = MutableStateFlow(PodcastDirectoryState())
     val directory: StateFlow<PodcastDirectoryState> = _directory.asStateFlow()
 
     private val _show = MutableStateFlow(ShowState())
     val show: StateFlow<ShowState> = _show.asStateFlow()
+
+    // openShow is called from the UI, while appScope loads on Dispatchers.Default.
+    // Selection and result publication must share a lock: checking the feed URL
+    // alone misses A -> B -> A, and cancellation cannot stop every blocking read.
+    private val showLock = Any()
+    private var showRequest: Any? = null
+    private var showJob: Job? = null
 
     // Subscriptions come straight from Room: a toggle or a feed add writes the
     // row and the invalidation tracker re-emits the list, so the subscribing
@@ -247,40 +264,59 @@ private var chartCursor: List<String> = emptyList()
      * re-opening a show is instant instead of another multi-megabyte download.
      */
     fun openShow(show: PodcastShow) {
-        val held = _show.value
-        // Re-entering a show that is already in hand should be instant, so a
-        // second tap is not a second 4 MB download. [refreshShow] is how a
-        // re-read is asked for.
-        if (held.show?.feedUrl == show.feedUrl && held.episodes.isNotEmpty() && !held.loading) return
-        _show.value = ShowState(show = show, loading = true)
-        scope.launch {
-            // Fill the screen from this feed's last snapshot while the fresh
-            // one downloads. Loading stays true so "reading the feed…" shows
-            // until the new list lands.
-            restoreFeed(show.feedUrl)
-            val loaded = retryFetch { PodcastFeed.load(show) }.getOrElse { e ->
-                val cur = _show.value
-                // A snapshot already on screen is better than an error; the
-                // failure can retry silently next visit.
-                _show.value = if (cur.episodes.isNotEmpty()) cur.copy(loading = false)
-                else ShowState(show = show, loading = false, error = e.message ?: "feed unreachable")
-                return@launch
+        val job = synchronized(showLock) {
+            val held = _show.value
+            // Re-entering a show already in hand should be instant.
+            if (held.show?.feedUrl == show.feedUrl && held.episodes.isNotEmpty() && !held.loading) return
+            val request = Any()
+            showRequest = request
+            showJob?.cancel()
+            _show.value = ShowState(show = show, loading = true)
+            // Assign before starting, including when the supplied scope runs inline.
+            val nextJob = scope.launch(start = CoroutineStart.LAZY) {
+                restoreFeed(show.feedUrl, request)
+                currentCoroutineContext().ensureActive()
+                val loaded = retryFetch { loadFeed(show) }.getOrElse { e ->
+                    if (e is CancellationException) throw e
+                    currentCoroutineContext().ensureActive()
+                    publishShow(request) { cur ->
+                        // Keep this request's cached episodes on a network failure.
+                        if (cur.episodes.isNotEmpty()) cur.copy(loading = false)
+                        else ShowState(show = show, error = e.message ?: "feed unreachable")
+                    }
+                    return@launch
+                }
+                currentCoroutineContext().ensureActive()
+                if (!publishShow(request) {
+                    ShowState(show = loaded.show, episodes = loaded.episodes)
+                }) return@launch
+                snapshotFeed(loaded.show, loaded.episodes)
+                // A subscription keeps whatever the feed knows that the
+                // directory did not, so the list stops looking half-filled.
+                if (dao.isSubscribed(loaded.show.feedUrl)) {
+                    dao.subscribe(loaded.show.toEntity(dao.nextTopPosition() + 1))
+                }
             }
-            _show.value = ShowState(show = loaded.show, episodes = loaded.episodes)
-            snapshotFeed(loaded.show, loaded.episodes)
-            // A subscription keeps whatever the feed knows that the
-            // directory did not, so the list stops looking half-filled.
-            if (dao.isSubscribed(loaded.show.feedUrl)) {
-                dao.subscribe(loaded.show.toEntity(dao.nextTopPosition() + 1))
-            }
+            showJob = nextJob
+            nextJob
         }
+        job.start()
     }
+
+    // Cancellation is cooperative: another selection can arrive after ensureActive.
+    // The identity check and write are atomic with openShow, so only its request wins.
+    private fun publishShow(request: Any, update: (ShowState) -> ShowState): Boolean =
+        synchronized(showLock) {
+            if (showRequest !== request) return@synchronized false
+            _show.value = update(_show.value)
+            true
+        }
 
     /** The last snapshot of [feedUrl]'s feed, or nothing when it has gone stale.
      * The caller refreshes regardless, so freshness only decides whether the
      * cached list is worth a first paint (a feed a month old still beats a
      * spinner, but why re-fetch it every open). */
-    private suspend fun restoreFeed(feedUrl: String) {
+    private suspend fun restoreFeed(feedUrl: String, request: Any) {
         val row = cache.getFeed(feedUrl) ?: return
         if (System.currentTimeMillis() - row.savedAt > FEED_TTL) return
         val cached = runCatching {
@@ -288,11 +324,10 @@ private var chartCursor: List<String> = emptyList()
             val episodes = Http.json.decodeFromString<List<PodcastEpisode>>(row.episodesJson)
             show to episodes
         }.getOrNull() ?: return
-        val cur = _show.value
-        // Only a feed that is still waiting counts; an already-live list
-        // (or another show) wins.
-        if (cur.show?.feedUrl == feedUrl && cur.episodes.isEmpty()) {
-            _show.value = cur.copy(show = cached.first, episodes = cached.second)
+        currentCoroutineContext().ensureActive()
+        publishShow(request) { cur ->
+            if (cur.episodes.isEmpty()) cur.copy(show = cached.first, episodes = cached.second)
+            else cur
         }
     }
 
