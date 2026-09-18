@@ -1,5 +1,10 @@
 package stream.kleeamp.mobile.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -212,14 +217,33 @@ fun SettingsScreen(
                 onSelect = { vm.onEvent(SettingsViewModel.Event.SetPalette(key)) },
             )
         }
-        if (custom != null) {
-            ThemeRow(
-                key = customName ?: "custom",
-                theme = custom,
-                selected = palette == "custom",
-                trailDivider = false,
-                onSelect = { vm.onEvent(SettingsViewModel.Event.SetPalette("custom")) },
-            )
+        AnimatedVisibility(
+            visible = custom != null,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
+            if (custom != null) {
+                UpNextSwipeToRemove(
+                    onRemove = { vm.onEvent(SettingsViewModel.Event.ClearCustomTheme) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    // Opaque like the Up Next rows: the red must only show
+                    // where the drag uncovers, never through the row itself.
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(p.ground)
+                    ) {
+                        ThemeRow(
+                            key = customName ?: "custom",
+                            theme = custom,
+                            selected = palette == "custom",
+                            trailDivider = false,
+                            onSelect = { vm.onEvent(SettingsViewModel.Event.SetPalette("custom")) },
+                        )
+                    }
+                }
+            }
         }
         Row(
             Modifier.fillMaxWidth().microPress { themeImporter.launch("application/json") }
@@ -235,17 +259,6 @@ fun SettingsScreen(
                 it, KleeampType.rowSecondary, p.destructiveInk,
                 Modifier.padding(start = Gutter, end = Gutter, bottom = 12.dp),
             )
-        }
-        if (custom != null) {
-            Row(
-                Modifier.fillMaxWidth().microPress { vm.onEvent(SettingsViewModel.Event.ClearCustomTheme) }
-                    .padding(horizontal = Gutter, vertical = 13.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Mono("Remove custom theme", KleeampType.rowPrimary, p.destructiveInk)
-                Mono("▸", KleeampType.rowPrimary, p.destructiveInk)
-            }
         }
 
         SectionLabel("storage")

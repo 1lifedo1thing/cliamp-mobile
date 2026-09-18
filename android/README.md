@@ -246,8 +246,8 @@ A good import applies immediately as the `custom` theme (with swatches, like
 the rest) and follows into the widgets. An optional `"name"` in the file
 (`"name": "noir dawn"`) labels it in Settings instead of `custom`. A bad one
 is refused with the exact fault named (`missing "accent"`, `bad colour for
-"ground": blue`) and nothing is written. `Remove custom theme` deletes it,
-falling back to system.
+"ground": blue`) and nothing is written. A left swipe on the imported theme
+deletes it, falling back to system.
 
 Current limits, all temporary: JSON only (no TOML import yet), no live
 editing (change the file, import again), and an absent or broken custom theme
