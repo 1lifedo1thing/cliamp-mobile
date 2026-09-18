@@ -14,6 +14,7 @@ import stream.kleeamp.mobile.data.Repository
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.ui.theme.KleeampPalette
 import stream.kleeamp.mobile.ui.theme.decodeCustomThemeOrNull
+import stream.kleeamp.mobile.ui.theme.customThemeNameOrNull
 import stream.kleeamp.mobile.ui.theme.parseCustomTheme
 
 class SettingsViewModel(
@@ -23,6 +24,7 @@ class SettingsViewModel(
     data class UiState(
         val palette: String = "dark",
         val custom: KleeampPalette? = null,
+        val customName: String? = null,
         val importError: String? = null,
         val haptics: Boolean = true,
         val visualizer: String = "spectrum",
@@ -111,6 +113,7 @@ class SettingsViewModel(
         UiState(
             palette = appearance.palette,
             custom = decodeCustomThemeOrNull(appearance.customJson),
+            customName = customThemeNameOrNull(appearance.customJson),
             importError = appearance.importError,
             haptics = appearance.haptics,
             visualizer = appearance.visualizer,

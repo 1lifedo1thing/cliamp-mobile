@@ -2,6 +2,7 @@ package stream.kleeamp.mobile.ui.theme
 
 import androidx.compose.ui.graphics.Color
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -15,6 +16,8 @@ import kotlinx.serialization.json.jsonPrimitive
  *
  * Shape: `{"dark": true, "canvas": "#...", "ground": "#...", ...}` with all
  * [CustomThemeRoles] present. Unknown extra keys are tolerated and ignored.
+ * An optional `"name"` string labels the theme in Settings instead of
+ * "custom"; blank or missing falls back to "custom".
  */
 val CustomThemeRoles = listOf(
     "canvas", "ground", "groundScope", "groundLock", "panel", "panelRaised",
@@ -56,6 +59,19 @@ fun parseCustomTheme(raw: String): Result<KleeampPalette> = runCatching {
 /** Decodes a stored custom theme, or null when absent or broken. */
 fun decodeCustomThemeOrNull(raw: String): KleeampPalette? =
     raw.takeIf { it.isNotBlank() }?.let { parseCustomTheme(it).getOrNull() }
+
+/**
+ * The display name a theme file declares for itself, or null when absent.
+ * Must be a string; blank trims to null so callers fall back to "custom".
+ * Never fails: a broken file simply has no name.
+ */
+fun customThemeNameOrNull(raw: String): String? = runCatching {
+    val primitive = Json.parseToJsonElement(raw).jsonObject["name"] as? JsonPrimitive
+        ?: return@runCatching null
+    // A JSON string prints quoted; numbers, booleans and null do not.
+    if (!primitive.toString().startsWith("\"")) return@runCatching null
+    primitive.content.trim().takeIf { it.isNotBlank() }
+}.getOrNull()
 
 /** `#RRGGBB` or `#AARRGGBB` into a Color, naming the role on failure. */
 private fun parseHex(role: String, hex: String): Color {

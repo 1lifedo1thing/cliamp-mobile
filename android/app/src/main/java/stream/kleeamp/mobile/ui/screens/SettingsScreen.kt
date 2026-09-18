@@ -72,6 +72,7 @@ fun SettingsScreen(
     val uiState by vm.state.collectAsState()
     val palette = uiState.palette
     val custom = uiState.custom
+    val customName = uiState.customName
     val importError = uiState.importError
     val haptics = uiState.haptics
     val visualizer = uiState.visualizer
@@ -213,7 +214,7 @@ fun SettingsScreen(
         }
         if (custom != null) {
             ThemeRow(
-                key = "custom",
+                key = customName ?: "custom",
                 theme = custom,
                 selected = palette == "custom",
                 subtitle = "imported",

@@ -1,5 +1,6 @@
 {
-  "_comment": "Example custom theme for kleeamp mobile: noir-dawn (omarchy-echosystem/omarchy-noir-dawn-theme). Copy this file, change the hex values, and import it from Settings — themes. Every role below is required; extras are ignored. Colours are #RRGGBB or #AARRGGBB. Values marked derived are ground/ink blends in the style of the generated Omarchy themes, not colours the scheme ships.",
+  "_comment": "Example custom theme for kleeamp: noir-dawn. Copy this file, change the hex values, and import it from Settings — themes. Every role below is required; extras are ignored. The optional name is shown in Settings instead of custom. Colours are #RRGGBB or #AARRGGBB. Values marked derived are ground/ink blends in the style of the generated Omarchy themes, not colours the scheme ships.",
+  "name": "noir dawn",
   "dark": true,
   "canvas": "#0c0b0c",
   "ground": "#0c0b0c",
