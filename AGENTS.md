@@ -51,3 +51,9 @@ Load `android-tui-parity`, the Go set, and Compose skills for the Android _host_
 Terminal mode ON means a full-screen PTY running the real `cliamp` binary. Same frames, colors, visualizers, and keys as desktop cliamp.
 
 Do not rebuild the Winamp TUI in Compose. Material UI exists only when Terminal mode is OFF.
+
+## Commits
+
+Every commit must have a description body, not just a subject line.
+Subject: `area: what changed (#n)` (50 chars or less). Body: what was wrong,
+what the fix does, and how it was verified (build, tests, emulator/phone).

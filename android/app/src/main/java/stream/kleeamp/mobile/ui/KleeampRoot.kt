@@ -622,7 +622,12 @@ fun KleeampRoot(
                 val accountId = entry.toRoute<ProviderBrowse>().accountId
                 val account = providerAccounts.firstOrNull { it.id == accountId }
                 if (account == null) {
-                    navController.popBackStack()
+                    // Never pop during composition: side-effect runs after the
+                    // frame, so a stale/deleted account can't throw
+                    // "popBackStack called during composition".
+                    LaunchedEffect(accountId) {
+                        navController.popBackStack()
+                    }
                 } else {
                     OverlayCover {
                     ProviderBrowseScreen(
@@ -643,7 +648,11 @@ fun KleeampRoot(
                 val route = entry.toRoute<ProviderWizardRoute>()
                 val spec = ProviderCatalog.byKey(route.providerKey)
                 if (spec == null) {
-                    navController.popBackStack()
+                    // Same as above: navigate only from an effect, never from
+                    // the composable body.
+                    LaunchedEffect(route.providerKey) {
+                        navController.popBackStack()
+                    }
                 } else {
                     val existing = if (route.accountId.isNotEmpty()) {
                         providerAccounts.firstOrNull { it.id == route.accountId }
