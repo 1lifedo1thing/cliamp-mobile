@@ -41,6 +41,8 @@ enum class Visualizer(val id: String, val label: String, val columns: Int) {
 
     Omarchy("omarchy", "omarchy", 24),
 
+    Kleeamp("kleeamp", "kleeamp", 24),
+
     /**
      * The widget's brick meter. Glance renders to RemoteViews, which hard-cap
      * every Row at 10 direct children, so the full 24-column meter cannot

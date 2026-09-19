@@ -13,7 +13,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import stream.kleeamp.mobile.data.visualizer.ClassicLedCore
 import stream.kleeamp.mobile.data.visualizer.ClassicPeakCore
+import stream.kleeamp.mobile.data.visualizer.KleeampCore
 import stream.kleeamp.mobile.data.visualizer.MeterCore
+import stream.kleeamp.mobile.data.visualizer.OmarchyField
 import stream.kleeamp.mobile.data.visualizer.StereoCore
 import stream.kleeamp.mobile.data.visualizer.StereoMetrics
 import stream.kleeamp.mobile.data.visualizer.VisMath
@@ -110,6 +112,18 @@ class OmarchyFrame(columns: Int) : VisFrame(columns, OMARCHY_TICK_NS) {
     }
 }
 
+class KleeampFrame(columns: Int) : VisFrame(columns, KLEEAMP_TICK_NS) {
+    val core = KleeampCore(columns)
+
+    override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
+        core.push(bands ?: VisMath.idleBands(columns, t), dt)
+    }
+
+    private companion object {
+        const val KLEEAMP_TICK_NS = 0L
+    }
+}
+
 @Composable
 fun rememberVisFrame(
     mode: Visualizer,
@@ -147,6 +161,7 @@ private fun newVisFrame(mode: Visualizer, columns: Int): VisFrame = when (mode) 
     Visualizer.ClassicLed -> ClassicLedFrame(columns)
     Visualizer.Stereo -> StereoFrame(columns)
     Visualizer.Omarchy -> OmarchyFrame(columns)
+    Visualizer.Kleeamp -> KleeampFrame(columns)
     Visualizer.Brick, Visualizer.Widget -> error("brick renders through rememberMeter")
 }
 
@@ -180,5 +195,6 @@ fun VisualizerView(frame: VisFrame, modifier: Modifier = Modifier) {
         is ClassicLedFrame -> VisClassicLed(frame, modifier)
         is StereoFrame -> VisStereo(frame, modifier)
         is OmarchyFrame -> VisOmarchy(frame, modifier)
+        is KleeampFrame -> VisKleeamp(frame, modifier)
     }
 }
