@@ -34,6 +34,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -154,17 +155,20 @@ fun KleeampRoot(
     // favourites smart detail pane so both agree.
     var favScope by rememberSaveable { mutableStateOf(FavScope.All) }
 
+    // Playback-global state stays at the root: the chrome and every screen
+    // read current/playing. Prefs, provider and progress flows are collected
+    // down in the chrome/destination that owns them, so a favorite toggle or
+    // a provider edit no longer recomposes the whole tree.
     val playerState by player.state.collectAsState()
     val station by PlaybackBus.station.collectAsState()
     val streamTitle by PlaybackBus.streamTitle.collectAsState()
-    val favorites by prefs.favorites.collectAsState(initial = emptyList())
-    val recent by prefs.history.collectAsState(initial = emptyList())
-    val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
     val reconnect by PlaybackBus.reconnectAttempt.collectAsState()
-    val providerAccounts by providers.accounts.collectAsState(initial = emptyList())
-    val progress by podcasts.progress.collectAsState(initial = emptyMap())
 
-    player.setFallbackSource(recent)
+    // The player's fallback queue follows history without subscribing
+    // composition to it: a collect in scope, never a State read in the body.
+    LaunchedEffect(Unit) {
+        prefs.history.collect { player.setFallbackSource(it) }
+    }
 
     // Search-widget deep link while running: any OPEN_SEARCH tick opens the
     // Search overlay, unless it is already on top. launchSingleTop keeps
@@ -224,23 +228,11 @@ fun KleeampRoot(
     }
     val switchTab: (Tab) -> Unit = { newTab -> goToTab(newTab, true) }
 
-    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-    // The chrome (mini player + tab strip) lives under every page for the
-    // whole session: it is never removed, so there is no flash of it
-    // disappearing when an overlay opens. Full overlays cover it at rest and
-    // a back just slides them away to show it - tabs, mini player and all.
-    // Guarded opens: tapping the mini player while already on that page is a
-    // no-op instead of stacking a duplicate destination.
-    val openPlayer: () -> Unit = {
-        if (currentRoute?.startsWith(Player::class.qualifiedName!!) != true) {
-            navController.navigate(Player)
-        }
-    }
-    val openUpNext: () -> Unit = {
-        if (currentRoute?.startsWith(UpNext::class.qualifiedName!!) != true) {
-            navController.navigate(UpNext)
-        }
-    }
+    // Route-guarded navigation, read here in the chrome (and once per
+    // destination that needs it) so the root never subscribes to the back
+    // stack. Guarded opens: tapping the mini player while already on that
+    // page is a no-op instead of stacking a duplicate destination.
+    val chromeNav = rememberGuardedNav(navController)
 
     BoxWithConstraints(Modifier.fillMaxSize().background(p.ground)) {
         val rail = maxWidth > maxHeight
@@ -267,20 +259,18 @@ fun KleeampRoot(
                 .padding(end = contentEnd)
                 .onSizeChanged { chromeBottom = with(density) { it.height.toDp() } },
         ) {
-            MiniPlayer(
-                station = station ?: recent.firstOrNull(),
+            ScopedMiniPlayer(
+                prefs = prefs,
+                player = player,
+                station = station,
                 streamTitle = streamTitle,
                 playing = playerState.playing,
                 buffering = playerState.buffering,
-                    reconnecting = reconnect,
-                    visualizer = visualizer,
+                reconnecting = reconnect,
                 hasPrev = playerState.hasPrev,
                 hasNext = playerState.hasNext,
-                onPrev = { player.prev() },
-                onNext = { player.next() },
-                onOpenUpNext = openUpNext,
-                onToggle = { player.toggle(station ?: recent.firstOrNull()) },
-                onOpen = openPlayer,
+                onOpenUpNext = chromeNav.openUpNext,
+                onOpen = chromeNav.openPlayer,
             )
 
             if (!rail) {
@@ -349,11 +339,10 @@ fun KleeampRoot(
                     // so a chip row slows a swipe but never swallows it.
                     Box(Modifier.fillMaxSize()) {
                         when (Tab.entries[page]) {
-                            Tab.Stations -> StationsScreen(
-                                vm = appViewModel { app -> StationsViewModel(app.repository, app.prefs) },
+                            Tab.Stations -> StationsTab(
+                                prefs = prefs,
                                 current = station,
                                 playing = playerState.playing,
-                                favorites = favorites,
                                 onPlay = onPlay,
                                 onOpenSearch = {
                                     navController.navigate(Search)
@@ -445,6 +434,7 @@ fun KleeampRoot(
             }
             composable<LibrarySmartPlaylist> { entry ->
                 val kind = entry.toRoute<LibrarySmartPlaylist>().kind
+                val progress by podcasts.progress.collectAsState(initial = emptyMap())
                 Box(contentModifier) {
                     LibrarySmartPlaylistPane(
                         vm = appViewModel(key = kind) { app ->
@@ -532,7 +522,7 @@ fun KleeampRoot(
                 NowPlayingScreen(
                     vm = appViewModel { app -> NowPlayingViewModel(app.player, app.prefs) },
                     onOpenScope = { navController.navigate(Scope) },
-                    onOpenUpNext = openUpNext,
+                    onOpenUpNext = rememberGuardedNav(navController).openUpNext,
                     onBack = { navController.popBackStack() },
                 )
                 }
@@ -620,6 +610,7 @@ fun KleeampRoot(
             }
             composable<ProviderBrowse> { entry ->
                 val accountId = entry.toRoute<ProviderBrowse>().accountId
+                val providerAccounts by providers.accounts.collectAsState(initial = emptyList())
                 val account = providerAccounts.firstOrNull { it.id == accountId }
                 if (account == null) {
                     // Never pop during composition: side-effect runs after the
@@ -639,7 +630,7 @@ fun KleeampRoot(
                             )
                         },
                         onPlay = onPlay,
-                        onOpenPlayer = openPlayer,
+                        onOpenPlayer = rememberGuardedNav(navController).openPlayer,
                     )
                     }
                 }
@@ -654,6 +645,7 @@ fun KleeampRoot(
                         navController.popBackStack()
                     }
                 } else {
+                    val providerAccounts by providers.accounts.collectAsState(initial = emptyList())
                     val existing = if (route.accountId.isNotEmpty()) {
                         providerAccounts.firstOrNull { it.id == route.accountId }
                     } else null
@@ -696,8 +688,7 @@ fun KleeampRoot(
  * they cannot fall through to the chrome. Taps give no visual: null.
  */
 @Composable
-private fun OverlayCover(content: @Composable () -> Unit) {
-    val p = LocalPalette.current
+private fun OverlayCover(content: @Composable () -> Unit) {    val p = LocalPalette.current
     Box(
         Modifier
             .fillMaxSize()
@@ -710,4 +701,100 @@ private fun OverlayCover(content: @Composable () -> Unit) {
     ) {
         content()
     }
+}
+
+/**
+ * Route-guarded opens, scoped to the caller: the back-stack entry is read
+ * here, so a navigation only recomposes the chrome or the destination that
+ * asked - never the root.
+ */
+private class GuardedNav(
+    val openPlayer: () -> Unit,
+    val openUpNext: () -> Unit,
+)
+
+@Composable
+private fun rememberGuardedNav(navController: NavHostController): GuardedNav {
+    val route = navController.currentBackStackEntryAsState().value?.destination?.route
+    return remember(route) {
+        GuardedNav(
+            openPlayer = {
+                if (route?.startsWith(Player::class.qualifiedName!!) != true) {
+                    navController.navigate(Player)
+                }
+            },
+            openUpNext = {
+                if (route?.startsWith(UpNext::class.qualifiedName!!) != true) {
+                    navController.navigate(UpNext)
+                }
+            },
+        )
+    }
+}
+
+/**
+ * Mini player with its Prefs flows collected locally: history (fallback
+ * station) and the visualizer choice live here, so neither recomposes the
+ * root when they change.
+ */
+@Composable
+private fun ScopedMiniPlayer(
+    prefs: Prefs,
+    player: PlayerConnection,
+    station: Station?,
+    streamTitle: String,
+    playing: Boolean,
+    buffering: Boolean,
+    reconnecting: Int,
+    hasPrev: Boolean,
+    hasNext: Boolean,
+    onOpenUpNext: () -> Unit,
+    onOpen: () -> Unit,
+) {
+    val recent by prefs.history.collectAsState(initial = emptyList())
+    val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
+    MiniPlayer(
+        station = station ?: recent.firstOrNull(),
+        streamTitle = streamTitle,
+        playing = playing,
+        buffering = buffering,
+        reconnecting = reconnecting,
+        visualizer = visualizer,
+        hasPrev = hasPrev,
+        hasNext = hasNext,
+        onPrev = { player.prev() },
+        onNext = { player.next() },
+        onOpenUpNext = onOpenUpNext,
+        onToggle = { player.toggle(station ?: recent.firstOrNull()) },
+        onOpen = onOpen,
+    )
+}
+
+/**
+ * Stations tab with its favorites collected locally: toggling a star only
+ * recomposes this tab, not the pager, the chrome or the other tabs.
+ */
+@Composable
+private fun StationsTab(
+    prefs: Prefs,
+    current: Station?,
+    playing: Boolean,
+    onPlay: (Station, List<Station>) -> Unit,
+    onOpenSearch: () -> Unit,
+    onOpenSettings: () -> Unit,
+    focusDirectory: Boolean,
+    onDirectoryFocusConsumed: () -> Unit,
+) {
+    val favorites by prefs.favorites.collectAsState(initial = emptyList())
+    StationsScreen(
+        vm = appViewModel { app -> StationsViewModel(app.repository, app.prefs) },
+        current = current,
+        playing = playing,
+        favorites = favorites,
+        onPlay = onPlay,
+        onOpenSearch = onOpenSearch,
+        onOpenSettings = onOpenSettings,
+        focusDirectory = focusDirectory,
+        onDirectoryFocusConsumed = onDirectoryFocusConsumed,
+    )
 }
