@@ -303,8 +303,11 @@ fun SettingsScreen(
                 modifier = Modifier.size(34.dp),
             )
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Mono("kleeamp ${BuildConfig.VERSION_NAME} · all rights reserved", KleeampType.rowSecondary, p.inkSecondary)
-                Mono("cliamp.stream · radio-browser.info", KleeampType.meta, p.inkFaint)
+                // A release carries the tag it was built from; a local debug
+                // build is not a release and must not name one.
+                val version = if (BuildConfig.DEBUG) "dev" else BuildConfig.VERSION_NAME
+                Mono("kleeamp $version · all rights reserved", KleeampType.rowSecondary, p.inkSecondary)
+                Mono("cliamp.stream", KleeampType.meta, p.inkFaint)
             }
         }
         Spacer(Modifier.height(40.dp))
