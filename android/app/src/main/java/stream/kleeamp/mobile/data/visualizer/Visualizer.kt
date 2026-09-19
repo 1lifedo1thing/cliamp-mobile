@@ -23,9 +23,23 @@ import kotlin.math.sin
  * [stream.kleeamp.mobile.widget.WidgetViz] is the widget-side dispatch that
  * maps the persisted setting id onto whichever painter draws it.
  */
-enum class Visualizer(val id: String, val columns: Int, val brickDp: Int, val gapDp: Int) {
+enum class Visualizer(val id: String, val label: String, val columns: Int) {
     /** The signature brick meter: 24 columns, the NowPlaying geometry. */
-    Brick("spectrum", 24, 4, 3),
+    Brick("spectrum", "spectrum", 24),
+
+    Bars("bars", "bars", 24),
+
+    ClassicPeak("classicpeak", "classic peak", 28),
+
+    Matrix("matrix", "matrix", 32),
+
+    Butterfly("butterfly", "butterfly", 24),
+
+    ClassicLed("classicled", "classic led", 28),
+
+    Stereo("stereo", "stereo", 28),
+
+    Omarchy("omarchy", "omarchy", 24),
 
     /**
      * The widget's brick meter. Glance renders to RemoteViews, which hard-cap
@@ -34,11 +48,14 @@ enum class Visualizer(val id: String, val columns: Int, val brickDp: Int, val ga
      * levels/peaks (downsampled from the 24-column MeterCore) at a column
      * count Glance can hold.
      */
-    Widget("widget", 10, 4, 3),
+    Widget("widget", "widget", 10),
     ;
 
     companion object {
         val default = Brick
+
+        val selectable: List<Visualizer> get() = entries.filter { it != Widget }
+
         fun byId(id: String?): Visualizer =
             entries.firstOrNull { it.id == id } ?: default
     }

@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.data.visualizer.StereoMetrics
 
 /**
  * The service and the UI live in the same process, so rather than round-trip
@@ -18,6 +19,9 @@ object PlaybackBus {
     /** False means the columns are synthesised, not measured. */
     private val _spectrumLive = MutableStateFlow(false)
     val spectrumLive: StateFlow<Boolean> = _spectrumLive.asStateFlow()
+
+    private val _stereo = MutableStateFlow(StereoMetrics.silent)
+    val stereo: StateFlow<StereoMetrics> = _stereo.asStateFlow()
 
     private val _streamTitle = MutableStateFlow("")
     val streamTitle: StateFlow<String> = _streamTitle.asStateFlow()
@@ -46,6 +50,7 @@ object PlaybackBus {
 
     fun publishSpectrum(v: FloatArray) { _spectrum.value = v }
     fun publishSpectrumLive(v: Boolean) { _spectrumLive.value = v }
+    fun publishStereo(v: StereoMetrics) { _stereo.value = v }
     fun publishStreamTitle(v: String) { _streamTitle.value = v }
     fun publishStation(v: Station?) { _station.value = v; if (v != null) _streamTitle.value = "" }
     fun publishSource(v: List<Station>) { _source.value = v }

@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import stream.kleeamp.mobile.BuildConfig
 import stream.kleeamp.mobile.R
+import stream.kleeamp.mobile.data.visualizer.Visualizer
 import stream.kleeamp.mobile.ui.components.Chip
 import stream.kleeamp.mobile.ui.components.KleeampIcons
 import stream.kleeamp.mobile.ui.components.KleeampToggle
@@ -182,7 +183,7 @@ fun SettingsScreen(
         )
         ChoiceRow(
             title = "Visualizer",
-            options = listOf("spectrum", "off"),
+            options = Visualizer.selectable.map { it.id to it.label } + listOf("off" to "off"),
             selected = visualizer,
             onSelect = { vm.onEvent(SettingsViewModel.Event.SetVisualizer(it)) },
         )
@@ -392,7 +393,12 @@ private fun ThemeRow(
 }
 
 @Composable
-private fun ChoiceRow(title: String, options: List<String>, selected: String, onSelect: (String) -> Unit) {
+private fun ChoiceRow(
+    title: String,
+    options: List<Pair<String, String>>,
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
     val p = LocalPalette.current
     Column {
         Row(
@@ -405,7 +411,9 @@ private fun ChoiceRow(title: String, options: List<String>, selected: String, on
                 Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                options.forEach { o -> Chip(o, selected == o, onClick = { onSelect(o) }) }
+                options.forEach { (id, label) ->
+                    Chip(label, selected == id, onClick = { onSelect(id) })
+                }
             }
         }
         // Last row before the themes section: full width instead of stacking

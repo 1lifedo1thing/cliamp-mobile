@@ -83,6 +83,8 @@ class PlaybackService : MediaSessionService() {
         for (n in 1..8) m.putChannelMixingMatrix(identityMatrix(n))
     }
 
+    private val stereoTap = StereoMeterTap()
+
     /** Last channel count seen, so the toggle reapplies without a format event. */
     @Volatile private var mixerChannels = 2
 
@@ -113,7 +115,7 @@ class PlaybackService : MediaSessionService() {
             ): AudioSink = DefaultAudioSink.Builder(context)
                 .setEnableFloatOutput(enableFloatOutput)
                 .setEnableAudioOutputPlaybackParameters(enableAudioTrackPlaybackParams)
-                .setAudioProcessors(arrayOf(sinkMixer))
+                .setAudioProcessors(arrayOf(stereoTap, sinkMixer))
                 .build()
         }
     }

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.data.Prefs
 import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.data.visualizer.StereoMetrics
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection
 import stream.kleeamp.mobile.playback.upNextIndices
@@ -37,6 +38,7 @@ class NowPlayingViewModel(
         val shuffled: Boolean = false,
         val visualizer: String = "spectrum",
         val spectrum: FloatArray = FloatArray(0),
+        val stereo: StereoMetrics = StereoMetrics.silent,
     )
 
     sealed interface Event {
@@ -60,6 +62,7 @@ class NowPlayingViewModel(
         val recent: List<Station> = emptyList(),
         val visualizer: String = "spectrum",
         val shuffled: Boolean = false,
+        val stereo: StereoMetrics = StereoMetrics.silent,
     )
 
     val state: StateFlow<UiState> = combine(
@@ -72,13 +75,24 @@ class NowPlayingViewModel(
             ::BusState,
         ),
         combine(
-            PlaybackBus.spectrum,
+            combine(
+                PlaybackBus.spectrum,
+                PlaybackBus.stereo,
+            ) { spectrum, stereo -> spectrum to stereo },
             prefs.favorites,
             prefs.history,
             prefs.visualizer,
             player.shuffle,
-            ::LibState,
-        ),
+        ) { spectrumStereo, favorites, history, visualizer, shuffled ->
+            LibState(
+                spectrum = spectrumStereo.first,
+                favorites = favorites,
+                recent = history,
+                visualizer = visualizer,
+                shuffled = shuffled,
+                stereo = spectrumStereo.second,
+            )
+        },
         player.upNext,
         player.upNextIndex,
     ) { bus, lib, upNext, upNextIndex ->
@@ -98,6 +112,7 @@ class NowPlayingViewModel(
             shuffled = lib.shuffled,
             visualizer = lib.visualizer,
             spectrum = lib.spectrum,
+            stereo = lib.stereo,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
 

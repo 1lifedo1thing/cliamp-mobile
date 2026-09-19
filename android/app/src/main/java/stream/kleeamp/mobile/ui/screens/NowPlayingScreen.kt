@@ -56,11 +56,12 @@ import androidx.media3.common.util.UnstableApi
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationArtSource
 import stream.kleeamp.mobile.data.StationSource
+import stream.kleeamp.mobile.data.visualizer.StereoMetrics
+import stream.kleeamp.mobile.data.visualizer.Visualizer
 import stream.kleeamp.mobile.playback.PlayerState
 import stream.kleeamp.mobile.ui.clock
 import stream.kleeamp.mobile.ui.compact
 import stream.kleeamp.mobile.ui.components.BackChevron
-import stream.kleeamp.mobile.ui.components.BrickMeter
 import stream.kleeamp.mobile.ui.components.Chip
 import stream.kleeamp.mobile.ui.components.KleeampIcons
 import stream.kleeamp.mobile.ui.components.Gutter
@@ -72,8 +73,8 @@ import stream.kleeamp.mobile.ui.components.StreamingRule
 import stream.kleeamp.mobile.ui.components.ArtGlow
 import stream.kleeamp.mobile.ui.components.ArtPlate
 import stream.kleeamp.mobile.ui.components.microPress
-import stream.kleeamp.mobile.ui.components.rememberMeter
 import stream.kleeamp.mobile.ui.components.rememberStationThumbnail
+import stream.kleeamp.mobile.ui.components.vis.VisualizerMeter
 import stream.kleeamp.mobile.ui.theme.KleeampShape
 import stream.kleeamp.mobile.ui.theme.KleeampType
 import stream.kleeamp.mobile.ui.theme.LocalPalette
@@ -121,6 +122,7 @@ private data class PlayerModel(
     val shuffled: Boolean,
     val visualizer: String,
     val spectrum: State<FloatArray>,
+    val stereo: State<StereoMetrics>,
 )
 
 /** Every control the player screen can take, so both layouts share one set. */
@@ -148,9 +150,10 @@ fun NowPlayingScreen(
     val p = LocalPalette.current
 
     val uiState by vm.state.collectAsState()
-    // rememberMeter reads its spectrum through Compose State, so hand it a
+    // The meter reads its spectrum through Compose State, so hand it a
     // state that tracks the latest VM frame.
     val spectrum = rememberUpdatedState(uiState.spectrum)
+    val stereo = rememberUpdatedState(uiState.stereo)
 
     val model = PlayerModel(
         state = uiState.playerState,
@@ -163,6 +166,7 @@ fun NowPlayingScreen(
         shuffled = uiState.shuffled,
         visualizer = uiState.visualizer,
         spectrum = spectrum,
+        stereo = stereo,
     )
     val actions = PlayerActions(
         onBack = onBack,
@@ -470,19 +474,18 @@ private fun PlayerTransport(
         // removed entirely, not just fed idle data - so neither the
         // frame loop nor a static brick grid exists in the player.
         if (model.visualizer != "off") {
-            val frame = rememberMeter(
+            VisualizerMeter(
+                mode = Visualizer.byId(model.visualizer),
                 columns = MeterSize.NowPlaying.columns,
                 live = model.state.playing,
                 spectrum = model.spectrum,
-            )
-            BrickMeter(
-                frame = frame,
+                stereo = model.stereo,
+                brick = MeterSize.NowPlaying.brick,
+                gap = MeterSize.NowPlaying.gap,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(MeterSize.NowPlaying.height)
                     .consumeAllGestures(),
-                brick = MeterSize.NowPlaying.brick,
-                gap = MeterSize.NowPlaying.gap,
             )
         }
 

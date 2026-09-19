@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -31,10 +32,10 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.data.Prefs
 import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.data.visualizer.Visualizer
 import stream.kleeamp.mobile.playback.EqPresets
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.ui.components.BackChevron
-import stream.kleeamp.mobile.ui.components.BrickMeter
 import stream.kleeamp.mobile.ui.components.Chip
 import stream.kleeamp.mobile.ui.components.KleeampToggle
 import stream.kleeamp.mobile.ui.components.Gutter
@@ -42,7 +43,7 @@ import stream.kleeamp.mobile.ui.components.HairlineDivider
 import stream.kleeamp.mobile.ui.components.MechSliderVertical
 import stream.kleeamp.mobile.ui.components.MeterSize
 import stream.kleeamp.mobile.ui.components.SectionLabel
-import stream.kleeamp.mobile.ui.components.rememberMeter
+import stream.kleeamp.mobile.ui.components.vis.VisualizerMeter
 import stream.kleeamp.mobile.ui.theme.KleeampType
 import stream.kleeamp.mobile.ui.theme.LocalPalette
 import stream.kleeamp.mobile.ui.theme.Mono
@@ -62,7 +63,9 @@ fun ScopeScreen(
     val scope = rememberCoroutineScope()
 
     val spectrum = PlaybackBus.spectrum.collectAsState()
+    val stereo = PlaybackBus.stereo.collectAsState()
     val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
+    val mode = Visualizer.byId(visualizer)
     val spectrumLive by PlaybackBus.spectrumLive.collectAsState()
     val eqEnabled by prefs.eqEnabled.collectAsState(initial = false)
     val eqBands by prefs.eqBands.collectAsState(initial = List(7) { 0f })
@@ -85,29 +88,35 @@ fun ScopeScreen(
             Mono(
                 when {
                     visualizer == "off" -> "VISUALIZER OFF"
-                    spectrumLive -> "SPECTRUM · LIVE"
-                    playing -> "SPECTRUM · SIMULATED"
-                    else -> "SPECTRUM · IDLE"
+                    spectrumLive -> "${mode.label.uppercase()} · LIVE"
+                    playing -> "${mode.label.uppercase()} · SIMULATED"
+                    else -> "${mode.label.uppercase()} · IDLE"
                 },
                 KleeampType.sectionLabel,
                 if (spectrumLive) p.accent else p.inkTertiary,
             )
         }
 
-        // Explicit visualizer switch: spectrum or off, same setting the
-        // player and mini player read. Sits above the meter it controls.
+        // Explicit visualizer switch: every family, then off, on the same
+        // setting the player and mini player read. Sits above the meter it
+        // controls.
         Row(
             Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Mono("Visualizer", KleeampType.rowPrimaryMedium, p.ink)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip(
-                    "spectrum",
-                    visualizer == "spectrum",
-                    onClick = { scope.launch { prefs.setVisualizer("spectrum") } },
-                )
+            Spacer(Modifier.width(12.dp))
+            Row(
+                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Visualizer.selectable.forEach { m ->
+                    Chip(
+                        m.label,
+                        visualizer == m.id,
+                        onClick = { scope.launch { prefs.setVisualizer(m.id) } },
+                    )
+                }
                 Chip(
                     "off",
                     visualizer == "off",
@@ -120,12 +129,6 @@ fun ScopeScreen(
         // entirely (no frame loop, no grid, no peak readout), leaving just the
         // equalizer on this screen.
         if (visualizer != "off") {
-            val frame = rememberMeter(
-                columns = MeterSize.Scope.columns,
-                live = playing,
-                spectrum = spectrum,
-            )
-
             // Peak level in dBFS, read straight off the folded spectrum.
             val peakDb = spectrum.value.maxOrNull()?.let { -48f + it * 48f } ?: -48f
 
@@ -147,15 +150,17 @@ fun ScopeScreen(
                         p.accent.copy(alpha = if (spectrumLive) peakAlpha else 1f),
                     )
                 }
-                BrickMeter(
-                    frame = frame,
-                    modifier = Modifier.fillMaxWidth().height(MeterSize.Scope.height),
+                VisualizerMeter(
+                    mode = mode,
+                    columns = MeterSize.Scope.columns,
+                    live = playing,
+                    spectrum = spectrum,
+                    stereo = stereo,
                     brick = MeterSize.Scope.brick,
                     gap = MeterSize.Scope.gap,
-                    columnGap = 3.dp,
+                    modifier = Modifier.fillMaxWidth().height(MeterSize.Scope.height),
                 )
             }
-
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
