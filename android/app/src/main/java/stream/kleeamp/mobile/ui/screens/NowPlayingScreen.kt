@@ -58,6 +58,9 @@ import stream.kleeamp.mobile.data.StationArtSource
 import stream.kleeamp.mobile.data.StationSource
 import stream.kleeamp.mobile.data.visualizer.StereoMetrics
 import stream.kleeamp.mobile.data.visualizer.Visualizer
+import stream.kleeamp.mobile.playback.AudioOutput
+import stream.kleeamp.mobile.playback.AudioOutputs
+import stream.kleeamp.mobile.playback.OutputKind
 import stream.kleeamp.mobile.playback.PlayerState
 import stream.kleeamp.mobile.ui.clock
 import stream.kleeamp.mobile.ui.compact
@@ -68,11 +71,13 @@ import stream.kleeamp.mobile.ui.components.Gutter
 import stream.kleeamp.mobile.ui.components.MechKey
 import stream.kleeamp.mobile.ui.components.MeterSize
 import stream.kleeamp.mobile.ui.components.MarqueeLabel
+import stream.kleeamp.mobile.ui.components.OutputMenu
 import stream.kleeamp.mobile.ui.components.Scrubber
 import stream.kleeamp.mobile.ui.components.StreamingRule
 import stream.kleeamp.mobile.ui.components.ArtGlow
 import stream.kleeamp.mobile.ui.components.ArtPlate
 import stream.kleeamp.mobile.ui.components.microPress
+import stream.kleeamp.mobile.ui.components.rememberAudioOutputs
 import stream.kleeamp.mobile.ui.components.rememberStationThumbnail
 import stream.kleeamp.mobile.ui.components.vis.VisualizerMeter
 import stream.kleeamp.mobile.ui.theme.KleeampShape
@@ -123,6 +128,9 @@ private data class PlayerModel(
     val visualizer: String,
     val spectrum: State<FloatArray>,
     val stereo: State<StereoMetrics>,
+    val outputDevice: Int,
+    val outputs: List<AudioOutput>,
+    val currentOutput: AudioOutput?,
 )
 
 /** Every control the player screen can take, so both layouts share one set. */
@@ -137,6 +145,7 @@ private data class PlayerActions(
     val onPrev: () -> Unit,
     val onPlayPause: () -> Unit,
     val onNext: () -> Unit,
+    val onSelectOutput: (Int) -> Unit,
 )
 
 @UnstableApi
@@ -154,6 +163,13 @@ fun NowPlayingScreen(
     // state that tracks the latest VM frame.
     val spectrum = rememberUpdatedState(uiState.spectrum)
     val stereo = rememberUpdatedState(uiState.stereo)
+    // The connected sinks and the one the stream is on: "speaker" until a
+    // headset or Bluetooth route takes over.
+    val context = LocalContext.current
+    val outputs = rememberAudioOutputs()
+    val currentOutput = remember(outputs, uiState.outputDevice) {
+        AudioOutputs.current(context, uiState.outputDevice)
+    }
 
     val model = PlayerModel(
         state = uiState.playerState,
@@ -167,6 +183,9 @@ fun NowPlayingScreen(
         visualizer = uiState.visualizer,
         spectrum = spectrum,
         stereo = stereo,
+        outputDevice = uiState.outputDevice,
+        outputs = outputs,
+        currentOutput = currentOutput,
     )
     val actions = PlayerActions(
         onBack = onBack,
@@ -179,6 +198,7 @@ fun NowPlayingScreen(
         onPrev = { vm.player.prev() },
         onPlayPause = { vm.player.toggle(uiState.shownStation) },
         onNext = { vm.player.next() },
+        onSelectOutput = { vm.onEvent(NowPlayingViewModel.Event.SetOutputDevice(it)) },
     )
 
     Box(Modifier.fillMaxSize()) {
@@ -416,6 +436,12 @@ private fun PlayerStatusRow(
                 .height(18.dp)
                 .consumeAllGestures(),
         )
+        OutputAction(
+            current = model.currentOutput,
+            outputs = model.outputs,
+            selectedId = model.outputDevice,
+            onSelect = actions.onSelectOutput,
+        )
         SmallAction(
             KleeampIcons.Shuffle,
             if (model.shuffled) "stop shuffling" else "shuffle",
@@ -429,6 +455,43 @@ private fun PlayerStatusRow(
             tint = if (model.isFav) p.accent else p.inkTertiary,
         ) { actions.onToggleFav() }
     }
+}
+
+/**
+ * The output key: one tap names the sink the stream is on and offers the other
+ * connected ones. The icon tells the route at a glance, and it picks up the
+ * accent when audio is not on the phone's own speaker.
+ */
+@Composable
+private fun OutputAction(
+    current: AudioOutput?,
+    outputs: List<AudioOutput>,
+    selectedId: Int,
+    onSelect: (Int) -> Unit,
+) {
+    val p = LocalPalette.current
+    val external = current != null && current.kind != OutputKind.Speaker
+    OutputMenu(
+        trigger = { onOpen ->
+            SmallAction(
+                outputIcon(current?.kind),
+                "audio output · ${current?.name ?: "system default"}",
+                tint = if (external) p.accent else p.inkSecondary,
+                onClick = onOpen,
+            )
+        },
+        currentName = current?.name,
+        outputs = outputs,
+        selectedId = selectedId,
+        onSelect = onSelect,
+    )
+}
+
+private fun outputIcon(kind: OutputKind?): androidx.compose.ui.graphics.vector.ImageVector = when (kind) {
+    OutputKind.Headphones -> KleeampIcons.Headphones
+    OutputKind.Bluetooth -> KleeampIcons.Bluetooth
+    OutputKind.Usb -> KleeampIcons.Usb
+    else -> KleeampIcons.Speaker
 }
 
 /** The station name, stream title and source meta line. All gesture-inert. */

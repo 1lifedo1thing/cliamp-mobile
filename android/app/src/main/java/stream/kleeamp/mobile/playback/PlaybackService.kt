@@ -3,7 +3,12 @@ package stream.kleeamp.mobile.playback
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -84,6 +89,19 @@ class PlaybackService : MediaSessionService() {
     }
 
     private val stereoTap = StereoMeterTap()
+
+    /** Chosen output device id, -1 for system default. Mirrored from [prefs0]. */
+    private var outputPreference = -1
+
+    private val outputCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = applyOutputPreference()
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) = applyOutputPreference()
+    }
+
+    /** Re-expresses the preference after a device arrives or leaves. */
+    private fun applyOutputPreference() {
+        player.setPreferredAudioDevice(AudioOutputs.find(this, outputPreference))
+    }
 
     /** Last channel count seen, so the toggle reapplies without a format event. */
     @Volatile private var mixerChannels = 2
@@ -182,6 +200,20 @@ class PlaybackService : MediaSessionService() {
 
         player.addListener(PlayerEvents())
         player.addAnalyticsListener(FormatEvents())
+
+        // The output choice is a preference, not a command: the UI writes it
+        // and the player follows. Re-applied when devices come and go, so a
+        // headset that reconnects picks its stream back up.
+        getSystemService(AudioManager::class.java)?.registerAudioDeviceCallback(
+            outputCallback,
+            Handler(Looper.getMainLooper()),
+        )
+        scope.launch {
+            prefs0.outputDevice.collect {
+                outputPreference = it
+                applyOutputPreference()
+            }
+        }
 
         // The mono key flips a matrix, not the chain; the format listener
         // below re-anchors it per stream so exotic channel counts stay safe.
@@ -530,6 +562,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        getSystemService(AudioManager::class.java)?.unregisterAudioDeviceCallback(outputCallback)
         reconnector?.detach()
         fx.release()
         scope.cancel()

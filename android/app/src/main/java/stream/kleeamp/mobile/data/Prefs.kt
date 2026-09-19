@@ -80,7 +80,8 @@ class Prefs(private val context: Context) {
     private object K {
         val palette = stringPreferencesKey("palette")           // system | oxide | dark | ...
         val haptics = booleanPreferencesKey("haptics")
-        val visualizer = stringPreferencesKey("visualizer")     // spectrum | scope | off
+        val visualizer = stringPreferencesKey("visualizer")     // spectrum | bars | ...
+        val outputDevice = intPreferencesKey("output_device")   // -1 = system default
         val cellular = booleanPreferencesKey("cellular")
         val mono = booleanPreferencesKey("mono")
         val bufferSeconds = intPreferencesKey("buffer_seconds")
@@ -113,6 +114,8 @@ class Prefs(private val context: Context) {
     val palette: Flow<String> = context.settingsStore.data.map { it[K.palette] ?: "system" }
     val haptics: Flow<Boolean> = context.settingsStore.data.map { it[K.haptics] ?: true }
     val visualizer: Flow<String> = context.settingsStore.data.map { it[K.visualizer] ?: "spectrum" }
+    /** Chosen audio output device id, or -1 to follow the system routing. */
+    val outputDevice: Flow<Int> = context.settingsStore.data.map { it[K.outputDevice] ?: -1 }
     val cellular: Flow<Boolean> = context.settingsStore.data.map { it[K.cellular] ?: true }
     /** Stereo folds to dual mono; one dead earbud never loses half the mix. */
     val mono: Flow<Boolean> = context.settingsStore.data.map { it[K.mono] ?: false }
@@ -261,6 +264,7 @@ class Prefs(private val context: Context) {
     }
     suspend fun setHaptics(v: Boolean) = put(K.haptics, v)
     suspend fun setVisualizer(v: String) = put(K.visualizer, v)
+    suspend fun setOutputDevice(v: Int) = put(K.outputDevice, v)
     suspend fun setCellular(v: Boolean) = put(K.cellular, v)
     suspend fun setMono(v: Boolean) = put(K.mono, v)
     suspend fun listenBrainzTokenSync(): String = listenBrainzToken.first()

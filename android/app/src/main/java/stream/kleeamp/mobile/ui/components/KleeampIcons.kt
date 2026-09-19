@@ -96,6 +96,31 @@ object KleeampIcons {
     val Star = stroked(16f, 16f, 1.8f, "M8 1.5l1.9 4.2 4.6.5-3.4 3.1.9 4.5L8 11.6 4 13.8l.9-4.5L1.5 6.2l4.6-.5z")
     val StarFilled = solid(16f, 16f, "M8 1.5l1.9 4.2 4.6.5-3.4 3.1.9 4.5L8 11.6 4 13.8l.9-4.5L1.5 6.2l4.6-.5z")
 
+    /** Headphones: band over two ear cups, for wired and hearing-aid routes. */
+    val Headphones = stroked(
+        16f, 16f, 1.6f,
+        "M2.5 11V9a5.5 5.5 0 0 1 11 0v2",
+        rect(1.5f, 10f, 3.2f, 5.2f),
+        rect(11.3f, 10f, 3.2f, 5.2f),
+    )
+
+    /** Bluetooth rune: the vertical spine with its two chevrons. */
+    val Bluetooth = stroked(
+        14f, 16f, 1.7f,
+        "M7 1.5v13",
+        "M7 1.5l4 3.5-4 3.5",
+        "M7 14.5l4-3.5-4-3.5",
+    )
+
+    /** USB: connector shell with the cable and its plug. */
+    val Usb = stroked(
+        16f, 16f, 1.6f,
+        rect(4.5f, 5.5f, 7f, 5f),
+        "M6.5 5.5V2.5h3v3",
+        "M8 10.5v1.6",
+        circle(8f, 14.2f, 1.4f),
+    )
+
     /**
      * Radio waves: a symmetric stack of three domed waves rising from a
      * transmitter dot set on a grounding baseline. Balanced left and right, the

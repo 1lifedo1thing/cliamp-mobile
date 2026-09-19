@@ -39,11 +39,13 @@ class NowPlayingViewModel(
         val visualizer: String = "spectrum",
         val spectrum: FloatArray = FloatArray(0),
         val stereo: StereoMetrics = StereoMetrics.silent,
+        val outputDevice: Int = -1,
     )
 
     sealed interface Event {
         data object ToggleFavorite : Event
         data object CycleSpeed : Event
+        data class SetOutputDevice(val id: Int) : Event
     }
 
     /** Live transport and tune state: what is playing and what it says. */
@@ -63,6 +65,7 @@ class NowPlayingViewModel(
         val visualizer: String = "spectrum",
         val shuffled: Boolean = false,
         val stereo: StereoMetrics = StereoMetrics.silent,
+        val outputDevice: Int = -1,
     )
 
     val state: StateFlow<UiState> = combine(
@@ -78,19 +81,21 @@ class NowPlayingViewModel(
             combine(
                 PlaybackBus.spectrum,
                 PlaybackBus.stereo,
-            ) { spectrum, stereo -> spectrum to stereo },
+                prefs.outputDevice,
+            ) { spectrum, stereo, output -> Triple(spectrum, stereo, output) },
             prefs.favorites,
             prefs.history,
             prefs.visualizer,
             player.shuffle,
-        ) { spectrumStereo, favorites, history, visualizer, shuffled ->
+        ) { spectrumStereoOutput, favorites, history, visualizer, shuffled ->
             LibState(
-                spectrum = spectrumStereo.first,
+                spectrum = spectrumStereoOutput.first,
                 favorites = favorites,
                 recent = history,
                 visualizer = visualizer,
                 shuffled = shuffled,
-                stereo = spectrumStereo.second,
+                stereo = spectrumStereoOutput.second,
+                outputDevice = spectrumStereoOutput.third,
             )
         },
         player.upNext,
@@ -113,6 +118,7 @@ class NowPlayingViewModel(
             visualizer = lib.visualizer,
             spectrum = lib.spectrum,
             stereo = lib.stereo,
+            outputDevice = lib.outputDevice,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
 
@@ -125,6 +131,7 @@ class NowPlayingViewModel(
             // stay as direct vm.player.* calls in the composable; only the speed
             // ladder, which derives the next step, is routed here.
             Event.CycleSpeed -> player.setSpeed(nextSpeed(player.speed.value))
+            is Event.SetOutputDevice -> viewModelScope.launch { prefs.setOutputDevice(e.id) }
         }
     }
 }
