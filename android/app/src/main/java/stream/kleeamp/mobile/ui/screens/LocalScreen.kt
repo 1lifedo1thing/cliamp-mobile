@@ -1106,7 +1106,6 @@ private fun PlaylistRow(
     onPin: () -> Unit,
 ) {
     val p = LocalPalette.current
-    val byId = remember(songs) { songs.associate { it.id to it.name } }
     ListRow(
         onClick = { onOpen(pl) },
         verticalPadding = 9.dp,
@@ -1121,11 +1120,10 @@ private fun PlaylistRow(
             }
         },
     ) {
+        // Title plus the trailing count only: no song-name preview and no
+        // empty text, so the row keeps one stable height from the first
+        // frame instead of shifting when its songs resolve.
         Mono(pl.station.name, KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
-        Mono(
-            playlistPreview(pl.songIds, byId).ifBlank { "empty playlist" },
-            KleeampType.rowSecondary, p.inkTertiary, maxLines = 1,
-        )
     }
 }
 
@@ -1154,9 +1152,6 @@ private fun SmartPlaylistRow(
         },
     ) {
         Mono(sp.label, KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
-        if (sp.stations.isEmpty()) {
-            Mono("nothing here yet", KleeampType.rowSecondary, p.inkTertiary, maxLines = 1)
-        }
     }
 }
 
@@ -1186,9 +1181,6 @@ private fun ProvidersRow(count: Int, onOpen: () -> Unit) {
         },
     ) {
         Mono("providers", KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
-        if (count == 0) {
-            Mono("connect one to fill this", KleeampType.rowSecondary, p.inkTertiary, maxLines = 1)
-        }
     }
 }
 
@@ -1301,18 +1293,6 @@ private fun InlineNameField(
             Modifier.clip(RoundedCornerShape(KleeampShape.tiny)).border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny))
                 .microPress(onClick = onCancel).padding(horizontal = 9.dp, vertical = 7.dp))
     }
-}
-
-/**
- * Preview line under a user playlist row. Uses an id→name map (O(1) per id)
- * instead of a linear scan, and caps the number of names shown.
- */
-private fun playlistPreview(songIds: List<String>, byId: Map<String, String>): String {
-    if (songIds.isEmpty()) return ""
-    val head = 4
-    val names = songIds.take(head).joinToString(" · ") { byId[it] ?: "…" }
-    if (songIds.size <= head) return names
-    return "$names · +${songIds.size - head} more"
 }
 
 @Composable
