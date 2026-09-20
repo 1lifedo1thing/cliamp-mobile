@@ -28,6 +28,9 @@ enum class Visualizer(val id: String, val label: String, val columns: Int) {
     /** The signature brick meter: 24 columns, the NowPlaying geometry. */
     Brick("spectrum", "spectrum", 24),
 
+    /** The oscilloscope: raw time-domain trace, ported from cliamp's wave. */
+    Wave("wave", "wave", 24),
+
     Bars("bars", "bars", 24),
 
     ClassicPeak("classicpeak", "classic peak", 28),
@@ -43,9 +46,6 @@ enum class Visualizer(val id: String, val label: String, val columns: Int) {
     Omarchy("omarchy", "omarchy", 24),
 
     Kleeamp("kleeamp", "kleeamp", 24),
-
-    /** The oscilloscope: raw time-domain trace, ported from cliamp's wave. */
-    Wave("wave", "wave", 24),
 
     /**
      * The widget's brick meter. Glance renders to RemoteViews, which hard-cap
