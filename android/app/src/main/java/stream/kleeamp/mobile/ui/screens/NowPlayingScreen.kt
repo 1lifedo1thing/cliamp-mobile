@@ -1,5 +1,11 @@
 package stream.kleeamp.mobile.ui.screens
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
+import android.view.WindowManager
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -26,6 +32,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
@@ -33,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,12 +54,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.util.UnstableApi
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationArtSource
@@ -146,6 +158,7 @@ private data class PlayerActions(
     val onPlayPause: () -> Unit,
     val onNext: () -> Unit,
     val onSelectOutput: (Int) -> Unit,
+    val onToggleFullscreen: () -> Unit,
 )
 
 @UnstableApi
@@ -157,6 +170,7 @@ fun NowPlayingScreen(
     onBack: () -> Unit,
 ) {
     val p = LocalPalette.current
+    var fullscreen by rememberSaveable { mutableStateOf(false) }
 
     val uiState by vm.state.collectAsState()
     // The meter reads its spectrum through Compose State, so hand it a
@@ -199,6 +213,7 @@ fun NowPlayingScreen(
         onPlayPause = { vm.player.toggle(uiState.shownStation) },
         onNext = { vm.player.next() },
         onSelectOutput = { vm.onEvent(NowPlayingViewModel.Event.SetOutputDevice(it)) },
+        onToggleFullscreen = { fullscreen = true },
     )
 
     Box(Modifier.fillMaxSize()) {
@@ -221,7 +236,83 @@ fun NowPlayingScreen(
                 PortraitPlayer(model, actions)
             }
         }
+
+        if (fullscreen) {
+            FullscreenVisualizer(model) { fullscreen = false }
+        }
     }
+}
+
+/** Columns the fullscreen meter spreads across a landscape frame. */
+private const val FULLSCREEN_COLUMNS = 48
+
+/**
+ * The visualizer alone, edge to edge. Entering flips the activity to sensor
+ * landscape and hides the bars; leaving puts both back. A double tap or Back
+ * is the way out.
+ */
+@Composable
+private fun FullscreenVisualizer(model: PlayerModel, onExit: () -> Unit) {
+    val p = LocalPalette.current
+    FullscreenEffect(onExit)
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(p.groundScope)
+            .pointerInput(onExit) { detectTapGestures(onDoubleTap = { onExit() }) },
+    ) {
+        VisualizerMeter(
+            mode = Visualizer.byId(model.visualizer),
+            columns = FULLSCREEN_COLUMNS,
+            live = model.state.playing,
+            spectrum = model.spectrum,
+            stereo = model.stereo,
+            brick = 5.dp,
+            gap = 4.dp,
+            modifier = Modifier.fillMaxSize(),
+        )
+        Mono(
+            "double tap to exit",
+            KleeampType.meta,
+            p.inkFaint,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
+        )
+    }
+}
+
+@Composable
+private fun FullscreenEffect(onExit: () -> Unit) {
+    val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
+    DisposableEffect(activity) {
+        val window = activity?.window
+        if (window == null) return@DisposableEffect onDispose {}
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        val previousOrientation = activity.requestedOrientation
+        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.systemBars())
+        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            controller.show(WindowInsetsCompat.Type.systemBars())
+            activity.requestedOrientation = previousOrientation
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+    BackHandler(onBack = onExit)
+}
+
+private fun Context.findActivity(): Activity? {
+    var current: Context? = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return null
+}
+
+private fun Modifier.doubleTapToFullscreen(onToggle: () -> Unit): Modifier = pointerInput(onToggle) {
+    detectTapGestures(onDoubleTap = { onToggle() })
 }
 
 /** The portrait player: art plate over text, meter, then the transport. */
@@ -548,7 +639,7 @@ private fun PlayerTransport(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(MeterSize.NowPlaying.height)
-                    .consumeAllGestures(),
+                    .doubleTapToFullscreen(actions.onToggleFullscreen),
             )
         }
 
