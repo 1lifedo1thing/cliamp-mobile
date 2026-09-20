@@ -739,9 +739,9 @@ private fun rememberGuardedNav(navController: NavHostController): GuardedNav {
 }
 
 /**
- * Mini player with its Prefs flows collected locally: history (fallback
- * station) and the visualizer choice live here, so neither recomposes the
- * root when they change.
+ * Mini player with its history collected locally: the fallback station
+ * lives here, so it never recomposes the root when it changes. The bar
+ * shows covers, not the meter, so the visualizer setting is not read here.
  */
 @Composable
 private fun ScopedMiniPlayer(
@@ -758,14 +758,12 @@ private fun ScopedMiniPlayer(
     onOpen: () -> Unit,
 ) {
     val recent by prefs.history.collectAsState(initial = emptyList())
-    val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
     MiniPlayer(
         station = station ?: recent.firstOrNull(),
         streamTitle = streamTitle,
         playing = playing,
         buffering = buffering,
         reconnecting = reconnecting,
-        visualizer = visualizer,
         hasPrev = hasPrev,
         hasNext = hasNext,
         onPrev = { player.prev() },

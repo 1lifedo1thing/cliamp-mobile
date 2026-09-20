@@ -28,17 +28,17 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.data.LocalArt
+import stream.kleeamp.mobile.data.PlaceholderArt
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationArtSource
 import stream.kleeamp.mobile.data.StationSource
 import stream.kleeamp.mobile.data.sourceLine
-import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.ui.theme.KleeampShape
 import stream.kleeamp.mobile.ui.theme.KleeampType
 import stream.kleeamp.mobile.ui.theme.LocalPalette
 import stream.kleeamp.mobile.ui.theme.Mono
 
-/** The lockscreen widget's in-app twin: art plate, meter, one key. */
+/** The lockscreen widget's in-app twin: art plate, one key. */
 @Composable
 fun MiniPlayer(
     station: Station?,
@@ -46,7 +46,6 @@ fun MiniPlayer(
     playing: Boolean,
     buffering: Boolean,
     reconnecting: Int = 0,
-    visualizer: String = "spectrum",
     hasPrev: Boolean = false,
     hasNext: Boolean = false,
     onPrev: () -> Unit = {},
@@ -59,15 +58,6 @@ fun MiniPlayer(
     // The bar never goes away: it shows the current or last-played station,
     // or the empty "nothing playing" state when nothing has played yet.
     val empty = station == null
-    // The meter is the visualizer; when the setting is off the frame loop is
-    // not run at all, so the brick meter is truly gone from the bar.
-    val frame = if (visualizer != "off")
-        rememberMeter(
-            columns = MeterSize.Mini.columns,
-            live = playing,
-            spectrumProvider = { PlaybackBus.spectrum.value },
-        )
-    else null
 
     Column(Modifier.fillMaxWidth().background(p.panel)) {
         HairlineDivider(region = true)
@@ -79,10 +69,7 @@ fun MiniPlayer(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            MiniArt(
-                station = station,
-                frame = frame,
-            )
+            MiniArt(station = station)
             if (empty) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Mono("nothing playing", KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
@@ -178,11 +165,10 @@ private fun MiniKey(
 }
 
 /**
- * The mini bar's leading slot: a small square cover thumbnail for anything
- * that has art - local embedded art, a provider/podcast cover, or scraped
- * radio branding (og:image, touch icon, favicon). Only when no cover exists
- * does it fall back to the brick meter, and that meter only when the
- * visualizer is on; with it off the striped placeholder plate is shown.
+ * The mini bar's leading slot is always a cover: real art when the station
+ * has any, otherwise one of the bundled designs - so the slot is never
+ * empty and never needs the meter or the striped plate for a station.
+ * Only the nothing-playing state (no station at all) keeps the plate.
  */
 /** Synchronous memory peek behind [MiniArt], mirroring its async resolve. The
  * full-size caches are included: the notification path warms those, and the
@@ -207,12 +193,18 @@ private fun peekSmall(station: Station?): androidx.compose.ui.graphics.ImageBitm
 }
 
 @Composable
-private fun MiniArt(station: Station?, frame: MeterFrame?) {
-    val p = LocalPalette.current
+private fun MiniArt(station: Station?) {
     val context = LocalContext.current
     // Same synchronous-first treatment as the player screen: paint a known
     // cover on the first frame instead of flashing the plate on every change.
+    // The bundled design seeds instantly underneath, so the slot shows a
+    // cover from frame one and the lookup only ever upgrades to real art.
     var art by remember(station?.id) { mutableStateOf(peekSmall(station)) }
+    val key = station?.id?.ifBlank { station.url }
+    val placeholder = remember(key) {
+        key?.takeIf { it.isNotEmpty() }
+            ?.let { PlaceholderArt.thumbnailFor(context, it)?.asImageBitmap() }
+    }
     LaunchedEffect(station?.id) {
         if (art != null) return@LaunchedEffect
         val s = station ?: return@LaunchedEffect
@@ -227,10 +219,10 @@ private fun MiniArt(station: Station?, frame: MeterFrame?) {
             else -> StationArtSource.bitmapForSmall(s)
         }?.asImageBitmap()
     }
-    val a = art
+    val a = art ?: placeholder
     if (a != null) {
         // Real cover art gets a square thumbnail so the plate reads as a little
-        // album square; the brick meter fallback below stays squat instead.
+        // album square, and so does the bundled stand-in.
         Image(
             bitmap = a,
             contentDescription = station?.name,
@@ -238,15 +230,6 @@ private fun MiniArt(station: Station?, frame: MeterFrame?) {
                 .size(40.dp)
                 .clip(RoundedCornerShape(KleeampShape.medium)),
             contentScale = ContentScale.Crop,
-        )
-    } else if (frame != null) {
-        BrickMeter(
-            frame = frame,
-            modifier = Modifier.size(width = 40.dp, height = MeterSize.Mini.height),
-            brick = MeterSize.Mini.brick,
-            gap = MeterSize.Mini.gap,
-            columnGap = 2.dp,
-            showPeaks = false,
         )
     } else {
         ArtPlate(
