@@ -90,6 +90,7 @@ fun StationsScreen(
     playing: Boolean,
     favorites: List<Station>,
     onPlay: (Station, List<Station>) -> Unit,
+    onAddToQueue: (Station) -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     focusDirectory: Boolean = false,
@@ -234,6 +235,7 @@ fun StationsScreen(
                                 favorite = favorites.any { it.url == s.url },
                                 onPlay = { onPlay(s, cliamp) },
                                 onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
+                                onQueue = { onAddToQueue(s) },
                             )
                         }
                     }
@@ -298,6 +300,7 @@ fun StationsScreen(
                                 onPlay = { onPlay(s, custom) },
                                 onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                                 onRemove = { vm.onEvent(StationsViewModel.Event.RemoveCustom(s)) },
+                                onQueue = { onAddToQueue(s) },
                             )
                         }
                     }
@@ -373,6 +376,7 @@ fun StationsScreen(
                                 favorite = favorites.any { it.url == s.url },
                                 onPlay = { onPlay(s, directory.stations) },
                                 onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
+                                onQueue = { onAddToQueue(s) },
                             )
                         }
                     }
@@ -404,6 +408,7 @@ private fun StationRow(
     favorite: Boolean,
     onPlay: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onQueue: () -> Unit,
 ) {
     val p = LocalPalette.current
     ListRow(
@@ -413,6 +418,7 @@ private fun StationRow(
         gutter = 8.dp,
         railOffset = 14.dp,
         leading = { StationThumb(station, active, playing) },
+        onQueue = onQueue,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (station.votes > 0) {
@@ -736,6 +742,7 @@ private fun CustomStationRow(
     onPlay: () -> Unit,
     onToggleFavorite: () -> Unit,
     onRemove: () -> Unit,
+    onQueue: () -> Unit,
 ) {
     val p = LocalPalette.current
     ListRow(
@@ -745,6 +752,7 @@ private fun CustomStationRow(
         gutter = 8.dp,
         railOffset = 14.dp,
         leading = { StationThumb(station, active, playing) },
+        onQueue = onQueue,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(

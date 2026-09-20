@@ -349,6 +349,7 @@ fun LibrarySmartPlaylistPane(
     current: Station?,
     playing: Boolean,
     onPlay: (Station, List<Station>) -> Unit,
+    onAddToQueue: (Station) -> Unit = {},
     favScope: FavScope = FavScope.All,
     onFavScopeChange: (FavScope) -> Unit = {},
     onOpenSongInfo: (Station) -> Unit = {},
@@ -487,6 +488,7 @@ fun LibrarySmartPlaylistPane(
                         onPlay = onPlay,
                         onToggleFavorite = { vm.onEvent(SmartPlaylistViewModel.Event.ToggleFavorite(it)) },
                         favorites = favorites.map { it.url }.toSet(),
+                        onAddToQueue = onAddToQueue,
                         loading = loading,
                         favScope = favScope,
                         onInfo = onOpenSongInfo,
@@ -526,6 +528,7 @@ fun ProviderSongsPane(
     current: Station?,
     playing: Boolean,
     onPlay: (Station, List<Station>) -> Unit,
+    onAddToQueue: (Station) -> Unit = {},
     onBack: () -> Unit,
     onAddProvider: () -> Unit,
     onOpenSearch: () -> Unit = {},
@@ -614,6 +617,7 @@ fun ProviderSongsPane(
                                     tint = if (s.url in favorites) p.accent else p.inkFaint,
                                 )
                             },
+                            onQueue = { onAddToQueue(s) },
                         ) {
                             Mono(s.name, KleeampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
                             Mono(
@@ -700,6 +704,7 @@ fun LibraryPlaylistPane(
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onAddToPlaylist: (Station) -> Unit = {},
+    onAddToQueue: (Station) -> Unit = {},
     /** True when opened from a playlist row's add menu: lands in the song picker. */
     startAdding: Boolean = false,
 ) {
@@ -756,6 +761,7 @@ fun LibraryPlaylistPane(
                         onPlay = onPlay,
                         onToggle = { vm.onEvent(PlaylistDetailViewModel.Event.ToggleMember(it)) },
                         onRemoveMember = { vm.onEvent(PlaylistDetailViewModel.Event.RemoveMember(it)) },
+                        onAddToQueue = onAddToQueue,
                         adding = adding,
                         onAddToPlaylist = onAddToPlaylist,
                         onBeginAdd = { adding = true },
@@ -1319,6 +1325,7 @@ private fun PlaylistDetailShown(
     onBeginAdd: () -> Unit = {},
     favorites: Set<String> = emptySet(),
     onToggleFavorite: (Station) -> Unit = {},
+    onAddToQueue: (Station) -> Unit = {},
 ) {
     val p = LocalPalette.current
 
@@ -1376,6 +1383,7 @@ private fun PlaylistDetailShown(
                     leading = {
                         SongCover(s = s, current = current, playing = playing)
                     },
+                    onQueue = { onAddToQueue(s) },
                     trailing = {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -1645,6 +1653,7 @@ private fun SmartPlaylistDetail(
     sort: PlaylistSort = PlaylistSort.Title,
     fetchedBytes: Map<String, Long> = emptyMap(),
     onAddToPlaylist: (Station) -> Unit = {},
+    onAddToQueue: (Station) -> Unit = {},
     /** Non-null on lists that can grow: renders the section + button. */
     onBeginAdd: (() -> Unit)? = null,
 ) {
@@ -1710,6 +1719,7 @@ private fun SmartPlaylistDetail(
                     leading = {
                         SongCover(s = s, current = current, playing = playing)
                     },
+                    onQueue = { onAddToQueue(s) },
                     trailing = {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,

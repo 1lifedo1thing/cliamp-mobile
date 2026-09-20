@@ -593,7 +593,8 @@ fun GlyphPlate(
  * for "this is the row that is playing right now". [gutter] is the horizontal
  * inset: rows hosted in a padded grid pass a smaller one so grid padding plus
  * row gutter lands exactly on [Gutter]. [railOffset] shifts the rail left by
- * the same outer inset, so it still starts at the true screen edge. */
+ * the same outer inset, so it still starts at the true screen edge. [onQueue]
+ * turns on the right swipe that adds the row to Up Next. */
 @Composable
 fun ListRow(
     modifier: Modifier = Modifier,
@@ -605,6 +606,7 @@ fun ListRow(
     gutter: Dp = Gutter,
     rail: Boolean = false,
     railOffset: Dp = 0.dp,
+    onQueue: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val p = LocalPalette.current
@@ -615,22 +617,29 @@ fun ListRow(
             drawRect(p.accent, topLeft = Offset(-railShift, 0f), size = Size(2.dp.toPx(), size.height))
         }
     else Modifier
-    Column(modifier.then(railMod).fillMaxWidth()) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .then(if (onClick != null) Modifier.microPress(onClick = onClick) else Modifier)
-                .padding(horizontal = gutter, vertical = verticalPadding),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (leading != null) {
-                leading()
-                Spacer(Modifier.width(12.dp))
+    val row: @Composable (Modifier) -> Unit = { m ->
+        Column(m.then(railMod).fillMaxWidth()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (onClick != null) Modifier.microPress(onClick = onClick) else Modifier)
+                    .padding(horizontal = gutter, vertical = verticalPadding),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (leading != null) {
+                    leading()
+                    Spacer(Modifier.width(12.dp))
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) { content() }
+                trailing?.invoke(this)
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) { content() }
-            trailing?.invoke(this)
+            if (divider) Box(Modifier.padding(start = gutter)) { HairlineDivider() }
         }
-        if (divider) Box(Modifier.padding(start = gutter)) { HairlineDivider() }
+    }
+    if (onQueue != null) {
+        SwipeToQueue(onQueue = onQueue, modifier = modifier.fillMaxWidth()) { row(Modifier) }
+    } else {
+        row(modifier)
     }
 }
 

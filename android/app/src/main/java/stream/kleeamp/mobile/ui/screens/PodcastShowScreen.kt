@@ -274,6 +274,7 @@ private fun EpisodeRow(
         rail = active,
         onClick = onPlay,
         verticalPadding = 11.dp,
+        onQueue = onAddToUpNext,
         leading = {
             // The resolved station cover already falls back to the show's own
             // artwork when the episode has none (see toStation), so only a
