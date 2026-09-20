@@ -44,11 +44,13 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.data.DirectoryQuery
+import stream.kleeamp.mobile.data.PlaceholderArt
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationArtSource
 import stream.kleeamp.mobile.data.StationSource
@@ -454,10 +456,15 @@ private fun StationRow(
 @Composable
 private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
     val p = LocalPalette.current
+    val context = LocalContext.current
     var art by remember(station.id) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(station.id) {
-        if (station.source == StationSource.Cliamp) return@LaunchedEffect
-        art = StationArtSource.bitmapForSmall(station)?.asImageBitmap()
+        val fallback = PlaceholderArt.bitmapFor(context, station.id.ifBlank { station.url })
+        art = if (station.source == StationSource.Cliamp) {
+            fallback?.asImageBitmap()
+        } else {
+            (StationArtSource.bitmapForSmall(station) ?: fallback)?.asImageBitmap()
+        }
     }
     val bmp = art
     // No art to show, so the plate carries the broadcast mark in accent on
@@ -519,10 +526,15 @@ private fun StationTile(
     onRemove: (() -> Unit)? = null,
 ) {
     val p = LocalPalette.current
+    val context = LocalContext.current
     var art by remember(station.id) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(station.id) {
-        if (station.source == StationSource.Cliamp) return@LaunchedEffect
-        art = StationArtSource.bitmapFor(station)?.asImageBitmap()
+        val fallback = PlaceholderArt.bitmapFor(context, station.id.ifBlank { station.url })
+        art = if (station.source == StationSource.Cliamp) {
+            fallback?.asImageBitmap()
+        } else {
+            (StationArtSource.bitmapFor(station) ?: fallback)?.asImageBitmap()
+        }
     }
     Column(
         Modifier

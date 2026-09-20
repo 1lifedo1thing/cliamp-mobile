@@ -65,6 +65,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.util.UnstableApi
+import stream.kleeamp.mobile.data.PlaceholderArt
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationArtSource
 import stream.kleeamp.mobile.data.StationSource
@@ -805,7 +806,14 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
     // thumbnail doubles as a progressive preview: soft for a frame or two,
     // then replaced by the full art - still the new item, never empty.
     var art by remember(station?.id) { mutableStateOf(peekArt(station)) }
-    val preview = station?.let { rememberStationThumbnail(it) }
+    val preview = station?.let { rememberStationThumbnail(it, fallback = false) }
+    // No cover of its own: one of the bundled designs stands in. The pick is
+    // stable per station, so the plate does not reshuffle on every change.
+    val placeholderKey = station?.id?.ifBlank { station.url }
+    val placeholder = remember(placeholderKey) {
+        placeholderKey?.takeIf { it.isNotEmpty() }
+            ?.let { PlaceholderArt.bitmapFor(context, it)?.asImageBitmap() }
+    }
     LaunchedEffect(station?.id) {
         if (art != null) return@LaunchedEffect
         val s = station ?: return@LaunchedEffect
@@ -859,7 +867,7 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
             }
             .consumeAllGestures(),
         radius = KleeampShape.large,
-        caption = if (art == null && preview == null) caption else null,
+        caption = if (art == null && preview == null && placeholder == null) caption else null,
     ) {
         (art ?: preview)?.let { bmp ->
             // Real album art is square and fills the plate edge to edge. Radio
@@ -891,10 +899,34 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
                 contentScale = if (fills) ContentScale.Crop else ContentScale.Fit,
             )
         }
-        // No cover at all: the broadcast glyph in accent, the same themed
-        // mark the station's list rows wear - one identity in both places,
-        // for cliamp channels and directory stations alike.
-        if (art == null && preview == null && station != null) {
+        // No cover at all: the bundled designs stand in, with a small note
+        // that names them for what they are.
+        if (art == null && preview == null) {
+            placeholder?.let { bmp ->
+                Image(
+                    bitmap = bmp,
+                    contentDescription = station?.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+                Mono(
+                    "no cover · random art",
+                    KleeampType.meta,
+                    p.inkTertiary,
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(12.dp)
+                        .background(p.ground.copy(alpha = 0.72f), RoundedCornerShape(KleeampShape.tiny))
+                        .padding(horizontal = 6.dp, vertical = 3.dp),
+                    maxLines = 1,
+                )
+            }
+        }
+        // No cover and no bundled design either: the broadcast glyph in
+        // accent, the same themed mark the station's list rows wear - one
+        // identity in both places, for cliamp channels and directory stations
+        // alike.
+        if (art == null && preview == null && placeholder == null && station != null) {
             Icon(
                 KleeampIcons.StationsTab,
                 null,
