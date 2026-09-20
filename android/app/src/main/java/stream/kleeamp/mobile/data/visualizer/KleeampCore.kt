@@ -18,8 +18,8 @@ class KleeampCore(val columns: Int) {
         private set
 
     fun push(bands: FloatArray, dt: Float) {
-        field.push(bands)
-        bars.push(bands)
+        field.push(bands, dt)
+        bars.push(bands, dt)
         burst.push(bands, dt)
 
         val low = bassOf(bands)

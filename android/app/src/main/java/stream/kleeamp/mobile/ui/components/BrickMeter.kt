@@ -119,11 +119,14 @@ fun rememberMeter(
             return@LaunchedEffect
         }
         val start = withFrameNanos { it }
+        var last = start
         while (true) {
             withFrameNanos { now ->
+                val dt = ((now - last) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.1f)
+                last = now
                 val real = spectrumProvider?.invoke() ?: spectrum?.value
                 if (real != null && real.isNotEmpty()) {
-                    frame.push(real)
+                    frame.push(real, dt)
                 } else {
                     val t = (now - start) / 1_000_000_000.0
                     frame.pushIdle(t)
@@ -149,8 +152,8 @@ class MeterFrame(val columns: Int) {
     var frame by mutableIntStateOf(0)
         private set
 
-    fun push(source: FloatArray) {
-        core.push(source)
+    fun push(source: FloatArray, dt: Float) {
+        core.push(source, dt)
         frame++
     }
 

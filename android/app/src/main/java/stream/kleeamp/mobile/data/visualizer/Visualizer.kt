@@ -1,6 +1,7 @@
 package stream.kleeamp.mobile.data.visualizer
 
 import kotlin.math.PI
+import kotlin.math.exp
 import kotlin.math.sin
 
 /**
@@ -88,22 +89,29 @@ class MeterCore(val columns: Int) {
     val levels = FloatArray(columns) { 0.05f }
     val peaks = FloatArray(columns) { 0.07f }
 
-    private val attack = 0.55f
-    private val release = 0.14f
     private val peakFall = 0.010f
+
+    /** cliamp's classicPeakStep rates: fast attack, slow decay. */
+    private val riseRate = 34f
+    private val fallRate = 10f
 
     /**
      * The analyser publishes a fixed number of bands; each meter asks for its
      * own column count. Pooling here (rather than requiring an exact match)
      * is what stops a 24-column meter silently falling back to the fake
      * animation while a 32-column one shows the real thing.
+     *
+     * Smoothing uses cliamp's attack/release rates (34/s up, 10/s down) with
+     * the real frame dt, so bars track transients identically at 60 and 120
+     * Hz. Fixed per-frame fractions would double the speed on 120 Hz screens.
      */
-    fun push(source: FloatArray) {
+    fun push(source: FloatArray, dt: Float) {
         if (source.isEmpty()) return
+        val step = dt.coerceIn(0f, 0.1f)
         for (i in 0 until columns) {
             val t = bandFor(source, i).coerceIn(0f, 1f)
-            val k = if (t > levels[i]) attack else release
-            levels[i] += (t - levels[i]) * k
+            val rate = if (t > levels[i]) riseRate else fallRate
+            levels[i] += (t - levels[i]) * (1f - exp(-rate * step))
             peaks[i] = if (levels[i] >= peaks[i]) levels[i]
             else (peaks[i] - peakFall).coerceAtLeast(levels[i])
         }

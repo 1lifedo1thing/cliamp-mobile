@@ -56,4 +56,20 @@ class VisMathTest {
         assertTrue(first.contentEquals(second))
         for (v in first) assertTrue(v in 0f..0.96f)
     }
+
+    @Test
+    fun easeBandsAttacksFastAndDecaysSlow() {
+        val prev = floatArrayOf(0f, 1f)
+        val out = VisMath.easeBands(prev, floatArrayOf(1f, 0f))
+        // cliamp Analyze blend: 0.6 new on rises, 0.25 new on falls.
+        assertEquals(0.6f, out[0], 1e-4f)
+        assertEquals(0.75f, out[1], 1e-4f)
+    }
+
+    @Test
+    fun easeBandsSnapsOnResize() {
+        val out = VisMath.easeBands(FloatArray(4), FloatArray(8) { 1f })
+        assertEquals(8, out.size)
+        for (v in out) assertEquals(1f, v, 1e-4f)
+    }
 }

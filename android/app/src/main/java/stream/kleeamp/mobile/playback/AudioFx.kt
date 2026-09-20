@@ -6,6 +6,7 @@ import android.util.Log
 import kotlin.math.hypot
 import kotlin.math.log10
 import kotlin.math.pow
+import stream.kleeamp.mobile.data.visualizer.VisMath
 import stream.kleeamp.mobile.data.visualizer.WaveCore
 
 /**
@@ -21,6 +22,8 @@ class AudioFx(private val bands: Int = 64) {
     private var equalizer: Equalizer? = null
     private var sessionId = 0
     private var spectrumOn = false
+    /** Last published bands: per-capture easing target, like cliamp Analyze. */
+    private var smoothPrev = FloatArray(0)
 
     val bandLabels: List<String> get() = _bandLabels
     private var _bandLabels: List<String> = emptyList()
@@ -76,7 +79,8 @@ class AudioFx(private val bands: Int = 64) {
                                 spectrumLive = true
                                 onLiveChanged(true)
                             }
-                            onSpectrum(fold(fft))
+                            smoothPrev = VisMath.easeBands(smoothPrev, fold(fft))
+                            onSpectrum(smoothPrev)
                         }
                     },
                     Visualizer.getMaxCaptureRate().coerceAtMost(20_000),
@@ -157,6 +161,9 @@ class AudioFx(private val bands: Int = 64) {
         sessionId = 0
         spectrumOn = false
         spectrumLive = false
+        // Drop the easing state so the next session snaps to its own
+        // analysis instead of blending up from a dead stream.
+        smoothPrev = FloatArray(0)
     }
 
     private companion object {

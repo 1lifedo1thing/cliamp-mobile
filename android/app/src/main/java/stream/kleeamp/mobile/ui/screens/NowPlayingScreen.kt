@@ -34,12 +34,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -74,6 +72,7 @@ import stream.kleeamp.mobile.data.visualizer.Visualizer
 import stream.kleeamp.mobile.playback.AudioOutput
 import stream.kleeamp.mobile.playback.AudioOutputs
 import stream.kleeamp.mobile.playback.OutputKind
+import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerState
 import stream.kleeamp.mobile.ui.clock
 import stream.kleeamp.mobile.ui.compact
@@ -139,8 +138,8 @@ private data class PlayerModel(
     val isFav: Boolean,
     val shuffled: Boolean,
     val visualizer: String,
-    val spectrum: State<FloatArray>,
-    val stereo: State<StereoMetrics>,
+    val spectrumProvider: () -> FloatArray?,
+    val stereoProvider: () -> StereoMetrics?,
     val outputDevice: Int,
     val outputs: List<AudioOutput>,
     val currentOutput: AudioOutput?,
@@ -174,10 +173,12 @@ fun NowPlayingScreen(
     var fullscreen by rememberSaveable { mutableStateOf(false) }
 
     val uiState by vm.state.collectAsState()
-    // The meter reads its spectrum through Compose State, so hand it a
-    // state that tracks the latest VM frame.
-    val spectrum = rememberUpdatedState(uiState.spectrum)
-    val stereo = rememberUpdatedState(uiState.stereo)
+    // The meters read the live analyser straight off the bus in their frame
+    // loops: routing spectrum through VM state would recompose this whole
+    // screen on every FFT callback and lag the visuals behind the music.
+    // Lambdas are not effect keys, so re-creating them never restarts a loop.
+    val spectrumProvider: () -> FloatArray? = { PlaybackBus.spectrum.value }
+    val stereoProvider: () -> StereoMetrics? = { PlaybackBus.stereo.value }
     // The connected sinks and the one the stream is on: "speaker" until a
     // headset or Bluetooth route takes over.
     val context = LocalContext.current
@@ -196,8 +197,8 @@ fun NowPlayingScreen(
         isFav = uiState.isFav,
         shuffled = uiState.shuffled,
         visualizer = uiState.visualizer,
-        spectrum = spectrum,
-        stereo = stereo,
+        spectrumProvider = spectrumProvider,
+        stereoProvider = stereoProvider,
         outputDevice = uiState.outputDevice,
         outputs = outputs,
         currentOutput = currentOutput,
@@ -266,8 +267,8 @@ private fun FullscreenVisualizer(model: PlayerModel, onExit: () -> Unit) {
             mode = Visualizer.byId(model.visualizer),
             columns = FULLSCREEN_COLUMNS,
             live = model.state.playing,
-            spectrum = model.spectrum,
-            stereo = model.stereo,
+            spectrumProvider = model.spectrumProvider,
+            stereoProvider = model.stereoProvider,
             brick = 5.dp,
             gap = 4.dp,
             modifier = Modifier.fillMaxSize(),
@@ -633,8 +634,8 @@ private fun PlayerTransport(
                 mode = Visualizer.byId(model.visualizer),
                 columns = MeterSize.NowPlaying.columns,
                 live = model.state.playing,
-                spectrum = model.spectrum,
-                stereo = model.stereo,
+                spectrumProvider = model.spectrumProvider,
+                stereoProvider = model.stereoProvider,
                 brick = MeterSize.NowPlaying.brick,
                 gap = MeterSize.NowPlaying.gap,
                 modifier = Modifier

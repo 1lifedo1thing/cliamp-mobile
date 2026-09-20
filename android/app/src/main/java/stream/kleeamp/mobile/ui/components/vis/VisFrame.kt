@@ -48,7 +48,7 @@ class BarsFrame(columns: Int) : VisFrame(columns, 0L) {
     val peaks get() = core.peaks
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        if (bands != null) core.push(bands) else core.pushIdle(t)
+        if (bands != null) core.push(bands, dt) else core.pushIdle(t)
     }
 
     override fun settle() = core.settle()
@@ -184,8 +184,10 @@ fun rememberVisFrame(
     mode: Visualizer,
     columns: Int,
     live: Boolean,
-    spectrum: State<FloatArray>,
-    stereo: State<StereoMetrics>,
+    spectrum: State<FloatArray>? = null,
+    stereo: State<StereoMetrics>? = null,
+    spectrumProvider: (() -> FloatArray?)? = null,
+    stereoProvider: (() -> StereoMetrics?)? = null,
 ): VisFrame {
     val frame = remember(mode, columns) { newVisFrame(mode, columns) }
     LaunchedEffect(frame, live) {
@@ -206,9 +208,10 @@ fun rememberVisFrame(
                 val dt = ((now - last) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.1f)
                 last = now
                 lastTick = now
-                val src = spectrum.value
-                val real = live && src.isNotEmpty()
-                frame.tick(if (real) src else null, stereo.value, dt, (now - start) / 1_000_000_000.0)
+                val src = spectrumProvider?.invoke() ?: spectrum?.value
+                val real = live && src != null && src.isNotEmpty()
+                val metrics = stereoProvider?.invoke() ?: stereo?.value ?: StereoMetrics.silent
+                frame.tick(if (real) src else null, metrics, dt, (now - start) / 1_000_000_000.0)
                 frame.bump()
             }
         }
@@ -234,17 +237,19 @@ fun VisualizerMeter(
     mode: Visualizer,
     columns: Int,
     live: Boolean,
-    spectrum: State<FloatArray>,
-    stereo: State<StereoMetrics>,
+    spectrum: State<FloatArray>? = null,
+    stereo: State<StereoMetrics>? = null,
     brick: Dp,
     gap: Dp,
     modifier: Modifier = Modifier,
+    spectrumProvider: (() -> FloatArray?)? = null,
+    stereoProvider: (() -> StereoMetrics?)? = null,
 ) {
     if (mode == Visualizer.Brick) {
-        val frame = rememberMeter(columns, live, spectrum)
+        val frame = rememberMeter(columns, live, spectrum, spectrumProvider)
         BrickMeter(frame = frame, modifier = modifier, brick = brick, gap = gap)
     } else {
-        val frame = rememberVisFrame(mode, columns, live, spectrum, stereo)
+        val frame = rememberVisFrame(mode, columns, live, spectrum, stereo, spectrumProvider, stereoProvider)
         VisualizerView(frame, modifier)
     }
 }

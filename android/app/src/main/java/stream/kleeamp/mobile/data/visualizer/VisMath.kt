@@ -77,4 +77,23 @@ object VisMath {
         }
         return out
     }
+
+    /**
+     * Per-capture smoothing, mirroring cliamp Analyze's fast-attack /
+     * slow-decay blend (0.6 new on rises, 0.25 new on falls). The render-side
+     * cores ease again per frame, but without this stage every FFT callback
+     * would snap the shared levels and every consumer would step at the
+     * capture rate instead of gliding. Resizes to the new input.
+     */
+    fun easeBands(prev: FloatArray, next: FloatArray): FloatArray {
+        if (prev.size != next.size) return next.copyOf()
+        for (i in next.indices) {
+            val k = if (next[i] > prev[i]) RISE_BLEND else FALL_BLEND
+            prev[i] += (next[i] - prev[i]) * k
+        }
+        return prev
+    }
+
+    private const val RISE_BLEND = 0.6f
+    private const val FALL_BLEND = 0.25f
 }
