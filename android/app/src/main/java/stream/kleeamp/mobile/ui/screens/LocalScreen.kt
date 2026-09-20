@@ -1,9 +1,7 @@
 package stream.kleeamp.mobile.ui.screens
 
-import android.Manifest
 import android.app.Activity
 import android.net.Uri
-import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
@@ -191,10 +189,7 @@ fun LocalScreen(
     val localSort = ui.localSort
     val fetched = ui.fetched
 
-    val audioPerm = if (Build.VERSION.SDK_INT >= 33)
-        Manifest.permission.READ_MEDIA_AUDIO
-    else Manifest.permission.READ_EXTERNAL_STORAGE
-    var haveAudio by remember { mutableStateOf(checkAudio(context, audioPerm)) }
+    var haveAudio by remember { mutableStateOf(LocalLibrary.hasAudioPermission(context)) }
 
     // The media permission is requested once at app launch. Recheck it whenever
     // this screen resumes, so granting it in system Settings (without another
@@ -215,7 +210,7 @@ fun LocalScreen(
         }
     }
     LifecycleResumeEffect(Unit) {
-        haveAudio = checkAudio(context, audioPerm)
+        haveAudio = LocalLibrary.hasAudioPermission(context)
         onPauseOrDispose { }
     }
 
@@ -832,9 +827,6 @@ fun LibrarySongInfoPane(
         }
     }
 }
-
-private fun checkAudio(context: android.content.Context, perm: String): Boolean =
-    context.checkSelfPermission(perm) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
 @Composable
 private fun CenterNote(text: String, color: androidx.compose.ui.graphics.Color) {

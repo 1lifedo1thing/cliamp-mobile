@@ -91,6 +91,13 @@ class KleeampApp : Application() {
         repository.bootstrap()
         podcasts.bootstrap()
 
+        // Local songs power search, smart playlists and resume as well as
+        // the Library tab, so the scan starts here at launch instead of
+        // waiting for a first Library visit. Needs the audio permission
+        // MainActivity asks for; without it the Library screen picks the
+        // scan up when the permission is granted.
+        if (LocalLibrary.hasAudioPermission(this)) localLibrary.refresh()
+
         // The widget reads the palette and the visualizer family too, and a
         // paused widget gets no nudge from the playback service, so watch
         // both settings directly: a theme or visualizer change re-renders

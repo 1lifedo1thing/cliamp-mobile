@@ -1,13 +1,16 @@
 package stream.kleeamp.mobile.data
 
+import android.Manifest
 import android.app.PendingIntent
 import android.content.ContentUris
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -83,6 +86,9 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val scanLock = Any()
+    private var scanJob: Job? = null
+
     fun refresh() {
         // Serve whatever we already have now. On a warm launch that is the disk
         // cache, so the list paints instantly and never flashes a scan message;
@@ -92,25 +98,32 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
             _loading.value = true
         }
         _error.value = null
-        scope.launch(Dispatchers.IO) {
-            // Cache read and MediaStore scan both live on this background
-            // context so a warm launch's per-song File.isFile check never
-            // janks the UI.
-            val cached = readCache()
-            if (_songs.value.isEmpty() && !cached.isNullOrEmpty()) {
-                _songs.value = cached
-            }
-            _loading.value = _songs.value.isEmpty()
-            val found = runCatching { querySongs() }.getOrElse { e ->
-                if (_songs.value.isEmpty()) _error.value = e.message ?: "could not read the library"
-                _songs.value
-            }
-            if (found.isNotEmpty()) {
-                _songs.value = found
-                writeCache(found)
-            }
-            _loading.value = false
+        // One scan at a time: startup and the Library visit both fire this,
+        // and the second call would otherwise re-query MediaStore redundantly.
+        synchronized(scanLock) {
+            if (scanJob?.isActive == true) return
+            scanJob = scope.launch(Dispatchers.IO) { scan() }
         }
+    }
+
+    private suspend fun scan() {
+        // Cache read and MediaStore scan both live on this background
+        // context so a warm launch's per-song File.isFile check never
+        // janks the UI.
+        val cached = readCache()
+        if (_songs.value.isEmpty() && !cached.isNullOrEmpty()) {
+            _songs.value = cached
+        }
+        _loading.value = _songs.value.isEmpty()
+        val found = runCatching { querySongs() }.getOrElse { e ->
+            if (_songs.value.isEmpty()) _error.value = e.message ?: "could not read the library"
+            _songs.value
+        }
+        if (found.isNotEmpty()) {
+            _songs.value = found
+            writeCache(found)
+        }
+        _loading.value = false
     }
 
     private fun querySongs(): List<Station> {
@@ -295,5 +308,15 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
                 runCatching { File(path).delete() }
             }
         }
+    }
+
+    companion object {
+        /** The audio permission for this OS version. */
+        fun audioPermission(): String =
+            if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO
+            else Manifest.permission.READ_EXTERNAL_STORAGE
+
+        fun hasAudioPermission(context: Context): Boolean =
+            context.checkSelfPermission(audioPermission()) == PackageManager.PERMISSION_GRANTED
     }
 }
