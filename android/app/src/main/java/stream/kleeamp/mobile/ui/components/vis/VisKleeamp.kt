@@ -18,12 +18,13 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import stream.kleeamp.mobile.data.visualizer.BurstCore
 import stream.kleeamp.mobile.data.visualizer.KleeampCore
 import stream.kleeamp.mobile.data.visualizer.VisMath
-import stream.kleeamp.mobile.ui.theme.JetBrainsMono
 import stream.kleeamp.mobile.ui.theme.KleeampPalette
 import stream.kleeamp.mobile.ui.theme.LocalPalette
+import stream.kleeamp.mobile.ui.theme.Poppins
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -57,8 +58,8 @@ internal fun VisKleeamp(frame: KleeampFrame, modifier: Modifier) {
         val burst = core.burst
 
         val cx = size.width / 2f
-        val midY = size.height * 0.42f
-        val markBox = min(size.height * 0.70f, size.width * 0.60f)
+        val midY = size.height * 0.40f
+        val markBox = min(size.height * 0.66f, size.width * 0.60f)
         val scale = markBox / MARK_VIEW
         val unit = max(1f, size.height / 44f)
 
@@ -161,17 +162,20 @@ private fun DrawScope.drawWordmark(
     flash: Float,
 ) {
     if (size.height < 96.dp.toPx()) return
-    val fontSize = (size.height * 0.10f).toSp()
-    val layout = measurer.measure(
-        "KLEEAMP",
-        TextStyle(
-            fontFamily = JetBrainsMono,
-            fontWeight = FontWeight.Medium,
-            fontSize = fontSize,
-            letterSpacing = fontSize * 0.26f,
-        ),
+    // The wordmark: Poppins ExtraBold, lowercase, −0.035em. Sized to the frame.
+    val base = TextStyle(
+        fontFamily = Poppins,
+        fontWeight = FontWeight.ExtraBold,
+        letterSpacing = (-0.035).em,
     )
-    val y = midY + 20f * scale + fontSize.toPx() * 1.05f
+    var fontSizePx = size.height * 0.15f
+    var layout = measurer.measure("kleeamp", base.copy(fontSize = fontSizePx.toSp()))
+    val maxWidth = size.width * 0.72f
+    if (layout.size.width > maxWidth) {
+        fontSizePx *= maxWidth / layout.size.width
+        layout = measurer.measure("kleeamp", base.copy(fontSize = fontSizePx.toSp()))
+    }
+    val y = midY + 20f * scale + size.height * 0.03f
     if (y + layout.size.height > size.height) return
     val alpha = (0.60f + 0.28f * core.bass + 0.12f * flash).coerceIn(0f, 1f)
     drawText(

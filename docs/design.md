@@ -95,6 +95,25 @@ body, 1.3–1.35 for rows, 1.14–1.2 for titles, 1.1 for clocks. Chrome — chi
 tabs, section labels, settings rows — sits at Medium so it reads a touch heavier
 than the data around it.
 
+### Wordmark
+
+The app name is a text logo: **Poppins ExtraBold, lowercase, at −0.035em**.
+
+```
+kleeamp
+```
+
+Same face as every title, so the name costs no new type debt, and the tight
+tracking keeps the geometric `o` from reading loose at display sizes.
+
+- Always lowercase. `KLEEAMP` is not the logo.
+- Never set it in JetBrains Mono. The mono face is for readouts that tick, not
+  for the brand.
+- Stacked or alone; when a mark is present the wordmark sits under it, the same
+  width as the mark, not beside it.
+- The visualizer draws it under the live six-bar mark when the frame is tall
+  enough, sized to the frame and clipped rather than wrapped if it cannot fit.
+
 ## Layout
 
 - **Gutter is 22dp**, horizontally, everywhere. Nothing is flush to the edge.
