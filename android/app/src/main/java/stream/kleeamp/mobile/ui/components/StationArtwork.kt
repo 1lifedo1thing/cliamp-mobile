@@ -17,27 +17,28 @@ import stream.kleeamp.mobile.data.StationArtSource
 /**
  * Shared small-cover lookup for library and queue rows; decoding uses the
  * bounded cover pool. With [fallback], an item that has no art of its own
- * gets one of the bundled cover designs instead of an empty plate.
+ * gets one of the bundled cover designs instead of an empty plate - seeded
+ * synchronously from the row-sized cache, so the first frame already shows
+ * it and the background lookup only ever upgrades to real art.
  */
 @Composable
 internal fun rememberStationThumbnail(station: Station, fallback: Boolean = true): ImageBitmap? {
     val context = LocalContext.current
     val resolver = context.contentResolver
-    var art by remember(station.id, station.cover, station.url) {
-        mutableStateOf(
-            (LocalArt.cachedSmall(station.cover) ?: StationArtSource.cachedSmall(station))?.asImageBitmap()
-        )
+    val key = station.id.ifBlank { station.url }
+    val cached = remember(station.id, station.cover, station.url) {
+        (LocalArt.cachedSmall(station.cover) ?: StationArtSource.cachedSmall(station))?.asImageBitmap()
     }
+    val placeholder = remember(key) {
+        if (fallback) PlaceholderArt.thumbnailFor(context, key)?.asImageBitmap() else null
+    }
+    var art by remember(station.id, station.cover, station.url) { mutableStateOf(cached ?: placeholder) }
     LaunchedEffect(station.id, station.cover, station.url, resolver, fallback) {
-        if (art != null) return@LaunchedEffect
-        art = (LocalArt.bitmapForSmall(station.cover, resolver)
+        if (cached != null) return@LaunchedEffect
+        val real = (LocalArt.bitmapForSmall(station.cover, resolver)
             ?: StationArtSource.bitmapForKnownSmall(station)
-            ?: StationArtSource.bitmapForSmall(station)
-            ?: if (fallback) {
-                PlaceholderArt.bitmapFor(context, station.id.ifBlank { station.url })
-            } else {
-                null
-            })?.asImageBitmap()
+            ?: StationArtSource.bitmapForSmall(station))?.asImageBitmap()
+        if (real != null) art = real
     }
     return art
 }

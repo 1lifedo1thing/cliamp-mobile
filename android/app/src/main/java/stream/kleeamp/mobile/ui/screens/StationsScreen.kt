@@ -457,14 +457,17 @@ private fun StationRow(
 private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
     val p = LocalPalette.current
     val context = LocalContext.current
-    var art by remember(station.id) { mutableStateOf<ImageBitmap?>(null) }
+    // Bundled design first: a coverless station paints it on the first frame
+    // instead of flashing the empty plate while the lookup below runs. The
+    // lookup only ever upgrades to real art.
+    var art by remember(station.id) {
+        mutableStateOf(PlaceholderArt.thumbnailFor(context, station.id.ifBlank { station.url })?.asImageBitmap())
+    }
     LaunchedEffect(station.id) {
-        val fallback = PlaceholderArt.bitmapFor(context, station.id.ifBlank { station.url })
-        art = if (station.source == StationSource.Cliamp) {
-            fallback?.asImageBitmap()
-        } else {
-            (StationArtSource.bitmapForSmall(station) ?: fallback)?.asImageBitmap()
-        }
+        // Cliamp stations carry no art by design: the bundled design above
+        // is the final answer, no lookup.
+        if (station.source == StationSource.Cliamp) return@LaunchedEffect
+        StationArtSource.bitmapForSmall(station)?.asImageBitmap()?.let { art = it }
     }
     val bmp = art
     // No art to show, so the plate carries the broadcast mark in accent on
@@ -527,14 +530,14 @@ private fun StationTile(
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
-    var art by remember(station.id) { mutableStateOf<ImageBitmap?>(null) }
+    // Same synchronous bundled seed as the row thumb: the tile never shows
+    // an empty plate, the lookup below only upgrades to real art.
+    var art by remember(station.id) {
+        mutableStateOf(PlaceholderArt.thumbnailFor(context, station.id.ifBlank { station.url })?.asImageBitmap())
+    }
     LaunchedEffect(station.id) {
-        val fallback = PlaceholderArt.bitmapFor(context, station.id.ifBlank { station.url })
-        art = if (station.source == StationSource.Cliamp) {
-            fallback?.asImageBitmap()
-        } else {
-            (StationArtSource.bitmapFor(station) ?: fallback)?.asImageBitmap()
-        }
+        if (station.source == StationSource.Cliamp) return@LaunchedEffect
+        StationArtSource.bitmapFor(station)?.asImageBitmap()?.let { art = it }
     }
     Column(
         Modifier
