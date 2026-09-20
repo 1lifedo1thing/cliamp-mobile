@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -46,17 +48,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
+import stream.kleeamp.mobile.KleeampApp
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationSource
 import stream.kleeamp.mobile.data.durationLabel
+import stream.kleeamp.mobile.data.visualizer.Visualizer
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection
 import stream.kleeamp.mobile.ui.components.rememberStationThumbnail
-import stream.kleeamp.mobile.ui.components.BrickMeter
 import stream.kleeamp.mobile.ui.components.KleeampIcons
 import stream.kleeamp.mobile.ui.components.HairlineDivider
-import stream.kleeamp.mobile.ui.components.rememberMeter
 import stream.kleeamp.mobile.ui.components.BackChevron
+import stream.kleeamp.mobile.ui.components.vis.VisualizerMeter
 import stream.kleeamp.mobile.ui.components.Gutter
 import stream.kleeamp.mobile.ui.components.ListRow
 import stream.kleeamp.mobile.ui.components.ScreenHeader
@@ -85,11 +88,16 @@ fun UpNextScreen(
 ) {
     val upNext by player.upNext.collectAsStateWithLifecycle()
     val upNextIndex by player.upNextIndex.collectAsStateWithLifecycle()
+    // The card meter follows the applied visualizer like every other meter;
+    // read the setting here so only this screen recomposes when it changes.
+    val app = LocalContext.current.applicationContext as KleeampApp
+    val visualizer by app.prefs.visualizer.collectAsState(initial = "spectrum")
     UpNextContent(
         upNext = upNext,
         activeIndex = upNextIndex.takeIf { upNext.getOrNull(it)?.url == current?.url } ?: -1,
         current = current,
         playing = playing,
+        visualizer = visualizer,
         onPlay = { if (player.upNext.value == upNext) onPlay(it) },
         onClear = player::clearUpNext,
         onMove = { from, to ->
@@ -113,6 +121,7 @@ internal fun UpNextContent(
     onRemove: (Int) -> Unit,
     onBack: () -> Unit,
     onClear: () -> Unit = {},
+    visualizer: String = "spectrum",
 ) {
     val p = LocalPalette.current
     val listState = rememberLazyListState()
@@ -155,7 +164,7 @@ internal fun UpNextContent(
         }
 
         if (current != null && activeIndex >= 0) {
-            NowPlayingCard(current, playing, p)
+            NowPlayingCard(current, playing, p, visualizer)
         }
 
         LazyColumn(
@@ -231,7 +240,7 @@ internal fun UpNextContent(
 }
 
 @Composable
-private fun NowPlayingCard(s: Station, playing: Boolean, p: KleeampPalette) {
+private fun NowPlayingCard(s: Station, playing: Boolean, p: KleeampPalette, visualizer: String) {
     Column(Modifier.fillMaxWidth().background(p.panel)) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 14.dp),
@@ -244,16 +253,17 @@ private fun NowPlayingCard(s: Station, playing: Boolean, p: KleeampPalette) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    BrickMeter(
-                        frame = rememberMeter(
-                            columns = 16,
-                            live = playing,
-                            spectrumProvider = { PlaybackBus.spectrum.value },
-                        ),
-                        modifier = Modifier.size(width = 62.dp, height = 18.dp),
+                    // The applied visualizer at card size - never a hardcoded
+                    // brick. Brick geometry matches the old strip exactly.
+                    VisualizerMeter(
+                        mode = Visualizer.byId(visualizer),
+                        columns = 16,
+                        live = playing,
                         brick = 2.dp,
                         gap = 2.dp,
-                        columnGap = 2.dp,
+                        modifier = Modifier.size(width = 62.dp, height = 18.dp),
+                        spectrumProvider = { PlaybackBus.spectrum.value },
+                        stereoProvider = { PlaybackBus.stereo.value },
                     )
                     Mono(if (playing) "PLAYING" else "PAUSED", KleeampType.tabLabel,
                         if (playing) p.accent else p.inkTertiary)
