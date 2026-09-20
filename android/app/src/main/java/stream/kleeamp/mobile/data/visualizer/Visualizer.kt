@@ -43,6 +43,9 @@ enum class Visualizer(val id: String, val label: String, val columns: Int) {
 
     Kleeamp("kleeamp", "kleeamp", 24),
 
+    /** The oscilloscope: raw time-domain trace, ported from cliamp's wave. */
+    Wave("wave", "wave", 24),
+
     /**
      * The widget's brick meter. Glance renders to RemoteViews, which hard-cap
      * every Row at 10 direct children, so the full 24-column meter cannot

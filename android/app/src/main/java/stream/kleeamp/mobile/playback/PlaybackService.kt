@@ -267,6 +267,7 @@ class PlaybackService : MediaSessionService() {
                     player.audioSessionId,
                     spectrumWanted,
                     onSpectrum = ::handleSpectrum,
+                    onWaveform = PlaybackBus::publishWaveform,
                     onLiveChanged = PlaybackBus::publishSpectrumLive,
                 )
                 fx.setEqEnabled(eqOn)
@@ -634,6 +635,7 @@ class PlaybackService : MediaSessionService() {
                 player.audioSessionId,
                 spectrumWanted,
                 onSpectrum = ::handleSpectrum,
+                onWaveform = PlaybackBus::publishWaveform,
                 onLiveChanged = PlaybackBus::publishSpectrumLive,
             )
         }

@@ -20,6 +20,7 @@ import stream.kleeamp.mobile.data.visualizer.StereoCore
 import stream.kleeamp.mobile.data.visualizer.StereoMetrics
 import stream.kleeamp.mobile.data.visualizer.VisMath
 import stream.kleeamp.mobile.data.visualizer.Visualizer
+import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.ui.components.BrickMeter
 import stream.kleeamp.mobile.ui.components.rememberMeter
 
@@ -154,6 +155,30 @@ class KleeampFrame(columns: Int) : VisFrame(columns, KLEEAMP_TICK_NS) {
     }
 }
 
+class WaveFrame(columns: Int) : VisFrame(columns, WAVE_TICK_NS) {
+    /**
+     * Latest raw time-domain samples, read straight off the waveform bus.
+     * The FFT cannot produce these, so wave ignores [bands] and follows the
+     * waveform tap instead - which also means it works while the FFT is
+     * still attaching. The published arrays are never mutated after publish,
+     * so the reference can be held without copying.
+     */
+    var samples: FloatArray = FloatArray(0)
+        private set
+
+    override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
+        samples = PlaybackBus.waveform.value
+    }
+
+    override fun settle() {
+        samples = FloatArray(0)
+    }
+
+    private companion object {
+        const val WAVE_TICK_NS = 33_000_000L
+    }
+}
+
 @Composable
 fun rememberVisFrame(
     mode: Visualizer,
@@ -200,6 +225,7 @@ private fun newVisFrame(mode: Visualizer, columns: Int): VisFrame = when (mode) 
     Visualizer.Stereo -> StereoFrame(columns)
     Visualizer.Omarchy -> OmarchyFrame(columns)
     Visualizer.Kleeamp -> KleeampFrame(columns)
+    Visualizer.Wave -> WaveFrame(columns)
     Visualizer.Brick, Visualizer.Widget -> error("brick renders through rememberMeter")
 }
 
@@ -234,5 +260,6 @@ fun VisualizerView(frame: VisFrame, modifier: Modifier = Modifier) {
         is StereoFrame -> VisStereo(frame, modifier)
         is OmarchyFrame -> VisOmarchy(frame, modifier)
         is KleeampFrame -> VisKleeamp(frame, modifier)
+        is WaveFrame -> VisWave(frame, modifier)
     }
 }

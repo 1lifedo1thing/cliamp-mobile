@@ -20,6 +20,15 @@ object PlaybackBus {
     private val _spectrumLive = MutableStateFlow(false)
     val spectrumLive: StateFlow<Boolean> = _spectrumLive.asStateFlow()
 
+    /**
+     * Raw time-domain samples for the wave oscilloscope, -1..1. The FFT
+     * cannot produce these, so they ride their own Visualizer tap. Nobody
+     * collects this flow: frames read the current value directly in their
+     * tick loop, costing no recomposition.
+     */
+    private val _waveform = MutableStateFlow(FloatArray(0))
+    val waveform: StateFlow<FloatArray> = _waveform.asStateFlow()
+
     private val _stereo = MutableStateFlow(StereoMetrics.silent)
     val stereo: StateFlow<StereoMetrics> = _stereo.asStateFlow()
 
@@ -50,6 +59,7 @@ object PlaybackBus {
 
     fun publishSpectrum(v: FloatArray) { _spectrum.value = v }
     fun publishSpectrumLive(v: Boolean) { _spectrumLive.value = v }
+    fun publishWaveform(v: FloatArray) { _waveform.value = v }
     fun publishStereo(v: StereoMetrics) { _stereo.value = v }
     fun publishStreamTitle(v: String) { _streamTitle.value = v }
     fun publishStation(v: Station?) { _station.value = v; if (v != null) _streamTitle.value = "" }

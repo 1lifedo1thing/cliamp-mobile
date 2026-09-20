@@ -6,6 +6,7 @@ import android.util.Log
 import kotlin.math.hypot
 import kotlin.math.log10
 import kotlin.math.pow
+import stream.kleeamp.mobile.data.visualizer.WaveCore
 
 /**
  * Real spectrum and real EQ, both attached to the ExoPlayer audio session.
@@ -35,6 +36,7 @@ class AudioFx(private val bands: Int = 64) {
         audioSessionId: Int,
         spectrumEnabled: Boolean,
         onSpectrum: (FloatArray) -> Unit,
+        onWaveform: (FloatArray) -> Unit = {},
         onLiveChanged: (Boolean) -> Unit = {},
     ) {
         if (audioSessionId == 0) return
@@ -64,7 +66,10 @@ class AudioFx(private val bands: Int = 64) {
                 captureSize = Visualizer.getCaptureSizeRange()[1].coerceAtMost(1024)
                 setDataCaptureListener(
                     object : Visualizer.OnDataCaptureListener {
-                        override fun onWaveFormDataCapture(v: Visualizer?, wf: ByteArray?, rate: Int) = Unit
+                        override fun onWaveFormDataCapture(v: Visualizer?, wf: ByteArray?, rate: Int) {
+                            if (wf == null) return
+                            onWaveform(WaveCore.fromBytes(wf))
+                        }
                         override fun onFftDataCapture(v: Visualizer?, fft: ByteArray?, rate: Int) {
                             if (fft == null) return
                             if (!spectrumLive) {
@@ -75,7 +80,7 @@ class AudioFx(private val bands: Int = 64) {
                         }
                     },
                     Visualizer.getMaxCaptureRate().coerceAtMost(20_000),
-                    false, true,
+                    true, true,
                 )
                 enabled = true
             }
