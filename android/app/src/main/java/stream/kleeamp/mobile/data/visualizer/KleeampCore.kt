@@ -26,6 +26,14 @@ class KleeampCore(val columns: Int) {
         bass = if (low > bass) low else bass + (low - bass) * (dt * 3f).coerceAtMost(1f)
     }
 
+    /** Rest state for pause: settled field and bars, no burst, no glow. */
+    fun settle() {
+        field.settle()
+        bars.settle()
+        burst.reset()
+        bass = 0f
+    }
+
     companion object {
         const val BAR_COUNT = 6
 

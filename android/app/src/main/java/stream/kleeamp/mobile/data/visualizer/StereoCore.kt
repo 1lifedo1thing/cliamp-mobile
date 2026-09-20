@@ -31,6 +31,13 @@ class StereoCore {
         stepChannel(1, target.rightLevel, target.rightPeak, step)
     }
 
+    /** Rest state for pause: stubs at the meter floor, no hold. */
+    fun settle() {
+        levels.fill(REST_LEVEL)
+        peaks.fill(REST_PEAK)
+        hold.fill(0f)
+    }
+
     fun idle(t: Double) {
         val l = (sin(2 * PI * t / 3.1) + 1.0) / 2.0 * 0.35 + 0.10
         val r = (sin(2 * PI * t / 2.7 + 1.7) + 1.0) / 2.0 * 0.35 + 0.10
@@ -71,6 +78,9 @@ class StereoCore {
         private const val PEAK_HOLD = 0.45f
         private const val PEAK_FALL = 0.65f
         private const val FLOOR_DB = -48.0
+        /** Matches MeterCore.settle so every family rests on the same floor. */
+        private const val REST_LEVEL = 0.04f
+        private const val REST_PEAK = 0.06f
 
         fun dbLevel(amplitude: Double): Float {
             if (amplitude <= 0.0) return 0f

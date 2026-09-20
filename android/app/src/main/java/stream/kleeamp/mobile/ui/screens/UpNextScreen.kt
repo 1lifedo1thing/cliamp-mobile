@@ -49,6 +49,7 @@ import androidx.media3.common.util.UnstableApi
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationSource
 import stream.kleeamp.mobile.data.durationLabel
+import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection
 import stream.kleeamp.mobile.ui.components.rememberStationThumbnail
 import stream.kleeamp.mobile.ui.components.BrickMeter
@@ -244,7 +245,11 @@ private fun NowPlayingCard(s: Station, playing: Boolean, p: KleeampPalette) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     BrickMeter(
-                        frame = rememberMeter(columns = 16, live = playing),
+                        frame = rememberMeter(
+                            columns = 16,
+                            live = playing,
+                            spectrumProvider = { PlaybackBus.spectrum.value },
+                        ),
                         modifier = Modifier.size(width = 62.dp, height = 18.dp),
                         brick = 2.dp,
                         gap = 2.dp,

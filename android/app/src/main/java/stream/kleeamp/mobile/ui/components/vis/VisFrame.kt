@@ -31,6 +31,14 @@ sealed class VisFrame(val columns: Int, val minTickNs: Long) {
     internal fun bump() { frame++ }
 
     abstract fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double)
+
+    /**
+     * Rest state for pause. Brick settles to the meter floor and stops its
+     * loop; every other family does the same here so nothing keeps dancing
+     * when the music stops. Style is untouched - each renderer simply draws
+     * resting values.
+     */
+    abstract fun settle()
 }
 
 class BarsFrame(columns: Int) : VisFrame(columns, 0L) {
@@ -41,6 +49,8 @@ class BarsFrame(columns: Int) : VisFrame(columns, 0L) {
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
         if (bands != null) core.push(bands) else core.pushIdle(t)
     }
+
+    override fun settle() = core.settle()
 }
 
 class ClassicPeakFrame(columns: Int) : VisFrame(columns, 0L) {
@@ -51,6 +61,8 @@ class ClassicPeakFrame(columns: Int) : VisFrame(columns, 0L) {
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
         core.push(bands ?: VisMath.idleBands(columns, t), dt)
     }
+
+    override fun settle() = core.settle()
 }
 
 class ClassicLedFrame(columns: Int) : VisFrame(columns, 0L) {
@@ -61,6 +73,8 @@ class ClassicLedFrame(columns: Int) : VisFrame(columns, 0L) {
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
         core.push(bands ?: VisMath.idleBands(columns, t), dt)
     }
+
+    override fun settle() = core.settle()
 }
 
 class StereoFrame(columns: Int) : VisFrame(columns, 0L) {
@@ -71,6 +85,8 @@ class StereoFrame(columns: Int) : VisFrame(columns, 0L) {
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
         if (bands != null) core.push(stereo, dt) else core.idle(t)
     }
+
+    override fun settle() = core.settle()
 }
 
 class MatrixFrame(columns: Int) : VisFrame(columns, MATRIX_TICK_NS) {
@@ -79,6 +95,10 @@ class MatrixFrame(columns: Int) : VisFrame(columns, MATRIX_TICK_NS) {
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
         val src = bands ?: VisMath.idleBands(columns, t)
         VisMath.resampleAverage(src, columns).copyInto(energy)
+    }
+
+    override fun settle() {
+        energy.fill(0f)
     }
 
     private companion object {
@@ -94,6 +114,10 @@ class ButterflyFrame(columns: Int) : VisFrame(columns, BUTTERFLY_TICK_NS) {
         this.bands = (bands ?: VisMath.idleBands(columns, t)).copyOf()
     }
 
+    override fun settle() {
+        bands = FloatArray(columns)
+    }
+
     private companion object {
         const val BUTTERFLY_TICK_NS = 66_000_000L
     }
@@ -107,6 +131,10 @@ class OmarchyFrame(columns: Int) : VisFrame(columns, OMARCHY_TICK_NS) {
         this.bands = (bands ?: VisMath.idleBands(columns, t)).copyOf()
     }
 
+    override fun settle() {
+        bands = FloatArray(columns)
+    }
+
     private companion object {
         const val OMARCHY_TICK_NS = 50_000_000L
     }
@@ -118,6 +146,8 @@ class KleeampFrame(columns: Int) : VisFrame(columns, KLEEAMP_TICK_NS) {
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
         core.push(bands ?: VisMath.idleBands(columns, t), dt)
     }
+
+    override fun settle() = core.settle()
 
     private companion object {
         const val KLEEAMP_TICK_NS = 0L
@@ -134,6 +164,14 @@ fun rememberVisFrame(
 ): VisFrame {
     val frame = remember(mode, columns) { newVisFrame(mode, columns) }
     LaunchedEffect(frame, live) {
+        // Paused settles to the rest state and stops, like Brick: no idle
+        // dance when the music stops. Playing with no FFT yet (session
+        // attaching) still idles inside the loop until real bands land.
+        if (!live) {
+            frame.settle()
+            frame.bump()
+            return@LaunchedEffect
+        }
         val start = withFrameNanos { it }
         var last = start
         var lastTick = start - frame.minTickNs

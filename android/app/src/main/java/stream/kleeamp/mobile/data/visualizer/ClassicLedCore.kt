@@ -32,6 +32,13 @@ class ClassicLedCore(val columns: Int) {
         }
     }
 
+    /** Rest state for pause: stubs at the meter floor, no hold. */
+    fun settle() {
+        body.fill(REST_LEVEL)
+        peak.fill(REST_PEAK)
+        hold.fill(0f)
+    }
+
     private fun clampDt(dt: Float): Float = when {
         dt <= 0f || dt > 10f * FRAME -> FRAME
         else -> dt
@@ -43,5 +50,8 @@ class ClassicLedCore(val columns: Int) {
         const val FALL_RATE = 16f
         const val PEAK_HOLD = 0.45f
         const val PEAK_FALL = 0.55f
+        /** Matches MeterCore.settle so every family rests on the same floor. */
+        const val REST_LEVEL = 0.04f
+        const val REST_PEAK = 0.06f
     }
 }

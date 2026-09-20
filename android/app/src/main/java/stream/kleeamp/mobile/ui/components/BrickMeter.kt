@@ -96,15 +96,21 @@ enum class MeterSize(val columns: Int, val brick: Dp, val gap: Dp, val height: D
  * When a real spectrum is available it is used directly; otherwise the columns
  * fall back to a synthesised idle animation. Per-column variety comes from
  * staggered period and phase, never from randomised colour.
+ *
+ * [spectrumProvider] lets small always-composed meters (mini player, Up Next)
+ * read the live analyser without subscribing composition to it: a lambda read
+ * inside the frame loop costs no recomposition, while a collected State would
+ * re-emit the whole caller sixty times a second.
  */
 @Composable
 fun rememberMeter(
     columns: Int,
     live: Boolean,
     spectrum: State<FloatArray>? = null,
+    spectrumProvider: (() -> FloatArray?)? = null,
 ): MeterFrame {
     val frame = remember(columns) { MeterFrame(columns) }
-    val src = spectrum?.value
+    val src = spectrumProvider?.invoke() ?: spectrum?.value
     val useReal = live && src != null && src.isNotEmpty()
 
     LaunchedEffect(columns, live, useReal) {
@@ -115,7 +121,7 @@ fun rememberMeter(
         val start = withFrameNanos { it }
         while (true) {
             withFrameNanos { now ->
-                val real = spectrum?.value
+                val real = spectrumProvider?.invoke() ?: spectrum?.value
                 if (real != null && real.isNotEmpty()) {
                     frame.push(real)
                 } else {

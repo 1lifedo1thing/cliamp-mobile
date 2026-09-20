@@ -32,6 +32,7 @@ import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationArtSource
 import stream.kleeamp.mobile.data.StationSource
 import stream.kleeamp.mobile.data.sourceLine
+import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.ui.theme.KleeampShape
 import stream.kleeamp.mobile.ui.theme.KleeampType
 import stream.kleeamp.mobile.ui.theme.LocalPalette
@@ -61,7 +62,11 @@ fun MiniPlayer(
     // The meter is the visualizer; when the setting is off the frame loop is
     // not run at all, so the brick meter is truly gone from the bar.
     val frame = if (visualizer != "off")
-        rememberMeter(columns = MeterSize.Mini.columns, live = playing)
+        rememberMeter(
+            columns = MeterSize.Mini.columns,
+            live = playing,
+            spectrumProvider = { PlaybackBus.spectrum.value },
+        )
     else null
 
     Column(Modifier.fillMaxWidth().background(p.panel)) {

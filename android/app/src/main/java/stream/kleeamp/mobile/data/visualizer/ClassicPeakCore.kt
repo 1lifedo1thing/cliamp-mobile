@@ -17,6 +17,14 @@ class ClassicPeakCore(val columns: Int) {
         advance(levels, step)
     }
 
+    /** Rest state for pause: stubs at the meter floor, no velocity or hold. */
+    fun settle() {
+        barPos.fill(REST_LEVEL)
+        peakPos.fill(REST_PEAK)
+        peakVel.fill(0f)
+        peakHold.fill(0f)
+    }
+
     private fun reset(levels: FloatArray) {
         levels.copyInto(barPos)
         levels.copyInto(peakPos)
@@ -82,5 +90,8 @@ class ClassicPeakCore(val columns: Int) {
         const val BAR_FALL_RATE = 10f
         const val MAX_HEIGHT = 1f
         const val VISIBLE_EPSILON = 0.01f
+        /** Matches MeterCore.settle so every family rests on the same floor. */
+        const val REST_LEVEL = 0.04f
+        const val REST_PEAK = 0.06f
     }
 }
