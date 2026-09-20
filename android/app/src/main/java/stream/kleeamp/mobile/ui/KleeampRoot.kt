@@ -144,8 +144,10 @@ fun KleeampRoot(
     // yet, so the strip reads as having none selected, the way it always did.
     var tabVisited by rememberSaveable { mutableStateOf(openSearchTick == 0) }
     val tab: Tab? = if (tabVisited) Tab.entries[pagerState.currentPage] else null
-    var focusDirectory by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
+    // Search state survives rotation like its neighbours below: a rotate
+    // with Search open keeps the query and the pending tag focus.
+    var focusDirectory by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     // True for a beat after any tab-bar tap: pushes and pops go flat so a
     // switch never flashes the intermediate page's slide+scale. Tab-bar
     // travel is always instant; only a real push or back animates.

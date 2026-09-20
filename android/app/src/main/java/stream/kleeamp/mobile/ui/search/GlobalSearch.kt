@@ -51,21 +51,24 @@ object GlobalSearch {
             if (score != Int.MAX_VALUE) scored += score to hit
         }
 
-        // Local songs, favourites and recent are all real files/streams; a given
+        // Local songs, favourites and recents are all real files/streams; a given
         // url may sit in more than one bucket (a local song can be a favourite),
-        // so dedupe by url keeping the most specific label.
+        // so dedupe by url keeping the most specific label: Song, then
+        // Favorite (the user starred it), then Recent (merely heard).
         val byUrl = HashMap<String, SearchHit>()
         fun remember(hit: SearchHit) {
             val s = hit.playable ?: return
             val old = byUrl[s.url]
-            // Prefer a Song label over a plain Favorite when both exist.
-            if (old == null || old is SearchHit.Favorite && hit is SearchHit.Song) {
+            if (old == null ||
+                old is SearchHit.Recent && hit !is SearchHit.Recent ||
+                old is SearchHit.Favorite && hit is SearchHit.Song
+            ) {
                 byUrl[s.url] = hit
             }
         }
         localSongs.forEach { remember(SearchHit.Song(it)) }
         favorites.forEach { remember(SearchHit.Favorite(it)) }
-        recent.forEach { remember(SearchHit.Favorite(it)) }
+        recent.forEach { remember(SearchHit.Recent(it)) }
         byUrl.values.forEach { consider(it) }
 
         radio.forEach { s -> consider(SearchHit.StationHit(s)) }

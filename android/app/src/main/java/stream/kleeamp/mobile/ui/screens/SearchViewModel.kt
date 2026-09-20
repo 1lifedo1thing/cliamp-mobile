@@ -117,7 +117,9 @@ class SearchViewModel(
         ).hits
         val shown = when (dir.filter) {
             SearchScope.All -> results
-            SearchScope.Media -> results.filter { it is SearchHit.Song || it is SearchHit.Favorite }
+            // LOCAL means on-device files only: favourited or recently played
+            // radio streams file under radio, never here.
+            SearchScope.Media -> results.filter { it is SearchHit.Song }
             SearchScope.Radio -> results.filter { it is SearchHit.StationHit }
             SearchScope.Pods -> results.filter { it is SearchHit.Show || it is SearchHit.Episode }
             SearchScope.Tags -> results.filter { it is SearchHit.Tag }

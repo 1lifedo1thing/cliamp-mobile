@@ -44,6 +44,19 @@ sealed interface SearchHit {
     }
 
     /**
+     * A recently played station. Never labelled "fav": the user did not star
+     * it, they just heard it. (GlobalSearch used to wrap these as Favorite,
+     * so recents wore the fav tag and filed under local.)
+     */
+    data class Recent(val station: Station) : SearchHit {
+        override val playable get() = station
+        override val key get() = "recent:${station.url}"
+        override val origin get() = "recent"
+        override val haystack get() =
+            (listOf(station.name) + station.tagList).joinToString(" ")
+    }
+
+    /**
      * One episode out of a subscribed show's cached feed: plays immediately,
      * with the show's artwork behind it when the episode carries none.
      */

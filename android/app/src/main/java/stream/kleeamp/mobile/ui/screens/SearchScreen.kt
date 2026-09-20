@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -48,6 +49,7 @@ import kotlinx.coroutines.delay
 import stream.kleeamp.mobile.data.PodcastShow
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationArtSource
+import stream.kleeamp.mobile.data.StationSource
 import stream.kleeamp.mobile.data.provider.ProviderAccount
 import stream.kleeamp.mobile.ui.components.BackChevron
 import stream.kleeamp.mobile.ui.components.Chip
@@ -142,30 +144,68 @@ fun SearchScreen(
             }
         }
 
-        LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
-            if (shown.isNotEmpty()) {
-                val first = shown.first()
-                val label = sectionOf(first)
-                item(key = "label:$label") { SectionLabel(label) }
-                items(shown, key = { it.key }) { hit ->
-                    HitRow(
-                        hit = hit,
-                        current = current,
-                        playing = playing,
-                        term = term,
-                        onClick = { open(hit, shown) },
-                        accent = p.accent,
-                    )
+        // Mixed scopes group under their own stable label: one "label:X"
+        // key per section, unique row keys inside. A single label taken
+        // from the first hit misdescribed the rest and changed keys on
+        // every keystroke. Sections keep chip order (not first-seen), so
+        // late async arrivals for the same term grow sections in place
+        // instead of reordering them and yanking the viewport.
+        val groups = remember(shown) {
+            shown.groupBy(::sectionOf).entries
+                .sortedBy { SECTION_ORDER.indexOf(it.key).takeIf { i -> i >= 0 } ?: Int.MAX_VALUE }
+                .associate { it.key to it.value }
+        }
+        val listState = rememberLazyListState()
+        // A new term or filter is a new result set: pin to the top. Without
+        // this the list keeps its old index while the content morphs under
+        // it - narrowing 200 hits to 5 from index 50 clamps to the end, and
+        // async insertions above shove the viewport mid-list.
+        LaunchedEffect(term, filter) { listState.scrollToItem(0) }
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
+            // No placeholder while empty: a keyed trailing spacer would
+            // anchor the scroll, so the moment the first results land the
+            // fresh list jumps to the bottom following its key. With no
+            // prior keys there is nothing to restore, and it opens at top.
+            if (groups.isNotEmpty()) {
+                groups.forEach { (label, hits) ->
+                    item(key = "label:$label") { SectionLabel(label) }
+                    items(hits, key = { it.key }) { hit ->
+                        HitRow(
+                            hit = hit,
+                            current = current,
+                            playing = playing,
+                            term = term,
+                            onClick = { open(hit, shown) },
+                            accent = p.accent,
+                        )
+                    }
                 }
+                item(key = "bottom-spacer") { Spacer(Modifier.height(12.dp)) }
             }
-            item { Spacer(Modifier.height(12.dp)) }
         }
     }
 }
 
+/** Section order mirrors the scope chips; unknown sections sort last. */
+private val SECTION_ORDER = listOf(
+    "local — global",
+    "radio — global",
+    "podcasts — global",
+    "tags — global",
+    "providers — global",
+)
+
 private fun sectionOf(hit: SearchHit): String {
     val head = when (hit) {
-        is SearchHit.Song, is SearchHit.Favorite -> "local"
+        is SearchHit.Song -> "local"
+        // Favourites and recents file by what the station IS, not by the
+        // fact it was starred or heard: a recent radio stream is radio,
+        // not local, and never wears the fav tag unless starred.
+        is SearchHit.Favorite, is SearchHit.Recent -> when (hit.playable?.source) {
+            StationSource.Local -> "local"
+            StationSource.Podcast -> "podcasts"
+            else -> "radio"
+        }
         is SearchHit.StationHit -> "radio"
         is SearchHit.Show, is SearchHit.Episode -> "podcasts"
         is SearchHit.Tag -> "tags"
@@ -186,6 +226,7 @@ private fun HitArt(
     val station = when (hit) {
         is SearchHit.Song -> hit.station
         is SearchHit.Favorite -> hit.station
+        is SearchHit.Recent -> hit.station
         is SearchHit.StationHit -> hit.station
         is SearchHit.Episode -> hit.station
         else -> null
@@ -268,6 +309,7 @@ private fun HitRow(
     val currentUrl = when (hit) {
         is SearchHit.Song -> hit.station.url
         is SearchHit.Favorite -> hit.station.url
+        is SearchHit.Recent -> hit.station.url
         is SearchHit.StationHit -> hit.station.url
         else -> null
     }
@@ -286,6 +328,7 @@ private fun HitRow(
         val title = when (hit) {
             is SearchHit.Song -> hit.station.name
             is SearchHit.Favorite -> hit.station.name
+            is SearchHit.Recent -> hit.station.name
             is SearchHit.StationHit -> hit.station.name
             is SearchHit.Episode -> hit.station.name
             is SearchHit.Show -> hit.show.title
@@ -295,6 +338,7 @@ private fun HitRow(
         val sub = when (hit) {
             is SearchHit.Song -> hit.station.artist
             is SearchHit.Favorite -> hit.station.meta.ifBlank { hit.station.name }
+            is SearchHit.Recent -> hit.station.meta.ifBlank { hit.station.name }
             is SearchHit.StationHit -> hit.station.meta
             is SearchHit.Episode -> hit.showTitle
             is SearchHit.Show -> hit.show.meta
@@ -325,7 +369,7 @@ private fun highlight(haystack: String, term: String, accent: androidx.compose.u
 }
 
 private fun iconOf(hit: SearchHit): ImageVector = when (hit) {
-    is SearchHit.Song, is SearchHit.Favorite -> KleeampIcons.MusicNote
+    is SearchHit.Song, is SearchHit.Favorite, is SearchHit.Recent -> KleeampIcons.MusicNote
     is SearchHit.StationHit -> KleeampIcons.StationsTab
     is SearchHit.Show, is SearchHit.Episode -> KleeampIcons.PodRow
     is SearchHit.Tag -> KleeampIcons.ListShort
