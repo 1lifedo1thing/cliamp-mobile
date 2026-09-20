@@ -29,9 +29,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.data.Prefs
 import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.data.visualizer.StereoMetrics
 import stream.kleeamp.mobile.data.visualizer.Visualizer
 import stream.kleeamp.mobile.playback.EqPresets
 import stream.kleeamp.mobile.playback.PlaybackBus
@@ -51,6 +54,7 @@ import stream.kleeamp.mobile.ui.theme.Mono
 private val bandLabels = listOf("60", "150", "400", "1k", "3k", "8k", "16k")
 private val rulerLabels = listOf("32", "125", "500", "2k", "8k", "20k")
 
+@OptIn(FlowPreview::class)
 @Composable
 fun ScopeScreen(
     prefs: Prefs,
@@ -62,8 +66,13 @@ fun ScopeScreen(
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
 
-    val spectrum = PlaybackBus.spectrum.collectAsState()
-    val stereo = PlaybackBus.stereo.collectAsState()
+    // The peak readout below only needs a slow sample: collecting the raw
+    // analyser flow would recompose this whole screen on every FFT callback
+    // and starve the meter loop into stutter. The meter itself reads the bus
+    // directly through provider lambdas (zero recomposition, zero lag).
+    val peakBands by PlaybackBus.spectrum.sample(500).collectAsState(initial = FloatArray(0))
+    val spectrumProvider: () -> FloatArray? = { PlaybackBus.spectrum.value }
+    val stereoProvider: () -> StereoMetrics? = { PlaybackBus.stereo.value }
     val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
     val mode = Visualizer.byId(visualizer)
     val spectrumLive by PlaybackBus.spectrumLive.collectAsState()
@@ -129,8 +138,9 @@ fun ScopeScreen(
         // entirely (no frame loop, no grid, no peak readout), leaving just the
         // equalizer on this screen.
         if (visualizer != "off") {
-            // Peak level in dBFS, read straight off the folded spectrum.
-            val peakDb = spectrum.value.maxOrNull()?.let { -48f + it * 48f } ?: -48f
+            // Peak level in dBFS, read off the slow sample: a twice-a-second
+            // number needs no FFT-rate recomposition.
+            val peakDb = peakBands.maxOrNull()?.let { -48f + it * 48f } ?: -48f
 
             Column(Modifier.fillMaxWidth().padding(horizontal = Gutter)) {
                 // The peak datum breathes with the meter while the spectrum is
@@ -154,8 +164,8 @@ fun ScopeScreen(
                     mode = mode,
                     columns = MeterSize.Scope.columns,
                     live = playing,
-                    spectrum = spectrum,
-                    stereo = stereo,
+                    spectrumProvider = spectrumProvider,
+                    stereoProvider = stereoProvider,
                     brick = MeterSize.Scope.brick,
                     gap = MeterSize.Scope.gap,
                     modifier = Modifier.fillMaxWidth().height(MeterSize.Scope.height),

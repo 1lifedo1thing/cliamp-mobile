@@ -83,13 +83,20 @@ class AudioFx(private val bands: Int = 64) {
                             onSpectrum(smoothPrev)
                         }
                     },
-                    Visualizer.getMaxCaptureRate().coerceAtMost(20_000),
+                    // Device max, not an arbitrary cap: every millisecond of
+                    // capture staleness lands directly on beat sync, and the
+                    // callbacks are a kilobyte each - noise next to playback.
+                    Visualizer.getMaxCaptureRate(),
                     true, true,
                 )
                 enabled = true
             }
         }.onSuccess {
-            Log.d("kleeamp/wid", "ATTACH visualizer ok session=$audioSessionId")
+            Log.d(
+                "kleeamp/wid",
+                "ATTACH visualizer ok session=$audioSessionId " +
+                    "capture=${visualizer?.captureSize} maxRate=${Visualizer.getMaxCaptureRate()}",
+            )
         }.onFailure {
             Log.w(TAG, "visualizer unavailable (RECORD_AUDIO?): ${it.message}")
             visualizer = null
