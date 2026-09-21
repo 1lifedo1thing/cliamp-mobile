@@ -256,13 +256,15 @@ private fun HitArt(
             ?: station?.let { StationArtSource.cachedSmall(it) })?.asImageBitmap()
     }
     // Bundled design first, keyed exactly like StationThumb so a coverless
-    // station wears the same design here as in the stations list. Never key
-    // by cover URL: signed provider URLs rotate, which would change the
+    // station wears the same design here as in the stations list - except
+    // local and provider songs, which wear the empty plate instead. Never
+    // key by cover URL: signed provider URLs rotate, which would change the
     // design on every list build. The lookup below only ever upgrades to
     // real art.
     val placeholder = remember(artKey) {
         val key = when {
-            station != null -> station.id.ifBlank { station.url }
+            station != null && station.bundledCover -> station.id.ifBlank { station.url }
+            station != null -> null
             hit is SearchHit.Show -> hit.show.feedUrl
             else -> null
         }

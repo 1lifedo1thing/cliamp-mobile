@@ -808,12 +808,15 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
     // then replaced by the full art - still the new item, never empty.
     var art by remember(station?.id) { mutableStateOf(peekArt(station)) }
     val preview = station?.let { rememberStationThumbnail(it, fallback = false) }
-    // No cover of its own: one of the bundled designs stands in. The pick is
-    // stable per station, so the plate does not reshuffle on every change.
+    // No cover of its own: one of the bundled designs stands in - except
+    // local and provider songs, which wear the empty plate instead. The pick
+    // is stable per station, so the plate does not reshuffle on every change.
     val placeholderKey = station?.id?.ifBlank { station.url }
     val placeholder = remember(placeholderKey) {
-        placeholderKey?.takeIf { it.isNotEmpty() }
-            ?.let { PlaceholderArt.bitmapFor(context, it)?.asImageBitmap() }
+        if (station?.bundledCover != false) {
+            placeholderKey?.takeIf { it.isNotEmpty() }
+                ?.let { PlaceholderArt.bitmapFor(context, it)?.asImageBitmap() }
+        } else null
     }
     LaunchedEffect(station?.id) {
         if (art != null) return@LaunchedEffect
@@ -858,7 +861,7 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
         modifier = Modifier
             .fillMaxSize()
             // Soft drop shadow so the plate floats over the page - the
-            // premium read. Same large radius as the plate itself. A touch
+            // premium read, same large radius as the plate itself. A touch
             // lighter on light grounds, where the same elevation reads
             // stronger against the pale ground.
             .shadow(if (p.dark) 26.dp else 20.dp, RoundedCornerShape(KleeampShape.large))
@@ -900,9 +903,9 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
                 contentScale = if (fills) ContentScale.Crop else ContentScale.Fit,
             )
         }
-        // No cover at all: the bundled designs stand in, with a small note
-        // that names them for what they are.
-        if (art == null && preview == null) {
+        // No cover at all and no bundled stand-in: an honest glyph rather
+        // than a blank hole.
+        if (art == null && preview == null && placeholder == null) {
             placeholder?.let { bmp ->
                 Image(
                     bitmap = bmp,
@@ -921,24 +924,17 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
                         .padding(horizontal = 6.dp, vertical = 3.dp),
                     maxLines = 1,
                 )
+            } ?: station?.let {
+                Icon(
+                    KleeampIcons.MusicNote,
+                    it.name,
+                    Modifier.align(Alignment.Center).size(64.dp),
+                    tint = p.accent,
+                )
             }
         }
-        // No cover and no bundled design either: the broadcast glyph in
-        // accent, the same themed mark the station's list rows wear - one
-        // identity in both places, for cliamp channels and directory stations
-        // alike.
-        if (art == null && preview == null && placeholder == null && station != null) {
-            Icon(
-                KleeampIcons.StationsTab,
-                null,
-                Modifier
-                    .align(Alignment.Center)
-                    .size(96.dp),
-                tint = p.accent,
-            )
-        }
     }
-    }
+}
 }
 
 /** A 15dp icon in a 28dp tap target, sized for a secondary action. */
