@@ -103,7 +103,9 @@ object SftpLibrary {
             dao.clear(accountId)
             dao.clearIndex(accountId)
         }
-        statusFlow(accountId).value = IndexState()
+        // Drop the flow, not just its value: nobody will ask for this
+        // account again, and status() recreates on demand if they do.
+        statuses.remove(accountId)
     }
 
     private suspend fun scan(account: ProviderAccount): Result<Unit> {
@@ -120,11 +122,15 @@ object SftpLibrary {
                     val scanId = System.currentTimeMillis()
                     var written = 0
                     var lastReport = 0L
+                    // Batches accumulate in memory; the single commit below
+                    // runs outside the SFTP lease, so a slow disk never
+                    // stalls the walk. Bounded by the walk's own file cap.
+                    val all = ArrayList<SftpTrackEntity>(4096)
                     SshPool.useSftp(account) { sftp ->
                         SftpScan(
                             folders = cfg.folders,
                             onBatch = { batch ->
-                                dao.insert(batch.map { it.toEntity(account.id, scanId) })
+                                all += batch.map { it.toEntity(account.id, scanId) }
                                 written += batch.size
                             },
                             onProgress = { found, where ->
@@ -143,14 +149,16 @@ object SftpLibrary {
                     }
                     // Anything still carrying an older scan id was not found
                     // this time round, so it is gone from the server.
-                    dao.pruneOlderThan(account.id, scanId)
-                    dao.record(
+                    dao.commitScan(
+                        account.id,
+                        scanId,
+                        all,
                         SftpIndexEntity(
                             accountId = account.id,
                             folders = cfg.folders.joinToString("\n"),
                             scannedAt = scanId,
                             tracks = written,
-                        )
+                        ),
                     )
                     written
                 }

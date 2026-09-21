@@ -245,11 +245,37 @@ interface CacheDao {
     @Query("SELECT * FROM kv_cache WHERE `key` = :key")
     suspend fun get(key: String): KvCacheEntity?
 
+    /**
+     * Rows past this age are never read again (every reader TTL-checks), so
+     * a launch-time prune keeps the table from growing forever.
+     */
+    @Query("DELETE FROM kv_cache WHERE savedAt < :cutoff")
+    suspend fun pruneOlderThan(cutoff: Long): Int
+
+    /**
+     * Search snapshots grow one row per query text: keep only the newest
+     * window instead.
+     */
+    @Query("""
+        DELETE FROM kv_cache
+        WHERE `key` LIKE :prefix || '%'
+        AND `key` NOT IN (
+            SELECT `key` FROM kv_cache
+            WHERE `key` LIKE :prefix || '%'
+            ORDER BY savedAt DESC LIMIT :keep
+        )
+    """)
+    suspend fun trimPrefix(prefix: String, keep: Int): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putFeed(row: PodcastFeedCacheEntity)
 
     @Query("SELECT * FROM podcast_feed_cache WHERE feedUrl = :feedUrl")
     suspend fun getFeed(feedUrl: String): PodcastFeedCacheEntity?
+
+    /** Feed rows past their TTL are never painted; drop them on launch. */
+    @Query("DELETE FROM podcast_feed_cache WHERE savedAt < :cutoff")
+    suspend fun pruneFeedsOlderThan(cutoff: Long): Int
 }
 
 @Dao
@@ -267,6 +293,24 @@ interface SftpDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun record(row: SftpIndexEntity)
+
+    /**
+     * The whole commit as one transaction, off the SFTP lease: a crash
+     * mid-scan rolls back to the previous complete index instead of
+     * stranding mixed scanIds that the staleness check then reads as
+     * current. Chunked like the other bulk replaces.
+     */
+    @Transaction
+    fun commitScan(
+        accountId: String,
+        scanId: Long,
+        rows: List<SftpTrackEntity>,
+        index: SftpIndexEntity,
+    ) {
+        pruneOlderThan(accountId, scanId)
+        rows.chunked(500).forEach { insert(it) }
+        record(index)
+    }
 
     @Query("DELETE FROM sftp_tracks WHERE accountId = :accountId")
     suspend fun clear(accountId: String)

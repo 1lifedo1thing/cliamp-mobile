@@ -177,8 +177,11 @@ class PodcastRepositoryTest {
         var readFeed: suspend (String) -> PodcastFeedCacheEntity? = { null }
         override suspend fun getFeed(feedUrl: String) = readFeed(feedUrl)
         override suspend fun putFeed(row: PodcastFeedCacheEntity) = Unit
+        override suspend fun pruneFeedsOlderThan(cutoff: Long) = 0
         override suspend fun get(key: String): KvCacheEntity? = null
         override suspend fun put(row: KvCacheEntity) = Unit
+        override suspend fun pruneOlderThan(cutoff: Long) = 0
+        override suspend fun trimPrefix(prefix: String, keep: Int) = 0
     }
 
     private class FakePodcasts : PodcastDao {

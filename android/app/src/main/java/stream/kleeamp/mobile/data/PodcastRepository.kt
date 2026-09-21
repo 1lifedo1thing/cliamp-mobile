@@ -121,7 +121,13 @@ private var chartCursor: List<String> = emptyList()
     /** Search or category results fetched but not yet shown. */
     private var pending: List<PodcastShow> = emptyList()
 
-    fun bootstrap() = load(PodcastQuery.Top(), reset = true)
+    fun bootstrap() {
+        load(PodcastQuery.Top(), reset = true)
+        // Feed rows past their TTL are never painted; drop them on launch.
+        scope.launch {
+            runCatching { cache.pruneFeedsOlderThan(System.currentTimeMillis() - FEED_TTL) }
+        }
+    }
 
     fun load(query: PodcastQuery, reset: Boolean) {
         scope.launch {
