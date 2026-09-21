@@ -235,6 +235,15 @@ private fun MiniArt(station: Station?) {
                 .clip(RoundedCornerShape(KleeampShape.medium)),
             contentScale = ContentScale.Crop,
         )
+    } else if (station != null) {
+        // Coverless local and provider songs: an honest glyph, never a
+        // bundled design and never a blank hole.
+        GlyphPlate(
+            KleeampIcons.MusicNote,
+            station.name,
+            Modifier.size(40.dp),
+            iconSize = 15.dp,
+        )
     } else {
         ArtPlate(
             modifier = Modifier.size(40.dp),
