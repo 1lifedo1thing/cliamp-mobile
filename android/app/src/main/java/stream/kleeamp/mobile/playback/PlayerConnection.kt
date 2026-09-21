@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import stream.kleeamp.mobile.KleeampApp
+import stream.kleeamp.mobile.data.Prefs
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationSource
 import stream.kleeamp.mobile.data.wrapNext
@@ -109,9 +110,37 @@ class PlayerConnection(
             if (_fallbackSource.isEmpty()) {
                 _fallbackSource = history.ifEmpty { favs }
             }
+            restoreQueue(prefs)
             _speed.value = prefs.speed.first()
             prefs.resumeLocal.collect { _resumeLocal.value = it }
         }
+    }
+
+    /**
+     * Cold-start queue restore: the last session's Up Next window becomes this
+     * session's queue, published paused - never auto-played. The mini player
+     * and the Up Next screen render the remembered list from the first
+     * DataStore emission instead of flashing empty until something plays.
+     * Skipped when a play already landed (e.g. auto-resume won the race).
+     */
+    private suspend fun restoreQueue(prefs: Prefs) {
+        val window = prefs.queue.first()
+        if (window.isEmpty() || _upNext.value.isNotEmpty()) return
+        val idx = prefs.queueIndex.first().coerceIn(0, window.lastIndex)
+        _upNext.value = window
+        _upNextIndex.value = idx
+        // The full source list is deliberately not persisted (it can be the
+        // whole local library), so navigation walks the restored window. The
+        // next real play rebases onto its own list as before.
+        _source = window
+        _baseSource = window
+        windowBase = 0
+        PlaybackBus.publishStation(window[idx])
+        PlaybackBus.publishSource(window)
+        _state.value = _state.value.copy(
+            hasPrev = idx > 0,
+            hasNext = idx < window.lastIndex,
+        )
     }
 
     /** Whether shuffled playback is switched on. */
@@ -189,6 +218,13 @@ class PlayerConnection(
 
     /** Queues larger than this are played lazily from a window, not in full. */
     private val WINDOW = 60
+
+    /**
+     * Predecessors kept in front of a persisted queue window. The live window
+     * starts at the tapped track, so persisting it alone remembers next but
+     * not prev; this run-up from the source restores both sides.
+     */
+    private val PREV_KEEP = 8
 
     /** How often a playing episode's position reaches the database. */
     private val PROGRESS_INTERVAL = 5_000L
@@ -492,6 +528,26 @@ class PlayerConnection(
         }
     }
 
+    /**
+     * The Up Next window plus the position inside it, so a cold start reopens
+     * on the remembered queue. The window alone starts at the tapped track,
+     * so up to [PREV_KEEP] predecessors from the source ride in front of it -
+     * linear and clamped, never wrapped, so a finite list still reads in its
+     * own order. Written at the same choke point as the widget window, so
+     * both agree on what "now" means.
+     */
+    private fun persistQueue() {
+        val q = _upNext.value
+        if (q.isEmpty()) return
+        val prefs = (context.applicationContext as KleeampApp).prefs
+        val idx = _upNextIndex.value.coerceIn(0, q.lastIndex)
+        val runUp = _source.takeIf { it.size > q.size }
+            ?.subList((windowBase - PREV_KEEP).coerceAtLeast(0), windowBase)
+            ?: emptyList()
+        val combined = runUp + q
+        scope.launch { prefs.setQueue(combined, runUp.size + idx) }
+    }
+
     /** Widget preview follows the same occurrence and finite tail as the Up Next screen. */
     internal fun upcomingStations(count: Int = 4): List<Station> {
         val index = windowBase + _upNextIndex.value
@@ -577,6 +633,7 @@ class PlayerConnection(
         recordPlay(station)
         android.util.Log.d("kleeamp/wid", "PLAY source.size=${_source.size} station=${station.name} preserve=$preserveOrder")
         persistWidgetWindow(station)
+        persistQueue()
         PlaybackBus.publishError(null)
         PlaybackBus.publishFormat(StreamFormat())
 

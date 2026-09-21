@@ -98,6 +98,8 @@ class Prefs(private val context: Context) {
         val wDuration = longPreferencesKey("w_duration")
         val wNext = stringPreferencesKey("w_next")
         val wSource = stringPreferencesKey("w_source")
+        val queue = stringPreferencesKey("queue")
+        val queueIndex = intPreferencesKey("queue_index")
         val downloads = stringPreferencesKey("downloads")
         val customTheme = stringPreferencesKey("custom_theme")
         val playlistSorts = stringPreferencesKey("playlist_sorts")  // slug -> PlaylistSort.ordinal
@@ -178,6 +180,29 @@ class Prefs(private val context: Context) {
 
     val history: Flow<List<Station>> =
         db.history().recent().map { rows -> rows.map { it.toStation() } }
+
+    /**
+     * Last session's Up Next window plus the position inside it, so a cold
+     * start opens on the remembered queue instead of an empty one. The window
+     * is already bounded (WINDOW=60 in PlayerConnection), the same size class
+     * as the widget's persisted lists - the full source list is deliberately
+     * not stored, it can be the whole local library.
+     */
+    val queue: Flow<List<Station>> = context.settingsStore.data.map { p ->
+        p[K.queue]?.let { raw ->
+            runCatching { Http.json.decodeFromString<List<Station>>(raw) }.getOrNull()
+        } ?: emptyList()
+    }
+    val queueIndex: Flow<Int> = context.settingsStore.data.map { it[K.queueIndex] ?: 0 }
+
+    /** Write the queue window and position in one transaction so cold-boot
+     * readers never see a list from one play with another's index. */
+    suspend fun setQueue(stations: List<Station>, index: Int) {
+        context.settingsStore.edit {
+            it[K.queue] = Http.json.encodeToString(stations)
+            it[K.queueIndex] = index
+        }
+    }
     val custom: Flow<List<Station>> =
         db.customStations().all().map { rows -> rows.map { it.toStation() } }
 
