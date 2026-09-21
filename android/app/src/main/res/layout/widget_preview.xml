@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Pin-dialog preview. Mirrors the real widget (widget_kleeamp): station
-    title and subtitle on the left, prev / play / next transport keys right,
-    the brick scope strip below, then the seek row. Static stand-ins only:
-    tinted vector marks and one frozen frame of the scope algorithm. -->
+<!-- Pin-dialog preview. Mirrors the real widget (widget_kleeamp) for a tuned
+    live station: station title and subtitle on the left, prev / play / next
+    transport keys right, the streaming rule below. Static stand-ins only. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -65,48 +64,19 @@
         android:src="@drawable/ic_w_next"
         android:tint="@color/ink" />
     </LinearLayout>
-    <!-- Frozen scope frame: one rendered pass of the live brick algorithm
-        (same geometry, same oxide colors), so the pin dialog shows the
-        visualizer instead of an empty gap. -->
-    <ImageView
-        android:layout_width="match_parent"
-        android:layout_height="64dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="8dp"
-        android:scaleType="fitXY"
-        android:src="@drawable/widget_scope_preview" />
-    <LinearLayout
+    <!-- Live station, so the streaming rule - exactly like the real widget's
+        w_streaming row - instead of a seek row, which only seekable sources
+        get. -->
+    <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:fontFamily="monospace"
-            android:text="1:23"
-            android:textColor="@color/ink_tertiary"
-            android:textSize="11sp" />
-        <ProgressBar
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"
-            android:layout_weight="1"
-            android:max="100"
-            android:maxHeight="4dp"
-            android:minHeight="4dp"
-            android:progress="35"
-            android:progressBackgroundTint="@color/ink_tertiary"
-            android:progressTint="@color/accent" />
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:fontFamily="monospace"
-            android:text="-2:31"
-            android:textColor="@color/ink_tertiary"
-            android:textSize="11sp" />
-    </LinearLayout>
+        android:ellipsize="none"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:letterSpacing="0.16"
+        android:maxLines="1"
+        android:text="--- STREAMING ---"
+        android:textColor="@color/ink_tertiary"
+        android:textSize="11sp" />
 </LinearLayout>
