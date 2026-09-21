@@ -4,7 +4,7 @@ Terminal soul, native body. An Android radio player for
 [cliamp radio](https://radio.cliamp.stream) and the 53,000-station
 [Radio Browser](https://www.radio-browser.info/) directory.
 
-Built from the `Cliamp Mobile.dc.html` concept: one monospace face, hairline rules
+Built from the `Kleeamp.dc.html` concept: one monospace face, hairline rules
 instead of cards, phosphor green as the only accent, and transport keys with real
 mechanical travel.
 
@@ -212,7 +212,7 @@ redirect first; on a slow connection that window closes and the system kills the
 
 `../docs/design.md` is the source of truth for palette, type scale, control geometry and
 the brick meter, read out of `ui/theme/` rather than out of the concept. `../docs/concept.md`
-is the original spec and `../docs/Cliamp Mobile.dc.html` the twelve artboards it describes.
+is the original spec and `../docs/Kleeamp.dc.html` the twelve artboards it describes.
 
 Open the HTML in any browser. It renders standalone: the canvas runtime it was authored
 with is not included, and does not need to be, because the artboards are plain HTML and
