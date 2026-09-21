@@ -2,7 +2,10 @@ package stream.kleeamp.mobile.data
 
 import android.util.Xml
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.xmlpull.v1.XmlPullParser
 import stream.kleeamp.mobile.net.Http
 import java.io.InputStream
@@ -33,19 +36,25 @@ object PodcastFeed {
     /** The feed's own view of the show, plus its episodes. */
     data class Loaded(val show: PodcastShow, val episodes: List<PodcastEpisode>)
 
+    /** Whole fetch + parse bound, mirroring the directory timeout: a 4.4 MB
+     * feed on a trickling connection must not park the show loader. */
+    private const val FEED_TIMEOUT_MS = 30_000L
+
     suspend fun load(show: PodcastShow): Result<Loaded> = withContext(Dispatchers.IO) {
         runCatching {
-            val response = Http.call(show.feedUrl)
-            if (!response.isSuccessful) {
-                val code = response.code
-                response.close()
-                error("HTTP $code")
-            }
-            response.use { parse(show, it.body.byteStream()) }
+            withTimeoutOrNull(FEED_TIMEOUT_MS) {
+                val response = Http.call(show.feedUrl)
+                if (!response.isSuccessful) {
+                    val code = response.code
+                    response.close()
+                    error("HTTP $code")
+                }
+                response.use { parse(show, it.body.byteStream()) }
+            } ?: error("feed timed out")
         }
     }
 
-    private fun parse(base: PodcastShow, input: InputStream): Loaded {
+    private suspend fun parse(base: PodcastShow, input: InputStream): Loaded {
         val parser = Xml.newPullParser()
         parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
         // A null encoding lets the parser honour the XML declaration, which is
@@ -133,6 +142,10 @@ object PodcastFeed {
                 XmlPullParser.END_TAG -> when {
                     name == "item" && inItem -> {
                         inItem = false
+                        // Cooperative cancel point: a stalled giant feed must
+                        // drop when the timeout fires or the show is switched,
+                        // not spin to END_DOCUMENT.
+                        currentCoroutineContext().ensureActive()
                         if (audio.isNotBlank()) {
                             episodes += PodcastEpisode(
                                 // guid is optional and wildly inconsistent

@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import stream.kleeamp.mobile.data.db.CacheDao
 import stream.kleeamp.mobile.data.db.KleeampDatabase
 import stream.kleeamp.mobile.data.db.EpisodeProgressEntity
@@ -24,6 +25,7 @@ import stream.kleeamp.mobile.data.db.PodcastDao
 import stream.kleeamp.mobile.data.db.PodcastFeedCacheEntity
 import stream.kleeamp.mobile.data.db.toEntity
 import stream.kleeamp.mobile.net.Http
+import java.io.IOException
 
 /** How the podcast directory is currently ordered or filtered. */
 sealed interface PodcastQuery {
@@ -108,6 +110,16 @@ class PodcastRepository internal constructor(
 
     private val pageLock = Mutex()
     private val PAGE = 30
+    private var loadJob: Job? = null
+
+    /**
+     * Hard bound on one directory load, retries included - the same trickle
+     * protection the radio directory has. Per-call timeouts cannot bound a
+     * trickling connection (every byte resets the read clock), so without
+     * this a dead network holds [pageLock] with `loading = true` and the
+     * footer spins until it finally lets go.
+     */
+    private val directoryTimeoutMs = 30_000L
 
 /** Chart ids not yet resolved to shows, in chart order. */
 private var chartCursor: List<String> = emptyList()
@@ -124,7 +136,10 @@ private var chartCursor: List<String> = emptyList()
     fun bootstrap() = load(PodcastQuery.Top(), reset = true)
 
     fun load(query: PodcastQuery, reset: Boolean) {
-        scope.launch {
+        // A new query supersedes whatever is still loading: cancel it so a
+        // retap never queues behind a hung fetch, mirroring radio loads.
+        if (reset) loadJob?.cancel()
+        loadJob = scope.launch {
             pageLock.withLock {
                 val cur = _directory.value
                 if (!reset && (cur.loading || cur.exhausted || cur.error != null)) return@withLock
@@ -144,21 +159,26 @@ private var chartCursor: List<String> = emptyList()
                     // the network answers; the first live page replaces it.
                     restore(query)
                     val primed = runCatching {
-                        retryFetch {
-                            when (query) {
-                                is PodcastQuery.Top -> {
-                                    chartCursor = PodcastDirectory.chartIds(country = query.country.ifEmpty { "us" })
-                                    PodcastDirectory.genres.forEach { g ->
-                                        chartQueue.add {
-                                            PodcastDirectory.genreChartIds(query.country.ifEmpty { "us" }, g.id)
+                        withTimeoutOrNull(directoryTimeoutMs) {
+                            retryFetch {
+                                when (query) {
+                                    is PodcastQuery.Top -> {
+                                        chartCursor = PodcastDirectory.chartIds(country = query.country.ifEmpty { "us" })
+                                        PodcastDirectory.genres.forEach { g ->
+                                            chartQueue.add {
+                                                PodcastDirectory.genreChartIds(query.country.ifEmpty { "us" }, g.id)
+                                            }
                                         }
                                     }
+                                    is PodcastQuery.Search -> pending = PodcastDirectory.search(query.text)
+                                    is PodcastQuery.Category -> pending = PodcastDirectory.byGenre(query.genre)
                                 }
-                                is PodcastQuery.Search -> pending = PodcastDirectory.search(query.text)
-                                is PodcastQuery.Category -> pending = PodcastDirectory.byGenre(query.genre)
                             }
-                        }
+                        } ?: throw IOException("podcast directory timed out")
                     }
+                    // A superseding tap cancelled this load: leave the state
+                    // alone, the newer load owns the UI now.
+                    if (primed.exceptionOrNull() is CancellationException) return@withLock
                     primed.exceptionOrNull()?.let { e ->
                         val cur = _directory.value
                         // A snapshot already on screen is better than an error;
@@ -175,26 +195,29 @@ private var chartCursor: List<String> = emptyList()
 
                 val base = if (reset) emptyList() else _directory.value.shows
                 val next = runCatching {
-                    if (chartCursor.isNotEmpty() || chartQueue.isNotEmpty()) {
-                        if (chartCursor.isEmpty()) {
-                            // The current chart ran out; move on to the next
-                            // (a genre chart) so the directory keeps going
-                            // instead of quietly ending at Apple's cap.
-                            chartCursor = retryFetch { chartQueue.removeAt(0)() }
+                    withTimeoutOrNull(directoryTimeoutMs) {
+                        if (chartCursor.isNotEmpty() || chartQueue.isNotEmpty()) {
+                            if (chartCursor.isEmpty()) {
+                                // The current chart ran out; move on to the next
+                                // (a genre chart) so the directory keeps going
+                                // instead of quietly ending at Apple's cap.
+                                chartCursor = retryFetch { chartQueue.removeAt(0)() }
+                            }
+                            val ids = chartCursor.take(PAGE)
+                            val shows = retryFetch { PodcastDirectory.lookup(ids) }
+                            // Only consume the ids once they have actually resolved:
+                            // a page that fails (connection dropped, Apple rate
+                            // limit) must be retried, not silently skipped.
+                            chartCursor = chartCursor.drop(ids.size)
+                            shows
+                        } else {
+                            val slice = pending.take(PAGE)
+                            pending = pending.drop(slice.size)
+                            slice
                         }
-                        val ids = chartCursor.take(PAGE)
-                        val shows = retryFetch { PodcastDirectory.lookup(ids) }
-                        // Only consume the ids once they have actually resolved:
-                        // a page that fails (connection dropped, Apple rate
-                        // limit) must be retried, not silently skipped.
-                        chartCursor = chartCursor.drop(ids.size)
-                        shows
-                    } else {
-                        val slice = pending.take(PAGE)
-                        pending = pending.drop(slice.size)
-                        slice
-                    }
+                    } ?: throw IOException("podcast directory timed out")
                 }
+                if (next.exceptionOrNull() is CancellationException) return@withLock
 
                 _directory.value = next.fold(
                     onSuccess = { list ->
