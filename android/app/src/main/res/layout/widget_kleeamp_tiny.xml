@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tiny tier (min height + min width, ~150x64 cells): no room for the
+    station title / artist line beside the keys, so transport only -
+    prev / play-pause / next centered. Same view IDs as the other
+    layouts (minus titles and seek rows, which have no room here) so one
+    code path tints and wires all four. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/w_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:src="@drawable/widget_bg_root" />
+
+    <LinearLayout
+        android:id="@+id/w_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
+
+        <FrameLayout
+            android:id="@+id/w_prev"
+            android:layout_width="38dp"
+            android:layout_height="38dp">
+
+            <ImageView
+                android:id="@+id/w_prev_bg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/widget_bg_key" />
+
+            <ImageView
+                android:id="@+id/w_prev_icon"
+                android:layout_width="19dp"
+                android:layout_height="15dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_w_prev" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/w_toggle"
+            android:layout_width="52dp"
+            android:layout_height="38dp"
+            android:layout_marginStart="6dp">
+
+            <ImageView
+                android:id="@+id/w_toggle_bg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/widget_bg_key" />
+
+            <ImageView
+                android:id="@+id/w_toggle_icon"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_w_play" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/w_next"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_marginStart="6dp">
+
+            <ImageView
+                android:id="@+id/w_next_bg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/widget_bg_key" />
+
+            <ImageView
+                android:id="@+id/w_next_icon"
+                android:layout_width="19dp"
+                android:layout_height="15dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_w_next" />
+        </FrameLayout>
+    </LinearLayout>
+</FrameLayout>

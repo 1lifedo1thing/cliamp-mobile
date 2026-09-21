@@ -84,6 +84,13 @@ object WidgetRenderer {
      */
     private const val MINIMAL_MAX_HEIGHT_DP = 110
 
+    /**
+     * Below this width *and* [MINIMAL_MAX_HEIGHT_DP] even the horizontal
+     * minimal row cannot fit titles beside the keys (~150dp for keys plus
+     * padding), so those instances get transport keys only, centered, with
+     * no title/artist line.
+     */
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Any()
 
@@ -137,8 +144,8 @@ object WidgetRenderer {
         val ctx = context.applicationContext
         scope.launch {
             val mgr = AppWidgetManager.getInstance(ctx)
-            // Only the centered compact card has no seek row; full and
-            // min-height instances both tick.
+            // Only the centered compact card and the tiny keys-only tier
+            // have no seek row; full and min-height instances both tick.
             val ids = mgr.getAppWidgetIds(ComponentName(ctx, CliampWidgetProvider::class.java))
                 .filterNot { isCompact(mgr, it) }
             if (ids.isEmpty()) return@launch
@@ -215,15 +222,17 @@ object WidgetRenderer {
 
         val mgr = AppWidgetManager.getInstance(ctx)
         val ids = mgr.getAppWidgetIds(ComponentName(ctx, CliampWidgetProvider::class.java))
-        // Per instance: a short cell gets the horizontal titles-plus-keys
-        // row, a narrow-but-tall one the centered compact card, anything
-        // roomier the transport row with the seek row.
+        // Per instance: a short-and-narrow cell gets transport keys only, a
+        // short-but-roomy one the horizontal titles-plus-keys row, a
+        // narrow-but-tall one the centered compact card, anything roomier
+        // the transport row with the seek row.
         for (id in ids) {
             val (w, h) = cellSize(mgr, id)
-            val minimal = h < MINIMAL_MAX_HEIGHT_DP
-            val compact = !minimal && (w < COMPACT_MAX_WIDTH_DP || h < COMPACT_MAX_HEIGHT_DP)
-            Log.d("kleeamp/wid", "widget layout id=$id cell=${w}x${h} minimal=$minimal compact=$compact")
-            mgr.updateAppWidget(id, buildViews(ctx, row, p, compact, minimal))
+            val tiny = h < MINIMAL_MAX_HEIGHT_DP && w < COMPACT_MAX_WIDTH_DP
+            val minimal = !tiny && h < MINIMAL_MAX_HEIGHT_DP
+            val compact = !tiny && !minimal && (w < COMPACT_MAX_WIDTH_DP || h < COMPACT_MAX_HEIGHT_DP)
+            Log.d("kleeamp/wid", "widget layout id=$id cell=${w}x${h} tiny=$tiny minimal=$minimal compact=$compact")
+            mgr.updateAppWidget(id, buildViews(ctx, row, p, compact, minimal, tiny))
         }
     }
 
@@ -234,10 +243,11 @@ object WidgetRenderer {
      * layout fits however the phone is held.
      *
      * Only the seek tick path uses this: progress bars exist in every layout
-     * except the centered compact card.
+     * except the centered compact card and the tiny keys-only tier.
      */
     private fun isCompact(mgr: AppWidgetManager, id: Int): Boolean {
         val (w, h) = cellSize(mgr, id)
+        if (h < MINIMAL_MAX_HEIGHT_DP && w < COMPACT_MAX_WIDTH_DP) return true
         return h >= MINIMAL_MAX_HEIGHT_DP && (w < COMPACT_MAX_WIDTH_DP || h < COMPACT_MAX_HEIGHT_DP)
     }
 
@@ -260,23 +270,27 @@ object WidgetRenderer {
         p: KleeampPalette,
         compact: Boolean = false,
         minimal: Boolean = false,
+        tiny: Boolean = false,
     ): RemoteViews {
         val rv = RemoteViews(
             ctx.packageName,
             when {
+                tiny -> R.layout.widget_kleeamp_tiny
                 minimal -> R.layout.widget_kleeamp_minimal
                 compact -> R.layout.widget_kleeamp_compact
                 else -> R.layout.widget_kleeamp
             },
         )
-        // Titles exist in every layout (the min-height tier is the same
-        // card, bottom-shifted); seek only exists outside it.
-        // The tints and tap wiring below run for all three: every layout
-        // shares those view IDs.
-        rv.setTextViewText(R.id.w_title, row.station?.name ?: "nothing tuned")
-        rv.setTextViewText(R.id.w_subtitle, widgetSubtitle(row.track, row.station))
-        rv.setTextColor(R.id.w_title, p.ink.toArgb())
-        rv.setTextColor(R.id.w_subtitle, p.inkTertiary.toArgb())
+        // Titles exist in every layout except the tiny keys-only tier.
+        // Seek only exists outside the compact and tiny tiers.
+        // The tints and tap wiring below run for all four: every layout
+        // shares those view IDs (missing IDs in a tier are no-ops).
+        if (!tiny) {
+            rv.setTextViewText(R.id.w_title, row.station?.name ?: "nothing tuned")
+            rv.setTextViewText(R.id.w_subtitle, widgetSubtitle(row.track, row.station))
+            rv.setTextColor(R.id.w_title, p.ink.toArgb())
+            rv.setTextColor(R.id.w_subtitle, p.inkTertiary.toArgb())
+        }
 
         rv.setInt(R.id.w_bg, "setColorFilter", p.ground.toArgb())
         rv.setInt(R.id.w_prev_bg, "setColorFilter", p.keyFace.toArgb())
@@ -296,13 +310,14 @@ object WidgetRenderer {
         // live position row - elapsed, bar, remaining - mirroring the
         // expanded player's scrubber readout. Live radio gets the streaming
         // rule instead. Neither shows before anything has played. Only the
-        // centered compact card lacks these rows; the min-height tier
-        // carries the same seek/streaming row as the full layout.
-        val showSeek = !compact && row.seekable && row.durationMs > 0 && row.station != null
+        // centered compact card and the tiny keys-only tier lack these
+        // rows; the min-height tier carries the same seek/streaming row
+        // as the full layout.
+        val showSeek = !compact && !tiny && row.seekable && row.durationMs > 0 && row.station != null
         rv.setViewVisibility(R.id.w_seek_row, if (showSeek) View.VISIBLE else View.GONE)
         rv.setViewVisibility(
             R.id.w_streaming,
-            if (!compact && !showSeek && row.station != null) View.VISIBLE else View.GONE,
+            if (!compact && !tiny && !showSeek && row.station != null) View.VISIBLE else View.GONE,
         )
         if (showSeek) {
             rv.setTextViewText(R.id.w_elapsed, clock(row.positionMs))
