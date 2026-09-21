@@ -80,6 +80,13 @@ class Repository(
     private var loadJob: Job? = null
 
     /**
+     * Snapshot rows older than this are never read again; pruned on launch.
+     * Search snapshots grow one row per query text and cap separately below.
+     */
+    private val cacheTtlMs = 14L * 24 * 60 * 60 * 1000
+    private val maxSearchSnapshots = 100
+
+    /**
      * Hard bound on one directory load, retries included. Per-call timeouts
      * cannot bound a trickling connection (every byte resets the read
      * clock), so without this a dead network holds [pageLock] with
@@ -100,6 +107,14 @@ class Repository(
 
     fun bootstrap() {
         refreshCliamp()
+        // Snapshot hygiene, once per launch: rows past their TTL are never
+        // read, and search snapshots would otherwise grow one row per query.
+        scope.launch {
+            runCatching {
+                cache.pruneOlderThan(System.currentTimeMillis() - cacheTtlMs)
+                cache.trimPrefix("stations:search:", maxSearchSnapshots)
+            }
+        }
         // Meta first: instant chips and stats from the last snapshot, then the
         // live fetches replace them. Same snapshot pattern as the directories.
         scope.launch { restoreMeta() }

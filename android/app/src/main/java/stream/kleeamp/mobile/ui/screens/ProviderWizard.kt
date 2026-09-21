@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import stream.kleeamp.mobile.data.provider.DISPLAY_NAME_KEY
 import stream.kleeamp.mobile.data.provider.FieldKeyboard
 import stream.kleeamp.mobile.data.provider.FieldSpec
 import stream.kleeamp.mobile.data.provider.ProviderAccount
@@ -92,6 +93,26 @@ fun ProviderWizard(
                 spec.intro.forEach { Mono(it, KleeampType.body, p.inkSecondary) }
             }
             HairlineDivider(region = true)
+
+            // The user's own name for this account, shown in lists instead of
+            // the probed server name. Optional and app-only: blank keeps
+            // exactly today's behavior, and it never re-probes.
+            FieldRow(
+                field = FieldSpec(
+                    key = DISPLAY_NAME_KEY,
+                    label = "display name",
+                    required = false,
+                ),
+                value = uiState.values[DISPLAY_NAME_KEY].orEmpty(),
+                last = false,
+                autoFocus = false,
+                onValue = { vm.onEvent(ProviderWizardViewModel.Event.SetValue(DISPLAY_NAME_KEY, it)) },
+                onNext = { focus.moveFocus(FocusDirection.Next) },
+                onDone = {
+                    focus.clearFocus()
+                    vm.onEvent(ProviderWizardViewModel.Event.Test)
+                },
+            )
 
             visible.forEachIndexed { i, field ->
                 FieldRow(

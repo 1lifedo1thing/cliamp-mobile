@@ -77,7 +77,9 @@ import stream.kleeamp.mobile.data.downloadSizeLabel
 import stream.kleeamp.mobile.data.sortedStations
 import stream.kleeamp.mobile.data.provider.ProviderAccount
 import stream.kleeamp.mobile.data.provider.ProviderCatalog
+import stream.kleeamp.mobile.data.provider.displayName
 import stream.kleeamp.mobile.data.provider.ProviderSpec
+import stream.kleeamp.mobile.data.provider.SftpLibrary
 import stream.kleeamp.mobile.ui.components.rememberStationThumbnail
 import stream.kleeamp.mobile.ui.components.BackChevron
 import stream.kleeamp.mobile.ui.components.Chip
@@ -323,6 +325,7 @@ fun LibraryProvidersPane(
     vm: ProvidersPaneViewModel,
     onBack: () -> Unit,
     onOpenProvider: (ProviderAccount) -> Unit,
+    onEditProvider: (ProviderAccount) -> Unit,
     onAddProvider: (ProviderSpec) -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
@@ -344,6 +347,7 @@ fun LibraryProvidersPane(
                     listState = listState,
                     providers = ui.providers,
                     onOpenProvider = onOpenProvider,
+                    onEditProvider = onEditProvider,
                     onAddProvider = onAddProvider,
                     onRemoveProvider = { vm.onEvent(ProvidersPaneViewModel.Event.Remove(it)) },
                 )
@@ -556,14 +560,20 @@ fun ProviderSongsPane(
     onPlay: (Station, List<Station>) -> Unit,
     onAddToQueue: (Station) -> Unit = {},
     onBack: () -> Unit,
-    onAddProvider: () -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    /** Non-blank locks the pane to one account with no picker row. */
+    accountId: String = "",
 ) {
     val p = LocalPalette.current
     val ui by vm.state.collectAsState()
-    val accounts = ui.accounts
-    var selected by rememberSaveable { mutableStateOf(accounts.firstOrNull()?.id) }
+    // A locked pane shows that account only, with no picker: the row it came
+    // from already named it.
+    val accounts = remember(ui.accounts, accountId) {
+        if (accountId.isBlank()) ui.accounts
+        else ui.accounts.filter { it.id == accountId }
+    }
+    var selected by rememberSaveable(accountId) { mutableStateOf(accounts.firstOrNull()?.id) }
     // A removed account must not leave the filter pointing at nothing.
     LaunchedEffect(accounts) {
         if (accounts.none { it.id == selected }) selected = accounts.firstOrNull()?.id
@@ -626,7 +636,7 @@ fun ProviderSongsPane(
     }
     val favorites = ui.favorites.map { it.url }.toSet()
     val failedLabels = ui.failures.keys.mapNotNull { id ->
-        accounts.firstOrNull { it.id == id }?.label?.ifBlank { null }
+        accounts.firstOrNull { it.id == id }?.displayName()?.ifBlank { null }
     }
     fun pop() {
         when {
@@ -640,16 +650,20 @@ fun ProviderSongsPane(
         val scope = rememberCoroutineScope()
         val listState = rememberLazyListState()
         MainLayout(
-            title = selectedAlbum ?: selectedArtist ?: "providers",
+            title = if (accountId.isBlank()) {
+                selectedAlbum ?: selectedArtist ?: "providers"
+            } else {
+                accounts.firstOrNull()?.displayName()?.ifBlank { "provider" } ?: "provider"
+            },
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
             onBack = { pop() },
-            chips = if (accounts.isNotEmpty()) {
+            chips = if (accounts.size > 1) {
                 @Composable {
                     accounts.forEach { a ->
                         Chip(
-                            a.label.ifBlank { "provider" },
+                            a.displayName().ifBlank { "provider" },
                             selected == a.id,
                             onClick = {
                                 selected = a.id; query = ""; selectedArtist = null; selectedAlbum = null
@@ -670,29 +684,30 @@ fun ProviderSongsPane(
                         onClick = { sort = s; query = ""; selectedArtist = null; selectedAlbum = null },
                     )
                 }
+                // The browse page is gone; its rescan rides the sort row for
+                // SSH accounts, trailing like it always did.
+                val selectedAccount = accounts.firstOrNull { it.id == selected }
+                if (selectedAccount?.providerKey == "ssh") {
+                    val indexState by SftpLibrary.status(selectedAccount.id).collectAsState()
+                    Chip(
+                        if (indexState.scanning) "scanning" else "rescan",
+                        selected = false,
+                        onClick = { scope.launch { SftpLibrary.rescan(selectedAccount) } },
+                    )
+                }
             }
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
                 item { FilterRow(value = query, onValue = { query = it }) }
                 item {
+                    // Adding happens on the providers page; this page only
+                    // shows what is already connected.
                     SectionLabel(
                         when {
                             browsingArtists -> "artists — ${artistRows.size}"
                             browsingAlbums -> "albums — ${albumRows.size}"
                             else -> "songs — ${visible.size}"
                         },
-                    ) {
-                        Box(
-                            Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(KleeampShape.small))
-                                .background(if (p.dark) p.keyFace else p.ground)
-                                .border(1.dp, p.keyBorder, RoundedCornerShape(KleeampShape.small))
-                                .microPress(onClick = onAddProvider),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(KleeampIcons.Plus, "add provider", Modifier.size(16.dp), tint = p.accent)
-                        }
-                    }
+                    )
                 }
                 if (browsingArtists) {
                     if (artistRows.isEmpty()) {
@@ -1151,6 +1166,7 @@ private fun ProvidersView(
     listState: LazyListState,
     providers: List<ProviderAccount>,
     onOpenProvider: (ProviderAccount) -> Unit,
+    onEditProvider: (ProviderAccount) -> Unit,
     onAddProvider: (ProviderSpec) -> Unit,
     onRemoveProvider: (ProviderAccount) -> Unit,
 ) {
@@ -1193,6 +1209,11 @@ private fun ProvidersView(
                                 trigger = { open -> OverflowButton(open, size = 16) },
                                 items = listOf(
                                     OverflowItem(
+                                        "edit account",
+                                        color = p.ink,
+                                        action = { onEditProvider(acc) },
+                                    ),
+                                    OverflowItem(
                                         "remove account",
                                         color = p.destructiveInk,
                                         action = { onRemoveProvider(acc) },
@@ -1203,7 +1224,7 @@ private fun ProvidersView(
                         }
                     },
                 ) {
-                    Mono(acc.label.ifBlank { "provider" }, KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
+                    Mono(acc.displayName().ifBlank { "provider" }, KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
                     Mono(
                         ProviderCatalog.byKey(acc.providerKey)?.summary?.invoke(acc.values)
                             ?: acc.url,

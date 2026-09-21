@@ -16,7 +16,6 @@ import kotlinx.serialization.Serializable
 @Serializable data object Settings
 @Serializable data object Search
 
-@Serializable data class ProviderBrowse(val accountId: String)
 @Serializable data class ProviderWizardRoute(val providerKey: String, val accountId: String = "")
 
 @Serializable data object ScrobbleWizard
@@ -24,7 +23,8 @@ import kotlinx.serialization.Serializable
 @Serializable data class PodcastShowRoute(val podcastId: String)
 
 @Serializable data object LibraryProviders
-@Serializable data object LibraryProviderSongs
+/** Blank [accountId] shows every account with the picker; set locks to one. */
+@Serializable data class LibraryProviderSongs(val accountId: String = "")
 @Serializable data class LibrarySmartPlaylist(val kind: String)
 @Serializable data class LibraryPlaylist(val slug: String, val pickSongs: Boolean = false)
 @Serializable data class LibrarySongInfo(val stationUrl: String)

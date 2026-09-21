@@ -74,7 +74,6 @@ import stream.kleeamp.mobile.ui.screens.ScopeScreen
 import stream.kleeamp.mobile.ui.screens.ScrobbleWizard as ScrobbleWizardScreen
 import stream.kleeamp.mobile.data.provider.ProviderCatalog
 import stream.kleeamp.mobile.data.provider.ProviderStore
-import stream.kleeamp.mobile.ui.screens.ProviderBrowseScreen
 import stream.kleeamp.mobile.ui.screens.ProviderWizard as ProviderWizardScreen
 import stream.kleeamp.mobile.ui.screens.SettingsScreen
 import stream.kleeamp.mobile.ui.screens.StationsScreen
@@ -92,7 +91,6 @@ import stream.kleeamp.mobile.ui.screens.SongInfoViewModel
 import stream.kleeamp.mobile.ui.screens.NowPlayingViewModel
 import stream.kleeamp.mobile.ui.screens.SearchViewModel
 import stream.kleeamp.mobile.ui.screens.SettingsViewModel
-import stream.kleeamp.mobile.ui.screens.ProviderBrowseViewModel
 import stream.kleeamp.mobile.ui.screens.ProviderWizardViewModel
 import stream.kleeamp.mobile.ui.screens.ScrobbleWizardViewModel
 import stream.kleeamp.mobile.ui.theme.LocalPalette
@@ -403,7 +401,7 @@ fun KleeampRoot(
                                 vm = appViewModel { app ->
                                     LocalViewModel(app.localLibrary, app.playlists, app.prefs, app.providers)
                                 },
-                                onOpenProviderSongs = { navController.navigate(LibraryProviderSongs) },
+                                onOpenProviderSongs = { navController.navigate(LibraryProviders) },
                                 onOpenSmart = { kind -> navController.navigate(LibrarySmartPlaylist(kind)) },
                                 onOpenPlaylist = { slug -> navController.navigate(LibraryPlaylist(slug)) },
                                 onPickSongs = { slug ->
@@ -442,7 +440,12 @@ fun KleeampRoot(
                     LibraryProvidersPane(
                         vm = appViewModel { app -> ProvidersPaneViewModel(app.providers) },
                         onBack = { navController.popBackStack() },
-                        onOpenProvider = { a -> navController.navigate(ProviderBrowse(a.id)) },
+                        onOpenProvider = { a -> navController.navigate(LibraryProviderSongs(a.id)) },
+                        onEditProvider = { account ->
+                            navController.navigate(
+                                ProviderWizardRoute(account.providerKey, account.id)
+                            )
+                        },
                         onAddProvider = { spec ->
                             navController.navigate(ProviderWizardRoute(spec.key))
                         },
@@ -451,18 +454,19 @@ fun KleeampRoot(
                     )
                 }
             }
-            composable<LibraryProviderSongs> {
+            composable<LibraryProviderSongs> { entry ->
+                val songsAccountId = entry.toRoute<LibraryProviderSongs>().accountId
                 Box(contentModifier) {
                     ProviderSongsPane(
                         vm = appViewModel { app ->
                             ProviderSongsViewModel(app.providers, app.prefs)
                         },
+                        accountId = songsAccountId,
                         current = station,
                         playing = playerState.playing,
                         onPlay = onPlay,
                         onAddToQueue = { player.addToUpNext(it) },
                         onBack = { navController.popBackStack() },
-                        onAddProvider = { navController.navigate(LibraryProviders) },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenSettings = { navController.navigate(Settings) },
                     )
@@ -615,9 +619,7 @@ fun KleeampRoot(
                     current = station,
                     playing = playerState.playing,
                     onPlay = onPlay,
-                    onOpenProvider = { account ->
-                        navController.navigate(ProviderBrowse(account.id))
-                    },
+                    onOpenProvider = { account -> navController.navigate(LibraryProviderSongs(account.id)) },
                     onOpenShow = { show: PodcastShow ->
                         podcasts.openShow(show)
                         // Pop the search overlay, switch to podcasts tab,
@@ -646,33 +648,6 @@ fun KleeampRoot(
                 )
                 }
             }
-            composable<ProviderBrowse> { entry ->
-                val accountId = entry.toRoute<ProviderBrowse>().accountId
-                val providerAccounts by providers.accounts.collectAsState(initial = emptyList())
-                val account = providerAccounts.firstOrNull { it.id == accountId }
-                if (account == null) {
-                    // Never pop during composition: side-effect runs after the
-                    // frame, so a stale/deleted account can't throw
-                    // "popBackStack called during composition".
-                    LaunchedEffect(accountId) {
-                        navController.popBackStack()
-                    }
-                } else {
-                    OverlayCover {
-                    ProviderBrowseScreen(
-                        vm = appViewModel(key = accountId) { _ -> ProviderBrowseViewModel(account) },
-                        onBack = { navController.popBackStack() },
-                        onEdit = {
-                            navController.navigate(
-                                ProviderWizardRoute(account.providerKey, account.id)
-                            )
-                        },
-                        onPlay = onPlay,
-                        onOpenPlayer = rememberGuardedNav(navController).openPlayer,
-                    )
-                    }
-                }
-            }
             composable<ProviderWizardRoute> { entry ->
                 val route = entry.toRoute<ProviderWizardRoute>()
                 val spec = ProviderCatalog.byKey(route.providerKey)
@@ -683,11 +658,23 @@ fun KleeampRoot(
                         navController.popBackStack()
                     }
                 } else {
-                    val providerAccounts by providers.accounts.collectAsState(initial = emptyList())
+                    val providerAccounts by providers.accounts.collectAsState(initial = null)
                     val existing = if (route.accountId.isNotEmpty()) {
-                        providerAccounts.firstOrNull { it.id == route.accountId }
+                        providerAccounts?.firstOrNull { it.id == route.accountId }
                     } else null
-                    OverlayCover {
+                    // Editing waits for the list: a first-frame null is
+                    // "loading", not "new" - building the form on it leaves
+                    // every field empty, and the blank form survives because
+                    // the viewmodel is keyed, not recreated. A loaded list
+                    // without the id is a deleted account: pop out.
+                    if (route.accountId.isNotEmpty() && providerAccounts != null && existing == null) {
+                        LaunchedEffect(route.accountId) {
+                            navController.popBackStack()
+                        }
+                    } else if (providerAccounts == null && route.accountId.isNotEmpty()) {
+                        // Hold the previous page until accounts arrive.
+                    } else {
+                        OverlayCover {
                     ProviderWizardScreen(
                         vm = appViewModel(key = route.providerKey + route.accountId) { _ ->
                             ProviderWizardViewModel(spec, existing)
@@ -698,6 +685,7 @@ fun KleeampRoot(
                             navController.popBackStack()
                         },
                     )
+                    }
                     }
                 }
             }

@@ -45,9 +45,7 @@ fun KleeampTextField(
     autoFocus: Boolean = false,
     /**
      * Rows for a value that is not one line - a list of folders, a pasted
-     * private key. Multi-line fields are never masked: a PEM block that has
-     * become a field of dots cannot be checked against what was pasted, and
-     * the value is encrypted at rest either way.
+     * private key.
      */
     lines: Int = 1,
     onAction: () -> Unit = {},
@@ -68,9 +66,9 @@ fun KleeampTextField(
         textStyle = textStyle.copy(color = p.ink),
         cursorBrush = SolidColor(p.accent),
         visualTransformation =
-            if (secret && !multiline) PasswordVisualTransformation() else VisualTransformation.None,
+            if (secret) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(
-            keyboardType = if (secret && !multiline) KeyboardType.Password else keyboardType,
+            keyboardType = if (secret) KeyboardType.Password else keyboardType,
             autoCorrectEnabled = autoCorrect,
             // A newline is the separator in a multi-line field, so the return
             // key has to stay a return key.
