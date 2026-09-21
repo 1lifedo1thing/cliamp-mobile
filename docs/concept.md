@@ -1,6 +1,6 @@
-# kleeamp mobile — the concept
+# Kleeamp — the concept
 
-The design spec for `Cliamp Mobile.dc.html`, in the CSS the artboards are drawn
+The design spec for `Kleeamp.dc.html`, in the CSS the artboards are drawn
 in. This is where the app came from, kept verbatim.
 
 It is no longer what the app is. The shipped Android build has moved on — a
@@ -15,37 +15,37 @@ Two builds, same geometry. Only ground, ink, and accent flip.
 
 ### Dark (default)
 
-| Role | Value |
-|---|---|
-| Canvas (behind phones) | `oklch(0.28 0.006 150)` |
-| Screen ground | `oklch(0.155 0.008 150)` |
-| Screen ground, scope/lockscreen | `oklch(0.13 0.008 150)` / `oklch(0.115 0.006 150)` |
-| Panel / raised row | `oklch(0.185 0.009 150)` – `oklch(0.19 0.012 150)` |
-| Key face | `oklch(0.215 0.010 150)`, border `oklch(0.32 0.012 150)` |
-| Hairline | `oklch(0.225 0.01 150)` (rows), `oklch(0.26 0.01 150)` (regions) |
-| Ink | `oklch(0.96 0.01 150)` |
-| Ink, secondary | `oklch(0.72 0.012 150)` |
-| Ink, tertiary / labels | `oklch(0.56–0.60 0.012 150)` |
-| Accent (phosphor) | `oklch(0.84 0.17 148)` |
-| Accent ink-on-accent | `oklch(0.19 0.04 148)` |
-| Remote host (amber) | `oklch(0.80 0.13 78)` |
-| Destructive | `oklch(0.55 0.16 27)` / text `oklch(0.70 0.16 27)` |
-| Unlit meter cell | `oklch(0.265 0.022 150)` |
+| Role                            | Value                                                            |
+| ------------------------------- | ---------------------------------------------------------------- |
+| Canvas (behind phones)          | `oklch(0.28 0.006 150)`                                          |
+| Screen ground                   | `oklch(0.155 0.008 150)`                                         |
+| Screen ground, scope/lockscreen | `oklch(0.13 0.008 150)` / `oklch(0.115 0.006 150)`               |
+| Panel / raised row              | `oklch(0.185 0.009 150)` – `oklch(0.19 0.012 150)`               |
+| Key face                        | `oklch(0.215 0.010 150)`, border `oklch(0.32 0.012 150)`         |
+| Hairline                        | `oklch(0.225 0.01 150)` (rows), `oklch(0.26 0.01 150)` (regions) |
+| Ink                             | `oklch(0.96 0.01 150)`                                           |
+| Ink, secondary                  | `oklch(0.72 0.012 150)`                                          |
+| Ink, tertiary / labels          | `oklch(0.56–0.60 0.012 150)`                                     |
+| Accent (phosphor)               | `oklch(0.84 0.17 148)`                                           |
+| Accent ink-on-accent            | `oklch(0.19 0.04 148)`                                           |
+| Remote host (amber)             | `oklch(0.80 0.13 78)`                                            |
+| Destructive                     | `oklch(0.55 0.16 27)` / text `oklch(0.70 0.16 27)`               |
+| Unlit meter cell                | `oklch(0.265 0.022 150)`                                         |
 
 ### Light
 
-| Role | Value |
-|---|---|
-| Screen ground | `oklch(0.975 0.006 150)` |
-| Panel | `oklch(0.945 0.008 150)` |
-| Hairline | `oklch(0.885 0.010 150)` |
-| Ink | `oklch(0.24 0.012 150)` |
-| Ink, secondary | `oklch(0.46 0.012 150)` |
-| Ink, tertiary | `oklch(0.60 0.012 150)` |
-| Accent | `oklch(0.55 0.15 148)` (darkened for 4.5:1 on paper) |
-| Accent wash | `oklch(0.92 0.05 148)` |
-| Remote host (amber) | `oklch(0.58 0.13 62)` |
-| Unlit meter cell | `oklch(0.885 0.020 150)` |
+| Role                | Value                                                |
+| ------------------- | ---------------------------------------------------- |
+| Screen ground       | `oklch(0.975 0.006 150)`                             |
+| Panel               | `oklch(0.945 0.008 150)`                             |
+| Hairline            | `oklch(0.885 0.010 150)`                             |
+| Ink                 | `oklch(0.24 0.012 150)`                              |
+| Ink, secondary      | `oklch(0.46 0.012 150)`                              |
+| Ink, tertiary       | `oklch(0.60 0.012 150)`                              |
+| Accent              | `oklch(0.55 0.15 148)` (darkened for 4.5:1 on paper) |
+| Accent wash         | `oklch(0.92 0.05 148)`                               |
+| Remote host (amber) | `oklch(0.58 0.13 62)`                                |
+| Unlit meter cell    | `oklch(0.885 0.020 150)`                             |
 
 Rules: hue stays in the 148–150 family for every neutral, so greys read faintly green.
 Amber is reserved for "this lives on a remote host" and nothing else. Red only for
@@ -55,17 +55,17 @@ destructive actions (drop from queue, purge cache). Never introduce a third acce
 
 JetBrains Mono, weights 400 / 500 / 700. No second family anywhere.
 
-| Use | Size / weight |
-|---|---|
-| Clock (lockscreen) | 76 / 500, `-0.04em` |
-| Screen title | 24 / 700, `-0.02em` |
-| Track title, now playing | 28 / 700, `-0.015em` |
-| Track title, compact | 16–19 / 700 |
-| Row primary | 14–15 / 400–500 |
-| Row secondary, meta | 11–12 / 400 |
-| Section label | 11 / 400, `letter-spacing 0.14em`, uppercase, tertiary ink |
-| Chip / key cap | 11–12 / 400, `letter-spacing 0.06–0.1em`, uppercase |
-| Tab label | 10 / 400, `letter-spacing 0.1em` |
+| Use                      | Size / weight                                              |
+| ------------------------ | ---------------------------------------------------------- |
+| Clock (lockscreen)       | 76 / 500, `-0.04em`                                        |
+| Screen title             | 24 / 700, `-0.02em`                                        |
+| Track title, now playing | 28 / 700, `-0.015em`                                       |
+| Track title, compact     | 16–19 / 700                                                |
+| Row primary              | 14–15 / 400–500                                            |
+| Row secondary, meta      | 11–12 / 400                                                |
+| Section label            | 11 / 400, `letter-spacing 0.14em`, uppercase, tertiary ink |
+| Chip / key cap           | 11–12 / 400, `letter-spacing 0.06–0.1em`, uppercase        |
+| Tab label                | 10 / 400, `letter-spacing 0.1em`                           |
 
 Numbers (durations, sizes, rates) are always tabular by virtue of the monospace face —
 never re-align them with letter-spacing hacks.
@@ -113,8 +113,28 @@ brick phase never shifts as the level animates:
    `@keyframes peak` with the same duration but `+0.16s` delay, so it lags and floats above.
 
 ```css
-@keyframes brick { 0% { height: 12%; }  45% { height: 68%; }  100% { height: 96%; } }
-@keyframes peak  { 0% { bottom: 14%; }  45% { bottom: 72%; }  100% { bottom: 97%; } }
+@keyframes brick {
+  0% {
+    height: 12%;
+  }
+  45% {
+    height: 68%;
+  }
+  100% {
+    height: 96%;
+  }
+}
+@keyframes peak {
+  0% {
+    bottom: 14%;
+  }
+  45% {
+    bottom: 72%;
+  }
+  100% {
+    bottom: 97%;
+  }
+}
 ```
 
 Sizes by context: now playing 24 cols / 4px brick / 3px gap / 66px tall; hero scope 32 cols /
