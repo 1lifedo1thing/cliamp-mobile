@@ -223,7 +223,12 @@ fun MainLayout(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // Weighted, never pushing: a long title takes the free space
+                // and ellipsizes instead of reaching the corner icons.
+                Row(
+                    Modifier.weight(1f, fill = false),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     if (onBack != null) {
                         // Centred exactly on the row axis with the title, so
                         // the arrow reads level against the caps beside it.

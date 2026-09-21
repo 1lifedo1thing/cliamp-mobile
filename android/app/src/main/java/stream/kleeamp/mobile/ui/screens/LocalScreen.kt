@@ -1168,7 +1168,6 @@ private fun ProvidersView(
                                     ),
                                 ),
                             )
-                            Icon(KleeampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary)
                         }
                     },
                 ) {
@@ -1245,7 +1244,6 @@ private fun PlaylistRow(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Mono("${pl.songIds.size} songs", KleeampType.meta, p.inkFaint)
                 PlaylistMenu(pinned = pinned, onAddSongs = onAddSongs, onEdit = onEdit, onDelete = onDelete, onPin = onPin)
-                Icon(KleeampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary)
             }
         },
     ) {
@@ -1276,7 +1274,6 @@ private fun SmartPlaylistRow(
                     if (sp.stations.isEmpty()) "empty" else "${sp.stations.size} items",
                     KleeampType.meta, p.inkFaint,
                 )
-                Icon(KleeampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary)
             }
         },
     ) {
@@ -1305,7 +1302,6 @@ private fun ProvidersRow(count: Int, onOpen: () -> Unit) {
                     if (count == 0) "none yet" else "$count account${if (count == 1) "" else "s"}",
                     KleeampType.meta, p.inkFaint,
                 )
-                Icon(KleeampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary)
             }
         },
     ) {
@@ -2029,11 +2025,12 @@ internal fun SongCover(s: Station, current: Station?, playing: Boolean) {
             Image(art, s.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
             // Coverless episodes keep their home mark in the row box; local
-            // files, provider tracks and stations take the plate above.
+            // files, provider tracks and stations take the music mark -
+            // never a play glyph. Play state keeps its badge below.
             Icon(
                 when (s.source) {
                     StationSource.Podcast -> KleeampIcons.PodRow
-                    else -> KleeampIcons.PlayRow
+                    else -> KleeampIcons.MusicNote
                 },
                 null,
                 Modifier.size(if (s.source == StationSource.Podcast) 18.dp else 15.dp),
