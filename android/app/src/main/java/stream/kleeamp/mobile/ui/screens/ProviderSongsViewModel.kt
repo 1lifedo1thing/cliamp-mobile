@@ -24,6 +24,12 @@ import stream.kleeamp.mobile.data.provider.toStation
  * failure line rather than failing the whole list. Loaded songs are kept
  * per account id, so adding or removing an account only (re)loads what
  * changed instead of refetching every library.
+ *
+ * Each album's tracks are kept in the server's own order (track number),
+ * never re-sorted here, so the artist drill can play an album back exactly
+ * as it was released. [albumYearsByAccount] carries the one bit of album
+ * metadata [Station] has no field for, keyed by [albumYearKey], so the
+ * drill can list an artist's albums chronologically.
  */
 class ProviderSongsViewModel(
     private val store: ProviderStore,
@@ -32,6 +38,7 @@ class ProviderSongsViewModel(
     data class UiState(
         val accounts: List<ProviderAccount> = emptyList(),
         val songsByAccount: Map<String, List<Station>> = emptyMap(),
+        val albumYearsByAccount: Map<String, Map<String, Int>> = emptyMap(),
         val loading: Boolean = false,
         val failures: Map<String, String> = emptyMap(),
         val favorites: List<Station> = emptyList(),
@@ -45,6 +52,7 @@ class ProviderSongsViewModel(
     }
 
     private val songsByAccount = MutableStateFlow<Map<String, List<Station>>>(emptyMap())
+    private val albumYearsByAccount = MutableStateFlow<Map<String, Map<String, Int>>>(emptyMap())
     private val failures = MutableStateFlow<Map<String, String>>(emptyMap())
     private val loading = MutableStateFlow(false)
 
@@ -52,6 +60,7 @@ class ProviderSongsViewModel(
         combine(
             store.accounts,
             songsByAccount,
+            albumYearsByAccount,
             failures,
             loading,
             ::SongsState,
@@ -61,6 +70,7 @@ class ProviderSongsViewModel(
         UiState(
             accounts = songs.accounts,
             songsByAccount = songs.songs,
+            albumYearsByAccount = songs.albumYears,
             loading = songs.loading,
             failures = songs.failures,
             favorites = favorites,
@@ -74,9 +84,12 @@ class ProviderSongsViewModel(
     private data class SongsState(
         val accounts: List<ProviderAccount> = emptyList(),
         val songs: Map<String, List<Station>> = emptyMap(),
+        val albumYears: Map<String, Map<String, Int>> = emptyMap(),
         val failures: Map<String, String> = emptyMap(),
         val loading: Boolean = false,
     )
+
+    private data class AccountLibrary(val songs: List<Station>, val albumYears: Map<String, Int>)
 
     init {
         viewModelScope.launch {
@@ -96,6 +109,7 @@ class ProviderSongsViewModel(
         // accounts fetch.
         val ids = accounts.map { it.id }.toSet()
         songsByAccount.value = songsByAccount.value.filterKeys { it in ids }
+        albumYearsByAccount.value = albumYearsByAccount.value.filterKeys { it in ids }
         failures.value = failures.value.filterKeys { it in ids }
         val missing = accounts.filter { it.id !in songsByAccount.value }
         if (missing.isEmpty()) return
@@ -105,8 +119,10 @@ class ProviderSongsViewModel(
                 missing.map { account ->
                     async {
                         runCatching { loadAccount(account) }
-                            .onSuccess { songs ->
-                                songsByAccount.value = songsByAccount.value + (account.id to songs)
+                            .onSuccess { library ->
+                                songsByAccount.value = songsByAccount.value + (account.id to library.songs)
+                                albumYearsByAccount.value =
+                                    albumYearsByAccount.value + (account.id to library.albumYears)
                                 failures.value = failures.value - account.id
                             }
                             .onFailure { t ->
@@ -121,15 +137,21 @@ class ProviderSongsViewModel(
         }
     }
 
-    private suspend fun loadAccount(account: ProviderAccount): List<Station> {
+    private suspend fun loadAccount(account: ProviderAccount): AccountLibrary {
         val client = account.browseClient()
         val albums = client.albums("az").getOrThrow()
+        val albumYears = albums.associate { albumYearKey(it.artist, it.name) to it.year }
         // Station ids key the song list, so they must be unique: servers can
         // repeat a track across overlapping listings, and the same id twice
         // crashes the list outright.
-        return albums.flatMap { album ->
+        val songs = albums.flatMap { album ->
             client.albumTracks(album.id).getOrDefault(emptyList())
                 .map { it.toStation(account, client.trackCover(it.id)) }
         }.distinctBy { it.id }
+        return AccountLibrary(songs, albumYears)
     }
 }
+
+/** Keys an artist+album pair the same way on both the load side and the drill's grouping. */
+fun albumYearKey(artist: String, album: String): String =
+    "${artist.ifBlank { "unknown artist" }}\u0000${album.ifBlank { "unknown album" }}"

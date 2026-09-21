@@ -258,7 +258,7 @@ private fun clockOf(seconds: Int): String =
  * page, so typing never fires a request per keystroke.
  */
 @Composable
-private fun FilterRow(value: String, onValue: (String) -> Unit) {
+internal fun FilterRow(value: String, onValue: (String) -> Unit) {
     val focus = LocalFocusManager.current
     Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 4.dp)) {
         KleeampTextField(

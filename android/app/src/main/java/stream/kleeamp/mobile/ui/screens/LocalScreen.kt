@@ -516,12 +516,23 @@ fun LibrarySmartPlaylistPane(
 
 /**
  * The "providers" playlist: one chip per connected account, each showing
- * that account's songs in one flat list. The + in the section header opens
- * the providers pane to connect another account - the add-playlist
- * button's counterpart for accounts. Rows play exactly like
- * smart-playlist rows, favourites included; provider tracks carry their
- * own cover URLs and fall back to the same plate local songs wear.
+ * that account's songs in one flat list, sorted and filtered exactly like
+ * the local-songs chips (title / artist / album / recently added, plus a
+ * text filter). The + in the section header opens the providers pane to
+ * connect another account - the add-playlist button's counterpart for
+ * accounts. Rows play exactly like smart-playlist rows, favourites
+ * included; provider tracks carry their own cover URLs and fall back to
+ * the same plate local songs wear.
+ *
+ * The artist chip is a drill, not just a sort: it lists distinct artist
+ * names first, picking one lists that artist's albums, and picking an
+ * album lands on its songs - the same three-level shape as the browse
+ * screen's node stack, but over the flat list already loaded for this
+ * account rather than fresh server calls. The back chevron pops one
+ * level of the drill before it ever reaches [onBack].
  */
+private data class ProviderAlbumRow(val name: String, val count: Int, val year: Int)
+
 @Composable
 fun ProviderSongsPane(
     vm: ProviderSongsViewModel,
@@ -542,36 +553,119 @@ fun ProviderSongsPane(
     LaunchedEffect(accounts) {
         if (accounts.none { it.id == selected }) selected = accounts.firstOrNull()?.id
     }
+    var sort by rememberSaveable { mutableStateOf(PlaylistSort.Title) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var selectedArtist by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedAlbum by rememberSaveable { mutableStateOf<String?>(null) }
     val pool = ui.songsByAccount[selected].orEmpty()
-    val visible = remember(pool) { sortedStations(pool, PlaylistSort.Title) }
+    val browsingArtists = sort == PlaylistSort.Artist && selectedArtist == null
+    val browsingAlbums = sort == PlaylistSort.Artist && selectedArtist != null && selectedAlbum == null
+    val artistRows = remember(pool, sort, query) {
+        if (sort != PlaylistSort.Artist) emptyList() else {
+            val q = query.trim().lowercase()
+            pool.groupBy { it.artist.ifBlank { "unknown artist" } }
+                .filterKeys { q.isBlank() || it.lowercase().contains(q) }
+                .toSortedMap(compareBy { it.lowercase() })
+                .map { (name, songs) -> name to songs.size }
+        }
+    }
+    val albumYears = ui.albumYearsByAccount[selected].orEmpty()
+    val albumRows = remember(pool, sort, selectedArtist, query, albumYears) {
+        val artist = selectedArtist
+        if (!browsingAlbums || artist == null) emptyList() else {
+            val q = query.trim().lowercase()
+            pool.filter { it.artist.ifBlank { "unknown artist" } == artist }
+                .groupBy { it.album.ifBlank { "unknown album" } }
+                .filterKeys { q.isBlank() || it.lowercase().contains(q) }
+                .map { (name, songs) ->
+                    ProviderAlbumRow(name, songs.size, albumYears[albumYearKey(artist, name)] ?: 0)
+                }
+                // Chronological, oldest first; albums with no known year sort
+                // last by name rather than pretending to be from year zero.
+                .sortedWith(
+                    compareBy<ProviderAlbumRow> { it.year <= 0 }
+                        .thenBy { it.year }
+                        .thenBy { it.name.lowercase() },
+                )
+        }
+    }
+    val visible = remember(pool, sort, query, selectedArtist, selectedAlbum) {
+        val songsOfAlbum = sort == PlaylistSort.Artist && selectedArtist != null && selectedAlbum != null
+        val scoped = when {
+            songsOfAlbum ->
+                pool.filter {
+                    it.artist.ifBlank { "unknown artist" } == selectedArtist &&
+                        it.album.ifBlank { "unknown album" } == selectedAlbum
+                }
+            sort != PlaylistSort.Artist -> pool
+            else -> emptyList()
+        }
+        val q = query.trim().lowercase()
+        val matching = if (q.isBlank()) scoped else scoped.filter {
+            it.name.lowercase().contains(q) || it.artist.lowercase().contains(q) || it.album.lowercase().contains(q)
+        }
+        // An album's tracks are already in the server's track-number order;
+        // re-sorting them alphabetically would scramble the album's own
+        // running order, so only the other views get a client-side sort.
+        if (songsOfAlbum) matching else sortedStations(matching, if (sort == PlaylistSort.Artist) PlaylistSort.Title else sort)
+    }
     val favorites = ui.favorites.map { it.url }.toSet()
     val failedLabels = ui.failures.keys.mapNotNull { id ->
         accounts.firstOrNull { it.id == id }?.label?.ifBlank { null }
     }
+    fun pop() {
+        when {
+            selectedAlbum != null -> { selectedAlbum = null; query = "" }
+            selectedArtist != null -> { selectedArtist = null; query = "" }
+            else -> onBack()
+        }
+    }
+    BackHandler(enabled = selectedArtist != null) { pop() }
     Box(Modifier.fillMaxSize().background(p.ground)) {
         val scope = rememberCoroutineScope()
         val listState = rememberLazyListState()
         MainLayout(
-            title = "providers",
+            title = selectedAlbum ?: selectedArtist ?: "providers",
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
-            onBack = onBack,
+            onBack = { pop() },
             chips = if (accounts.isNotEmpty()) {
                 @Composable {
                     accounts.forEach { a ->
                         Chip(
                             a.label.ifBlank { "provider" },
                             selected == a.id,
-                            onClick = { selected = a.id },
+                            onClick = {
+                                selected = a.id; query = ""; selectedArtist = null; selectedAlbum = null
+                            },
                         )
                     }
                 }
             } else null,
         ) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                    .padding(start = Gutter, end = Gutter, top = 2.dp, bottom = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                PlaylistSort.entries.forEach { s ->
+                    Chip(
+                        s.label, sort == s,
+                        onClick = { sort = s; query = ""; selectedArtist = null; selectedAlbum = null },
+                    )
+                }
+            }
+            FilterRow(value = query, onValue = { query = it })
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
                 item {
-                    SectionLabel("songs — ${visible.size}") {
+                    SectionLabel(
+                        when {
+                            browsingArtists -> "artists — ${artistRows.size}"
+                            browsingAlbums -> "albums — ${albumRows.size}"
+                            else -> "songs — ${visible.size}"
+                        },
+                    ) {
                         Box(
                             Modifier
                                 .size(34.dp)
@@ -585,7 +679,49 @@ fun ProviderSongsPane(
                         }
                     }
                 }
-                if (visible.isEmpty()) {
+                if (browsingArtists) {
+                    if (artistRows.isEmpty()) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                                Mono(
+                                    if (ui.loading) "loading provider songs…" else "nothing here",
+                                    KleeampType.rowSecondary, p.inkFaint,
+                                )
+                            }
+                        }
+                    } else {
+                        items(artistRows, key = { it.first }, contentType = { "provider-artist" }) { (name, count) ->
+                            ListRow(
+                                onClick = { selectedArtist = name; selectedAlbum = null; query = "" },
+                                verticalPadding = 11.dp,
+                                trailing = { Mono("$count", KleeampType.meta, p.inkFaint) },
+                            ) {
+                                Mono(name, KleeampType.rowPrimary, p.ink, maxLines = 1)
+                            }
+                        }
+                    }
+                } else if (browsingAlbums) {
+                    if (albumRows.isEmpty()) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                                Mono("nothing here", KleeampType.rowSecondary, p.inkFaint)
+                            }
+                        }
+                    } else {
+                        items(albumRows, key = { it.name }, contentType = { "provider-album" }) { row ->
+                            ListRow(
+                                onClick = { selectedAlbum = row.name; query = "" },
+                                verticalPadding = 11.dp,
+                                trailing = { Mono("${row.count}", KleeampType.meta, p.inkFaint) },
+                            ) {
+                                Mono(row.name, KleeampType.rowPrimary, p.ink, maxLines = 1)
+                                if (row.year > 0) {
+                                    Mono("${row.year}", KleeampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                } else if (visible.isEmpty()) {
                     item {
                         Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
                             Mono(
