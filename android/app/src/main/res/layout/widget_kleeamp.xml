@@ -122,26 +122,6 @@
         </FrameLayout>
     </LinearLayout>
 
-        <!-- Live brick scope: a bitmap painted twice a second from the real
-            FFT, same bottom-anchored bricks as BrickMeter. RemoteViews cannot
-            animate, so this is the flipbook version. Weighted to drink the
-            leftover height between the transport row above and the seek row
-            below, full-bleed edge to edge - collapsing to nothing in a short
-            cell, and capped here so an oversized cell only adds empty margin
-            instead of growing the content past the 226dp max. -->
-        <ImageView
-            android:id="@+id/w_scope"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            android:adjustViewBounds="true"
-            android:maxHeight="120dp"
-            android:minHeight="0dp"
-            android:scaleType="fitXY"
-            android:visibility="gone" />
-
         <!-- Live position for seekable sources (local files, provider tracks,
             episodes): elapsed, progress, remaining - the widget twin of the
             expanded player's scrubber row. Tapping it opens the app, where the

@@ -5,24 +5,17 @@ import kotlin.math.exp
 import kotlin.math.sin
 
 /**
- * The visualizer families the app can draw, and everything shared between the
- * places that actually render them: the in-app Compose meters and the
- * home-screen RemoteViews widget.
+ * The visualizer families the app can draw, shared by the in-app Compose
+ * meters (the home-screen widget renders no visualizer).
  *
  * A visualizer is described by an id (persisted in settings), the number of
- * columns it wants, and its brick geometry. Rendering itself is necessarily
- * different per host - Compose can draw a live 60fps canvas, Glance can only
- * paint a static snapshot - but the *values* fed to either renderer come from
- * the same [MeterCore] smoothing engine fed by the same analyser spectrum, so
- * the widget's bars and peaks are a true mirror of the in-app visualizer,
- * frozen at the last snapshot rather than a coarser stand-in.
+ * columns it wants, and its brick geometry. Rendering is a live 60fps Compose
+ * canvas fed by the same [MeterCore] smoothing engine and the same analyser
+ * spectrum.
  *
  * To add a new visualizer type later: add a [Visualizer] here, register its id
- * in the settings enum, and give it a Compose renderer and a widget painter
- * that both consume a [MeterCore] snapshot. The pipeline (AudioFx -> MeterCore
- * -> per-host renderer) is shared, so it works correctly everywhere for free.
- * [stream.kleeamp.mobile.widget.WidgetViz] is the widget-side dispatch that
- * maps the persisted setting id onto whichever painter draws it.
+ * in the settings enum, and give it a Compose renderer that consumes a
+ * [MeterCore] snapshot.
  */
 enum class Visualizer(val id: String, val label: String, val columns: Int) {
     /** The signature brick meter: 24 columns, the NowPlaying geometry. */

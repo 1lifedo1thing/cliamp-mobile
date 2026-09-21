@@ -506,9 +506,8 @@ class PlaybackService : MediaSessionService() {
     /**
      * Ticks the widget twice a second while anything plays: the seek row
      * (elapsed/bar, partial update, skips ticks where the clock second did
-     * not move) and the slim scope flipbook (one small bitmap, skipped when
-     * there is no spectrum). Paused, empty or failed playback stops the
-     * ticker; the last frame already shows the resting state.
+     * not move). Paused, empty or failed playback stops the ticker; the
+     * last frame already shows the resting state.
      */
     private var progressJob: Job? = null
 
@@ -526,8 +525,6 @@ class PlaybackService : MediaSessionService() {
                         dur,
                     )
                 }
-                // The renderer decides by family: `off` no-ops inside.
-                WidgetRenderer.pushVisualizer(this@PlaybackService)
                 delay(500)
             }
         } else null
@@ -540,16 +537,12 @@ class PlaybackService : MediaSessionService() {
                     duration,
                 )
             }
-            // Resting state reads as silence: bars and peaks drop to the
-            // grid instead of freezing mid-air.
-            WidgetRenderer.settleScope(this)
         }
     }
 
     /**
      * Shared spectrum sink used by every fx.attach (onCreate and the playing
-     * re-attach). The in-app meter and the oscilloscope read it live; the
-     * widget samples it twice a second for its scope strip.
+     * re-attach). The in-app meter and the oscilloscope read it live.
      */
     private fun handleSpectrum(it: FloatArray) {
         PlaybackBus.publishSpectrum(it)

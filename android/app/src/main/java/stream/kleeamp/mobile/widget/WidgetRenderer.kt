@@ -7,9 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Paint
 import android.os.Build
 import android.os.SystemClock
 import android.util.Log
@@ -27,8 +24,6 @@ import stream.kleeamp.mobile.MainActivity
 import stream.kleeamp.mobile.R
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationSource
-import stream.kleeamp.mobile.data.visualizer.MeterCore
-import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.ui.clock
 import stream.kleeamp.mobile.ui.theme.KleeampPalette
 import stream.kleeamp.mobile.ui.theme.decodeCustomThemeOrNull
@@ -80,67 +75,17 @@ object WidgetRenderer {
     private const val COMPACT_MAX_HEIGHT_DP = 84
 
     /**
-     * Below this height the full row (transport plus scope/seek chrome,
+     * Below this height the full row (transport plus seek chrome,
      * ~106dp fixed) cannot fit centered without nibbling the title's top
      * and the toggle's bottom — that is exactly the one-row cell. Those
      * instances get the same transport row laid out horizontally instead
-     * (titles left, keys right, no scope/seek rows), so everything stays
+     * (titles left, keys right, no seek rows), so everything stays
      * fully visible.
      */
     private const val MINIMAL_MAX_HEIGHT_DP = 110
 
-    /** At or above this height a stopped widget keeps the scope strip (as
-     * the flat stopped visualizer); below it - the shrunk one-row cell -
-     * only a playing widget earns the strip. */
-    private const val SCOPE_TALL_MIN_HEIGHT_DP = 90
-
-    /** Scope flipbook: two frames a second of this bitmap over binder.
-     * Painted at 2x and downscaled by the host for smooth edges. */
-    private const val SCOPE_COLS = 32
-    private const val SCOPE_WIDTH_PX = 508
-    private const val SCOPE_HEIGHT_PX = 128
-    private const val SCOPE_BRICK_PX = 8f
-    private const val SCOPE_GAP_PX = 4f
-    private const val SCOPE_COL_GAP_PX = 4f
-    private const val SCOPE_RADIUS_PX = 2.5f
-    /** Per-tick lerp toward the measured level: kills the 2Hz steppiness. */
-    private const val SCOPE_SMOOTHING = 0.55f
-    private const val SCOPE_PEAK_DECAY = 0.06f
-
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Any()
-
-    /** Guards the scope bitmap, its canvas and the peak memory: ticks and
-     * full renders share one reusable bitmap. */
-    private val scopeDrawLock = Any()
-    private var scopeBitmap: Bitmap? = null
-    private var scopeCanvas: Canvas? = null
-    private val scopePeaks = FloatArray(SCOPE_COLS)
-    private val scopeLevels = FloatArray(SCOPE_COLS)
-
-    /**
-     * Idle dance source for phones with no live FFT frames. Same band count
-     * AudioFx publishes and the same smoothing engine the in-app meter
-     * uses, so the fallback moves like the real thing.
-     */
-    private val idleMeter = MeterCore(64)
-
-    /** Last spectrum array seen, and when it changed. A frame that stops
-     * changing while playing means the capture died mid-stream. */
-    @Volatile private var lastSpectrumRef: FloatArray? = null
-    @Volatile private var lastSpectrumAt = 0L
-
-    /** Missed ticks before a live-looking array counts as dead (500ms each). */
-    private const val SPECTRUM_STALE_MS = 2500L
-
-    /** Palette of the last full render, for ticks that carry no theme. */
-    @Volatile private var lastPalette: KleeampPalette? = null
-
-    /** Visualizer family of the last full render; ticks obey it. */
-    @Volatile private var lastViz: WidgetViz = WidgetViz.SPECTRUM
-
-    /** True once the scope has been settled flat; skips repeat settle pushes. */
-    @Volatile private var scopeSettled = false
 
     /** Last tick's clock second + duration: identical ticks are skipped. */
     @Volatile private var lastTickSecond = -1L
@@ -212,145 +157,6 @@ object WidgetRenderer {
         enqueue(context, row = null, cold = true)
     }
 
-    /**
-     * Drops every bar to the grid: zeroed peaks plus one empty frame. Called
-     * when playback stops or pauses, so the scope reads as silence instead
-     * of a frozen mid-air frame. Skipped when already settled.
-     */
-    fun settleScope(context: Context) {
-        if (scopeSettled) return
-        val p = lastPalette ?: return
-        scopeSettled = true
-        val frame: Bitmap = synchronized(scopeDrawLock) {
-            scopePeaks.fill(0f)
-            scopeLevels.fill(0f)
-            drawScope(FloatArray(0), p)
-        }
-        val ctx = context.applicationContext
-        scope.launch {
-            val mgr = AppWidgetManager.getInstance(ctx)
-            val ids = mgr.getAppWidgetIds(ComponentName(ctx, CliampWidgetProvider::class.java))
-                .filterNot { isCompact(mgr, it) || isMinimal(mgr, it) }
-            if (ids.isEmpty()) return@launch
-            val rv = RemoteViews(ctx.packageName, R.layout.widget_kleeamp)
-            rv.setImageViewBitmap(R.id.w_scope, frame)
-            runCatching {
-                for (id in ids) mgr.partiallyUpdateAppWidget(id, rv)
-            }
-        }
-    }
-
-    /**
-     * One visualizer frame: paints the latest FFT into the shared bitmap and
-     * partially updates standard instances. No-ops when the family shows
-     * nothing or without a rendered palette - so the service fires it on a
-     * dumb cadence while playing and it costs nothing otherwise. Which
-     * family paints is [WidgetViz]'s decision, read from the last full
-     * render.
-     *
-     * With no FFT frames (record-audio permission denied, effect
-     * unavailable) or a capture that died mid-play (same frozen array while
-     * the song plays on), a playing widget dances the synthesized idle
-     * instead of freezing - the same fallback the in-app meter uses.
-     * Paused stays on the settled grid as before.
-     */
-    fun pushVisualizer(context: Context) {
-        if (!lastViz.showsScope) return
-        val p = lastPalette ?: return
-        val now = SystemClock.elapsedRealtime()
-        val spectrum = PlaybackBus.spectrum.value
-        if (spectrum.isNotEmpty() && spectrum !== lastSpectrumRef) {
-            lastSpectrumRef = spectrum
-            lastSpectrumAt = now
-        }
-        val live = spectrum.isNotEmpty() && now - lastSpectrumAt < SPECTRUM_STALE_MS
-        val bands = when {
-            live -> spectrum
-            lastKnown?.playing != true -> return
-            else -> {
-                idleMeter.pushIdle(now / 1000.0)
-                idleMeter.snapshotLevels()
-            }
-        }
-        val frame: Bitmap = synchronized(scopeDrawLock) {
-            drawScope(bands, p)
-        }
-        scopeSettled = false
-        val ctx = context.applicationContext
-        scope.launch {
-            val mgr = AppWidgetManager.getInstance(ctx)
-            val ids = mgr.getAppWidgetIds(ComponentName(ctx, CliampWidgetProvider::class.java))
-                .filterNot { isCompact(mgr, it) || isMinimal(mgr, it) }
-            if (ids.isEmpty()) return@launch
-            val rv = RemoteViews(ctx.packageName, R.layout.widget_kleeamp)
-            rv.setImageViewBitmap(R.id.w_scope, frame)
-            runCatching {
-                for (id in ids) mgr.partiallyUpdateAppWidget(id, rv)
-            }
-        }
-    }
-
-    /**
-     * The in-app brick meter as a bitmap: 32 columns folded from the 64 FFT
-     * bands, bottom-anchored rounded bricks, unlit grid behind, a bright to
-     * accent vertical sheen above the level, peak cap with decay. Levels are
-     * lerped toward the measurement so the 2Hz flipbook glides instead of
-     * stepping. Reuses one bitmap + canvas across ticks.
-     */
-    private fun drawScope(spectrum: FloatArray, p: KleeampPalette): Bitmap {
-        var bmp = scopeBitmap
-        var canvas = scopeCanvas
-        if (bmp == null || canvas == null || bmp.width != SCOPE_WIDTH_PX || bmp.height != SCOPE_HEIGHT_PX) {
-            bmp = Bitmap.createBitmap(SCOPE_WIDTH_PX, SCOPE_HEIGHT_PX, Bitmap.Config.ARGB_8888)
-            canvas = Canvas(bmp)
-            scopeBitmap = bmp
-            scopeCanvas = canvas
-        }
-        val unlit = Paint().apply { color = p.unlit.toArgb(); isAntiAlias = true }
-        val lit = Paint().apply {
-            isAntiAlias = true
-            shader = android.graphics.LinearGradient(
-                0f, 0f, 0f, SCOPE_HEIGHT_PX.toFloat(),
-                p.accentBright.toArgb(), p.accent.toArgb(),
-                android.graphics.Shader.TileMode.CLAMP,
-            )
-        }
-        val peak = Paint().apply { color = p.peak.toArgb(); isAntiAlias = true }
-        canvas.drawColor(0, android.graphics.PorterDuff.Mode.CLEAR)
-
-        val step = SCOPE_BRICK_PX + SCOPE_GAP_PX
-        val rows = ((SCOPE_HEIGHT_PX + SCOPE_GAP_PX) / step).toInt().coerceAtLeast(1)
-        val colW = (SCOPE_WIDTH_PX - SCOPE_COL_GAP_PX * (SCOPE_COLS - 1)) / SCOPE_COLS
-        val bandsPerCol = (spectrum.size / SCOPE_COLS).coerceAtLeast(1)
-        for (c in 0 until SCOPE_COLS) {
-            var measured = 0f
-            for (b in 0 until bandsPerCol) {
-                measured += spectrum.getOrElse(c * bandsPerCol + b) { 0f }
-            }
-            measured = (measured / bandsPerCol).coerceIn(0f, 1f)
-            val level = scopeLevels[c] + (measured - scopeLevels[c]) * SCOPE_SMOOTHING
-            scopeLevels[c] = level
-            scopePeaks[c] = maxOf(level, scopePeaks[c] - SCOPE_PEAK_DECAY)
-            val x = c * (colW + SCOPE_COL_GAP_PX)
-            val litRows = (level * rows).toInt()
-            for (r in 0 until rows) {
-                val y = SCOPE_HEIGHT_PX - (r + 1) * step + SCOPE_GAP_PX
-                canvas.drawRoundRect(
-                    x, y, x + colW, y + SCOPE_BRICK_PX,
-                    SCOPE_RADIUS_PX, SCOPE_RADIUS_PX,
-                    if (r < litRows) lit else unlit,
-                )
-            }
-            val pkRow = (scopePeaks[c].coerceIn(0f, 1f) * rows).toInt().coerceIn(0, rows - 1)
-            val py = SCOPE_HEIGHT_PX - (pkRow + 1) * step + SCOPE_GAP_PX
-            canvas.drawRoundRect(
-                x, py, x + colW, py + SCOPE_BRICK_PX,
-                SCOPE_RADIUS_PX, SCOPE_RADIUS_PX, peak,
-            )
-        }
-        return bmp
-    }
-
     private data class Req(val row: Row?, val cold: Boolean)
 
     private fun enqueue(context: Context, row: Row?, cold: Boolean) {
@@ -406,23 +212,19 @@ object WidgetRenderer {
         val systemDark = (ctx.resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val p = paletteFor(paletteName, systemDark, decodeCustomThemeOrNull(app.prefs.customTheme.first()))
-        val viz = WidgetViz.of(app.prefs.visualizer.first())
 
         val mgr = AppWidgetManager.getInstance(ctx)
         val ids = mgr.getAppWidgetIds(ComponentName(ctx, CliampWidgetProvider::class.java))
         // Per instance: a short cell gets the horizontal titles-plus-keys
         // row, a narrow-but-tall one the centered compact card, anything
-        // roomier the transport row with the flexing scope and seek.
+        // roomier the transport row with the seek row.
         for (id in ids) {
             val (w, h) = cellSize(mgr, id)
             val minimal = h < MINIMAL_MAX_HEIGHT_DP
             val compact = !minimal && (w < COMPACT_MAX_WIDTH_DP || h < COMPACT_MAX_HEIGHT_DP)
-            val tall = h >= SCOPE_TALL_MIN_HEIGHT_DP
-            Log.d("kleeamp/wid", "widget layout id=$id cell=${w}x${h} minimal=$minimal compact=$compact tall=$tall viz=${viz.settingId}")
-            mgr.updateAppWidget(id, buildViews(ctx, row, p, compact, viz, tall, minimal))
+            Log.d("kleeamp/wid", "widget layout id=$id cell=${w}x${h} minimal=$minimal compact=$compact")
+            mgr.updateAppWidget(id, buildViews(ctx, row, p, compact, minimal))
         }
-        lastPalette = p
-        lastViz = viz
     }
 
     /**
@@ -437,12 +239,6 @@ object WidgetRenderer {
     private fun isCompact(mgr: AppWidgetManager, id: Int): Boolean {
         val (w, h) = cellSize(mgr, id)
         return h >= MINIMAL_MAX_HEIGHT_DP && (w < COMPACT_MAX_WIDTH_DP || h < COMPACT_MAX_HEIGHT_DP)
-    }
-
-    /** True for the horizontal tier: one-row cells with no room to center. */
-    private fun isMinimal(mgr: AppWidgetManager, id: Int): Boolean {
-        val (_, h) = cellSize(mgr, id)
-        return h < MINIMAL_MAX_HEIGHT_DP
     }
 
     private fun cellSize(mgr: AppWidgetManager, id: Int): Pair<Int, Int> {
@@ -463,8 +259,6 @@ object WidgetRenderer {
         row: Row,
         p: KleeampPalette,
         compact: Boolean = false,
-        viz: WidgetViz = WidgetViz.SPECTRUM,
-        tall: Boolean = false,
         minimal: Boolean = false,
     ): RemoteViews {
         val rv = RemoteViews(
@@ -476,7 +270,7 @@ object WidgetRenderer {
             },
         )
         // Titles exist in every layout (the min-height tier is the same
-        // card, bottom-shifted); seek and scope only exist outside it.
+        // card, bottom-shifted); seek only exists outside it.
         // The tints and tap wiring below run for all three: every layout
         // shares those view IDs.
         rv.setTextViewText(R.id.w_title, row.station?.name ?: "nothing tuned")
@@ -539,30 +333,6 @@ object WidgetRenderer {
             }
         }
 
-        // The scope lives in the standard layout only and shows whenever the
-        // family draws one while playing. Stopped, it stays only where it
-        // has room to breathe (a tall cell), reading as the stopped
-        // visualizer - a short cell drops it instead of an empty gap. `off`
-        // removes the strip entirely. It flexes to the leftover height: a
-        // slim strip in a one-row cell, tall bricks in a two-row one. Its
-        // bitmap arrives separately (pushVisualizer flipbook); the current
-        // frame is painted inline here so a full re-render never blanks it
-        // mid-animation.
-        val showScope = !compact && !minimal && viz.showsScope && (row.playing || tall)
-        if (!compact && !minimal) {
-            rv.setViewVisibility(R.id.w_scope, if (showScope) View.VISIBLE else View.GONE)
-            if (showScope) {
-                val frame = synchronized(scopeDrawLock) {
-                    if (!row.playing) {
-                        scopePeaks.fill(0f)
-                        scopeLevels.fill(0f)
-                    }
-                    drawScope(if (row.playing) PlaybackBus.spectrum.value else FloatArray(0), p)
-                }
-                scopeSettled = !row.playing
-                rv.setImageViewBitmap(R.id.w_scope, frame)
-            }
-        }
         rv.setOnClickPendingIntent(R.id.w_toggle, actionIntent(ctx, WIDGET_ACTION_TOGGLE, 1))
         rv.setOnClickPendingIntent(R.id.w_prev, actionIntent(ctx, WIDGET_ACTION_PREV, 2))
         rv.setOnClickPendingIntent(R.id.w_next, actionIntent(ctx, WIDGET_ACTION_NEXT, 3))
