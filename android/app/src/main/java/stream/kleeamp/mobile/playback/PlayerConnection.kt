@@ -22,12 +22,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import stream.kleeamp.mobile.KleeampApp
 import stream.kleeamp.mobile.data.Prefs
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationSource
 import stream.kleeamp.mobile.data.wrapNext
 import stream.kleeamp.mobile.widget.WidgetRenderer
+import java.io.IOException
 
 /**
  * The UI's handle on playback. Transport goes through a MediaController rather
@@ -264,6 +266,8 @@ class PlayerConnection(
     var scrobbleTick: ((Station?, Boolean, Long) -> Unit)? = null
 
     private var lastProgressWrite = 0L
+    /** A slow sink must not stack: one write per tick, never overlapping. */
+    private var progressWrite: Job? = null
 
     fun connect() {
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
@@ -417,7 +421,13 @@ class PlayerConnection(
                 lastProgressWrite = now
                 val duration = c.duration.takeIf { it != C.TIME_UNSET && it > 0 }
                     ?: playingNow.durationMs
-                progressSink?.let { sink -> scope.launch { sink(playingNow, position, duration) } }
+                // Coalesced: a sink slower than the tick does not stack writes,
+                // the next tick covers the newer position instead.
+                if (progressWrite?.isActive != true) {
+                    progressWrite = progressSink?.let { sink ->
+                        scope.launch { sink(playingNow, position, duration) }
+                    }
+                }
             }
         }
 
@@ -1017,7 +1027,12 @@ class PlayerConnection(
 
     private suspend fun buildItem(station: Station): MediaItem =
         withContext(Dispatchers.Default) {
-            PlaybackService.mediaItem(context, station, StreamResolver.resolve(station.url))
+            // Bounded as one unit with the resolve inside: window builds map
+            // this over a slice, so an unbounded item multiplies into an
+            // unbounded queue swap.
+            withTimeoutOrNull(StreamResolver.RESOLVE_TIMEOUT_MS) {
+                PlaybackService.mediaItem(context, station, StreamResolver.resolve(station.url))
+            } ?: throw IOException("stream resolve timed out")
         }
 
     fun toggle(fallback: Station? = null) {

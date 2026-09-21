@@ -1,6 +1,8 @@
 package stream.kleeamp.mobile.playback
 
+import kotlinx.coroutines.withTimeoutOrNull
 import stream.kleeamp.mobile.net.Http
+import java.io.IOException
 
 /**
  * A URL ready to hand to the player, plus the HTTP headers its request
@@ -42,7 +44,20 @@ object StreamResolver {
      */
     @Volatile var downloadLookup: ((String) -> String?)? = null
 
-    suspend fun resolve(url: String): ResolvedStream {
+    /**
+     * Aggregate bound on one resolution: the provider hop is ensureAuth plus
+     * queries in sequence, each with its own generous call timeout, so
+     * without this a sick server parks the nav job and retaps queue behind
+     * it. Falls back to nothing - a timeout surfaces as a resolve error
+     * like any other failed hop.
+     */
+    const val RESOLVE_TIMEOUT_MS = 60_000L
+
+    suspend fun resolve(url: String): ResolvedStream =
+        withTimeoutOrNull(RESOLVE_TIMEOUT_MS) { resolveUnsafe(url) }
+            ?: throw IOException("stream resolve timed out")
+
+    private suspend fun resolveUnsafe(url: String): ResolvedStream {
         if (url.startsWith(PROVIDER_SCHEME)) {
             val ref = url.removePrefix(PROVIDER_SCHEME)
             val accountId = ref.substringBefore('/')
