@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -126,9 +127,10 @@ internal fun UpNextContent(
     val p = LocalPalette.current
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val drag = remember(upNext, activeIndex, listState) {
-        UpNextDragState(upNextEntries(upNext, activeIndex), listState, scope)
-    }
+    // One drag state for the screen's lifetime: queue emissions merge into
+    // the preview via sync instead of recreating it mid-drag.
+    val drag = remember(listState) { UpNextDragState(listState, scope) }
+    SideEffect { drag.sync(upNextEntries(upNext, activeIndex)) }
     val latestOnMove by rememberUpdatedState(onMove)
     val haptics = LocalHapticFeedback.current
     val hapticsEnabled by rememberUpdatedState(LocalHapticsEnabled.current)
