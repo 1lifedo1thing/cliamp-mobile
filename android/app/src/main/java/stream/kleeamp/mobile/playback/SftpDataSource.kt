@@ -61,14 +61,25 @@ class SftpDataSource : BaseDataSource(/* isNetwork = */ true) {
                 length - dataSpec.position
             }
             if (bytesRemaining < 0) {
-                throw DataSourceException(DataSourceException.POSITION_OUT_OF_RANGE)
+                positionOutOfRange()
             }
             // A plain RemoteFileInputStream costs a round trip per read, which
             // over anything but a LAN is not enough throughput to keep a FLAC
             // fed. The read-ahead stream keeps several requests in flight.
             stream = remote.ReadAheadRemoteFileInputStream(READ_AHEAD, dataSpec.position)
         } catch (t: Throwable) {
-            closeQuietly()
+            // A failed open just proved this connection broken: retire it
+            // instead of recycling it for the next open to trip over. A bad
+            // seek position says nothing about the connection, so that one
+            // recycles as before.
+            if (isPositionOutOfRange(t)) {
+                closeQuietly()
+            } else {
+                val bad = lease
+                lease = null
+                closeQuietly()
+                bad?.discard()
+            }
             throw if (t is IOException) t else IOException(t)
         }
 
@@ -82,7 +93,18 @@ class SftpDataSource : BaseDataSource(/* isNetwork = */ true) {
         if (bytesRemaining == 0L) return C.RESULT_END_OF_INPUT
         val source = stream ?: throw IOException("sftp read before open")
         val wanted = minOf(bytesRemaining, length.toLong()).toInt()
-        val read = source.read(buffer, offset, wanted)
+        val read = try {
+            source.read(buffer, offset, wanted)
+        } catch (e: IOException) {
+            // A broken stream means a broken connection: retire it so the
+            // retry reconnects instead of reading from a dead channel.
+            // close() still runs after this and reports the transfer end.
+            val bad = lease
+            lease = null
+            closeQuietly()
+            bad?.discard()
+            throw e
+        }
         if (read == -1) return C.RESULT_END_OF_INPUT
         bytesRemaining -= read
         bytesTransferred(read)
@@ -101,7 +123,7 @@ class SftpDataSource : BaseDataSource(/* isNetwork = */ true) {
 
     /**
      * The lease goes back last and always. Leaking one would take a connection
-     * out of the pool of two for the rest of the session.
+     * out of the pool of three for the rest of the session.
      */
     private fun closeQuietly() {
         runCatching { stream?.close() }
@@ -111,6 +133,19 @@ class SftpDataSource : BaseDataSource(/* isNetwork = */ true) {
         file = null
         lease = null
     }
+
+    /**
+     * POSITION_OUT_OF_RANGE is deprecated in recent SDKs, but Media3 still
+     * keys its seek handling off this exact reason, so both references live
+     * here under one suppression instead of scattered through the code.
+     */
+    @Suppress("DEPRECATION")
+    private fun positionOutOfRange(): Nothing =
+        throw DataSourceException(DataSourceException.POSITION_OUT_OF_RANGE)
+
+    @Suppress("DEPRECATION")
+    private fun isPositionOutOfRange(t: Throwable): Boolean =
+        t is DataSourceException && t.reason == DataSourceException.POSITION_OUT_OF_RANGE
 
     companion object {
         const val SCHEME = "cliamp-sftp"
