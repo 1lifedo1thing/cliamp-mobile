@@ -163,6 +163,19 @@ object SshPool {
     private const val CONNECT_TIMEOUT_MS = 15_000
     private const val SOCKET_TIMEOUT_MS = 30_000
     private const val KEEPALIVE_SECONDS = 30
+    /**
+     * An idle entry older than this is retired on borrow instead of reused:
+     * NATs and firewalls drop idle TCP long before SSH notices, so a pooled
+     * connection that has sat quietly is the classic half-open read hang.
+     */
+    private const val IDLE_TTL_MS = 120_000L
+    /** Absolute age cap: even a busy entry is re-handshaked past this. */
+    private const val MAX_AGE_MS = 15 * 60_000L
+    /** Consecutive connect failures before an account backs off... */
+    private const val BREAKER_FAILURES = 3
+    /** ...for this long, so a dead host fails fast instead of stacking
+     * 15 s handshake timeouts behind every tap. */
+    private const val BREAKER_COOLDOWN_MS = 10_000L
 
     internal class Pooled(
         val accountId: String,
@@ -170,13 +183,21 @@ object SshPool {
         val client: SSHClient,
         val sftp: SFTPClient,
     ) {
+        val createdAt = System.currentTimeMillis()
+        @Volatile var lastReleasedAt = createdAt
         val healthy: Boolean get() = client.isConnected && client.isAuthenticated
+
+        /** Too long idle - or alive - to hand out without a fresh handshake. */
+        fun stale(now: Long) = now - lastReleasedAt > IDLE_TTL_MS || now - createdAt > MAX_AGE_MS
 
         fun close() {
             runCatching { sftp.close() }
             runCatching { client.disconnect() }
         }
     }
+
+    private data class Breaker(var failures: Int = 0, var until: Long = 0)
+    private val breakers = HashMap<String, Breaker>()
 
     private val lock = ReentrantLock()
     private val freed = lock.newCondition()
@@ -192,6 +213,10 @@ object SshPool {
     class Lease internal constructor(internal val entry: Pooled) : Closeable {
         val sftp: SFTPClient get() = entry.sftp
         override fun close() = release(entry)
+
+        /** Retire a connection that just proved itself broken (failed open
+         * or read) instead of recycling it for the next borrow to trip over. */
+        fun discard() = discard(entry)
     }
 
     fun lease(account: ProviderAccount): Lease = Lease(acquire(account))
@@ -209,6 +234,7 @@ object SshPool {
         val doomed: List<Pooled>
         lock.withLock {
             generation[accountId] = (generation[accountId] ?: 0) + 1
+            breakers.remove(accountId)
             doomed = idle.remove(accountId)?.toList() ?: emptyList()
             freed.signalAll()
         }
@@ -224,11 +250,17 @@ object SshPool {
         val dead = ArrayList<Pooled>(2)
         try {
             lock.withLock {
+                breakers[id]?.let { breaker ->
+                    if (System.currentTimeMillis() < breaker.until) {
+                        throw IOException("ssh to ${account.ssh().host} cooling down after failures")
+                    }
+                }
                 while (true) {
                     val queue = idle.getOrPut(id) { ArrayDeque() }
+                    val now = System.currentTimeMillis()
                     while (queue.isNotEmpty()) {
                         val candidate = queue.removeFirst()
-                        if (candidate.healthy) {
+                        if (candidate.healthy && !candidate.stale(now)) {
                             leased[id] = (leased[id] ?: 0) + 1
                             return candidate
                         }
@@ -250,22 +282,41 @@ object SshPool {
         }
         // Connecting outside the monitor for the same reason: a handshake
         // against an unreachable host takes the full connect timeout.
-        return runCatching {
+        val fresh = try {
             val client = connect(account.ssh())
             // A client that connects but cannot open an SFTP channel would
             // otherwise be left holding a socket nothing can reach.
-            runCatching { Pooled(id, gen, client, client.newSFTPClient()) }
-                .getOrElse { failure ->
-                    runCatching { client.disconnect() }
-                    throw failure
-                }
-        }.getOrElse { failure ->
+            try {
+                Pooled(id, gen, client, client.newSFTPClient())
+            } catch (failure: Throwable) {
+                runCatching { client.disconnect() }
+                throw failure
+            }
+        } catch (failure: Throwable) {
             lock.withLock {
                 leased[id] = (leased[id] ?: 1) - 1
+                val breaker = breakers.getOrPut(id) { Breaker() }
+                if (++breaker.failures >= BREAKER_FAILURES) {
+                    breaker.until = System.currentTimeMillis() + BREAKER_COOLDOWN_MS
+                }
                 freed.signalAll()
             }
             throw failure
         }
+        lock.withLock { breakers.remove(id) }
+        return fresh
+    }
+
+    /**
+     * Drop a known-bad entry without recycling it. The socket teardown stays
+     * outside the lock: closing a dead connection can sit on it for a while.
+     */
+    internal fun discard(entry: Pooled) {
+        lock.withLock {
+            leased[entry.accountId] = (leased[entry.accountId] ?: 1) - 1
+            freed.signalAll()
+        }
+        entry.close()
     }
 
     internal fun release(entry: Pooled) {
@@ -274,7 +325,10 @@ object SshPool {
             val id = entry.accountId
             leased[id] = (leased[id] ?: 1) - 1
             if (keep && entry.generation != (generation[id] ?: 0)) keep = false
-            if (keep) idle.getOrPut(id) { ArrayDeque() }.addLast(entry)
+            if (keep) {
+                entry.lastReleasedAt = System.currentTimeMillis()
+                idle.getOrPut(id) { ArrayDeque() }.addLast(entry)
+            }
             freed.signalAll()
         }
         if (!keep) entry.close()
