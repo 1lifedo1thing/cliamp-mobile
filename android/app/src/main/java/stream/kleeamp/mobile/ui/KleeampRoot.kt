@@ -467,7 +467,6 @@ fun KleeampRoot(
                         onPlay = onPlay,
                         onAddToQueue = { player.addToUpNext(it) },
                         onBack = { navController.popBackStack() },
-                        onAddProvider = { navController.navigate(LibraryProviders) },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenSettings = { navController.navigate(Settings) },
                     )
@@ -659,11 +658,23 @@ fun KleeampRoot(
                         navController.popBackStack()
                     }
                 } else {
-                    val providerAccounts by providers.accounts.collectAsState(initial = emptyList())
+                    val providerAccounts by providers.accounts.collectAsState(initial = null)
                     val existing = if (route.accountId.isNotEmpty()) {
-                        providerAccounts.firstOrNull { it.id == route.accountId }
+                        providerAccounts?.firstOrNull { it.id == route.accountId }
                     } else null
-                    OverlayCover {
+                    // Editing waits for the list: a first-frame null is
+                    // "loading", not "new" - building the form on it leaves
+                    // every field empty, and the blank form survives because
+                    // the viewmodel is keyed, not recreated. A loaded list
+                    // without the id is a deleted account: pop out.
+                    if (route.accountId.isNotEmpty() && providerAccounts != null && existing == null) {
+                        LaunchedEffect(route.accountId) {
+                            navController.popBackStack()
+                        }
+                    } else if (providerAccounts == null && route.accountId.isNotEmpty()) {
+                        // Hold the previous page until accounts arrive.
+                    } else {
+                        OverlayCover {
                     ProviderWizardScreen(
                         vm = appViewModel(key = route.providerKey + route.accountId) { _ ->
                             ProviderWizardViewModel(spec, existing)
@@ -674,6 +685,7 @@ fun KleeampRoot(
                             navController.popBackStack()
                         },
                     )
+                    }
                     }
                 }
             }

@@ -94,6 +94,26 @@ fun ProviderWizard(
             }
             HairlineDivider(region = true)
 
+            // The user's own name for this account, shown in lists instead of
+            // the probed server name. Optional and app-only: blank keeps
+            // exactly today's behavior, and it never re-probes.
+            FieldRow(
+                field = FieldSpec(
+                    key = DISPLAY_NAME_KEY,
+                    label = "display name",
+                    required = false,
+                ),
+                value = uiState.values[DISPLAY_NAME_KEY].orEmpty(),
+                last = false,
+                autoFocus = false,
+                onValue = { vm.onEvent(ProviderWizardViewModel.Event.SetValue(DISPLAY_NAME_KEY, it)) },
+                onNext = { focus.moveFocus(FocusDirection.Next) },
+                onDone = {
+                    focus.clearFocus()
+                    vm.onEvent(ProviderWizardViewModel.Event.Test)
+                },
+            )
+
             visible.forEachIndexed { i, field ->
                 FieldRow(
                     field = field,
@@ -127,26 +147,6 @@ fun ProviderWizard(
                     }
                 }
             }
-
-            // The user's own name for this account, shown in lists instead of
-            // the probed server name. Optional and app-only: blank keeps
-            // exactly today's behavior, and it never re-probes.
-            FieldRow(
-                field = FieldSpec(
-                    key = DISPLAY_NAME_KEY,
-                    label = "display name",
-                    required = false,
-                ),
-                value = uiState.values[DISPLAY_NAME_KEY].orEmpty(),
-                last = false,
-                autoFocus = false,
-                onValue = { vm.onEvent(ProviderWizardViewModel.Event.SetValue(DISPLAY_NAME_KEY, it)) },
-                onNext = { focus.moveFocus(FocusDirection.Next) },
-                onDone = {
-                    focus.clearFocus()
-                    vm.onEvent(ProviderWizardViewModel.Event.Test)
-                },
-            )
 
             Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 14.dp)) {
                 when (val s = uiState.probe) {

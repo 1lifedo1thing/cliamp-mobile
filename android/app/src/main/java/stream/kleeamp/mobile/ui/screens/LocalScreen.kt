@@ -560,7 +560,6 @@ fun ProviderSongsPane(
     onPlay: (Station, List<Station>) -> Unit,
     onAddToQueue: (Station) -> Unit = {},
     onBack: () -> Unit,
-    onAddProvider: () -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     /** Non-blank locks the pane to one account with no picker row. */
@@ -700,25 +699,15 @@ fun ProviderSongsPane(
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
                 item { FilterRow(value = query, onValue = { query = it }) }
                 item {
+                    // Adding happens on the providers page; this page only
+                    // shows what is already connected.
                     SectionLabel(
                         when {
                             browsingArtists -> "artists — ${artistRows.size}"
                             browsingAlbums -> "albums — ${albumRows.size}"
                             else -> "songs — ${visible.size}"
                         },
-                    ) {
-                        Box(
-                            Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(KleeampShape.small))
-                                .background(if (p.dark) p.keyFace else p.ground)
-                                .border(1.dp, p.keyBorder, RoundedCornerShape(KleeampShape.small))
-                                .microPress(onClick = onAddProvider),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(KleeampIcons.Plus, "add provider", Modifier.size(16.dp), tint = p.accent)
-                        }
-                    }
+                    )
                 }
                 if (browsingArtists) {
                     if (artistRows.isEmpty()) {
