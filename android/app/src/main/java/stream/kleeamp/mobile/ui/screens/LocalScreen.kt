@@ -450,11 +450,8 @@ fun LibrarySmartPlaylistPane(
     val members = if (pl?.kind == SmartKind.LocalSongs && folder != null) {
         folders.firstOrNull { it.path == folder }?.songs.orEmpty()
     } else pl?.stations.orEmpty()
-    // Only the playlists that actually filter earn a header chip row; the
-    // others (recently played) get no chips at all so the header hugs the
-    // divider like a plain page instead of leaving an empty chip band.
-    val headerChips = pl?.kind == SmartKind.Favorites ||
-        pl?.kind == SmartKind.LocalSongs || pl?.kind == SmartKind.Downloads
+    // The header carries no chip rows; pickers ride the scrolling rows
+    // below, on top of the filter.
     Box(Modifier.fillMaxSize().background(p.ground)) {
         val scope = rememberCoroutineScope()
         val listState = rememberLazyListState()
@@ -468,20 +465,6 @@ fun LibrarySmartPlaylistPane(
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
             onBack = onBack,
-            chips = if (headerChips) {
-                @Composable {
-                    SmartHeaderChips(
-                        kind = pl.kind,
-                        favScope = favScope,
-                        onFavScopeChange = onFavScopeChange,
-                        detailSort = detailSort,
-                        onSort = { vm.onEvent(SmartPlaylistViewModel.Event.SetSort(it)) },
-                        folders = folders,
-                        folder = folder,
-                        onFolder = { folder = it },
-                    )
-                }
-            } else null,
         ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (pl == null) {
@@ -510,6 +493,11 @@ fun LibrarySmartPlaylistPane(
                         onAddToQueue = onAddToQueue,
                         loading = loading,
                         favScope = favScope,
+                        onFavScopeChange = onFavScopeChange,
+                        onSortChange = { vm.onEvent(SmartPlaylistViewModel.Event.SetSort(it)) },
+                        folders = folders,
+                        folder = folder,
+                        onFolder = { folder = it },
                         onInfo = onOpenSongInfo,
                         // Removing from downloads deletes the fetched file and
                         // untracks the URL; anywhere else it drops the song.
@@ -673,30 +661,34 @@ fun ProviderSongsPane(
                 }
             } else null,
         ) {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                    .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-            ) {
-                PlaylistSort.entries.forEach { s ->
-                    Chip(
-                        s.label, sort == s,
-                        onClick = { sort = s; query = ""; selectedArtist = null; selectedAlbum = null },
-                    )
-                }
-                // The browse page is gone; its rescan rides the sort row for
-                // SSH accounts, trailing like it always did.
-                val selectedAccount = accounts.firstOrNull { it.id == selected }
-                if (selectedAccount?.providerKey == "ssh") {
-                    val indexState by SftpLibrary.status(selectedAccount.id).collectAsState()
-                    Chip(
-                        if (indexState.scanning) "scanning" else "rescan",
-                        selected = false,
-                        onClick = { scope.launch { SftpLibrary.rescan(selectedAccount) } },
-                    )
-                }
-            }
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
+                // Picker rows scroll with the list; only the header is
+                // fixed. Sort first, rescan trailing for SSH accounts.
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                            .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        PlaylistSort.entries.forEach { s ->
+                            Chip(
+                                s.label, sort == s,
+                                onClick = { sort = s; query = ""; selectedArtist = null; selectedAlbum = null },
+                            )
+                        }
+                        // The browse page is gone; its rescan rides the sort row for
+                        // SSH accounts, trailing like it always did.
+                        val selectedAccount = accounts.firstOrNull { it.id == selected }
+                        if (selectedAccount?.providerKey == "ssh") {
+                            val indexState by SftpLibrary.status(selectedAccount.id).collectAsState()
+                            Chip(
+                                if (indexState.scanning) "scanning" else "rescan",
+                                selected = false,
+                                onClick = { scope.launch { SftpLibrary.rescan(selectedAccount) } },
+                            )
+                        }
+                    }
+                }
                 item { FilterRow(value = query, onValue = { query = it }) }
                 item {
                     // Adding happens on the providers page; this page only
@@ -811,50 +803,6 @@ fun ProviderSongsPane(
                 item { Spacer(Modifier.height(20.dp)) }
             }
         }
-    }
-}
-
-/** The header filter chips for a smart playlist, one row per kind. */
-@Composable
-private fun SmartHeaderChips(
-    kind: SmartKind,
-    favScope: FavScope,
-    onFavScopeChange: (FavScope) -> Unit,
-    detailSort: PlaylistSort,
-    onSort: (PlaylistSort) -> Unit,
-    folders: List<SongFolder>,
-    folder: String?,
-    onFolder: (String?) -> Unit,
-) {
-    when (kind) {
-        // Favourites mix local songs, radio stations and podcasts, so they
-        // earn their own type sub-tabs.
-        SmartKind.Favorites -> FavScope.entries.forEach { f ->
-            Chip(f.label, favScope == f, onClick = { onFavScopeChange(f) })
-        }
-        // The on-device lists sort; local songs also filter by folder through
-        // a picker dropdown that leads the sort row.
-        SmartKind.LocalSongs -> {
-            PlaylistSort.entries.forEach { t ->
-                Chip(t.label, detailSort == t, onClick = { onSort(t) })
-            }
-            if (folders.isNotEmpty()) {
-                ChipDropdown(
-                    label = folders.firstOrNull { it.path == folder }?.name ?: "all folders",
-                    selected = folder != null,
-                    options = listOf(
-                        ChipOption("all folders") { onFolder(null) },
-                    ) + folders.map { f ->
-                        ChipOption(f.name) { onFolder(f.path) }
-                    },
-                )
-            }
-        }
-        SmartKind.Downloads -> PlaylistSort.entries.forEach { t ->
-            Chip(t.label, detailSort == t, onClick = { onSort(t) })
-        }
-        // Recently played keeps its fixed time order - no filter chips.
-        SmartKind.RecentlyPlayed -> {}
     }
 }
 
@@ -1536,10 +1484,12 @@ private fun PlaylistDetailShown(
                 }
             }
         } else {
+            // Picker row scrolls with the list, on top of the filter; only
+            // the header is fixed.
             item {
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                        .padding(start = Gutter, end = Gutter, top = 4.dp, bottom = 4.dp),
+                        .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
                     PlaylistSort.entries.forEach { t ->
@@ -1852,6 +1802,11 @@ private fun SmartPlaylistDetail(
     favorites: Set<String>,
     loading: Boolean = false,
     favScope: FavScope = FavScope.All,
+    onFavScopeChange: (FavScope) -> Unit = {},
+    onSortChange: (PlaylistSort) -> Unit = {},
+    folders: List<SongFolder> = emptyList(),
+    folder: String? = null,
+    onFolder: (String?) -> Unit = {},
     onInfo: (Station) -> Unit = {},
     onRemove: (Station) -> Unit = {},
     progress: Map<String, EpisodeProgress> = emptyMap(),
@@ -1886,6 +1841,47 @@ private fun SmartPlaylistDetail(
     var query by rememberSaveable(pl.key) { mutableStateOf("") }
     val shown = remember(visible, query) { visible.matching(query) }
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
+        // Picker rows scroll with the list, on top of the filter; only the
+        // header is fixed.
+        if (isFav) {
+            item {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                        .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    FavScope.entries.forEach { f ->
+                        Chip(f.label, favScope == f, onClick = { onFavScopeChange(f) })
+                    }
+                }
+            }
+        }
+        if (local) {
+            item {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                        .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PlaylistSort.entries.forEach { t ->
+                        Chip(t.label, sort == t, onClick = { onSortChange(t) })
+                    }
+                    // Local songs only: the folder picker trails the sort row.
+                    if (pl.kind == SmartKind.LocalSongs && folders.isNotEmpty()) {
+                        ChipDropdown(
+                            label = folders.firstOrNull { it.path == folder }?.name ?: "all folders",
+                            selected = folder != null,
+                            options = listOf(
+                                ChipOption("all folders") { onFolder(null) },
+                            ) + folders.map { f ->
+                                ChipOption(f.name) { onFolder(f.path) }
+                            },
+                        )
+                    }
+                }
+            }
+        }
         item { FilterRow(value = query, onValue = { query = it }) }
         if (shown.isEmpty()) {
             // Growable lists keep their + on empty too, like playlists do.
