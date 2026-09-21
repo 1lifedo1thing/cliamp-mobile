@@ -450,11 +450,9 @@ fun LibrarySmartPlaylistPane(
     val members = if (pl?.kind == SmartKind.LocalSongs && folder != null) {
         folders.firstOrNull { it.path == folder }?.songs.orEmpty()
     } else pl?.stations.orEmpty()
-    // Only the playlists that actually filter earn a header chip row; the
-    // others (recently played) get no chips at all so the header hugs the
-    // divider like a plain page instead of leaving an empty chip band.
-    val headerChips = pl?.kind == SmartKind.Favorites ||
-        pl?.kind == SmartKind.LocalSongs || pl?.kind == SmartKind.Downloads
+    // Only local songs with folders earn a header chip row for the folder
+    // picker; everything else hugs the divider, with its picker row below.
+    val headerChips = pl?.kind == SmartKind.LocalSongs && folders.isNotEmpty()
     Box(Modifier.fillMaxSize().background(p.ground)) {
         val scope = rememberCoroutineScope()
         val listState = rememberLazyListState()
@@ -471,11 +469,6 @@ fun LibrarySmartPlaylistPane(
             chips = if (headerChips) {
                 @Composable {
                     SmartHeaderChips(
-                        kind = pl.kind,
-                        favScope = favScope,
-                        onFavScopeChange = onFavScopeChange,
-                        detailSort = detailSort,
-                        onSort = { vm.onEvent(SmartPlaylistViewModel.Event.SetSort(it)) },
                         folders = folders,
                         folder = folder,
                         onFolder = { folder = it },
@@ -483,6 +476,35 @@ fun LibrarySmartPlaylistPane(
                 }
             } else null,
         ) {
+            // Picker rows ride under the header, on top of the filter -
+            // exactly the provider songs shape, never in the header row.
+            if (pl?.kind == SmartKind.Favorites) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                        .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    FavScope.entries.forEach { f ->
+                        Chip(f.label, favScope == f, onClick = { onFavScopeChange(f) })
+                    }
+                }
+            }
+            // Sort rides its own row under the header, on top of the filter -
+            // exactly the provider songs shape, never in the header row.
+            if (pl?.kind == SmartKind.LocalSongs || pl?.kind == SmartKind.Downloads) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                        .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    PlaylistSort.entries.forEach { t ->
+                        Chip(
+                            t.label, detailSort == t,
+                            onClick = { vm.onEvent(SmartPlaylistViewModel.Event.SetSort(t)) },
+                        )
+                    }
+                }
+            }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (pl == null) {
                     CenterNote("no such playlist", p.inkTertiary)
@@ -814,47 +836,24 @@ fun ProviderSongsPane(
     }
 }
 
-/** The header filter chips for a smart playlist, one row per kind. */
+/** The header folder picker for local songs. Type and sort pickers ride
+ * their own rows under the header, like provider songs. */
 @Composable
 private fun SmartHeaderChips(
-    kind: SmartKind,
-    favScope: FavScope,
-    onFavScopeChange: (FavScope) -> Unit,
-    detailSort: PlaylistSort,
-    onSort: (PlaylistSort) -> Unit,
     folders: List<SongFolder>,
     folder: String?,
     onFolder: (String?) -> Unit,
 ) {
-    when (kind) {
-        // Favourites mix local songs, radio stations and podcasts, so they
-        // earn their own type sub-tabs.
-        SmartKind.Favorites -> FavScope.entries.forEach { f ->
-            Chip(f.label, favScope == f, onClick = { onFavScopeChange(f) })
-        }
-        // The on-device lists sort; local songs also filter by folder through
-        // a picker dropdown that leads the sort row.
-        SmartKind.LocalSongs -> {
-            PlaylistSort.entries.forEach { t ->
-                Chip(t.label, detailSort == t, onClick = { onSort(t) })
-            }
-            if (folders.isNotEmpty()) {
-                ChipDropdown(
-                    label = folders.firstOrNull { it.path == folder }?.name ?: "all folders",
-                    selected = folder != null,
-                    options = listOf(
-                        ChipOption("all folders") { onFolder(null) },
-                    ) + folders.map { f ->
-                        ChipOption(f.name) { onFolder(f.path) }
-                    },
-                )
-            }
-        }
-        SmartKind.Downloads -> PlaylistSort.entries.forEach { t ->
-            Chip(t.label, detailSort == t, onClick = { onSort(t) })
-        }
-        // Recently played keeps its fixed time order - no filter chips.
-        SmartKind.RecentlyPlayed -> {}
+    if (folders.isNotEmpty()) {
+        ChipDropdown(
+            label = folders.firstOrNull { it.path == folder }?.name ?: "all folders",
+            selected = folder != null,
+            options = listOf(
+                ChipOption("all folders") { onFolder(null) },
+            ) + folders.map { f ->
+                ChipOption(f.name) { onFolder(f.path) }
+            },
+        )
     }
 }
 
@@ -906,7 +905,24 @@ fun LibraryPlaylistPane(
                 }
             } else null,
         ) {
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            Column(Modifier.weight(1f).fillMaxWidth()) {
+                // Sort rides its own row under the header, on top of the
+                // filter - exactly the provider songs shape.
+                if (ui.members.isNotEmpty()) {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                            .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        PlaylistSort.entries.forEach { t ->
+                            Chip(
+                                t.label, ui.sort == t,
+                                onClick = { vm.onEvent(PlaylistDetailViewModel.Event.SetSort(t)) },
+                            )
+                        }
+                    }
+                }
+                Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (pl == null) {
                     CenterNote("playlist gone", p.inkTertiary)
                 } else {
@@ -918,8 +934,6 @@ fun LibraryPlaylistPane(
                         visible = remember(ui.visible, query) { ui.visible.matching(query) },
                         query = query,
                         onQuery = { query = it },
-                        sort = ui.sort,
-                        onSortChange = { vm.onEvent(PlaylistDetailViewModel.Event.SetSort(it)) },
                         localSongs = songs,
                         radioStations = radioStations,
                         subscribedShows = subscriptions,
@@ -938,6 +952,7 @@ fun LibraryPlaylistPane(
                         onToggleFavorite = { vm.onEvent(PlaylistDetailViewModel.Event.ToggleFavorite(it)) },
                     )
                 }
+            }
             }
         }
     }
@@ -1485,8 +1500,6 @@ private fun PlaylistDetailShown(
     visible: List<Station>,
     query: String,
     onQuery: (String) -> Unit,
-    sort: PlaylistSort,
-    onSortChange: (PlaylistSort) -> Unit,
     localSongs: List<Station>,
     radioStations: List<Station>,
     subscribedShows: List<PodcastShow>,
@@ -1536,17 +1549,6 @@ private fun PlaylistDetailShown(
                 }
             }
         } else {
-            item {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                        .padding(start = Gutter, end = Gutter, top = 4.dp, bottom = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    PlaylistSort.entries.forEach { t ->
-                        Chip(t.label, sort == t, onClick = { onSortChange(t) })
-                    }
-                }
-            }
             item { FilterRow(value = query, onValue = onQuery) }
             item {
                 SectionLabel("songs — ${visible.size}") {
