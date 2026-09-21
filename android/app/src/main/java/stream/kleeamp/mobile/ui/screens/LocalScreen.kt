@@ -450,9 +450,8 @@ fun LibrarySmartPlaylistPane(
     val members = if (pl?.kind == SmartKind.LocalSongs && folder != null) {
         folders.firstOrNull { it.path == folder }?.songs.orEmpty()
     } else pl?.stations.orEmpty()
-    // Only local songs with folders earn a header chip row for the folder
-    // picker; everything else hugs the divider, with its picker row below.
-    val headerChips = pl?.kind == SmartKind.LocalSongs && folders.isNotEmpty()
+    // The header carries no chip rows; pickers ride the scrolling rows
+    // below, on top of the filter.
     Box(Modifier.fillMaxSize().background(p.ground)) {
         val scope = rememberCoroutineScope()
         val listState = rememberLazyListState()
@@ -466,15 +465,6 @@ fun LibrarySmartPlaylistPane(
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
             onBack = onBack,
-            chips = if (headerChips) {
-                @Composable {
-                    SmartHeaderChips(
-                        folders = folders,
-                        folder = folder,
-                        onFolder = { folder = it },
-                    )
-                }
-            } else null,
         ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (pl == null) {
@@ -505,6 +495,9 @@ fun LibrarySmartPlaylistPane(
                         favScope = favScope,
                         onFavScopeChange = onFavScopeChange,
                         onSortChange = { vm.onEvent(SmartPlaylistViewModel.Event.SetSort(it)) },
+                        folders = folders,
+                        folder = folder,
+                        onFolder = { folder = it },
                         onInfo = onOpenSongInfo,
                         // Removing from downloads deletes the fetched file and
                         // untracks the URL; anywhere else it drops the song.
@@ -810,27 +803,6 @@ fun ProviderSongsPane(
                 item { Spacer(Modifier.height(20.dp)) }
             }
         }
-    }
-}
-
-/** The header folder picker for local songs. Type and sort pickers ride
- * their own rows under the header, like provider songs. */
-@Composable
-private fun SmartHeaderChips(
-    folders: List<SongFolder>,
-    folder: String?,
-    onFolder: (String?) -> Unit,
-) {
-    if (folders.isNotEmpty()) {
-        ChipDropdown(
-            label = folders.firstOrNull { it.path == folder }?.name ?: "all folders",
-            selected = folder != null,
-            options = listOf(
-                ChipOption("all folders") { onFolder(null) },
-            ) + folders.map { f ->
-                ChipOption(f.name) { onFolder(f.path) }
-            },
-        )
     }
 }
 
@@ -1832,6 +1804,9 @@ private fun SmartPlaylistDetail(
     favScope: FavScope = FavScope.All,
     onFavScopeChange: (FavScope) -> Unit = {},
     onSortChange: (PlaylistSort) -> Unit = {},
+    folders: List<SongFolder> = emptyList(),
+    folder: String? = null,
+    onFolder: (String?) -> Unit = {},
     onInfo: (Station) -> Unit = {},
     onRemove: (Station) -> Unit = {},
     progress: Map<String, EpisodeProgress> = emptyMap(),
@@ -1887,9 +1862,22 @@ private fun SmartPlaylistDetail(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                         .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     PlaylistSort.entries.forEach { t ->
                         Chip(t.label, sort == t, onClick = { onSortChange(t) })
+                    }
+                    // Local songs only: the folder picker trails the sort row.
+                    if (pl.kind == SmartKind.LocalSongs && folders.isNotEmpty()) {
+                        ChipDropdown(
+                            label = folders.firstOrNull { it.path == folder }?.name ?: "all folders",
+                            selected = folder != null,
+                            options = listOf(
+                                ChipOption("all folders") { onFolder(null) },
+                            ) + folders.map { f ->
+                                ChipOption(f.name) { onFolder(f.path) }
+                            },
+                        )
                     }
                 }
             }
