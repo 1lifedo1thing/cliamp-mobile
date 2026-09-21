@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -216,6 +217,10 @@ fun StationsScreen(
                             Box(
                                 Modifier
                                     .size(34.dp)
+                                    // Nudge to the row end: the shared label
+                                    // gutter leaves the key sitting in from
+                                    // the edge next to the rows below.
+                                    .offset(x = 7.dp)
                                     .clip(RoundedCornerShape(KleeampShape.small))
                                     .background(if (p.dark) p.keyFace else p.ground)
                                     .border(1.dp, p.keyBorder, RoundedCornerShape(KleeampShape.small))
