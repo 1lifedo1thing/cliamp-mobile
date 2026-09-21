@@ -903,9 +903,9 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
                 contentScale = if (fills) ContentScale.Crop else ContentScale.Fit,
             )
         }
-        // No cover at all and no bundled stand-in: an honest glyph rather
-        // than a blank hole.
-        if (art == null && preview == null && placeholder == null) {
+        // No cover at all: a bundled stand-in where allowed, otherwise an
+        // honest glyph rather than a blank hole.
+        if (art == null && preview == null) {
             placeholder?.let { bmp ->
                 Image(
                     bitmap = bmp,
