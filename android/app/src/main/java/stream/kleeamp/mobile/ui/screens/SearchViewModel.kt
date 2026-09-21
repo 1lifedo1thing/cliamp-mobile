@@ -2,6 +2,8 @@ package stream.kleeamp.mobile.ui.screens
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -9,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -126,28 +129,42 @@ class SearchViewModel(
             SearchScope.Providers -> results.filter { it is SearchHit.Provider }
         }
         UiState(filter = dir.filter, term = dir.term, results = results, shown = shown)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
+
+    /**
+     * The one directory fetch job: debounced typing and the Go action share
+     * it, so submitting never fires a second fetch alongside the debounced
+     * one - the latest term wins and the previous fetch is cancelled.
+     */
+    private var fetchJob: Job? = null
+
+    private fun fetchNow(term: String) {
+        fetchJob?.cancel()
+        fetchJob = viewModelScope.launch {
+            if (term.length < 2) {
+                episodeIndex.value = emptyList()
+                return@launch
+            }
+            repository.loadDirectory(DirectoryQuery.Search(term), reset = true)
+            // The podcast directory takes the same query, so a show can be found
+            // by name - through PodcastDirectory.search, never podcasts.load(),
+            // which would rewrite the shared directory state the Podcasts tab
+            // reads. Unlike the Stations tab, the Podcasts tab keeps the search
+            // rather than resetting it: Apple's search returns whole shows in one
+            // request with nothing to page, so the searched list IS the directory
+            // for as long as the query stands, and its header names the query.
+            podcastHits.value = runCatching { PodcastDirectory.search(term) }.getOrDefault(emptyList())
+            episodeIndex.value = runCatching { podcasts.subscribedEpisodes() }.getOrDefault(emptyList())
+        }
+    }
 
     init {
         // Debounce the directory: it is somebody else's server, not ours. The local
-        // and radio fuzzy pass above runs instantly on what we already hold.
+        // and radio fuzzy pass above runs on Default, not Main.
         viewModelScope.launch {
             query.map { it.trim() }.distinctUntilChanged().collectLatest { term ->
-                if (term.length < 2) {
-                    episodeIndex.value = emptyList()
-                    return@collectLatest
-                }
                 delay(320)
-                repository.loadDirectory(DirectoryQuery.Search(term), reset = true)
-                // The podcast directory takes the same query, so a show can be found
-                // by name - through PodcastDirectory.search, never podcasts.load(),
-                // which would rewrite the shared directory state the Podcasts tab
-                // reads. Unlike the Stations tab, the Podcasts tab keeps the search
-                // rather than resetting it: Apple's search returns whole shows in one
-                // request with nothing to page, so the searched list IS the directory
-                // for as long as the query stands, and its header names the query.
-                podcastHits.value = runCatching { PodcastDirectory.search(term) }.getOrDefault(emptyList())
-                episodeIndex.value = runCatching { podcasts.subscribedEpisodes() }.getOrDefault(emptyList())
+                fetchNow(term)
             }
         }
     }
@@ -159,7 +176,7 @@ class SearchViewModel(
             is Event.Submitted -> {
                 val text = e.raw.trim()
                 if (text.isEmpty()) return
-                repository.loadDirectory(DirectoryQuery.Search(text), reset = true)
+                fetchNow(text)
             }
         }
     }

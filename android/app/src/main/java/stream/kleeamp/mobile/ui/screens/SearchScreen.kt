@@ -32,7 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -247,8 +246,14 @@ private fun HitArt(
         return
     }
 
-    var art by remember(station?.id ?: directUrl) { mutableStateOf<ImageBitmap?>(null) }
+    var art by remember(station?.id ?: directUrl) {
+        mutableStateOf(
+            (directUrl?.let { StationArtSource.cachedSmallUrl(it) }
+                ?: station?.let { StationArtSource.cachedSmall(it) })?.asImageBitmap(),
+        )
+    }
     LaunchedEffect(station?.id ?: directUrl) {
+        if (art != null) return@LaunchedEffect
         delay(90)
         art = if (directUrl != null) StationArtSource.bitmapForUrlSmall(directUrl)?.asImageBitmap()
         else station?.let { StationArtSource.bitmapForSmall(it)?.asImageBitmap() }
@@ -346,7 +351,7 @@ private fun HitRow(
             is SearchHit.Provider -> hit.specLabel
         }
         androidx.compose.material3.Text(
-            text = highlight(title, term, accent),
+            text = remember(title, term, accent) { highlight(title, term, accent) },
             style = KleeampType.rowPrimary.copy(color = if (active) accent else p.ink),
             maxLines = 1,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
