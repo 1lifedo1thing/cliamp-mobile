@@ -1,4 +1,7 @@
+import org.gradle.api.provider.ValueSource
+import org.gradle.api.provider.ValueSourceParameters
 import java.util.Properties
+import java.util.concurrent.TimeUnit
 
 plugins {
     alias(libs.plugins.android.application)
@@ -26,6 +29,32 @@ val releaseKeyPassword = signing("keyPassword", "KEY_PASSWORD")
 val hasReleaseSigning = listOf(releaseStore, releaseStorePassword, releaseKeyAlias, releaseKeyPassword)
     .all { it != null } && rootProject.file(releaseStore!!).exists()
 
+/**
+ * Latest reachable tag (`v0.3.0` -> `0.3.0`) for local builds, so Settings
+ * and the User-Agent report the real version instead of the `0.0.1`
+ * fallback. CI still wins through `KLEEAMP_VERSION`. A value source, not a
+ * bare process call, so the configuration cache stays valid; no dirty
+ * suffix, so uncommitted work does not churn the version (and the build) on
+ * every keystroke.
+ */
+abstract class GitTagVersion : ValueSource<String, ValueSourceParameters.None> {
+    override fun obtain(): String = try {
+        val proc = ProcessBuilder("git", "describe", "--tags", "--abbrev=0", "--match=v*")
+            .redirectErrorStream(true)
+            .start()
+        if (!proc.waitFor(10, TimeUnit.SECONDS)) {
+            proc.destroyForcibly()
+            ""
+        } else {
+            proc.inputStream.bufferedReader().readText().trim().removePrefix("v")
+        }
+    } catch (_: Exception) {
+        ""
+    }
+}
+
+val gitTagVersion = providers.of(GitTagVersion::class.java) {}
+
 android {
     namespace = "stream.kleeamp.mobile"
     compileSdk = 36
@@ -37,7 +66,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // A tagged release overrides both; a local build keeps the defaults.
         versionCode = (System.getenv("KLEEAMP_VERSION_CODE")?.toIntOrNull()) ?: 1
-        versionName = System.getenv("KLEEAMP_VERSION")?.removePrefix("v") ?: "0.0.1"
+        versionName = System.getenv("KLEEAMP_VERSION")?.removePrefix("v")?.ifBlank { null }
+            ?: gitTagVersion.get().ifBlank { "0.0.1" }
     }
 
     signingConfigs {
