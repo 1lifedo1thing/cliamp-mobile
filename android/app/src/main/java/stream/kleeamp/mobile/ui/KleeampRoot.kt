@@ -401,7 +401,7 @@ fun KleeampRoot(
                                 vm = appViewModel { app ->
                                     LocalViewModel(app.localLibrary, app.playlists, app.prefs, app.providers)
                                 },
-                                onOpenProviderSongs = { navController.navigate(LibraryProviderSongs) },
+                                onOpenProviderSongs = { navController.navigate(LibraryProviders) },
                                 onOpenSmart = { kind -> navController.navigate(LibrarySmartPlaylist(kind)) },
                                 onOpenPlaylist = { slug -> navController.navigate(LibraryPlaylist(slug)) },
                                 onPickSongs = { slug ->
@@ -440,7 +440,7 @@ fun KleeampRoot(
                     LibraryProvidersPane(
                         vm = appViewModel { app -> ProvidersPaneViewModel(app.providers) },
                         onBack = { navController.popBackStack() },
-                        onOpenProvider = { navController.navigate(LibraryProviderSongs) },
+                        onOpenProvider = { a -> navController.navigate(LibraryProviderSongs(a.id)) },
                         onEditProvider = { account ->
                             navController.navigate(
                                 ProviderWizardRoute(account.providerKey, account.id)
@@ -454,12 +454,14 @@ fun KleeampRoot(
                     )
                 }
             }
-            composable<LibraryProviderSongs> {
+            composable<LibraryProviderSongs> { entry ->
+                val songsAccountId = entry.toRoute<LibraryProviderSongs>().accountId
                 Box(contentModifier) {
                     ProviderSongsPane(
                         vm = appViewModel { app ->
                             ProviderSongsViewModel(app.providers, app.prefs)
                         },
+                        accountId = songsAccountId,
                         current = station,
                         playing = playerState.playing,
                         onPlay = onPlay,
@@ -618,7 +620,7 @@ fun KleeampRoot(
                     current = station,
                     playing = playerState.playing,
                     onPlay = onPlay,
-                    onOpenProvider = { navController.navigate(LibraryProviderSongs) },
+                    onOpenProvider = { account -> navController.navigate(LibraryProviderSongs(account.id)) },
                     onOpenShow = { show: PodcastShow ->
                         podcasts.openShow(show)
                         // Pop the search overlay, switch to podcasts tab,

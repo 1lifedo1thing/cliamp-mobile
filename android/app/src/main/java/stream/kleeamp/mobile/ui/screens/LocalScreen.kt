@@ -562,11 +562,18 @@ fun ProviderSongsPane(
     onAddProvider: () -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    /** Non-blank locks the pane to one account with no picker row. */
+    accountId: String = "",
 ) {
     val p = LocalPalette.current
     val ui by vm.state.collectAsState()
-    val accounts = ui.accounts
-    var selected by rememberSaveable { mutableStateOf(accounts.firstOrNull()?.id) }
+    // A locked pane shows that account only, with no picker: the row it came
+    // from already named it.
+    val accounts = remember(ui.accounts, accountId) {
+        if (accountId.isBlank()) ui.accounts
+        else ui.accounts.filter { it.id == accountId }
+    }
+    var selected by rememberSaveable(accountId) { mutableStateOf(accounts.firstOrNull()?.id) }
     // A removed account must not leave the filter pointing at nothing.
     LaunchedEffect(accounts) {
         if (accounts.none { it.id == selected }) selected = accounts.firstOrNull()?.id
@@ -643,12 +650,16 @@ fun ProviderSongsPane(
         val scope = rememberCoroutineScope()
         val listState = rememberLazyListState()
         MainLayout(
-            title = selectedAlbum ?: selectedArtist ?: "providers",
+            title = if (accountId.isBlank()) {
+                selectedAlbum ?: selectedArtist ?: "providers"
+            } else {
+                accounts.firstOrNull()?.label?.ifBlank { "provider" } ?: "provider"
+            },
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
             onBack = { pop() },
-            chips = if (accounts.isNotEmpty()) {
+            chips = if (accounts.size > 1) {
                 @Composable {
                     accounts.forEach { a ->
                         Chip(
