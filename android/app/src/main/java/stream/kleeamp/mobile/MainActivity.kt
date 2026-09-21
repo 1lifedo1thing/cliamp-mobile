@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.SystemBarStyle
@@ -89,7 +90,6 @@ class MainActivity : ComponentActivity() {
         if (wantsSearch(intent)) openSearchTick++
 
         val app = application as KleeampApp
-        app.player.connect()
         handleShare(intent)
 
         val wanted = buildList {
@@ -137,6 +137,24 @@ class MainActivity : ComponentActivity() {
                     openSearchTick = openSearchTick,
                 )
             }
+        }
+
+        // The controller bind creates the playback service - ExoPlayer build
+        // plus a prefs read - on the main thread. Binding here would contend
+        // with inflation and the first composition, so it waits past the
+        // first frame: one-shot pre-draw, then posted so the draw itself goes
+        // first. Nothing audible can happen before then anyway, and share /
+        // auto-resume intents queue on onReady regardless of when it fires.
+        window.decorView.post {
+            window.decorView.viewTreeObserver.addOnPreDrawListener(
+                object : ViewTreeObserver.OnPreDrawListener {
+                    override fun onPreDraw(): Boolean {
+                        window.decorView.viewTreeObserver.removeOnPreDrawListener(this)
+                        window.decorView.post { app.player.connect() }
+                        return true
+                    }
+                },
+            )
         }
     }
 
