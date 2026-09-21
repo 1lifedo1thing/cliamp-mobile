@@ -574,7 +574,7 @@ class PlaybackService : MediaSessionService() {
                 val entry = metadata.get(i)
                 if (entry is IcyInfo) {
                     val title = entry.title?.trim().orEmpty()
-                    if (title.isNotEmpty()) {
+                    if (title.isNotEmpty() && isCurrentItem(PlaybackBus.station.value)) {
                         PlaybackBus.publishStreamTitle(title)
                         pushToSession(title)
                         publishWidgetState()
@@ -582,6 +582,24 @@ class PlaybackService : MediaSessionService() {
                 }
             }
         }
+
+        /**
+         * Generation check: an ICY packet racing a station switch belongs to
+         * the old stream. The player has already moved on when its current
+         * item no longer names the published station, so the title is stale
+         * and publishing it would stamp last song's name under the new one.
+         */
+        private fun isCurrentItem(station: Station?): Boolean {
+            if (station == null) return false
+            return player.currentMediaItem?.mediaId == station.id
+        }
+
+        /**
+         * Media id of the item whose notification metadata was just refreshed
+         * below. Its replace surfaces here as a transition too; clearing the
+         * title on that would fight the very update that caused it.
+         */
+        private var icyRefreshId: String? = null
 
         /**
          * The notification reads MediaItem.mediaMetadata, not the combined
@@ -594,6 +612,7 @@ class PlaybackService : MediaSessionService() {
             val station = PlaybackBus.station.value ?: return
             val current = item.mediaMetadata
             if (current.artist?.toString() == songTitle) return
+            icyRefreshId = item.mediaId
             player.replaceMediaItem(
                 player.currentMediaItemIndex,
                 item.buildUpon()
@@ -680,9 +699,12 @@ class PlaybackService : MediaSessionService() {
             }
             // replaceMediaItem (how the ICY title reaches the notification)
             // surfaces here too; clearing the title on that would fight the
-            // very update that caused it.
+            // very update that caused it. A real navigation lands on a
+            // different item, so only the refreshed item is exempt.
             if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) {
-                PlaybackBus.publishStreamTitle("")
+                val refreshed = mediaItem?.mediaId?.let { it == icyRefreshId } == true
+                icyRefreshId = null
+                if (!refreshed) PlaybackBus.publishStreamTitle("")
             }
             publishWidgetState()
             syncProgressTicker()
