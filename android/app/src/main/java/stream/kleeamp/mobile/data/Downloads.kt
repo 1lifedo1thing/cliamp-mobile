@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import okhttp3.Request
 import stream.kleeamp.mobile.net.Http
@@ -68,6 +70,13 @@ class DownloadStore(
 ) {
     private val dir = File(context.filesDir, "episode-downloads").apply { mkdirs() }
     private val jobs = mutableMapOf<String, Job>()
+    private val jobsLock = Any()
+    /** At most this many fetches at once; the rest wait, cancellable. */
+    private val slots = Semaphore(3)
+    /** Refuse to start below this free space; episodes are tens of MB. */
+    private val minFreeBytes = 100L * 1024 * 1024
+    /** Global backstop on auto fetches; manual downloads are never swept. */
+    private val maxAutoTotal = 60
 
     /** Auto-download keeps this many latest episodes per subscribed show. */
     private val AUTO_KEEP = 3
@@ -97,85 +106,107 @@ class DownloadStore(
     /** Queue a fetch; a no-op when already held or already running. */
     fun download(station: Station, auto: Boolean = false) {
         val url = station.url
-        if (isDownloaded(url) || jobs.containsKey(url)) return
-        if (!station.isTrack || !(url.startsWith("http://") || url.startsWith("https://"))) {
-            setState(url, DownloadState.Failed("not downloadable"))
-            return
-        }
-        jobs[url] = scope.launch(Dispatchers.IO) {
-            try {
-                if (!prefs.cellular.first() && !unmetered()) {
-                    setState(url, DownloadState.Failed("wifi only"))
-                    return@launch
-                }
-                setState(url, DownloadState.Active(0f, 0L, -1L))
-                val req = Request.Builder().url(url).header("User-Agent", Http.USER_AGENT).build()
-                Http.streamClient.newCall(req).execute().use { resp ->
-                    if (!resp.isSuccessful) {
-                        setState(url, DownloadState.Failed("http ${resp.code}"))
+        if (isDownloaded(url)) return
+        synchronized(jobsLock) {
+            if (jobs.containsKey(url)) return
+            if (!station.isTrack || !(url.startsWith("http://") || url.startsWith("https://"))) {
+                setState(url, DownloadState.Failed("not downloadable"))
+                return
+            }
+            if (dir.usableSpace < minFreeBytes) {
+                setState(url, DownloadState.Failed("storage full"))
+                return
+            }
+            jobs[url] = scope.launch(Dispatchers.IO) {
+                slots.acquire()
+                try {
+                    if (!prefs.cellular.first() && !unmetered()) {
+                        setState(url, DownloadState.Failed("wifi only"))
                         return@launch
                     }
-                    val total = resp.body.contentLength()
-                    val tmp = File(dir, fileName(url) + ".tmp")
-                    var read = 0L
-                    var lastEmit = 0L
-                    resp.body.byteStream().use { input ->
-                        tmp.outputStream().use { output ->
-                            val buf = ByteArray(64 * 1024)
-                            while (true) {
-                                ensureActive()
-                                val n = input.read(buf)
-                                if (n < 0) break
-                                output.write(buf, 0, n)
-                                read += n
-                                val now = System.currentTimeMillis()
-                                if (now - lastEmit > 400 || (total > 0 && read >= total)) {
-                                    lastEmit = now
-                                    val f = if (total > 0) (read.toFloat() / total).coerceIn(0f, 1f) else -1f
-                                    setState(url, DownloadState.Active(f, read, total))
+                    setState(url, DownloadState.Active(0f, 0L, -1L))
+                    val req = Request.Builder().url(url).header("User-Agent", Http.USER_AGENT).build()
+                    Http.streamClient.newCall(req).execute().use { resp ->
+                        if (!resp.isSuccessful) {
+                            setState(url, DownloadState.Failed("http ${resp.code}"))
+                            return@launch
+                        }
+                        val total = resp.body.contentLength()
+                        if (total > 0 && total > dir.usableSpace) {
+                            setState(url, DownloadState.Failed("not enough space"))
+                            return@launch
+                        }
+                        val tmp = File(dir, fileName(url) + ".tmp")
+                        var read = 0L
+                        var lastEmit = 0L
+                        resp.body.byteStream().use { input ->
+                            tmp.outputStream().use { output ->
+                                val buf = ByteArray(64 * 1024)
+                                while (true) {
+                                    ensureActive()
+                                    val n = input.read(buf)
+                                    if (n < 0) break
+                                    output.write(buf, 0, n)
+                                    read += n
+                                    val now = System.currentTimeMillis()
+                                    if (now - lastEmit > 400 || (total > 0 && read >= total)) {
+                                        lastEmit = now
+                                        val f = if (total > 0) (read.toFloat() / total).coerceIn(0f, 1f) else -1f
+                                        setState(url, DownloadState.Active(f, read, total))
+                                    }
                                 }
                             }
                         }
+                        val final = File(dir, fileName(url))
+                        runCatching { final.delete() }
+                        tmp.renameTo(final)
+                        val entry = DownloadEntry(
+                            url = url,
+                            path = final.absolutePath,
+                            bytes = final.length(),
+                            station = station,
+                            downloadedAt = System.currentTimeMillis(),
+                            auto = auto,
+                        )
+                        prefs.addDownload(entry)
+                        _entries.value = _entries.value + (url to entry)
+                        clearState(url)
                     }
-                    val final = File(dir, fileName(url))
-                    runCatching { final.delete() }
-                    tmp.renameTo(final)
-                    val entry = DownloadEntry(
-                        url = url,
-                        path = final.absolutePath,
-                        bytes = final.length(),
-                        station = station,
-                        downloadedAt = System.currentTimeMillis(),
-                        auto = auto,
-                    )
-                    prefs.addDownload(entry)
-                    _entries.value = _entries.value + (url to entry)
-                    clearState(url)
+                } catch (e: CancellationException) {
+                    setState(url, DownloadState.Idle)
+                    throw e
+                } catch (e: Exception) {
+                    setState(url, DownloadState.Failed(e.message?.lowercase()?.take(42) ?: "download failed"))
+                } finally {
+                    slots.release()
+                    synchronized(jobsLock) { jobs.remove(url) }
+                    runCatching { File(dir, fileName(url) + ".tmp").delete() }
                 }
-            } catch (e: CancellationException) {
-                setState(url, DownloadState.Idle)
-                throw e
-            } catch (e: Exception) {
-                setState(url, DownloadState.Failed(e.message?.lowercase()?.take(42) ?: "download failed"))
-            } finally {
-                jobs.remove(url)
-                runCatching { File(dir, fileName(url) + ".tmp").delete() }
             }
         }
     }
 
     fun cancel(url: String) {
-        jobs.remove(url)?.cancel()
+        synchronized(jobsLock) { jobs.remove(url) }?.cancel()
         if (!isDownloaded(url)) setState(url, DownloadState.Idle)
     }
 
-    /** Forget a fetch: stops it, deletes the file, untracks the URL. */
+    /**
+     * Forget a fetch: stops it, deletes the file, untracks the URL. The
+     * writer is joined before the delete so a remove landing mid-rename can
+     * never delete the file the writer just finished - cancel alone is async
+     * and the rename would win the race.
+     */
     fun remove(url: String) {
-        cancel(url)
-        _entries.value[url]?.let { runCatching { File(it.path).delete() } }
-        _entries.value = _entries.value - url
-        clearState(url)
-        scope.launch { prefs.removeDownload(url) }
+        val job = synchronized(jobsLock) { jobs.remove(url) }
+        scope.launch {
+            job?.cancel()
+            runCatching { withTimeoutOrNull(5_000) { job?.join() } }
+            _entries.value[url]?.let { runCatching { File(it.path).delete() } }
+            _entries.value = _entries.value - url
+            clearState(url)
+            prefs.removeDownload(url)
+        }
     }
 
     /**
@@ -200,6 +231,13 @@ class DownloadStore(
                 .filter { it.auto && it.station.slug == show.id }
                 .sortedByDescending { it.downloadedAt }
             mine.drop(AUTO_KEEP).forEach { remove(it.url) }
+            // Global backstop: auto fetches across many shows still add up.
+            // Manual downloads are never swept.
+            _entries.value.values
+                .filter { it.auto }
+                .sortedByDescending { it.downloadedAt }
+                .drop(maxAutoTotal)
+                .forEach { remove(it.url) }
         }
     }
 

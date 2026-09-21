@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import stream.kleeamp.mobile.data.db.KleeampDatabase
 import stream.kleeamp.mobile.data.db.SftpDao
 import stream.kleeamp.mobile.data.db.SftpIndexEntity
@@ -50,12 +51,14 @@ object SftpLibrary {
     /**
      * Blocking lookup by id. Falls back to the database because playback can
      * start from the restored last station before the accounts flow has had a
-     * chance to emit anything.
+     * chance to emit anything. Bounded: this runs on the ExoPlayer loader
+     * thread, which a hung database read would park.
      */
     fun account(id: String): ProviderAccount? {
         snapshot.firstOrNull { it.id == id }?.let { return it }
-        return runCatching { runBlocking { store.read() } }
-            .getOrDefault(emptyList())
+        return runCatching {
+            runBlocking { withTimeoutOrNull(5_000) { store.read() } }
+        }.getOrNull().orEmpty()
             .firstOrNull { it.id == id }
             ?.also { snapshot = snapshot + it }
     }
