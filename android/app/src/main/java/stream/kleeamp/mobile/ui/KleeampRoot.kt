@@ -2,6 +2,8 @@ package stream.kleeamp.mobile.ui
 
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
@@ -30,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -236,7 +239,36 @@ fun KleeampRoot(
     // page is a no-op instead of stacking a duplicate destination.
     val chromeNav = rememberGuardedNav(navController)
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(p.ground)) {
+    // Cold-start reveal: the first frames rearrange as resident data lands
+    // (chrome measures, lists fill), so the whole frame fades and rises in
+    // once instead of flashing each change. Saved across rotation so it
+    // plays on launch only, never on rotate. Layer properties only: no
+    // recomposition rides the animation frames.
+    var launched by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(50)
+        launched = true
+    }
+    val launchAlpha by animateFloatAsState(
+        if (launched) 1f else 0f,
+        tween(250),
+        label = "launchAlpha",
+    )
+    val launchRise by animateDpAsState(
+        if (launched) 0.dp else 12.dp,
+        tween(250),
+        label = "launchRise",
+    )
+
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .background(p.ground)
+            .graphicsLayer {
+                alpha = launchAlpha
+                translationY = launchRise.toPx()
+            },
+    ) {
         val rail = maxWidth > maxHeight
         val density = LocalDensity.current
 
