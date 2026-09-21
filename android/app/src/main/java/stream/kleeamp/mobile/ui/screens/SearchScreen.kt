@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import stream.kleeamp.mobile.data.PodcastShow
+import stream.kleeamp.mobile.data.PlaceholderArt
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationArtSource
 import stream.kleeamp.mobile.data.StationSource
@@ -246,17 +248,31 @@ private fun HitArt(
         return
     }
 
-    var art by remember(station?.id ?: directUrl) {
-        mutableStateOf(
-            (directUrl?.let { StationArtSource.cachedSmallUrl(it) }
-                ?: station?.let { StationArtSource.cachedSmall(it) })?.asImageBitmap(),
-        )
+    val context = LocalContext.current
+    val artKey = station?.id ?: directUrl
+    val cached = remember(artKey) {
+        (directUrl?.let { StationArtSource.cachedSmallUrl(it) }
+            ?: station?.let { StationArtSource.cachedSmall(it) })?.asImageBitmap()
     }
-    LaunchedEffect(station?.id ?: directUrl) {
-        if (art != null) return@LaunchedEffect
+    // Bundled design first, keyed exactly like StationThumb so a coverless
+    // station wears the same design here as in the stations list. Never key
+    // by cover URL: signed provider URLs rotate, which would change the
+    // design on every list build. The lookup below only ever upgrades to
+    // real art.
+    val placeholder = remember(artKey) {
+        val key = when {
+            station != null -> station.id.ifBlank { station.url }
+            hit is SearchHit.Show -> hit.show.feedUrl
+            else -> null
+        }
+        key?.let { PlaceholderArt.thumbnailFor(context, it)?.asImageBitmap() }
+    }
+    var art by remember(artKey) { mutableStateOf(cached ?: placeholder) }
+    LaunchedEffect(artKey) {
+        if (cached != null) return@LaunchedEffect
         delay(90)
-        art = if (directUrl != null) StationArtSource.bitmapForUrlSmall(directUrl)?.asImageBitmap()
-        else station?.let { StationArtSource.bitmapForSmall(it)?.asImageBitmap() }
+        (if (directUrl != null) StationArtSource.bitmapForUrlSmall(directUrl)?.asImageBitmap()
+        else station?.let { StationArtSource.bitmapForSmall(it)?.asImageBitmap() })?.let { art = it }
     }
     Box(
         Modifier
