@@ -9,18 +9,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,7 +27,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -62,7 +58,6 @@ import stream.kleeamp.mobile.ui.components.KleeampIcons
 import stream.kleeamp.mobile.ui.components.KleeampTextField
 import stream.kleeamp.mobile.ui.components.EmptyNote
 import stream.kleeamp.mobile.ui.components.GlyphPlate
-import stream.kleeamp.mobile.ui.components.GridListToggle
 import stream.kleeamp.mobile.ui.components.Gutter
 import stream.kleeamp.mobile.ui.components.ListRow
 import stream.kleeamp.mobile.ui.components.OverflowButton
@@ -101,10 +96,6 @@ fun StationsScreen(
     var source by rememberSaveable { mutableStateOf(Source.All) }
     var addingCustom by rememberSaveable { mutableStateOf(false) }
     val ui by vm.state.collectAsState()
-    val cliampGrid = ui.cliampGrid
-    val directoryGrid = ui.directoryGrid
-    val customGrid = ui.customGrid
-
     val cliamp = ui.cliamp
     val cliampError = ui.cliampError
     val custom = ui.custom
@@ -113,7 +104,7 @@ fun StationsScreen(
     val tags = ui.tags
     val countries = ui.countries
 
-    val listState = rememberLazyGridState()
+    val listState = rememberLazyListState()
     // NOTE: no scroll reset on query/source change. A filter keeps its
     // scroll position while the repository swaps content underneath
     // (stale rows stay until the live page lands), and returning from
@@ -180,222 +171,164 @@ fun StationsScreen(
         },
     ) {
 
-        // android LazyGrid keeps measured item spans in a per-item cache, so
-        // flipping a span in place (grid/list toggle) while the directory is
-        // still appending items hits a known androidx crash ("Place was called
-        // on a node which was placed already"). Keying the whole grid on the
-        // two mode flags remounts it fresh instead - spans are then constant
-        // for the grid's whole lifetime, and a toggle just rebuilds it.
-        key(cliampGrid, directoryGrid, customGrid) {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(150.dp),
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                state = listState,
-                // Page padding and column gaps exactly as they always were;
-                // rows compensate inside themselves (8dp gutter lands on the
-                // 22dp standard) and tiles pad their own rows, because any
-                // grid-level vertical gap would float the row hairlines.
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
+        LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            state = listState,
+            // Page padding exactly as before; rows compensate inside
+            // themselves (8dp gutter lands on the 22dp standard), because
+            // any list-level vertical gap would float the row hairlines.
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
+        ) {
 
-                if (source == Source.All || source == Source.Cliamp) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        SectionLabel("cliamp radio — ${cliamp.size}", gutter = 8.dp) {
-                            GridListToggle(cliampGrid) { vm.onEvent(StationsViewModel.Event.ToggleCliampGrid) }
-                        }
-                    }
-                    if (cliampError != null) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            RetryNote(
-                                message = "couldn't reach cliamp radio",
-                                onRetry = { vm.onEvent(StationsViewModel.Event.RefreshCliamp) },
-                            )
-                        }
-                    } else {
-                        items(
-                            cliamp,
-                            key = { "cl:${it.url}" },
-                            span = { GridItemSpan(if (cliampGrid) 1 else maxLineSpan) },
-                        ) { s ->
-                        if (cliampGrid) {
-                            StationTile(
-                                station = s,
-                                active = current?.url == s.url,
-                                playing = playing && current?.url == s.url,
-                                favorite = favorites.any { it.url == s.url },
-                                onPlay = { onPlay(s, cliamp) },
-                                onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
-                            )
-                        } else {
-                            StationRow(
-                                station = s,
-                                active = current?.url == s.url,
-                                playing = playing && current?.url == s.url,
-                                favorite = favorites.any { it.url == s.url },
-                                onPlay = { onPlay(s, cliamp) },
-                                onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
-                                onQueue = { onAddToQueue(s) },
-                            )
-                        }
-                    }
-                    }
+            if (source == Source.All || source == Source.Cliamp) {
+                item {
+                    SectionLabel("cliamp radio — ${cliamp.size}", gutter = 8.dp)
                 }
-
-                if (source == Source.All || source == Source.Custom) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        SectionLabel("custom — ${custom.size}", gutter = 8.dp) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                if (!addingCustom) {
-                                    Box(
-                                        Modifier
-                                            .size(34.dp)
-                                            .clip(RoundedCornerShape(KleeampShape.small))
-                                            .background(if (p.dark) p.keyFace else p.ground)
-                                            .border(1.dp, p.keyBorder, RoundedCornerShape(KleeampShape.small))
-                                            .microPress(onClick = { addingCustom = true }),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(KleeampIcons.Plus, "add station", Modifier.size(16.dp), tint = p.accent)
-                                    }
-                                }
-                                GridListToggle(customGrid) { vm.onEvent(StationsViewModel.Event.ToggleCustomGrid) }
-                            }
-                        }
+                if (cliampError != null) {
+                    item {
+                        RetryNote(
+                            message = "couldn't reach cliamp radio",
+                            onRetry = { vm.onEvent(StationsViewModel.Event.RefreshCliamp) },
+                        )
                     }
-                    if (addingCustom) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            CustomAddForm(
-                                onAdd = { name, url ->
-                                    customStation(name, url)?.let { s ->
-                                        vm.onEvent(StationsViewModel.Event.AddCustom(s))
-                                    }
-                                    addingCustom = false
-                                },
-                                onCancel = { addingCustom = false },
-                            )
-                        }
-                    }
+                } else {
                     items(
-                        custom,
-                        key = { "cu:${it.url}" },
-                        span = { GridItemSpan(if (customGrid) 1 else maxLineSpan) },
+                        cliamp,
+                        key = { "cl:${it.url}" },
                     ) { s ->
-                        if (customGrid) {
-                            StationTile(
-                                station = s,
-                                active = current?.url == s.url,
-                                playing = playing && current?.url == s.url,
-                                favorite = favorites.any { it.url == s.url },
-                                onPlay = { onPlay(s, custom) },
-                                onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
-                                onRemove = { vm.onEvent(StationsViewModel.Event.RemoveCustom(s)) },
-                            )
-                        } else {
-                            CustomStationRow(
-                                station = s,
-                                active = current?.url == s.url,
-                                playing = playing && current?.url == s.url,
-                                favorite = favorites.any { it.url == s.url },
-                                onPlay = { onPlay(s, custom) },
-                                onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
-                                onRemove = { vm.onEvent(StationsViewModel.Event.RemoveCustom(s)) },
-                                onQueue = { onAddToQueue(s) },
-                            )
-                        }
+                        StationRow(
+                            station = s,
+                            active = current?.url == s.url,
+                            playing = playing && current?.url == s.url,
+                            favorite = favorites.any { it.url == s.url },
+                            onPlay = { onPlay(s, cliamp) },
+                            onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
+                            onQueue = { onAddToQueue(s) },
+                        )
                     }
                 }
-
-                if (source == Source.All || source == Source.Directory) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        SectionLabel(
-                            "directory — " + (dirStats?.playable?.let { "%,d".format(it) }
-                                ?: if (directory.error != null) "unreachable" else "loading"),
-                            gutter = 8.dp,
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Mono(directory.query.label, KleeampType.meta, p.inkTertiary)
-                                GridListToggle(directoryGrid) {
-                                    vm.onEvent(StationsViewModel.Event.ToggleDirectoryGrid)
-                                }
-                            }
-                        }
-                    }
-                    // The directory's filters, one row: the order controls (top /
-                    // trending) lead it, then the tags that narrow the list.
-                    // Gutter-compensated like rows and labels: grid padding
-                    // plus this lands exactly on the shared gutter.
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Row(
-                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(7.dp),
-                        ) {
-                            Chip(
-                                "top",
-                                directory.query == DirectoryQuery.TopVoted,
-                                onClick = { vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.TopVoted, reset = true)) },
-                            )
-                            Chip(
-                                "trending",
-                                directory.query == DirectoryQuery.Trending,
-                                onClick = { vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.Trending, reset = true)) },
-                            )
-                            if (tags.isNotEmpty()) {
-                                tags.take(24).forEach { t ->
-                                    val q = directory.query
-                                    Chip(
-                                        t.name,
-                                        selected = q is DirectoryQuery.Tag && q.tag == t.name,
-                                        onClick = { vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.Tag(t.name), reset = true)) },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    item(span = { GridItemSpan(maxLineSpan) }) { Spacer(Modifier.height(6.dp)) }
-                    items(
-                        directory.stations,
-                        key = { "dir:${it.url}" },
-                        span = { GridItemSpan(if (directoryGrid) 1 else maxLineSpan) },
-                    ) { s ->
-                        if (directoryGrid) {
-                            StationTile(
-                                station = s,
-                                active = current?.url == s.url,
-                                playing = playing && current?.url == s.url,
-                                favorite = favorites.any { it.url == s.url },
-                                onPlay = { onPlay(s, directory.stations) },
-                                onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
-                            )
-                        } else {
-                            StationRow(
-                                station = s,
-                                active = current?.url == s.url,
-                                playing = playing && current?.url == s.url,
-                                favorite = favorites.any { it.url == s.url },
-                                onPlay = { onPlay(s, directory.stations) },
-                                onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
-                                onQueue = { onAddToQueue(s) },
-                            )
-                        }
-                    }
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        when {
-                            directory.error != null -> RetryNote(
-                                message = "couldn't fetch the directory",
-                                prominent = directory.stations.isEmpty(),
-                                onRetry = { vm.onEvent(StationsViewModel.Event.LoadDirectory(directory.query, reset = true)) },
-                            )
-                            directory.loading -> EmptyNote("loading more…")
-                            directory.exhausted -> EmptyNote("end of ${directory.query.label}")
-                            else -> Spacer(Modifier.height(8.dp))
-                        }
-                    }
-                }
-
-                item(span = { GridItemSpan(maxLineSpan) }) { Spacer(Modifier.height(20.dp)) }
             }
+
+            if (source == Source.All || source == Source.Custom) {
+                item {
+                    SectionLabel("custom — ${custom.size}", gutter = 8.dp) {
+                        if (!addingCustom) {
+                            Box(
+                                Modifier
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(KleeampShape.small))
+                                    .background(if (p.dark) p.keyFace else p.ground)
+                                    .border(1.dp, p.keyBorder, RoundedCornerShape(KleeampShape.small))
+                                    .microPress(onClick = { addingCustom = true }),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(KleeampIcons.Plus, "add station", Modifier.size(16.dp), tint = p.accent)
+                            }
+                        }
+                    }
+                }
+                if (addingCustom) {
+                    item {
+                        CustomAddForm(
+                            onAdd = { name, url ->
+                                customStation(name, url)?.let { s ->
+                                    vm.onEvent(StationsViewModel.Event.AddCustom(s))
+                                }
+                                addingCustom = false
+                            },
+                            onCancel = { addingCustom = false },
+                        )
+                    }
+                }
+                items(
+                    custom,
+                    key = { "cu:${it.url}" },
+                ) { s ->
+                    CustomStationRow(
+                        station = s,
+                        active = current?.url == s.url,
+                        playing = playing && current?.url == s.url,
+                        favorite = favorites.any { it.url == s.url },
+                        onPlay = { onPlay(s, custom) },
+                        onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
+                        onRemove = { vm.onEvent(StationsViewModel.Event.RemoveCustom(s)) },
+                        onQueue = { onAddToQueue(s) },
+                    )
+                }
+            }
+
+            if (source == Source.All || source == Source.Directory) {
+                item {
+                    SectionLabel(
+                        "directory — " + (dirStats?.playable?.let { "%,d".format(it) }
+                            ?: if (directory.error != null) "unreachable" else "loading"),
+                        gutter = 8.dp,
+                    ) {
+                        Mono(directory.query.label, KleeampType.meta, p.inkTertiary)
+                    }
+                }
+                // The directory's filters, one row: the order controls (top /
+                // trending) lead it, then the tags that narrow the list.
+                // Gutter-compensated like rows and labels: list padding
+                // plus this lands exactly on the shared gutter.
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        Chip(
+                            "top",
+                            directory.query == DirectoryQuery.TopVoted,
+                            onClick = { vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.TopVoted, reset = true)) },
+                        )
+                        Chip(
+                            "trending",
+                            directory.query == DirectoryQuery.Trending,
+                            onClick = { vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.Trending, reset = true)) },
+                        )
+                        if (tags.isNotEmpty()) {
+                            tags.take(24).forEach { t ->
+                                val q = directory.query
+                                Chip(
+                                    t.name,
+                                    selected = q is DirectoryQuery.Tag && q.tag == t.name,
+                                    onClick = { vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.Tag(t.name), reset = true)) },
+                                )
+                            }
+                        }
+                    }
+                }
+                item { Spacer(Modifier.height(6.dp)) }
+                items(
+                    directory.stations,
+                    key = { "dir:${it.url}" },
+                ) { s ->
+                    StationRow(
+                        station = s,
+                        active = current?.url == s.url,
+                        playing = playing && current?.url == s.url,
+                        favorite = favorites.any { it.url == s.url },
+                        onPlay = { onPlay(s, directory.stations) },
+                        onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
+                        onQueue = { onAddToQueue(s) },
+                    )
+                }
+                item {
+                    when {
+                        directory.error != null -> RetryNote(
+                            message = "couldn't fetch the directory",
+                            prominent = directory.stations.isEmpty(),
+                            onRetry = { vm.onEvent(StationsViewModel.Event.LoadDirectory(directory.query, reset = true)) },
+                        )
+                        directory.loading -> EmptyNote("loading more…")
+                        directory.exhausted -> EmptyNote("end of ${directory.query.label}")
+                        else -> Spacer(Modifier.height(8.dp))
+                    }
+                }
+            }
+
+            item { Spacer(Modifier.height(20.dp)) }
         }
     }
 }
@@ -517,111 +450,6 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
                     )
                 }
             }
-        }
-    }
-}
-
-/** A station as a small square tile: cover (or the broadcast mark), favourite
- * star, play badge, and name/source on a scrim. The grid layout's cell.
- * [onRemove] adds the providers-style ⋮ remove menu (custom stations only). */
-@Composable
-private fun StationTile(
-    station: Station,
-    active: Boolean,
-    playing: Boolean,
-    favorite: Boolean,
-    onPlay: () -> Unit,
-    onToggleFavorite: () -> Unit,
-    onRemove: (() -> Unit)? = null,
-) {
-    val p = LocalPalette.current
-    val context = LocalContext.current
-    // Same synchronous bundled seed as the row thumb: the tile never shows
-    // an empty plate, the lookup below only upgrades to real art.
-    var art by remember(station.id) {
-        mutableStateOf(PlaceholderArt.thumbnailFor(context, station.id.ifBlank { station.url })?.asImageBitmap())
-    }
-    LaunchedEffect(station.id) {
-        if (station.source == StationSource.Cliamp) return@LaunchedEffect
-        StationArtSource.bitmapFor(station)?.asImageBitmap()?.let { art = it }
-    }
-    Column(
-        Modifier
-            .fillMaxWidth()
-            // Vertical rhythm only: columns and page padding come from the
-            // grid itself, exactly as before.
-            .padding(vertical = 5.dp)
-            .microPress(onClick = onPlay)
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(KleeampShape.medium))
-                .background(p.panel)
-                .then(
-                    if (active) Modifier.border(2.dp, p.accent, RoundedCornerShape(KleeampShape.medium))
-                    else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.medium))
-                ),
-        ) {
-            if (art != null) {
-                Image(art!!, station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            } else {
-                Box(
-                    Modifier.fillMaxSize().background(p.panel),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(KleeampIcons.StationsTab, station.name, Modifier.size(26.dp), tint = p.accent)
-                }
-            }
-            Icon(
-                if (favorite) KleeampIcons.StarFilled else KleeampIcons.Star,
-                "favourite",
-                Modifier.align(Alignment.TopEnd).padding(10.dp).size(15.dp).microPress(onClick = onToggleFavorite),
-                tint = if (favorite) p.accent else p.inkFaint,
-            )
-            if (onRemove != null) {
-                Box(Modifier.align(Alignment.TopStart).padding(10.dp)) {
-                    OverflowMenu(
-                        trigger = { open -> OverflowButton(open, size = 16) },
-                        items = listOf(
-                            OverflowItem(
-                                "remove station",
-                                color = p.destructiveInk,
-                                action = onRemove,
-                            ),
-                        ),
-                    )
-                }
-            }
-            if (active) {
-Box(
-                        Modifier
-                            .align(Alignment.Center)
-                            .size(24.dp)
-                            .clip(RoundedCornerShape(KleeampShape.small))
-                            .background(p.accent.copy(alpha = 0.92f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        if (playing) KleeampIcons.Pause else KleeampIcons.PlayRow,
-                        null,
-                        Modifier.size(11.dp),
-                        tint = p.onAccent,
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(7.dp))
-        Column(Modifier.padding(horizontal = 2.dp)) {
-            Mono(station.name, KleeampType.rowPrimaryMedium, p.ink, maxLines = 2)
-            Mono(
-                buildList {
-                    if (station.source == StationSource.Cliamp) add("cliamp")
-                    station.meta.takeIf { it.isNotBlank() }?.let { add(it) }
-                }.joinToString(" · "),
-                KleeampType.rowSecondary, p.inkTertiary, maxLines = 1,
-            )
         }
     }
 }

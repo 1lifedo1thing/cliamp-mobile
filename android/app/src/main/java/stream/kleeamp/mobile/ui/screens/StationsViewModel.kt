@@ -21,9 +21,6 @@ class StationsViewModel(
     private val prefs: Prefs,
 ) : ViewModel() {
     data class UiState(
-        val cliampGrid: Boolean,
-        val directoryGrid: Boolean,
-        val customGrid: Boolean,
         val cliamp: List<Station>,
         val cliampError: String?,
         val custom: List<Station>,
@@ -34,9 +31,6 @@ class StationsViewModel(
     )
 
     sealed interface Event {
-        data object ToggleCliampGrid : Event
-        data object ToggleDirectoryGrid : Event
-        data object ToggleCustomGrid : Event
         data object NextPage : Event
         data object RefreshCliamp : Event
         data class LoadDirectory(val query: DirectoryQuery, val reset: Boolean = true) : Event
@@ -44,12 +38,6 @@ class StationsViewModel(
         data class RemoveCustom(val station: Station) : Event
         data class ToggleFavorite(val station: Station) : Event
     }
-
-    private data class GridState(
-        val cliampGrid: Boolean,
-        val directoryGrid: Boolean,
-        val customGrid: Boolean,
-    )
 
     private data class CatalogState(
         val cliamp: List<Station>,
@@ -66,12 +54,6 @@ class StationsViewModel(
 
     val state: StateFlow<UiState> = combine(
         combine(
-            prefs.cliampGrid,
-            prefs.directoryGrid,
-            prefs.customGrid,
-            ::GridState,
-        ),
-        combine(
             repository.cliamp,
             repository.cliampError,
             prefs.custom,
@@ -84,11 +66,8 @@ class StationsViewModel(
             repository.countries,
             ::FacetState,
         ),
-    ) { grids, catalog, facets ->
+    ) { catalog, facets ->
         UiState(
-            cliampGrid = grids.cliampGrid,
-            directoryGrid = grids.directoryGrid,
-            customGrid = grids.customGrid,
             cliamp = catalog.cliamp,
             cliampError = catalog.cliampError,
             custom = catalog.custom,
@@ -101,9 +80,6 @@ class StationsViewModel(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         UiState(
-            cliampGrid = prefs.cliampGrid.value,
-            directoryGrid = prefs.directoryGrid.value,
-            customGrid = prefs.customGrid.value,
             cliamp = repository.cliamp.value,
             cliampError = repository.cliampError.value,
             custom = emptyList(),
@@ -116,15 +92,6 @@ class StationsViewModel(
 
     fun onEvent(e: Event) {
         when (e) {
-            is Event.ToggleCliampGrid -> viewModelScope.launch {
-                prefs.setCliampGrid(!state.value.cliampGrid)
-            }
-            is Event.ToggleDirectoryGrid -> viewModelScope.launch {
-                prefs.setDirectoryGrid(!state.value.directoryGrid)
-            }
-            is Event.ToggleCustomGrid -> viewModelScope.launch {
-                prefs.setCustomGrid(!state.value.customGrid)
-            }
             is Event.NextPage -> repository.nextPage()
             is Event.RefreshCliamp -> repository.refreshCliamp()
             is Event.LoadDirectory -> repository.loadDirectory(e.query, e.reset)

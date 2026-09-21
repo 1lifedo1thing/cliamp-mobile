@@ -69,11 +69,8 @@ class Prefs(private val context: Context) {
     private val db by lazy { KleeampDatabase.get(context) }
 
     // Grid/list layout flags live in memory first (so a toggle is instant on
-    // the frame it is tapped) and only settle onto the DataStore file for the
-    // restore-after-boot source, like the per-playlist sorts below.
-    private val cliampGridFlag = MutableStateFlow(false)
-    private val directoryGridFlag = MutableStateFlow(false)
-    private val customGridFlag = MutableStateFlow(false)
+    // the frame it is tapped) and only settle onto the DataStore file for
+    // the restore-after-boot source, like the per-playlist sorts below.
     private val subsGridFlag = MutableStateFlow(true)
     private val podDirectoryGridFlag = MutableStateFlow(true)
 
@@ -104,9 +101,6 @@ class Prefs(private val context: Context) {
         val downloads = stringPreferencesKey("downloads")
         val customTheme = stringPreferencesKey("custom_theme")
         val playlistSorts = stringPreferencesKey("playlist_sorts")  // slug -> PlaylistSort.ordinal
-        val cliampGrid = booleanPreferencesKey("cliamp_grid")       // stations: cliamp channel tiles
-        val directoryGrid = booleanPreferencesKey("directory_grid") // stations: directory tiles
-        val customGrid = booleanPreferencesKey("custom_grid")       // stations: custom station tiles
         val subsGrid = booleanPreferencesKey("subs_grid")           // podcasts: subscribed shows as tiles
         val podDirectoryGrid = booleanPreferencesKey("pod_directory_grid") // podcasts: directory as tiles
     }
@@ -135,12 +129,6 @@ class Prefs(private val context: Context) {
     /** Playback speed multiplier, 0.5–2.0. Applied to every play. */
     val speed: Flow<Float> = context.settingsStore.data.map { (it[K.speed] ?: 1f).coerceIn(0.5f, 2f) }
 
-    /** Stations cliamp channel section as a grid. */
-    val cliampGrid: StateFlow<Boolean> = cliampGridFlag.asStateFlow()
-    /** Stations directory section as a grid. */
-    val directoryGrid: StateFlow<Boolean> = directoryGridFlag.asStateFlow()
-    /** Stations custom section as a grid. */
-    val customGrid: StateFlow<Boolean> = customGridFlag.asStateFlow()
     /** Podcasts subscribed-shows section as a grid. */
     val subsGrid: StateFlow<Boolean> = subsGridFlag.asStateFlow()
     /** Podcasts directory section as a grid. */
@@ -233,9 +221,6 @@ class Prefs(private val context: Context) {
         sortOverrides.value = p[K.playlistSorts]?.let { raw ->
             runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
         } ?: emptyMap()
-        cliampGridFlag.value = p[K.cliampGrid] ?: false
-        directoryGridFlag.value = p[K.directoryGrid] ?: false
-        customGridFlag.value = p[K.customGrid] ?: false
         subsGridFlag.value = p[K.subsGrid] ?: true
         podDirectoryGridFlag.value = p[K.podDirectoryGrid] ?: true
     }
@@ -277,18 +262,6 @@ class Prefs(private val context: Context) {
     suspend fun setResumeLocal(v: Boolean) = put(K.resumeLocal, v)
     suspend fun setVolume(v: Float) = put(K.volume, v)
     suspend fun setSpeed(v: Float) = put(K.speed, v.coerceIn(0.5f, 2f))
-    suspend fun setCliampGrid(v: Boolean) {
-        cliampGridFlag.value = v
-        put(K.cliampGrid, v)
-    }
-    suspend fun setDirectoryGrid(v: Boolean) {
-        directoryGridFlag.value = v
-        put(K.directoryGrid, v)
-    }
-    suspend fun setCustomGrid(v: Boolean) {
-        customGridFlag.value = v
-        put(K.customGrid, v)
-    }
     suspend fun setSubsGrid(v: Boolean) {
         subsGridFlag.value = v
         put(K.subsGrid, v)
