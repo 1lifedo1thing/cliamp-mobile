@@ -55,6 +55,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -63,6 +64,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -582,3 +584,49 @@ private const val MARQUEE_MS_PER_PX = 18f
 
 /** How long the label sits still before each pass. */
 private const val MARQUEE_HOLD_MS = 1200
+
+/**
+ * The filter box: narrows whatever list sits below it by name, client-side.
+ * Wears the chip chrome - small radius, hairline border that lights accent
+ * while focused or holding text - with a search glyph and a clear key, so it
+ * reads as a box instead of a floating hint.
+ */
+@Composable
+fun FilterRow(value: String, onValue: (String) -> Unit) {
+    val p = LocalPalette.current
+    val focus = LocalFocusManager.current
+    var focused by remember { mutableStateOf(false) }
+    val live = focused || value.isNotEmpty()
+    Box(Modifier.fillMaxWidth().padding(horizontal = Gutter).padding(top = 10.dp, bottom = 4.dp)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(KleeampShape.small))
+                .border(1.dp, if (live) p.accent else p.chipBorder, RoundedCornerShape(KleeampShape.small))
+                .padding(horizontal = 11.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                KleeampIcons.Search, null,
+                Modifier.size(16.dp),
+                tint = if (live) p.accent else p.inkFaint,
+            )
+            KleeampTextField(
+                value = value,
+                onValueChange = onValue,
+                modifier = Modifier.weight(1f).onFocusChanged { focused = it.isFocused },
+                placeholder = "filter",
+                textStyle = KleeampType.rowSecondary,
+                onAction = { focus.clearFocus() },
+            )
+            if (value.isNotEmpty()) {
+                Icon(
+                    KleeampIcons.Xmark, "clear filter",
+                    Modifier.size(14.dp).microPress { onValue("") },
+                    tint = p.inkTertiary,
+                )
+            }
+        }
+    }
+}

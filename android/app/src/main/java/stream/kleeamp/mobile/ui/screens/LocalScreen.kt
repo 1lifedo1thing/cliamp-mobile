@@ -83,6 +83,7 @@ import stream.kleeamp.mobile.ui.components.BackChevron
 import stream.kleeamp.mobile.ui.components.Chip
 import stream.kleeamp.mobile.ui.components.ChipDropdown
 import stream.kleeamp.mobile.ui.components.ChipOption
+import stream.kleeamp.mobile.ui.components.FilterRow
 import stream.kleeamp.mobile.ui.components.KleeampIcons
 import stream.kleeamp.mobile.ui.components.KleeampTextField
 import stream.kleeamp.mobile.ui.components.GlyphPlate
@@ -144,6 +145,20 @@ fun foldersOf(songs: List<Station>): List<SongFolder> {
             SongFolder(dir, java.io.File(dir).name.ifBlank { dir }, list.sortedBy { it.name.lowercase() })
         }
         .sortedBy { it.name.lowercase() }
+}
+
+/**
+ * Narrows stations by name, artist or album for the playlist filter boxes.
+ * Blank query passes the list through untouched.
+ */
+fun List<Station>.matching(query: String): List<Station> {
+    val q = query.trim().lowercase()
+    if (q.isBlank()) return this
+    return filter {
+        it.name.lowercase().contains(q) ||
+            it.artist.lowercase().contains(q) ||
+            it.album.lowercase().contains(q)
+    }
 }
 
 /**
@@ -656,8 +671,8 @@ fun ProviderSongsPane(
                     )
                 }
             }
-            FilterRow(value = query, onValue = { query = it })
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
+                item { FilterRow(value = query, onValue = { query = it }) }
                 item {
                     SectionLabel(
                         when {
@@ -847,6 +862,7 @@ fun LibraryPlaylistPane(
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
     var adding by rememberSaveable(slug) { mutableStateOf(startAdding) }
+    var query by rememberSaveable(slug) { mutableStateOf("") }
     val ui by vm.state.collectAsState()
     // Back closes the picker first; writes already landed per tap, so there
     // is nothing to save — a second back leaves the page.
@@ -884,7 +900,9 @@ fun LibraryPlaylistPane(
                         playlist = pl,
                         songIds = pl.songIds,
                         members = ui.members,
-                        visible = ui.visible,
+                        visible = remember(ui.visible, query) { ui.visible.matching(query) },
+                        query = query,
+                        onQuery = { query = it },
                         sort = ui.sort,
                         onSortChange = { vm.onEvent(PlaylistDetailViewModel.Event.SetSort(it)) },
                         localSongs = songs,
@@ -1444,6 +1462,8 @@ private fun PlaylistDetailShown(
     songIds: List<String>,
     members: List<Station>,
     visible: List<Station>,
+    query: String,
+    onQuery: (String) -> Unit,
     sort: PlaylistSort,
     onSortChange: (PlaylistSort) -> Unit,
     localSongs: List<Station>,
@@ -1506,9 +1526,17 @@ private fun PlaylistDetailShown(
                     }
                 }
             }
+            item { FilterRow(value = query, onValue = onQuery) }
             item {
-                SectionLabel("songs — ${members.size}") {
+                SectionLabel("songs — ${visible.size}") {
                     AddSongsButton(onClick = onBeginAdd)
+                }
+            }
+            if (visible.isEmpty()) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                        Mono("nothing matches", KleeampType.rowSecondary, p.inkFaint)
+                    }
                 }
             }
             items(visible, key = { it.id }) { s ->
@@ -1597,6 +1625,7 @@ private fun AddSongsPicker(
 ) {
     val p = LocalPalette.current
     var tab by remember { mutableStateOf(AddTab.Local) }
+    var query by remember { mutableStateOf("") }
     var openShow by remember { mutableStateOf<PodcastShow?>(null) }
 
     // Taps carry the song only: direction resolves store-side from fresh
@@ -1614,13 +1643,15 @@ private fun AddSongsPicker(
                 .padding(start = Gutter, end = Gutter, bottom = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            AddTab.entries.forEach { t -> Chip(t.label, tab == t, onClick = { tab = t }) }
+            AddTab.entries.forEach { t -> Chip(t.label, tab == t, onClick = { tab = t; query = "" }) }
         }
         HairlineDivider(region = true)
 
         when (tab) {
             AddTab.Local -> GroupList(
-                items = localSongs,
+                items = localSongs.matching(query),
+                query = query,
+                onQuery = { query = it },
                 picked = selected,
                 subtitle = { s ->
                     s.artistAlbum.ifBlank { durationLabel(s.durationMs) }
@@ -1629,7 +1660,9 @@ private fun AddSongsPicker(
                 empty = "no local songs yet",
             )
             AddTab.Stations -> GroupList(
-                items = radioStations,
+                items = radioStations.matching(query),
+                query = query,
+                onQuery = { query = it },
                 picked = selected,
                 subtitle = { s -> s.meta },
                 onToggle = onToggle,
@@ -1637,6 +1670,8 @@ private fun AddSongsPicker(
             )
             AddTab.Podcasts -> PodcastGroups(
                 shows = subscribedShows,
+                query = query,
+                onQuery = { query = it },
                 openShow = openShow,
                 onOpenShow = { show ->
                     openShow = show
@@ -1654,6 +1689,8 @@ private fun AddSongsPicker(
 @Composable
 private fun GroupList(
     items: List<Station>,
+    query: String,
+    onQuery: (String) -> Unit,
     picked: Set<String>,
     subtitle: (Station) -> String,
     onToggle: (Station) -> Unit,
@@ -1661,6 +1698,7 @@ private fun GroupList(
 ) {
     val p = LocalPalette.current
     LazyColumn(Modifier.fillMaxSize()) {
+        item { FilterRow(value = query, onValue = onQuery) }
         if (items.isEmpty()) {
             item {
                 Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
@@ -1696,6 +1734,8 @@ private fun GroupList(
 @Composable
 private fun PodcastGroups(
     shows: List<PodcastShow>,
+    query: String,
+    onQuery: (String) -> Unit,
     openShow: PodcastShow?,
     onOpenShow: (PodcastShow) -> Unit,
     onBackToShows: () -> Unit,
@@ -1705,8 +1745,10 @@ private fun PodcastGroups(
 ) {
     val p = LocalPalette.current
     val show = openShow
+    val q = query.trim().lowercase()
     if (show != null) {
         LazyColumn(Modifier.fillMaxSize()) {
+            item { FilterRow(value = query, onValue = onQuery) }
             item {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                     .padding(horizontal = Gutter, vertical = 6.dp),
@@ -1719,7 +1761,9 @@ private fun PodcastGroups(
             if (showState.loading) {
                 item { Mono("loading episodes…", KleeampType.rowSecondary, p.inkFaint, Modifier.padding(horizontal = Gutter, vertical = 12.dp)) }
             } else {
-                val eps = showState.episodes.filter { it.isFull }
+                val eps = showState.episodes.filter {
+                    it.isFull && (q.isBlank() || it.title.lowercase().contains(q))
+                }
                 items(eps, key = { "pod:${show.id}:${it.guid}" }) { e ->
                     val s = e.toStation(show)
                     val inPl = s.id in picked
@@ -1747,6 +1791,7 @@ private fun PodcastGroups(
     }
 
     LazyColumn(Modifier.fillMaxSize()) {
+        item { FilterRow(value = query, onValue = onQuery) }
         if (shows.isEmpty()) {
             item {
                 Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
@@ -1754,7 +1799,11 @@ private fun PodcastGroups(
                 }
             }
         } else {
-            items(shows, key = { it.feedUrl }) { show ->
+            val shown = if (q.isBlank()) shows
+            else shows.filter {
+                it.title.lowercase().contains(q) || it.author.lowercase().contains(q)
+            }
+            items(shown, key = { it.feedUrl }) { show ->
                 ListRow(
                     onClick = { onOpenShow(show) },
                     verticalPadding = 9.dp,
@@ -1813,8 +1862,11 @@ private fun SmartPlaylistDetail(
             }
         }
     }
+    var query by rememberSaveable(pl.key) { mutableStateOf("") }
+    val shown = remember(visible, query) { visible.matching(query) }
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
-        if (visible.isEmpty()) {
+        item { FilterRow(value = query, onValue = { query = it }) }
+        if (shown.isEmpty()) {
             // Growable lists keep their + on empty too, like playlists do.
             if (onBeginAdd != null) {
                 item {
@@ -1827,6 +1879,7 @@ private fun SmartPlaylistDetail(
                 Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
                     Mono(
                         when {
+                            query.isNotBlank() -> "nothing matches"
                             pl.kind == SmartKind.Favorites && favScope == FavScope.Local -> "no local favourites yet"
                             pl.kind == SmartKind.Favorites && favScope == FavScope.Stations -> "no station favourites yet"
                             pl.kind == SmartKind.Favorites && favScope == FavScope.Pods -> "no podcast favourites yet"
@@ -1843,14 +1896,14 @@ private fun SmartPlaylistDetail(
             }
         } else {
             item {
-                SectionLabel("${pl.label} — ${visible.size}") {
+                SectionLabel("${pl.label} — ${shown.size}") {
                     onBeginAdd?.let { AddSongsButton(onClick = it) }
                 }
             }
-            items(visible, key = { it.url }, contentType = { "local-song" }) { s ->
+            items(shown, key = { it.url }, contentType = { "local-song" }) { s ->
                 ListRow(
                     rail = current?.url == s.url,
-                    onClick = { onPlay(s, visible) },
+                    onClick = { onPlay(s, shown) },
                     verticalPadding = 9.dp,
                     leading = {
                         SongCover(s = s, current = current, playing = playing)
