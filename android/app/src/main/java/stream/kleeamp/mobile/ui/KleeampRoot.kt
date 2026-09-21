@@ -74,7 +74,6 @@ import stream.kleeamp.mobile.ui.screens.ScopeScreen
 import stream.kleeamp.mobile.ui.screens.ScrobbleWizard as ScrobbleWizardScreen
 import stream.kleeamp.mobile.data.provider.ProviderCatalog
 import stream.kleeamp.mobile.data.provider.ProviderStore
-import stream.kleeamp.mobile.ui.screens.ProviderBrowseScreen
 import stream.kleeamp.mobile.ui.screens.ProviderWizard as ProviderWizardScreen
 import stream.kleeamp.mobile.ui.screens.SettingsScreen
 import stream.kleeamp.mobile.ui.screens.StationsScreen
@@ -92,7 +91,6 @@ import stream.kleeamp.mobile.ui.screens.SongInfoViewModel
 import stream.kleeamp.mobile.ui.screens.NowPlayingViewModel
 import stream.kleeamp.mobile.ui.screens.SearchViewModel
 import stream.kleeamp.mobile.ui.screens.SettingsViewModel
-import stream.kleeamp.mobile.ui.screens.ProviderBrowseViewModel
 import stream.kleeamp.mobile.ui.screens.ProviderWizardViewModel
 import stream.kleeamp.mobile.ui.screens.ScrobbleWizardViewModel
 import stream.kleeamp.mobile.ui.theme.LocalPalette
@@ -442,7 +440,12 @@ fun KleeampRoot(
                     LibraryProvidersPane(
                         vm = appViewModel { app -> ProvidersPaneViewModel(app.providers) },
                         onBack = { navController.popBackStack() },
-                        onOpenProvider = { a -> navController.navigate(ProviderBrowse(a.id)) },
+                        onOpenProvider = { navController.navigate(LibraryProviderSongs) },
+                        onEditProvider = { account ->
+                            navController.navigate(
+                                ProviderWizardRoute(account.providerKey, account.id)
+                            )
+                        },
                         onAddProvider = { spec ->
                             navController.navigate(ProviderWizardRoute(spec.key))
                         },
@@ -615,9 +618,7 @@ fun KleeampRoot(
                     current = station,
                     playing = playerState.playing,
                     onPlay = onPlay,
-                    onOpenProvider = { account ->
-                        navController.navigate(ProviderBrowse(account.id))
-                    },
+                    onOpenProvider = { navController.navigate(LibraryProviderSongs) },
                     onOpenShow = { show: PodcastShow ->
                         podcasts.openShow(show)
                         // Pop the search overlay, switch to podcasts tab,
@@ -644,33 +645,6 @@ fun KleeampRoot(
                     query = searchQuery,
                     onQueryChange = { searchQuery = it },
                 )
-                }
-            }
-            composable<ProviderBrowse> { entry ->
-                val accountId = entry.toRoute<ProviderBrowse>().accountId
-                val providerAccounts by providers.accounts.collectAsState(initial = emptyList())
-                val account = providerAccounts.firstOrNull { it.id == accountId }
-                if (account == null) {
-                    // Never pop during composition: side-effect runs after the
-                    // frame, so a stale/deleted account can't throw
-                    // "popBackStack called during composition".
-                    LaunchedEffect(accountId) {
-                        navController.popBackStack()
-                    }
-                } else {
-                    OverlayCover {
-                    ProviderBrowseScreen(
-                        vm = appViewModel(key = accountId) { _ -> ProviderBrowseViewModel(account) },
-                        onBack = { navController.popBackStack() },
-                        onEdit = {
-                            navController.navigate(
-                                ProviderWizardRoute(account.providerKey, account.id)
-                            )
-                        },
-                        onPlay = onPlay,
-                        onOpenPlayer = rememberGuardedNav(navController).openPlayer,
-                    )
-                    }
                 }
             }
             composable<ProviderWizardRoute> { entry ->

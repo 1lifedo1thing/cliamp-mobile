@@ -78,6 +78,7 @@ import stream.kleeamp.mobile.data.sortedStations
 import stream.kleeamp.mobile.data.provider.ProviderAccount
 import stream.kleeamp.mobile.data.provider.ProviderCatalog
 import stream.kleeamp.mobile.data.provider.ProviderSpec
+import stream.kleeamp.mobile.data.provider.SftpLibrary
 import stream.kleeamp.mobile.ui.components.rememberStationThumbnail
 import stream.kleeamp.mobile.ui.components.BackChevron
 import stream.kleeamp.mobile.ui.components.Chip
@@ -323,6 +324,7 @@ fun LibraryProvidersPane(
     vm: ProvidersPaneViewModel,
     onBack: () -> Unit,
     onOpenProvider: (ProviderAccount) -> Unit,
+    onEditProvider: (ProviderAccount) -> Unit,
     onAddProvider: (ProviderSpec) -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
@@ -344,6 +346,7 @@ fun LibraryProvidersPane(
                     listState = listState,
                     providers = ui.providers,
                     onOpenProvider = onOpenProvider,
+                    onEditProvider = onEditProvider,
                     onAddProvider = onAddProvider,
                     onRemoveProvider = { vm.onEvent(ProvidersPaneViewModel.Event.Remove(it)) },
                 )
@@ -668,6 +671,17 @@ fun ProviderSongsPane(
                     Chip(
                         s.label, sort == s,
                         onClick = { sort = s; query = ""; selectedArtist = null; selectedAlbum = null },
+                    )
+                }
+                // The browse page is gone; its rescan rides the sort row for
+                // SSH accounts, trailing like it always did.
+                val selectedAccount = accounts.firstOrNull { it.id == selected }
+                if (selectedAccount?.providerKey == "ssh") {
+                    val indexState by SftpLibrary.status(selectedAccount.id).collectAsState()
+                    Chip(
+                        if (indexState.scanning) "scanning" else "rescan",
+                        selected = false,
+                        onClick = { scope.launch { SftpLibrary.rescan(selectedAccount) } },
                     )
                 }
             }
@@ -1151,6 +1165,7 @@ private fun ProvidersView(
     listState: LazyListState,
     providers: List<ProviderAccount>,
     onOpenProvider: (ProviderAccount) -> Unit,
+    onEditProvider: (ProviderAccount) -> Unit,
     onAddProvider: (ProviderSpec) -> Unit,
     onRemoveProvider: (ProviderAccount) -> Unit,
 ) {
@@ -1192,6 +1207,11 @@ private fun ProvidersView(
                             OverflowMenu(
                                 trigger = { open -> OverflowButton(open, size = 16) },
                                 items = listOf(
+                                    OverflowItem(
+                                        "edit account",
+                                        color = p.ink,
+                                        action = { onEditProvider(acc) },
+                                    ),
                                     OverflowItem(
                                         "remove account",
                                         color = p.destructiveInk,

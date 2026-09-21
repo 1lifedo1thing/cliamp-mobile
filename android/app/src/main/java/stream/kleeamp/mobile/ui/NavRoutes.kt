@@ -16,7 +16,6 @@ import kotlinx.serialization.Serializable
 @Serializable data object Settings
 @Serializable data object Search
 
-@Serializable data class ProviderBrowse(val accountId: String)
 @Serializable data class ProviderWizardRoute(val providerKey: String, val accountId: String = "")
 
 @Serializable data object ScrobbleWizard
