@@ -6,9 +6,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import stream.kleeamp.mobile.data.db.KleeampDatabase
 import stream.kleeamp.mobile.data.db.SftpDao
 import stream.kleeamp.mobile.data.db.SftpIndexEntity
@@ -84,6 +86,10 @@ object SftpLibrary {
      * Waiting would mean the browse screen sits on "loading" for as long as a
      * walk of a large tree takes. Instead the screen renders whatever is
      * already indexed, shows what the scan is doing, and reloads when it lands.
+     *
+     * Readers that need data (not a screen) use [awaitIndexed]: the scan flag
+     * is marked synchronously here, so an awaiter can never observe a stale
+     * idle between the claim and the launched scan's first line.
      */
     suspend fun ensureIndexed(account: ProviderAccount) {
         val cfg = account.ssh()
@@ -91,7 +97,29 @@ object SftpLibrary {
         val recorded = runCatching { dao.index(account.id) }.getOrNull()
         val stale = recorded == null || recorded.folders != cfg.folders.joinToString("\n")
         if (!stale) return
-        scope.launch { scan(account) }
+        if (!claimScan(account.id)) return
+        statusFlow(account.id).value = IndexState(scanning = true, text = "scanning…")
+        scope.launch {
+            try {
+                scanInner(account)
+            } finally {
+                releaseScan(account.id)
+            }
+        }
+    }
+
+    /**
+     * Trigger a stale index and suspend until it lands, so the first open of
+     * a fresh account reads music instead of an empty database that nothing
+     * ever re-reads. Fresh indexes return at once; a running scan is joined;
+     * the timeout yields whatever is indexed so far instead of hanging a
+     * list that only ever grows by re-entry.
+     */
+    suspend fun awaitIndexed(account: ProviderAccount, timeoutMs: Long = 180_000L): Boolean {
+        ensureIndexed(account)
+        val status = statusFlow(account.id)
+        if (!status.value.scanning) return true
+        return withTimeoutOrNull(timeoutMs) { status.first { !it.scanning } } != null
     }
 
     /** An explicit rescan, awaited so the caller can report what happened. */
@@ -114,10 +142,19 @@ object SftpLibrary {
             return Result.failure(IllegalStateException("no folders configured"))
         }
         if (!claimScan(account.id)) return Result.success(Unit)
-        val status = statusFlow(account.id)
         return try {
-            status.value = IndexState(scanning = true, text = "scanning…")
-            withContext(Dispatchers.IO) {
+            scanInner(account)
+        } finally {
+            releaseScan(account.id)
+        }
+    }
+
+    /** The walk itself; claiming and releasing stay with the callers above. */
+    private suspend fun scanInner(account: ProviderAccount): Result<Unit> {
+        val cfg = account.ssh()
+        val status = statusFlow(account.id)
+        status.value = IndexState(scanning = true, text = "scanning…")
+        return withContext(Dispatchers.IO) {
                 runCatching {
                     val scanId = System.currentTimeMillis()
                     var written = 0
@@ -176,9 +213,6 @@ object SftpLibrary {
                     Result.failure(failure)
                 },
             )
-        } finally {
-            releaseScan(account.id)
-        }
     }
 
     internal suspend fun albums(accountId: String, style: String): List<SftpTrackAlbum> = when (style) {
