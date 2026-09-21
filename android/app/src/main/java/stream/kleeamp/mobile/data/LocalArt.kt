@@ -22,9 +22,28 @@ object LocalArt {
 
     private const val TARGET = 512
     private const val TARGET_SMALL = 96
-    private val bitmaps = LruCache<String, Bitmap>(96)
-    private val smallBitmaps = LruCache<String, Bitmap>(384)
-    private val misses = LruCache<String, Boolean>(128)
+    // Byte-budgeted like StationArtSource's caches (sizes in KB): count caps
+    // alone could hold ~96 MB of full-size bitmaps here.
+    private val bitmaps = object : LruCache<String, Bitmap>(32 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap) = (value.byteCount / 1024).coerceAtLeast(1)
+    }
+    private val smallBitmaps = object : LruCache<String, Bitmap>(12 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap) = (value.byteCount / 1024).coerceAtLeast(1)
+    }
+    private val misses = LruCache<String, Long>(128)
+
+    /** How long a failed cover is left alone before a transient failure gets retried. */
+    private const val MISS_RETRY_MS = 60_000L
+
+    /** Drop decoded bitmaps under memory pressure; MediaStore re-serves. */
+    fun onTrimMemory(level: Int) {
+        // 60 == ComponentCallbacks2.TRIM_MEMORY_MODERATE (constant deprecated
+        // in recent SDKs, value documented).
+        if (level >= 60) {
+            bitmaps.evictAll()
+            smallBitmaps.evictAll()
+        }
+    }
 
     suspend fun bitmapFor(cover: String?, resolver: ContentResolver): Bitmap? =
         bitmapForAt(cover, resolver, TARGET, bitmaps)
@@ -54,9 +73,17 @@ object LocalArt {
     ): Bitmap? {
         if (cover.isNullOrBlank()) return null
         cache.get(cover)?.let { return it }
-        if (misses.get(cover) == true) return null
+        // Permanent misses never retried a transient failure; expiry bounds
+        // the re-hit rate instead.
+        misses.get(cover)?.let { at ->
+            if (System.currentTimeMillis() - at < MISS_RETRY_MS) return null
+        }
         val bmp = decode(cover, resolver, target)
-        if (bmp == null) misses.put(cover, true) else cache.put(cover, bmp)
+        if (bmp == null) misses.put(cover, System.currentTimeMillis())
+        else {
+            misses.remove(cover)
+            cache.put(cover, bmp)
+        }
         return bmp
     }
 
