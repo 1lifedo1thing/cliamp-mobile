@@ -199,14 +199,14 @@ private class SftpBrowseClient(private val account: ProviderAccount) : ProviderB
     override suspend fun reindex(): Result<Unit> = SftpLibrary.rescan(account)
 
     override suspend fun albums(style: String): Result<List<ProviderAlbum>> = runCatching {
-        SftpLibrary.ensureIndexed(account)
+        SftpLibrary.awaitIndexed(account)
         SftpLibrary.albums(account.id, style).map {
             ProviderAlbum(it.id, it.name, it.artist, it.songCount, it.year)
         }
     }
 
     override suspend fun artists(): Result<List<ProviderArtist>> = runCatching {
-        SftpLibrary.ensureIndexed(account)
+        SftpLibrary.awaitIndexed(account)
         SftpLibrary.artists(account.id).map { ProviderArtist(it.id, it.name, it.albumCount) }
     }
 
