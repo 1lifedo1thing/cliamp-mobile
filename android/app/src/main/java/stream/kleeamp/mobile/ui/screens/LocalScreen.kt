@@ -646,7 +646,7 @@ fun ProviderSongsPane(
         ) {
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                    .padding(start = Gutter, end = Gutter, top = 2.dp, bottom = 6.dp),
+                    .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
             ) {
                 PlaylistSort.entries.forEach { s ->
