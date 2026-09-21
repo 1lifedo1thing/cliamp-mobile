@@ -173,6 +173,8 @@ jobs:
           fi
 
           CHANGELOG=""
+          CONTRIBUTORS=""
+          declare -A SEEN
           while IFS=$'\x1f' read -r hash title author || [ -n "$hash" ]; do
             [ -n "$hash" ] || continue
             short="${hash:0:7}"
@@ -184,6 +186,11 @@ jobs:
             else
               who="$author"
             fi
+            key="${username:-$author}"
+            if [ -z "${SEEN[$key]:-}" ]; then
+              SEEN[$key]=1
+              CONTRIBUTORS="${CONTRIBUTORS}- $who"$'\n'
+            fi
             CHANGELOG="${CHANGELOG}- $title by $who ([\`$short\`](https://github.com/${REPO}/commit/$hash))"$'\n'
           done < <(git log "$RANGE" --no-merges --pretty=format:"%H%x1f%s%x1f%an")
 
@@ -192,6 +199,10 @@ jobs:
           fi
 
           {
+            echo "## Contributors"
+            echo ""
+            printf '%s' "$CONTRIBUTORS"
+            echo ""
             echo "## What's Changed"
             echo ""
             printf '%s' "$CHANGELOG"
