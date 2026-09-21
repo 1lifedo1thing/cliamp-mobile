@@ -22,10 +22,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.data.PlaylistSort
@@ -256,18 +260,47 @@ private fun clockOf(seconds: Int): String =
  * Narrows whatever list is on screen by name, the same job the folder
  * picker does on local songs. Client-side: the server already sent the
  * page, so typing never fires a request per keystroke.
+ *
+ * Wears the chip chrome - small radius, hairline border that lights accent
+ * while focused or holding text - with a search glyph and a clear key, so
+ * it reads as a box instead of a floating hint.
  */
 @Composable
 internal fun FilterRow(value: String, onValue: (String) -> Unit) {
+    val p = LocalPalette.current
     val focus = LocalFocusManager.current
+    var focused by remember { mutableStateOf(false) }
+    val live = focused || value.isNotEmpty()
     Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 4.dp)) {
-        KleeampTextField(
-            value = value,
-            onValueChange = onValue,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = "filter",
-            textStyle = KleeampType.rowSecondary,
-            onAction = { focus.clearFocus() },
-        )
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(KleeampShape.small))
+                .border(1.dp, if (live) p.accent else p.chipBorder, RoundedCornerShape(KleeampShape.small))
+                .padding(horizontal = 11.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                KleeampIcons.Search, null,
+                Modifier.size(16.dp),
+                tint = if (live) p.accent else p.inkFaint,
+            )
+            KleeampTextField(
+                value = value,
+                onValueChange = onValue,
+                modifier = Modifier.weight(1f).onFocusChanged { focused = it.isFocused },
+                placeholder = "filter",
+                textStyle = KleeampType.rowSecondary,
+                onAction = { focus.clearFocus() },
+            )
+            if (value.isNotEmpty()) {
+                Icon(
+                    KleeampIcons.Xmark, "clear filter",
+                    Modifier.size(14.dp).microPress { onValue("") },
+                    tint = p.inkTertiary,
+                )
+            }
+        }
     }
 }
