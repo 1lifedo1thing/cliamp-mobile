@@ -201,9 +201,13 @@ private fun MiniArt(station: Station?) {
     // cover from frame one and the lookup only ever upgrades to real art.
     var art by remember(station?.id) { mutableStateOf(peekSmall(station)) }
     val key = station?.id?.ifBlank { station.url }
+    // Bundled design underneath - except local and provider songs, which
+    // wear the empty plate instead.
     val placeholder = remember(key) {
-        key?.takeIf { it.isNotEmpty() }
-            ?.let { PlaceholderArt.thumbnailFor(context, it)?.asImageBitmap() }
+        if (station?.bundledCover != false) {
+            key?.takeIf { it.isNotEmpty() }
+                ?.let { PlaceholderArt.thumbnailFor(context, it)?.asImageBitmap() }
+        } else null
     }
     LaunchedEffect(station?.id) {
         if (art != null) return@LaunchedEffect

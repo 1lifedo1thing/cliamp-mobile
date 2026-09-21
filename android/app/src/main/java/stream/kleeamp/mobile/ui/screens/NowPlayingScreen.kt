@@ -808,12 +808,15 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
     // then replaced by the full art - still the new item, never empty.
     var art by remember(station?.id) { mutableStateOf(peekArt(station)) }
     val preview = station?.let { rememberStationThumbnail(it, fallback = false) }
-    // No cover of its own: one of the bundled designs stands in. The pick is
-    // stable per station, so the plate does not reshuffle on every change.
+    // No cover of its own: one of the bundled designs stands in - except
+    // local and provider songs, which wear the empty plate instead. The pick
+    // is stable per station, so the plate does not reshuffle on every change.
     val placeholderKey = station?.id?.ifBlank { station.url }
     val placeholder = remember(placeholderKey) {
-        placeholderKey?.takeIf { it.isNotEmpty() }
-            ?.let { PlaceholderArt.bitmapFor(context, it)?.asImageBitmap() }
+        if (station?.bundledCover != false) {
+            placeholderKey?.takeIf { it.isNotEmpty() }
+                ?.let { PlaceholderArt.bitmapFor(context, it)?.asImageBitmap() }
+        } else null
     }
     LaunchedEffect(station?.id) {
         if (art != null) return@LaunchedEffect

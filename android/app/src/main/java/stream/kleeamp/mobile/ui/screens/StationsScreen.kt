@@ -401,11 +401,13 @@ private fun StationRow(
 private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
     val p = LocalPalette.current
     val context = LocalContext.current
-    // Bundled design first: a coverless station paints it on the first frame
-    // instead of flashing the empty plate while the lookup below runs. The
-    // lookup only ever upgrades to real art.
+    // Bundled design first - except local and provider songs, which wear
+    // the empty plate instead (see Station.bundledCover).
     var art by remember(station.id) {
-        mutableStateOf(PlaceholderArt.thumbnailFor(context, station.id.ifBlank { station.url })?.asImageBitmap())
+        mutableStateOf(
+            if (station.bundledCover) PlaceholderArt.thumbnailFor(context, station.id.ifBlank { station.url })?.asImageBitmap()
+            else null,
+        )
     }
     LaunchedEffect(station.id) {
         // Cliamp stations carry no art by design: the bundled design above

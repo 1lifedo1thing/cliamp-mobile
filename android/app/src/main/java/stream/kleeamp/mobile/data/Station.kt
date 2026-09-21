@@ -55,6 +55,15 @@ data class Station(
             source == StationSource.Provider ||
             source == StationSource.Podcast
 
+    /**
+     * Whether a coverless item may wear a bundled design. Local and provider
+     * songs show the empty plate instead: their covers are real artwork that
+     * is either embedded, fetched, or absent - never a stand-in. Every other
+     * source keeps its design.
+     */
+    val bundledCover: Boolean
+        get() = source != StationSource.Local && source != StationSource.Provider
+
     val tagList: List<String>
         get() = tags.split(',', ' ')
             .map { it.trim().lowercase() }

@@ -19,7 +19,8 @@ import stream.kleeamp.mobile.data.StationArtSource
  * bounded cover pool. With [fallback], an item that has no art of its own
  * gets one of the bundled cover designs instead of an empty plate - seeded
  * synchronously from the row-sized cache, so the first frame already shows
- * it and the background lookup only ever upgrades to real art.
+ * it and the background lookup only ever upgrades to real art. Local and
+ * provider songs never take the fallback (see [Station.bundledCover]).
  */
 @Composable
 internal fun rememberStationThumbnail(station: Station, fallback: Boolean = true): ImageBitmap? {
@@ -30,7 +31,7 @@ internal fun rememberStationThumbnail(station: Station, fallback: Boolean = true
         (LocalArt.cachedSmall(station.cover) ?: StationArtSource.cachedSmall(station))?.asImageBitmap()
     }
     val placeholder = remember(key) {
-        if (fallback) PlaceholderArt.thumbnailFor(context, key)?.asImageBitmap() else null
+        if (fallback && station.bundledCover) PlaceholderArt.thumbnailFor(context, key)?.asImageBitmap() else null
     }
     var art by remember(station.id, station.cover, station.url) { mutableStateOf(cached ?: placeholder) }
     LaunchedEffect(station.id, station.cover, station.url, resolver, fallback) {
