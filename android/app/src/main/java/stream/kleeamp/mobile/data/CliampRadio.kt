@@ -3,10 +3,11 @@ package stream.kleeamp.mobile.data
 import stream.kleeamp.mobile.net.Http
 
 /**
- * cliamp's own stations. The twelve below are the offline seed - the same list
- * `cliamp` ships in main.go - and they are replaced at launch by whatever
- * `streams.m3u` currently advertises, so a new channel appears without a
- * client release.
+ * cliamp's own stations. The fifteen below are the offline seed - the same list
+ * `cliamp` ships in main.go, in the same order - and they are replaced at
+ * launch by whatever `streams.m3u` currently advertises, so a new channel
+ * appears without a client release. The seed must keep matching the playlist:
+ * anything else reorders the section on every cold start when the fetch lands.
  */
 object CliampRadio {
 
@@ -24,9 +25,12 @@ object CliampRadio {
 
     val builtin: List<Station> = listOf(
         seed("lofi", "Lofi"),
+        seed("meditative", "Meditative"),
         seed("synthwave", "Synthwave"),
         seed("edm", "EDM"),
         seed("omarchy", "Omarchy"),
+        seed("chiptune", "Chiptunes"),
+        seed("amiga", "Amiga"),
         seed("ncs", "NCS"),
         seed("ncs-house", "NCS House"),
         seed("ncs-dubstep", "NCS Dubstep"),

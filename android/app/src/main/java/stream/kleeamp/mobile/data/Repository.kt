@@ -46,7 +46,7 @@ data class DirectoryState(
 )
 
 /**
- * Holds the two catalogues side by side: cliamp's own dozen channels, which are
+ * Holds the two catalogues side by side: cliamp's own channels, which are
  * small enough to keep resident, and the directory, which is paged in 60 at a
  * time and never fully materialised.
  */

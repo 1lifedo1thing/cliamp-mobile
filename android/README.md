@@ -202,7 +202,7 @@ redirect first; on a slow connection that window closes and the system kills the
 
 ## Sources
 
-- `radio.cliamp.stream/streams.m3u` seeds the channel list at launch. The twelve
+- `radio.cliamp.stream/streams.m3u` seeds the channel list at launch. The fifteen
   built-ins in `CliampRadio.kt` are the offline fallback.
 - `radio.cliamp.stream/statistics` supplies live listener counts and daily history.
 - `all.api.radio-browser.info` is resolved at runtime for the directory, with failover
