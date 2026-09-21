@@ -41,14 +41,23 @@ object StationArtSource {
     /** A stored cover is trusted this long before the network is asked again. */
     private const val DISK_TTL_MS = 7L * 24 * 60 * 60 * 1000
 
+    /** Cap on files in covers/: ~500 small covers weigh a few tens of MB. */
+    private const val MAX_DISK_FILES = 500
+
     /** Formats BitmapFactory cannot decode, however cheerfully they are served.
      * ICO is served as image/x-icon or image/vnd.microsoft.icon and decodes
      * fine, so only SVG stays on the block list. */
     private val undecodable = setOf("image/svg+xml")
 
     private val resolved = LruCache<String, String>(128)
-    private val bitmaps = LruCache<String, Bitmap>(128)
-    private val smallBitmaps = LruCache<String, Bitmap>(384)
+    // Bitmap caches are byte-budgeted, not count-bounded: a 512px bitmap is a
+    // megabyte, so the old 128-count cap could hold ~128 MB. Size is in KB.
+    private val bitmaps = object : android.util.LruCache<String, Bitmap>(32 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap) = (value.byteCount / 1024).coerceAtLeast(1)
+    }
+    private val smallBitmaps = object : android.util.LruCache<String, Bitmap>(12 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap) = (value.byteCount / 1024).coerceAtLeast(1)
+    }
     // Key -> when its art last failed. A failure is not permanent: a cover
     // that times out on a cold-start stampede still gets another try once the
     // backoff passes, so a station that does have art ends up showing it.
@@ -67,6 +76,21 @@ object StationArtSource {
     /** Call once at startup with an application context. */
     fun init(context: android.content.Context) {
         cacheDir = java.io.File(context.cacheDir, "covers").apply { mkdirs() }
+    }
+
+    /** Network art fetch pool: bounded separately from [CoverIo] so a few
+     * slow scrapes never starve every other decode - including the player
+     * art - behind them. */
+    private val ArtNet = Dispatchers.IO.limitedParallelism(3)
+
+    /** Drop decoded bitmaps under memory pressure; disk + network re-serve. */
+    fun onTrimMemory(level: Int) {
+        // ComponentCallbacks2.TRIM_MEMORY_MODERATE (60) by value: the
+        // constant itself is deprecated in recent SDKs.
+        if (level >= 60) {
+            bitmaps.evictAll()
+            smallBitmaps.evictAll()
+        }
     }
 
     private fun coverFile(path: String): java.io.File {
@@ -123,15 +147,11 @@ object StationArtSource {
     }
 
     /**
-     * Low-quality art for tiny surfaces (row thumbnails, the mini player).
+     * Low-quality art for tiny surfaces (row icons, the mini player).
      * Decodes at [TARGET_SMALL] and serves its own cache so a 100-row list
-     * doesn't hold a dozen full-size bitmaps in memory. Unlike [bitmapFor] it
-     * keeps retrying a failed cover on every look, which is how the same
-     * station can end up with art in the list while the grid still misses it.
-     *
-     * Local files are the exception: a missing embedded picture is re-parsed
-     * out of the audio file on every look without this, so their misses rest
-     * for [MISS_RETRY_MS] like [bitmapFor]'s do.
+     * doesn't hold a dozen full-size bitmaps in memory. Failed covers rest
+     * for [MISS_RETRY_MS] like [bitmapFor]'s do, so scroll storms never
+     * re-hit the network.
      */
     suspend fun bitmapForSmall(station: Station): Bitmap? {
         if (station.source == StationSource.Cliamp) return null
@@ -145,7 +165,9 @@ object StationArtSource {
                 ?: cover(station) { url, save -> download(url, save, TARGET_SMALL) }
         }
         if (bmp != null) smallBitmaps.put(station.id, bmp)
-        else if (station.source == StationSource.Local) noteMiss(station.id)
+        // Every miss rests, not just local ones: a failed cover used to be
+        // re-hit on every scroll pass for non-local stations.
+        else noteMiss(station.id)
         return bmp
     }
 
@@ -255,7 +277,7 @@ object StationArtSource {
     private val contentAttr = Regex("""content\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
     private val hrefAttr = Regex("""href\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
 
-    private suspend fun scrape(homepage: String): String? = withContext(Dispatchers.IO) {
+    private suspend fun scrape(homepage: String): String? = withContext(ArtNet) {
         runCatching {
             val req = Request.Builder().url(homepage)
                 .header("User-Agent", Http.USER_AGENT)
@@ -280,7 +302,7 @@ object StationArtSource {
         URI(base).resolve(ref.trim()).toString().takeIf { it.startsWith("http") }
     }.getOrNull()
 
-    private suspend fun download(url: String, save: String? = null, target: Int = TARGET): Bitmap? = withContext(Dispatchers.IO) {
+    private suspend fun download(url: String, save: String? = null, target: Int = TARGET): Bitmap? = withContext(ArtNet) {
         runCatching {
             val req = Request.Builder().url(url).header("User-Agent", Http.USER_AGENT).build()
             Http.artClient.newCall(req).execute().use { r ->
@@ -306,6 +328,23 @@ object StationArtSource {
         if (!f.isFile) return null
         if (System.currentTimeMillis() - f.lastModified() > DISK_TTL_MS) return null
         return runCatching { decodeFile(f.absolutePath, target) }.getOrNull()
+    }
+
+    /**
+     * Delete what `disk` would reject anyway (stale) plus anything past a
+     * file cap, oldest first. Nothing pruned this directory before: the TTL
+     * only applied on read, so it grew forever.
+     */
+    suspend fun pruneDisk() = withContext(CoverIo) {
+        val dir = cacheDir ?: return@withContext
+        val now = System.currentTimeMillis()
+        dir.listFiles()?.forEach { f ->
+            if (now - f.lastModified() > DISK_TTL_MS) runCatching { f.delete() }
+        }
+        dir.listFiles()
+            ?.sortedBy { it.lastModified() }
+            ?.dropLast(MAX_DISK_FILES)
+            ?.forEach { runCatching { it.delete() } }
     }
 
     /** Reads up to [limit], and gives up rather than buffering something huge. */

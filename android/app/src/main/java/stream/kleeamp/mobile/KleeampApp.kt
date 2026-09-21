@@ -23,6 +23,7 @@ import stream.kleeamp.mobile.playback.SftpDataSource
 import stream.kleeamp.mobile.playback.StreamResolver
 import stream.kleeamp.mobile.net.Http
 import stream.kleeamp.mobile.data.DownloadStore
+import stream.kleeamp.mobile.data.LocalArt
 import stream.kleeamp.mobile.data.LocalLibrary
 import stream.kleeamp.mobile.data.StationArtSource
 import stream.kleeamp.mobile.data.PlaylistStore
@@ -59,6 +60,9 @@ class KleeampApp : Application() {
 
         StationArtSource.init(this)
         SftpLibrary.init(this, providers, appScope)
+        // The disk cache only TTL-checks on read, so prune stale + excess
+        // files once per launch instead of growing forever.
+        appScope.launch { StationArtSource.pruneDisk() }
 
         // Provider stream URLs are signed per request, so they are resolved
         // here at play time rather than stored.
@@ -122,5 +126,11 @@ class KleeampApp : Application() {
                 }
             }
         }
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        StationArtSource.onTrimMemory(level)
+        LocalArt.onTrimMemory(level)
     }
 }
