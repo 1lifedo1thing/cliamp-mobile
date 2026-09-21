@@ -99,3 +99,18 @@ data class ProviderAccount(
 ) {
     val url: String get() = values["url"].orEmpty()
 }
+
+/**
+ * Reserved values key for the user's own name for an account. App-only: it
+ * is never sent to any server and no spec declares it, so it takes part in
+ * no validation and no probe.
+ */
+const val DISPLAY_NAME_KEY = "_displayName"
+
+/**
+ * What lists call an account: the user's own name when set, otherwise the
+ * probed [ProviderAccount.label]. Blank stays blank so callers keep their
+ * own fallback ("provider").
+ */
+fun ProviderAccount.displayName(): String =
+    values[DISPLAY_NAME_KEY].orEmpty().trim().ifBlank { label }

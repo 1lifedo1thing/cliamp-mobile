@@ -77,6 +77,7 @@ import stream.kleeamp.mobile.data.downloadSizeLabel
 import stream.kleeamp.mobile.data.sortedStations
 import stream.kleeamp.mobile.data.provider.ProviderAccount
 import stream.kleeamp.mobile.data.provider.ProviderCatalog
+import stream.kleeamp.mobile.data.provider.displayName
 import stream.kleeamp.mobile.data.provider.ProviderSpec
 import stream.kleeamp.mobile.data.provider.SftpLibrary
 import stream.kleeamp.mobile.ui.components.rememberStationThumbnail
@@ -636,7 +637,7 @@ fun ProviderSongsPane(
     }
     val favorites = ui.favorites.map { it.url }.toSet()
     val failedLabels = ui.failures.keys.mapNotNull { id ->
-        accounts.firstOrNull { it.id == id }?.label?.ifBlank { null }
+        accounts.firstOrNull { it.id == id }?.displayName()?.ifBlank { null }
     }
     fun pop() {
         when {
@@ -653,7 +654,7 @@ fun ProviderSongsPane(
             title = if (accountId.isBlank()) {
                 selectedAlbum ?: selectedArtist ?: "providers"
             } else {
-                accounts.firstOrNull()?.label?.ifBlank { "provider" } ?: "provider"
+                accounts.firstOrNull()?.displayName()?.ifBlank { "provider" } ?: "provider"
             },
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
@@ -663,7 +664,7 @@ fun ProviderSongsPane(
                 @Composable {
                     accounts.forEach { a ->
                         Chip(
-                            a.label.ifBlank { "provider" },
+                            a.displayName().ifBlank { "provider" },
                             selected == a.id,
                             onClick = {
                                 selected = a.id; query = ""; selectedArtist = null; selectedAlbum = null
@@ -1234,7 +1235,7 @@ private fun ProvidersView(
                         }
                     },
                 ) {
-                    Mono(acc.label.ifBlank { "provider" }, KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
+                    Mono(acc.displayName().ifBlank { "provider" }, KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
                     Mono(
                         ProviderCatalog.byKey(acc.providerKey)?.summary?.invoke(acc.values)
                             ?: acc.url,

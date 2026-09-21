@@ -52,6 +52,7 @@ import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationArtSource
 import stream.kleeamp.mobile.data.StationSource
 import stream.kleeamp.mobile.data.provider.ProviderAccount
+import stream.kleeamp.mobile.data.provider.displayName
 import stream.kleeamp.mobile.ui.components.BackChevron
 import stream.kleeamp.mobile.ui.components.Chip
 import stream.kleeamp.mobile.ui.components.KleeampIcons
@@ -354,7 +355,7 @@ private fun HitRow(
             is SearchHit.Episode -> hit.station.name
             is SearchHit.Show -> hit.show.title
             is SearchHit.Tag -> "#${hit.name}"
-            is SearchHit.Provider -> hit.account.label
+            is SearchHit.Provider -> hit.account.displayName()
         }
         val sub = when (hit) {
             is SearchHit.Song -> hit.station.artist

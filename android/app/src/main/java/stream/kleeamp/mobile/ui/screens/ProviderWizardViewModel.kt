@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import stream.kleeamp.mobile.data.provider.DISPLAY_NAME_KEY
 import stream.kleeamp.mobile.data.provider.ProviderAccount
 import stream.kleeamp.mobile.data.provider.ProviderIdentity
 import stream.kleeamp.mobile.data.provider.ProviderSpec
@@ -60,7 +61,9 @@ class ProviderWizardViewModel(
         when (e) {
             is Event.SetValue -> {
                 values.value = values.value.toMutableMap().apply { put(e.key, e.value) }
-                probe.value = Probe.Idle
+                // Renaming is not a connection change: keep a good probe so
+                // the name alone never forces another server round trip.
+                if (e.key != DISPLAY_NAME_KEY) probe.value = Probe.Idle
             }
             Event.Test -> viewModelScope.launch { runProbe() }
         }
