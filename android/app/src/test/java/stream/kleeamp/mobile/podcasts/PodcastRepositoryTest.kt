@@ -4,7 +4,9 @@ import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -159,6 +161,153 @@ class PodcastRepositoryTest {
         assertFalse(repository.show.value.loading)
     }
 
+    @Test
+    fun emptyNextPagePublishesExhausted() = runTest {
+        val repository = PodcastRepository(backgroundScope, FakePodcasts(), FakeCache(), FakeGateway())
+        repository.nextPage()
+        runCurrent()
+        assertEquals(
+            PodcastDirectoryState(
+                query = PodcastQuery.Top(),
+                shows = emptyList(),
+                loading = false,
+                exhausted = true,
+                error = null,
+            ),
+            repository.directory.value,
+        )
+    }
+
+    @Test
+    fun primeTopMergesFirstPageAndSnapshotsIt() = runTest {
+        val ids = (1..35).map { "id-$it" }
+        val gateway = FakeGateway(
+            onChartIds = { ids },
+            onLookup = { wanted -> wanted.map { show(it.removePrefix("id-").toInt()) } },
+        )
+        val cache = FakeCache()
+        val repository = PodcastRepository(backgroundScope, FakePodcasts(), cache, gateway)
+        repository.load(PodcastQuery.Top(), reset = true)
+        runCurrent()
+        val state = repository.directory.value
+        assertEquals((1..30).map { "id-$it" }, state.shows.map { it.id })
+        assertFalse(state.loading)
+        assertFalse(state.exhausted)
+        assertEquals(null, state.error)
+        assertEquals(1, cache.kvPuts.size)
+        assertEquals("podcasts:top:all", cache.kvPuts.single().key)
+        val snapshotted = Http.json.decodeFromString<List<PodcastShow>>(cache.kvPuts.single().json)
+        assertEquals(30, snapshotted.size)
+    }
+
+    @Test
+    fun secondPageDedupsByFeedUrl() = runTest {
+        val ids = (1..35).map { "id-$it" }
+        val gateway = FakeGateway(
+            onChartIds = { ids },
+            onLookup = { wanted -> wanted.map { show(it.removePrefix("id-").toInt()) } },
+        )
+        val repository = PodcastRepository(backgroundScope, FakePodcasts(), FakeCache(), gateway)
+        repository.load(PodcastQuery.Top(), reset = true)
+        runCurrent()
+        gateway.onLookup = { wanted -> wanted.map { show(it.removePrefix("id-").toInt()) } + show(1) }
+        repository.nextPage()
+        runCurrent()
+        val state = repository.directory.value
+        assertEquals(35, state.shows.size)
+        assertEquals("id-35", state.shows.last().id)
+        assertEquals(35, state.shows.map { it.feedUrl }.toSet().size)
+        assertFalse(state.loading)
+    }
+
+    @Test
+    fun resetCancelsInFlightPrime() = runTest {
+        val primeGate = CompletableDeferred<List<String>>()
+        val searchGate = CompletableDeferred<List<PodcastShow>>()
+        val gateway = FakeGateway(
+            onChartIds = { primeGate.await() },
+            onSearch = { searchGate.await() },
+        )
+        val repository = PodcastRepository(backgroundScope, FakePodcasts(), FakeCache(), gateway)
+        repository.load(PodcastQuery.Top(), reset = true)
+        runCurrent()
+        repository.load(PodcastQuery.Search("x"), reset = true)
+        runCurrent()
+        searchGate.complete(listOf(show(7)))
+        runCurrent()
+        assertEquals(PodcastQuery.Search("x"), repository.directory.value.query)
+        assertEquals(listOf("id-7"), repository.directory.value.shows.map { it.id })
+        // The cancelled prime resolves late and must leave the newer query alone.
+        primeGate.complete(listOf("id-1"))
+        runCurrent()
+        assertEquals(PodcastQuery.Search("x"), repository.directory.value.query)
+        assertEquals(listOf("id-7"), repository.directory.value.shows.map { it.id })
+    }
+
+    @Test
+    fun primeTimeoutSurfacesError() = runTest {
+        val gateway = FakeGateway(onChartIds = { awaitCancellation() })
+        val repository = PodcastRepository(backgroundScope, FakePodcasts(), FakeCache(), gateway)
+        repository.load(PodcastQuery.Top(), reset = true)
+        runCurrent()
+        assertTrue(repository.directory.value.loading)
+        advanceTimeBy(30_001)
+        runCurrent()
+        val state = repository.directory.value
+        assertFalse(state.loading)
+        assertEquals("podcast directory timed out", state.error)
+        assertTrue(state.shows.isEmpty())
+    }
+
+    @Test
+    fun resetRestoresSnapshotWhilePrimeLoads() = runTest {
+        val old = listOf(show(1), show(2))
+        val cache = FakeCache()
+        cache.kv["podcasts:top:all"] = KvCacheEntity(
+            key = "podcasts:top:all",
+            json = Http.json.encodeToString(old),
+            savedAt = 0L,
+        )
+        val primeGate = CompletableDeferred<List<String>>()
+        val gateway = FakeGateway(
+            onChartIds = { primeGate.await() },
+            onLookup = { wanted -> wanted.map { show(it.removePrefix("id-").toInt()) } },
+        )
+        val repository = PodcastRepository(backgroundScope, FakePodcasts(), cache, gateway)
+        repository.load(PodcastQuery.Top(), reset = true)
+        runCurrent()
+        // Stale snapshot on screen, footer still loading behind it.
+        assertEquals(listOf("id-1", "id-2"), repository.directory.value.shows.map { it.id })
+        assertTrue(repository.directory.value.loading)
+        primeGate.complete(listOf("id-9"))
+        runCurrent()
+        val live = repository.directory.value
+        assertEquals(listOf("id-9"), live.shows.map { it.id })
+        assertFalse(live.loading)
+    }
+
+    @Test
+    fun searchPrimeUsesSearchGateway() = runTest {
+        val gateway = FakeGateway(onSearch = { listOf(show(3)) })
+        val repository = PodcastRepository(backgroundScope, FakePodcasts(), FakeCache(), gateway)
+        repository.load(PodcastQuery.Search("x"), reset = true)
+        runCurrent()
+        assertEquals(listOf("id-3"), repository.directory.value.shows.map { it.id })
+        assertFalse(repository.directory.value.loading)
+    }
+
+    @Test
+    fun categoryPrimeUsesGenreGateway() = runTest {
+        val gateway = FakeGateway(onByGenre = { listOf(show(4)) })
+        val repository = PodcastRepository(backgroundScope, FakePodcasts(), FakeCache(), gateway)
+        repository.load(PodcastQuery.Category(PodcastGenre(1, "Tech")), reset = true)
+        runCurrent()
+        assertEquals(listOf("id-4"), repository.directory.value.shows.map { it.id })
+        assertFalse(repository.directory.value.loading)
+    }
+
+    private fun show(i: Int) = PodcastShow("id-$i", "Show $i", "https://example.com/$i.xml")
+
     private fun loaded(show: PodcastShow, suffix: String = "episode") = PodcastFeed.Loaded(
         show,
         listOf(PodcastEpisode("${show.id}:$suffix", suffix, "https://example.com/${show.id}/$suffix.mp3")),
@@ -178,10 +327,29 @@ class PodcastRepositoryTest {
         override suspend fun getFeed(feedUrl: String) = readFeed(feedUrl)
         override suspend fun putFeed(row: PodcastFeedCacheEntity) = Unit
         override suspend fun pruneFeedsOlderThan(cutoff: Long) = 0
-        override suspend fun get(key: String): KvCacheEntity? = null
-        override suspend fun put(row: KvCacheEntity) = Unit
+        val kv = mutableMapOf<String, KvCacheEntity>()
+        val kvPuts = mutableListOf<KvCacheEntity>()
+        override suspend fun get(key: String): KvCacheEntity? = kv[key]
+        override suspend fun put(row: KvCacheEntity) {
+            kv[row.key] = row
+            kvPuts += row
+        }
         override suspend fun pruneOlderThan(cutoff: Long) = 0
         override suspend fun trimPrefix(prefix: String, keep: Int) = 0
+    }
+
+    private class FakeGateway(
+        var onChartIds: suspend (String) -> List<String> = { emptyList() },
+        var onGenreChartIds: suspend (String, Int) -> List<String> = { _, _ -> emptyList() },
+        var onSearch: suspend (String) -> List<PodcastShow> = { emptyList() },
+        var onByGenre: suspend (PodcastGenre) -> List<PodcastShow> = { emptyList() },
+        var onLookup: suspend (List<String>) -> List<PodcastShow> = { emptyList() },
+    ) : PodcastDirectoryGateway {
+        override suspend fun chartIds(country: String) = onChartIds(country)
+        override suspend fun genreChartIds(country: String, genreId: Int) = onGenreChartIds(country, genreId)
+        override suspend fun search(text: String) = onSearch(text)
+        override suspend fun byGenre(genre: PodcastGenre) = onByGenre(genre)
+        override suspend fun lookup(ids: List<String>) = onLookup(ids)
     }
 
     private class FakePodcasts : PodcastDao {

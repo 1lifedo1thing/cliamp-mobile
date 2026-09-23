@@ -54,10 +54,16 @@ object PodcastFeed {
         }
     }
 
-    // Single-pass pull-parser state machine; covered by PodcastRepositoryTest.
+    // Single-pass pull-parser state machine; covered by PodcastFeedTest.
+    // The parser factory is injectable because android.util.Xml is stubbed
+    // on the JVM; production uses the platform parser by default.
     @Suppress("LongMethod", "CyclomaticComplexMethod", "NestedBlockDepth")
-    private suspend fun parse(base: PodcastShow, input: InputStream): Loaded {
-        val parser = Xml.newPullParser()
+    internal suspend fun parse(
+        base: PodcastShow,
+        input: InputStream,
+        newParser: () -> XmlPullParser = Xml::newPullParser,
+    ): Loaded {
+        val parser = newParser()
         parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
         // A null encoding lets the parser honour the XML declaration, which is
         // the only thing that knows: feeds arrive as utf-8 and iso-8859-1 alike.

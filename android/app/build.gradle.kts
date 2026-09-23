@@ -156,6 +156,8 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Real XmlPullParser for feed-parser unit tests (android.util.Xml is stubbed on JVM).
+    testImplementation(libs.kxml2)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test)
     androidTestImplementation(libs.androidx.test.runner)

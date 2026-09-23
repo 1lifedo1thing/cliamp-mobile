@@ -63,6 +63,35 @@ data class ShowState(
 )
 
 /**
+ * The directory's network edge, seam-tested through fakes. The default
+ * delegates to [PodcastDirectory]; behaviour is identical either way.
+ */
+interface PodcastDirectoryGateway {
+    suspend fun chartIds(country: String): List<String>
+    suspend fun genreChartIds(country: String, genreId: Int): List<String>
+    suspend fun search(text: String): List<PodcastShow>
+    suspend fun byGenre(genre: PodcastGenre): List<PodcastShow>
+    suspend fun lookup(ids: List<String>): List<PodcastShow>
+}
+
+private object RealPodcastDirectoryGateway : PodcastDirectoryGateway {
+    override suspend fun chartIds(country: String): List<String> =
+        PodcastDirectory.chartIds(country)
+
+    override suspend fun genreChartIds(country: String, genreId: Int): List<String> =
+        PodcastDirectory.genreChartIds(country, genreId)
+
+    override suspend fun search(text: String): List<PodcastShow> =
+        PodcastDirectory.search(text)
+
+    override suspend fun byGenre(genre: PodcastGenre): List<PodcastShow> =
+        PodcastDirectory.byGenre(genre)
+
+    override suspend fun lookup(ids: List<String>): List<PodcastShow> =
+        PodcastDirectory.lookup(ids)
+}
+
+/**
  * Podcasts, held the way [RadioRepository] holds radio: a small resident list you
  * own (subscriptions, where radio has cliamp's channels and favourites) beside
  * a large directory that is paged and never fully materialised.
@@ -81,6 +110,7 @@ class PodcastRepository internal constructor(
     private val scope: CoroutineScope,
     private val dao: PodcastDao,
     private val cache: CacheDao,
+    private val directoryGateway: PodcastDirectoryGateway = RealPodcastDirectoryGateway,
     private val loadFeed: suspend (PodcastShow) -> Result<PodcastFeed.Loaded> = PodcastFeed::load,
 ) {
     constructor(context: Context, scope: CoroutineScope) : this(
@@ -174,17 +204,17 @@ private var chartCursor: List<String> = emptyList()
                             retryFetch {
                                 when (query) {
                                     is PodcastQuery.Top -> {
-                                        chartCursor = PodcastDirectory.chartIds(
+                                        chartCursor = directoryGateway.chartIds(
                                             country = query.country.ifEmpty { "us" },
                                         )
                                         PodcastDirectory.genres.forEach { g ->
                                             chartQueue.add {
-                                                PodcastDirectory.genreChartIds(query.country.ifEmpty { "us" }, g.id)
+                                                directoryGateway.genreChartIds(query.country.ifEmpty { "us" }, g.id)
                                             }
                                         }
                                     }
-                                    is PodcastQuery.Search -> pending = PodcastDirectory.search(query.text)
-                                    is PodcastQuery.Category -> pending = PodcastDirectory.byGenre(query.genre)
+                                    is PodcastQuery.Search -> pending = directoryGateway.search(query.text)
+                                    is PodcastQuery.Category -> pending = directoryGateway.byGenre(query.genre)
                                 }
                             }
                         } ?: throw IOException("podcast directory timed out")
@@ -217,7 +247,7 @@ private var chartCursor: List<String> = emptyList()
                                 chartCursor = retryFetch { chartQueue.removeAt(0)() }
                             }
                             val ids = chartCursor.take(PAGE)
-                            val shows = retryFetch { PodcastDirectory.lookup(ids) }
+                            val shows = retryFetch { directoryGateway.lookup(ids) }
                             // Only consume the ids once they have actually resolved:
                             // a page that fails (connection dropped, Apple rate
                             // limit) must be retried, not silently skipped.
