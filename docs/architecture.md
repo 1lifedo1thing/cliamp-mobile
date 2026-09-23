@@ -2,6 +2,10 @@
 
 Same app, same behavior. **Flat vertical slices** — no `feature/` folder, no `kernel/` folder. Each product job is a top-level package under `stream.kleeamp.mobile`.
 
+> Status after the refactor run (steps 00–20): **current = target.** The tree
+> below is what is on disk. `ui/` and `data/` are gone; `feature/` and
+> `kernel/` were never created.
+
 ```
 stream.kleeamp.mobile
 ├── KleeampApp.kt              # composition root (stays at package root)
