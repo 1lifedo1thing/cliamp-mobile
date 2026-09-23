@@ -271,7 +271,10 @@ class PlaybackService : MediaSessionService() {
                     onLiveChanged = PlaybackBus::publishSpectrumLive,
                 )
                 fx.setEqEnabled(eqOn)
-                if (eqOn) fx.applyBands(bands)
+                // Pretend-off: DSP stays engaged, OFF means flat (no pops
+                // from removing the effect; battery cost is negligible vs
+                // the visualizer). Stored bands are kept so ON restores them.
+                fx.applyEffectiveBands(eqOn, bands)
             }
         }
 

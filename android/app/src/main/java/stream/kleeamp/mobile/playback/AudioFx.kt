@@ -50,7 +50,10 @@ class AudioFx(private val bands: Int = 64) {
 
         runCatching {
             equalizer = Equalizer(0, audioSessionId).apply {
-                enabled = false
+                // Pretend-off: DSP stays engaged, OFF means flat bands.
+                // Flipping enabled=false re-routes the audio path on some
+                // phones and pops/jumps. Flat is sonically off.
+                enabled = true
                 _bandLabels = (0 until numberOfBands).map { b ->
                     val hz = getCenterFreq(b.toShort()) / 1000
                     if (hz >= 1000) "${hz / 1000}k" else "$hz"
@@ -138,8 +141,14 @@ class AudioFx(private val bands: Int = 64) {
         return out
     }
 
-    fun setEqEnabled(on: Boolean) {
-        runCatching { equalizer?.enabled = on }
+    /**
+     * Pretend-off: the DSP is never disabled (disabling re-routes audio and
+     * pops on some phones). OFF is flat bands; ON restores the user curve.
+     * The [on] flag is kept for call-site compat and always leaves the
+     * effect enabled — callers must follow with [applyEffectiveBands].
+     */
+    fun setEqEnabled(@Suppress("UNUSED_PARAMETER") on: Boolean) {
+        runCatching { equalizer?.enabled = true }
     }
 
     /** Slider values are -1..1; the device reports its own millibel range. */
@@ -158,6 +167,12 @@ class AudioFx(private val bands: Int = 64) {
     }
 
     fun applyBands(values: List<Float>) = values.forEachIndexed { i, v -> setBand(i, v) }
+
+    /** OFF applies [flat] with DSP still enabled; ON applies the user [bands]. */
+    fun applyEffectiveBands(enabled: Boolean, bands: List<Float>, flat: List<Float> = EqPresets.flat) {
+        runCatching { equalizer?.enabled = true }
+        applyBands(if (enabled) bands else flat)
+    }
 
     fun release() {
         runCatching { visualizer?.enabled = false }

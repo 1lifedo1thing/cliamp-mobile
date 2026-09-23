@@ -252,7 +252,8 @@ fun ScopeScreen(
         Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp)) {
             Mono(
                 "eq and spectrum attach to the decoder output. they need the record-audio permission, " +
-                    "which android uses to gate the visualizer api even with no microphone involved",
+                    "which android uses to gate the visualizer api even with no microphone involved. " +
+                    "eq off is flat with the dsp left on: same sound, no pop from removing the effect",
                 KleeampType.meta,
                 p.inkFaint,
             )
