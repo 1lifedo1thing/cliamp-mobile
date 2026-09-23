@@ -6,7 +6,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -15,6 +14,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import stream.kleeamp.mobile.common.stateInUi
 import stream.kleeamp.mobile.radio.DirectoryQuery
 import stream.kleeamp.mobile.radio.DirectoryState
 import stream.kleeamp.mobile.library.LocalLibrary
@@ -129,7 +129,7 @@ class SearchViewModel(
             SearchScope.Providers -> results.filter { it is SearchHit.Provider }
         }
         UiState(filter = dir.filter, term = dir.term, results = results, shown = shown)
-    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
+    }.flowOn(Dispatchers.Default).stateInUi(viewModelScope, UiState())
 
     /**
      * The one directory fetch job: debounced typing and the Go action share

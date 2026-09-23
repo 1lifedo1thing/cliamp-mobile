@@ -2,11 +2,11 @@ package stream.kleeamp.mobile.radio
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import stream.kleeamp.mobile.common.stateInUi
 import stream.kleeamp.mobile.radio.CountryCount
 import stream.kleeamp.mobile.radio.DirectoryQuery
 import stream.kleeamp.mobile.radio.DirectoryState
@@ -76,9 +76,8 @@ class StationsViewModel(
             tags = facets.tags,
             countries = facets.countries,
         )
-    }.stateIn(
+    }.stateInUi(
         viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
         UiState(
             cliamp = repository.cliamp.value,
             cliampError = repository.cliampError.value,

@@ -4,13 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import stream.kleeamp.mobile.common.stateInUi
 import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.servers.ProviderAccount
@@ -80,9 +80,8 @@ class ProviderSongsViewModel(
             failures = songs.failures,
             favorites = favorites,
         )
-    }.stateIn(
+    }.stateInUi(
         viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
         UiState(),
     )
 

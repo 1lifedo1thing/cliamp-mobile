@@ -3,11 +3,11 @@ package stream.kleeamp.mobile.library
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import stream.kleeamp.mobile.common.stateInUi
 import stream.kleeamp.mobile.radio.DirectoryState
 import stream.kleeamp.mobile.library.LocalLibrary
 import stream.kleeamp.mobile.library.PlaylistStore
@@ -99,9 +99,8 @@ class PlaylistDetailViewModel(
             showState = meta.showState,
             favorites = meta.favorites,
         )
-    }.stateIn(
+    }.stateInUi(
         viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
         UiState(
             sort = prefs.playlistSortValue(slug),
             localSongs = localLibrary.songs.value,

@@ -3,12 +3,12 @@ package stream.kleeamp.mobile.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.radio.DirectoryStats
+import stream.kleeamp.mobile.common.stateInUi
 import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.radio.RadioRepository
 import stream.kleeamp.mobile.model.Station
@@ -128,7 +128,7 @@ class SettingsViewModel(
             historyCount = library.history.size,
             directoryStats = library.directoryStats,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
+    }.stateInUi(viewModelScope, UiState())
 
     // Flat event dispatcher; every branch is one settings delegation.
     @Suppress("CyclomaticComplexMethod")

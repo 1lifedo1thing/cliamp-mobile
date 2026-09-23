@@ -3,11 +3,11 @@ package stream.kleeamp.mobile.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import stream.kleeamp.mobile.common.stateInUi
 
 sealed interface ScrobbleProbe {
     data object Idle : ScrobbleProbe
@@ -43,9 +43,8 @@ class ScrobbleWizardViewModel(
 
     val state: StateFlow<UiState> = combine(token, probe) { t, p ->
         UiState(token = t, probe = p)
-    }.stateIn(
+    }.stateInUi(
         viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
         UiState(token = seedToken),
     )
 

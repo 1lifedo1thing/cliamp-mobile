@@ -2,12 +2,12 @@ package stream.kleeamp.mobile.servers
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import stream.kleeamp.mobile.common.stateInUi
 import stream.kleeamp.mobile.servers.ProviderAccount
 import stream.kleeamp.mobile.servers.ProviderStore
 
@@ -27,9 +27,8 @@ class ProvidersPaneViewModel(
         flowOf(Unit),
     ) { accounts, _ ->
         UiState(providers = accounts)
-    }.stateIn(
+    }.stateInUi(
         viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
         UiState(),
     )
 

@@ -4,11 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import stream.kleeamp.mobile.common.stateInUi
 import stream.kleeamp.mobile.library.LocalLibrary
 import stream.kleeamp.mobile.library.PlaylistStore
 import stream.kleeamp.mobile.prefs.Prefs
@@ -99,9 +99,8 @@ class AddToPlaylistViewModel(
             favoritesCount = favorites.size,
             isFavorite = isFavorite,
         )
-    }.stateIn(
+    }.stateInUi(
         viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
         UiState(),
     )
 

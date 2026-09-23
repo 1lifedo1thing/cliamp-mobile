@@ -2,11 +2,11 @@ package stream.kleeamp.mobile.podcasts
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import stream.kleeamp.mobile.common.stateInUi
 import stream.kleeamp.mobile.radio.CountryCount
 import stream.kleeamp.mobile.podcasts.PodcastDirectoryState
 import stream.kleeamp.mobile.podcasts.PodcastQuery
@@ -49,9 +49,8 @@ class PodcastsViewModel(
             directory = directory,
             subscriptions = subscriptions,
         )
-    }.stateIn(
+    }.stateInUi(
         viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
         UiState(
             subsGrid = prefs.subsGrid.value,
             podDirectoryGrid = prefs.podDirectoryGrid.value,

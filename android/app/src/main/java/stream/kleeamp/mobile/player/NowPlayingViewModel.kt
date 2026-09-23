@@ -3,11 +3,11 @@ package stream.kleeamp.mobile.player
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import stream.kleeamp.mobile.common.stateInUi
 import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.playback.PlaybackBus
@@ -114,7 +114,7 @@ class NowPlayingViewModel(
             visualizer = lib.visualizer,
             outputDevice = lib.outputDevice,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
+    }.stateInUi(viewModelScope, UiState())
 
     fun onEvent(e: Event) {
         when (e) {
