@@ -24,7 +24,7 @@ import stream.kleeamp.mobile.library.PlaylistStore
 import stream.kleeamp.mobile.podcasts.PodcastRepository
 import stream.kleeamp.mobile.radio.RadioBrowser
 import stream.kleeamp.mobile.radio.RadioRepository
-import stream.kleeamp.mobile.data.Scrobbler
+import stream.kleeamp.mobile.settings.Scrobbler
 import stream.kleeamp.mobile.playback.PlayerConnection
 import stream.kleeamp.mobile.widget.WidgetRenderer
 

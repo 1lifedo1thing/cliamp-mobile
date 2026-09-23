@@ -72,11 +72,11 @@ import stream.kleeamp.mobile.podcasts.PodcastShowScreen
 import stream.kleeamp.mobile.podcasts.PodcastsScreen
 import stream.kleeamp.mobile.player.UpNextScreen
 import stream.kleeamp.mobile.player.ScopeScreen
-import stream.kleeamp.mobile.ui.screens.ScrobbleWizard as ScrobbleWizardScreen
+import stream.kleeamp.mobile.settings.ScrobbleWizard as ScrobbleWizardScreen
 import stream.kleeamp.mobile.servers.ProviderCatalog
 import stream.kleeamp.mobile.servers.ProviderStore
 import stream.kleeamp.mobile.servers.ProviderWizard as ProviderWizardScreen
-import stream.kleeamp.mobile.ui.screens.SettingsScreen
+import stream.kleeamp.mobile.settings.SettingsScreen
 import stream.kleeamp.mobile.radio.StationsScreen
 import stream.kleeamp.mobile.radio.StationsViewModel
 import stream.kleeamp.mobile.podcasts.PodcastsViewModel
@@ -91,9 +91,9 @@ import stream.kleeamp.mobile.library.PlaylistDetailViewModel
 import stream.kleeamp.mobile.library.SongInfoViewModel
 import stream.kleeamp.mobile.player.NowPlayingViewModel
 import stream.kleeamp.mobile.search.SearchViewModel
-import stream.kleeamp.mobile.ui.screens.SettingsViewModel
+import stream.kleeamp.mobile.settings.SettingsViewModel
 import stream.kleeamp.mobile.servers.ProviderWizardViewModel
-import stream.kleeamp.mobile.ui.screens.ScrobbleWizardViewModel
+import stream.kleeamp.mobile.settings.ScrobbleWizardViewModel
 import stream.kleeamp.mobile.theme.LocalPalette
 
 /**

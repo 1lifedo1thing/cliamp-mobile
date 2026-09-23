@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.screens
+package stream.kleeamp.mobile.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement

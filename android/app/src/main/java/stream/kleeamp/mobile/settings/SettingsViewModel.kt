@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.screens
+package stream.kleeamp.mobile.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope

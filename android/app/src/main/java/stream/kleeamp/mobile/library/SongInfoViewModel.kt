@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.library.LocalLibrary
 import stream.kleeamp.mobile.prefs.Prefs
-import stream.kleeamp.mobile.data.Scrobbler
+import stream.kleeamp.mobile.settings.Scrobbler
 import stream.kleeamp.mobile.model.Station
 
 class SongInfoViewModel(

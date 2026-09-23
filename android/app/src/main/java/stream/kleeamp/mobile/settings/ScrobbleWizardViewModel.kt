@@ -1,10 +1,9 @@
-package stream.kleeamp.mobile.ui.screens
+package stream.kleeamp.mobile.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import stream.kleeamp.mobile.data.validateListenBrainzToken
 
 sealed interface ScrobbleProbe {
     data object Idle : ScrobbleProbe
