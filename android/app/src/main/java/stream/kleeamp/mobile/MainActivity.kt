@@ -26,7 +26,6 @@ import stream.kleeamp.mobile.theme.KleeampTheme
 import stream.kleeamp.mobile.theme.decodeCustomThemeOrNull
 import stream.kleeamp.mobile.theme.paletteFor
 
-@UnstableApi
 class MainActivity : ComponentActivity() {
 
     companion object {
@@ -49,6 +48,7 @@ class MainActivity : ComponentActivity() {
      * the custom list and played straight away, so "share → kleeamp" just
      * tunes in.
      */
+    @UnstableApi
     private fun handleShare(intent: Intent?) {
         if (intent?.action != Intent.ACTION_SEND) return
         val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString().orEmpty()
@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { }
 
+    @UnstableApi
     override fun onCreate(savedInstanceState: Bundle?) {
         // Both bars stay, both are transparent, and the app draws through
         // them.
@@ -158,6 +159,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @UnstableApi
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)

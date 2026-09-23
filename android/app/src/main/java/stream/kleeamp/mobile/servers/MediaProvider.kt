@@ -1,5 +1,6 @@
 package stream.kleeamp.mobile.servers
 
+import androidx.media3.common.util.UnstableApi
 import stream.kleeamp.mobile.playback.ResolvedStream
 import stream.kleeamp.mobile.playback.SftpDataSource
 
@@ -51,6 +52,8 @@ object LyrionMediaProvider : MediaProvider {
  */
 object SshMediaProvider : MediaProvider {
     override val key = "ssh"
+    // SftpDataSource extends Media3's unstable data-source API.
+    @UnstableApi
     override suspend fun stream(account: ProviderAccount, trackId: String): ResolvedStream =
         ResolvedStream(SftpDataSource.uriFor(account.id, trackId))
 }

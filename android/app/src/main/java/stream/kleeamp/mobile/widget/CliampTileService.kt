@@ -1,6 +1,7 @@
 package stream.kleeamp.mobile.widget
 
 import android.graphics.drawable.Icon
+import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import kotlinx.coroutines.CoroutineScope
@@ -51,7 +52,10 @@ class CliampTileService : TileService() {
         qsTile?.apply {
             state = if (playing) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
             label = station?.name ?: "kleeamp"
-            subtitle = if (playing) "streaming" else "stopped"
+            // setSubtitle needs API 29; older tiles show the label alone.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                subtitle = if (playing) "streaming" else "stopped"
+            }
             icon = Icon.createWithResource(this@CliampTileService, R.drawable.ic_notification)
             updateTile()
         }

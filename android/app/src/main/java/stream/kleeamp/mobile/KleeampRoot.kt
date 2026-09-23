@@ -764,6 +764,7 @@ private fun rememberGuardedNav(navController: NavHostController): GuardedNav {
  * lives here, so it never recomposes the root when it changes. The bar
  * shows covers, not the meter, so the visualizer setting is not read here.
  */
+@UnstableApi
 @Composable
 private fun ScopedMiniPlayer(
     prefs: Prefs,

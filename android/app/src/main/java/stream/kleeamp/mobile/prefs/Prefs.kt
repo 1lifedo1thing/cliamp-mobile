@@ -46,14 +46,14 @@ enum class PlaylistSort(val label: String) {
 }
 
 /** Playlist members sorted by the chosen order; title is the stable tiebreak. */
-fun <T : Station> sortedStations(songs: List<T>, sort: PlaylistSort): List<T> {
-    val title = compareBy<T> { it.name.lowercase() }
+fun sortedStations(songs: List<Station>, sort: PlaylistSort): List<Station> {
+    val title = compareBy<Station> { it.name.lowercase() }
     return when (sort) {
         PlaylistSort.Title -> songs.sortedWith(title)
-        PlaylistSort.Artist -> songs.sortedWith(compareBy<T> { it.artist.lowercase() }.then(title))
-        PlaylistSort.Album -> songs.sortedWith(compareBy<T> { it.album.lowercase() }.then(title))
+        PlaylistSort.Artist -> songs.sortedWith(compareBy<Station> { it.artist.lowercase() }.then(title))
+        PlaylistSort.Album -> songs.sortedWith(compareBy<Station> { it.album.lowercase() }.then(title))
         PlaylistSort.RecentlyAdded ->
-            songs.sortedWith(compareByDescending<T> { it.dateAdded }.then(title))
+            songs.sortedWith(compareByDescending<Station> { it.dateAdded }.then(title))
     }
 }
 

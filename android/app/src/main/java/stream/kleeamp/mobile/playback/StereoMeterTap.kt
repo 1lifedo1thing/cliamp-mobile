@@ -2,12 +2,14 @@ package stream.kleeamp.mobile.playback
 
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.util.UnstableApi
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
 import stream.kleeamp.mobile.player.vis.StereoCore
 import stream.kleeamp.mobile.player.vis.StereoMetrics
 
+@UnstableApi
 class StereoMeterTap : AudioProcessor {
 
     private var configured = false

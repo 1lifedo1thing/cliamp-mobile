@@ -32,7 +32,6 @@ import stream.kleeamp.mobile.widget.WidgetRenderer
  * Manual DI. The graph is four objects deep; a framework would cost more
  * lines than it saves.
  */
-@UnstableApi
 class KleeampApp : Application() {
 
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -43,7 +42,22 @@ class KleeampApp : Application() {
     val podcasts: PodcastRepository by lazy { PodcastRepository(this, appScope) }
     val localLibrary: LocalLibrary by lazy { LocalLibrary(this, appScope) }
     val playlists: PlaylistStore by lazy { PlaylistStore(this) }
-    val player: PlayerConnection by lazy {
+    // PlayerConnection is Media3-unstable: only this getter and factory opt
+    // in, so the app type itself stays clean for every cast and lambda.
+    // A by-lazy delegate cannot carry markers (neither opt-in nor lint
+    // suppressions apply to it), hence the explicit synchronized memo.
+    @get:UnstableApi
+    val player: PlayerConnection
+        get() = synchronized(playerLock) {
+            playerField ?: buildPlayer().also { playerField = it }
+        }
+
+    private val playerLock = Any()
+    @UnstableApi
+    private var playerField: PlayerConnection? = null
+
+    @UnstableApi
+    private fun buildPlayer(): PlayerConnection =
         PlayerConnection(
             this,
             CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
@@ -56,7 +70,6 @@ class KleeampApp : Application() {
                 scrobbler.onTick(station, playing, durationMs)
             },
         )
-    }
     val downloads: DownloadStore by lazy { DownloadStore(this, prefs, appScope) }
     val scrobbler: Scrobbler by lazy { Scrobbler(this, prefs, appScope) }
     val providerRouter: ProviderRouter by lazy { ProviderRouter(ProviderRouter.defaults()) }
@@ -78,6 +91,7 @@ class KleeampApp : Application() {
         )
     }
 
+    @UnstableApi
     override fun onCreate() {
         super.onCreate()
         Http.init(this)

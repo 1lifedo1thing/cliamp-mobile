@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
+import android.annotation.SuppressLint
 
 enum class OutputKind { Speaker, Headphones, Bluetooth, Usb, Other }
 
@@ -122,6 +123,9 @@ object AudioOutputs {
         else -> "output"
     }
 
+    // TYPE_REMOTE_SUBMIX is an API 31 constant inlined at compile time, so
+    // comparing against it is a plain int check, safe on every minSdk.
+    @SuppressLint("InlinedApi")
     private fun sinkDevices(manager: AudioManager): List<AudioDeviceInfo> =
         manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).filter {
             it.isSink &&

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!--
+      UnusedAttribute below is forward compatibility, not dead config: the
+      attributes are honored on newer platforms and ignored on older ones.
+      Removing them would regress widgets on API 31+ (targetCell, preview)
+      and predictive back on API 33+.
+    -->
+    <issue id="UnusedAttribute" severity="ignore">
+        <ignore path="src/main/AndroidManifest.xml" />
+        <ignore path="src/main/res/xml/kleeamp_widget_info.xml" />
+        <ignore path="src/main/res/xml/search_widget_info.xml" />
+    </issue>
+</lint>

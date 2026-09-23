@@ -16,7 +16,6 @@ import kotlinx.coroutines.launch
  * [WidgetControl] (MediaController, ~15ms a round-trip); pixels go out
  * through [WidgetRenderer], which conflates bursts into one ordered push.
  */
-@UnstableApi
 class CliampWidgetProvider : AppWidgetProvider() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -34,6 +33,7 @@ class CliampWidgetProvider : AppWidgetProvider() {
         WidgetRenderer.refresh(context)
     }
 
+    @UnstableApi
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             WIDGET_ACTION_TOGGLE,

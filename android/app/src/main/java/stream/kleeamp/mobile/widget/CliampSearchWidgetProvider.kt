@@ -9,7 +9,6 @@ import android.content.res.Configuration
 import android.util.Log
 import android.widget.RemoteViews
 import androidx.compose.ui.graphics.toArgb
-import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,7 +25,6 @@ import stream.kleeamp.mobile.theme.decodeCustomThemeOrNull
  * Search page. No playback state, no collection - just a themed hint with a
  * PendingIntent into [MainActivity] carrying [MainActivity.EXTRA_OPEN_SEARCH].
  */
-@UnstableApi
 class CliampSearchWidgetProvider : android.appwidget.AppWidgetProvider() {
 
     override fun onUpdate(context: Context, mgr: AppWidgetManager, ids: IntArray) {
@@ -43,7 +41,6 @@ class CliampSearchWidgetProvider : android.appwidget.AppWidgetProvider() {
     }
 }
 
-@UnstableApi
 object SearchWidgetRenderer {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

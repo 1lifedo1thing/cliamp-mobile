@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,7 +71,10 @@ fun ScopeScreen(
     // analyser flow would recompose this whole screen on every FFT callback
     // and starve the meter loop into stutter. The meter itself reads the bus
     // directly through provider lambdas (zero recomposition, zero lag).
-    val peakBands by PlaybackBus.spectrum.sample(500).collectAsState(initial = FloatArray(0))
+    // The sample operator is hoisted out of composition so a recomposition
+    // never rebuilds the sampling pipeline.
+    val sampledSpectrum = remember { PlaybackBus.spectrum.sample(500) }
+    val peakBands by sampledSpectrum.collectAsState(initial = FloatArray(0))
     val spectrumProvider: () -> FloatArray? = { PlaybackBus.spectrum.value }
     val stereoProvider: () -> StereoMetrics? = { PlaybackBus.stereo.value }
     val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")

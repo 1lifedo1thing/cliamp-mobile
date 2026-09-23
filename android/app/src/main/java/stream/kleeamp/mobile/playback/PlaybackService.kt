@@ -1,19 +1,23 @@
 package stream.kleeamp.mobile.playback
 
 import android.app.PendingIntent
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
+import androidx.annotation.DrawableRes
 import android.os.Looper
 import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
+import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Metadata
 import androidx.media3.common.PlaybackException
@@ -144,6 +148,7 @@ class PlaybackService : MediaSessionService() {
     private lateinit var prefs0: stream.kleeamp.mobile.prefs.Prefs
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
+    @ExperimentalApi
     override fun onCreate() {
         super.onCreate()
 
@@ -293,27 +298,31 @@ class PlaybackService : MediaSessionService() {
     ): ImmutableList<CommandButton> = ImmutableList.of(
         CommandButton.Builder(CommandButton.ICON_PREVIOUS)
             .setDisplayName("Previous")
-            .setIconResId(R.drawable.ic_w_prev)
+            .setIconUri(iconUri(R.drawable.ic_w_prev))
             .setSessionCommand(SessionCommand(CMD_PREV_STATION, Bundle.EMPTY))
             .build(),
         CommandButton.Builder(
             if (isFavourite) CommandButton.ICON_STAR_FILLED else CommandButton.ICON_STAR_UNFILLED
         )
             .setDisplayName(if (isFavourite) "Remove favourite" else "Favourite")
-            .setIconResId(if (isFavourite) R.drawable.ic_w_star_filled else R.drawable.ic_w_star)
+            .setIconUri(iconUri(if (isFavourite) R.drawable.ic_w_star_filled else R.drawable.ic_w_star))
             .setSessionCommand(SessionCommand(CMD_FAVOURITE, Bundle.EMPTY))
             .build(),
         CommandButton.Builder(CommandButton.ICON_SHUFFLE_ON)
             .setDisplayName("Shuffle")
-            .setIconResId(R.drawable.ic_w_shuffle)
+            .setIconUri(iconUri(R.drawable.ic_w_shuffle))
             .setSessionCommand(SessionCommand(CMD_SHUFFLE, Bundle.EMPTY))
             .build(),
         CommandButton.Builder(CommandButton.ICON_NEXT)
             .setDisplayName("Next")
-            .setIconResId(R.drawable.ic_w_next)
+            .setIconUri(iconUri(R.drawable.ic_w_next))
             .setSessionCommand(SessionCommand(CMD_NEXT_STATION, Bundle.EMPTY))
             .build(),
     )
+
+    /** android.resource URIs resolve cross-process in SystemUI, like res ids did. */
+    private fun iconUri(@DrawableRes resId: Int): Uri =
+        Uri.parse("${ContentResolver.SCHEME_ANDROID_RESOURCE}://${packageName}/$resId")
 
     private inner class SessionCallback : MediaSession.Callback {
         override fun onConnect(
@@ -326,7 +335,7 @@ class PlaybackService : MediaSessionService() {
                 .add(SessionCommand(CMD_FAVOURITE, Bundle.EMPTY))
                 .add(SessionCommand(CMD_SHUFFLE, Bundle.EMPTY))
                 .build()
-            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller)
                 .setAvailableSessionCommands(commands)
                 .setMediaButtonPreferences(buttons(false))
                 .build()
@@ -787,6 +796,7 @@ class PlaybackService : MediaSessionService() {
  * shade. Fixed rather than following the chosen theme, because this is the
  * app's identity outside the app - same argument as the launcher icon.
  */
+@UnstableApi
 private class OxideNotificationProvider(context: Context) :
     DefaultMediaNotificationProvider(context) {
 
@@ -807,5 +817,6 @@ private class OxideNotificationProvider(context: Context) :
 }
 
 /** An N-to-N diagonal of ones: the mixer's spelling of passthrough. */
+@UnstableApi
 private fun identityMatrix(n: Int): ChannelMixingMatrix =
     ChannelMixingMatrix(n, n, FloatArray(n * n) { i -> if (i % (n + 1) == 0) 1f else 0f })

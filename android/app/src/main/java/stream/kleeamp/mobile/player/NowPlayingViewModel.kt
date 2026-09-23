@@ -2,6 +2,7 @@ package stream.kleeamp.mobile.player
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -22,6 +23,7 @@ private fun nextSpeed(now: Float): Float {
     return if (i < 0) 1f else SpeedSteps[(i + 1) % SpeedSteps.size]
 }
 
+@UnstableApi
 class NowPlayingViewModel(
     val player: PlayerConnection,
     private val prefs: Prefs,

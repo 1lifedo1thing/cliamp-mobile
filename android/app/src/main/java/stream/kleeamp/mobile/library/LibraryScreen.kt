@@ -234,7 +234,7 @@ fun LibraryScreen(
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
                 !haveAudio -> PermissionNote()
-                libError != null && songs.isEmpty() -> CenterNote(libError!!, p.destructiveInk)
+                libError != null && songs.isEmpty() -> CenterNote(libError, p.destructiveInk)
                 else -> PlaylistList(
                     listState = listState,
                     smart = smartPlaylists,
