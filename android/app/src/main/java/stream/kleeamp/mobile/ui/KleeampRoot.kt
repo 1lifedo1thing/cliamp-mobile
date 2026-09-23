@@ -52,6 +52,7 @@ import stream.kleeamp.mobile.data.PodcastRepository
 import stream.kleeamp.mobile.data.PodcastShow
 import stream.kleeamp.mobile.data.Repository
 import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.play.PlayFromList
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection
 import stream.kleeamp.mobile.ui.components.KleeampTabBar
@@ -189,7 +190,7 @@ fun KleeampRoot(
         }
     }
 
-    val onPlay: (Station, List<Station>) -> Unit = { s, from ->
+    val play = PlayFromList { s, from ->
         player.play(s, from)
         repository.reportPlay(s)
     }
@@ -375,7 +376,7 @@ fun KleeampRoot(
                                 prefs = prefs,
                                 current = station,
                                 playing = playerState.playing,
-                                onPlay = onPlay,
+                                onPlay = { s, from -> play(s, from) },
                                 onAddToQueue = { player.addToUpNext(it) },
                                 onOpenSearch = {
                                     navController.navigate(Search)
@@ -427,7 +428,7 @@ fun KleeampRoot(
                         current = station,
                         playing = playerState.playing,
                         onBack = { navController.popBackStack() },
-                        onPlay = onPlay,
+                        onPlay = { s, from -> play(s, from) },
                         onAddToUpNext = { player.addToUpNext(it) },
                         onPlayNext = { player.playNext(it) },
                         onOpenSearch = { navController.navigate(Search) },
@@ -464,7 +465,7 @@ fun KleeampRoot(
                         accountId = songsAccountId,
                         current = station,
                         playing = playerState.playing,
-                        onPlay = onPlay,
+                        onPlay = { s, from -> play(s, from) },
                         onAddToQueue = { player.addToUpNext(it) },
                         onBack = { navController.popBackStack() },
                         onOpenSearch = { navController.navigate(Search) },
@@ -483,7 +484,7 @@ fun KleeampRoot(
                         kindName = kind,
                         current = station,
                         playing = playerState.playing,
-                        onPlay = onPlay,
+                        onPlay = { s, from -> play(s, from) },
                         onAddToQueue = { player.addToUpNext(it) },
                         favScope = favScope,
                         onFavScopeChange = { favScope = it },
@@ -515,7 +516,7 @@ fun KleeampRoot(
                         slug = slug,
                         current = station,
                         playing = playerState.playing,
-                        onPlay = onPlay,
+                        onPlay = { s, from -> play(s, from) },
                         onAddToQueue = { player.addToUpNext(it) },
                         onBack = { navController.popBackStack() },
                         onOpenSearch = { navController.navigate(Search) },
@@ -618,7 +619,7 @@ fun KleeampRoot(
                     },
                     current = station,
                     playing = playerState.playing,
-                    onPlay = onPlay,
+                    onPlay = { s, from -> play(s, from) },
                     onOpenProvider = { account -> navController.navigate(LibraryProviderSongs(account.id)) },
                     onOpenShow = { show: PodcastShow ->
                         podcasts.openShow(show)
