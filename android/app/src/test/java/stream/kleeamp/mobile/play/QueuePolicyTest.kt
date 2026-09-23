@@ -1,7 +1,9 @@
 package stream.kleeamp.mobile.play
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import stream.kleeamp.mobile.model.Station
@@ -148,5 +150,168 @@ class QueuePolicyTest {
         val (combined, idx) = QueuePolicy.persistQueueWindow(source, 0, source, 3)
         assertEquals(source, combined)
         assertEquals(3, idx)
+    }
+
+    @Test
+    fun resolveHerePrefersPendingThenModelThenLiveThenBus() {
+        assertEquals(5, QueuePolicy.resolveHere(5, 4, 3, 2))
+        assertEquals(4, QueuePolicy.resolveHere(null, 4, 3, 2))
+        assertEquals(3, QueuePolicy.resolveHere(null, null, 3, 2))
+        assertEquals(2, QueuePolicy.resolveHere(null, null, null, 2))
+        assertEquals(0, QueuePolicy.resolveHere(null, null, null, null))
+    }
+
+    @Test
+    fun stepModeSeparatesColdRingAndLinear() {
+        assertEquals(
+            QueuePolicy.StepMode.Cold(3),
+            QueuePolicy.stepMode(sourceEmpty = true, hasPending = false, ringFallback = false, shown = 3),
+        )
+        assertEquals(
+            QueuePolicy.StepMode.Ring,
+            QueuePolicy.stepMode(sourceEmpty = true, hasPending = true, ringFallback = false, shown = -1),
+        )
+        assertEquals(
+            QueuePolicy.StepMode.Ring,
+            QueuePolicy.stepMode(sourceEmpty = false, hasPending = false, ringFallback = true, shown = -1),
+        )
+        assertEquals(
+            QueuePolicy.StepMode.Linear,
+            QueuePolicy.stepMode(sourceEmpty = false, hasPending = false, ringFallback = false, shown = -1),
+        )
+    }
+
+    @Test
+    fun stepTargetColdWalksFromShownOrHead() {
+        assertEquals(4, QueuePolicy.stepTarget(QueuePolicy.StepMode.Cold(3), 10, here = 0, delta = 1))
+        // Unknown shown item starts at the head, clamped into range.
+        assertEquals(0, QueuePolicy.stepTarget(QueuePolicy.StepMode.Cold(-1), 10, here = 5, delta = -9))
+        assertEquals(9, QueuePolicy.stepTarget(QueuePolicy.StepMode.Cold(-1), 10, here = 5, delta = 99))
+    }
+
+    @Test
+    fun stepTargetRingWrapsBothDirections() {
+        assertEquals(0, QueuePolicy.stepTarget(QueuePolicy.StepMode.Ring, 6, here = 5, delta = 1))
+        assertEquals(5, QueuePolicy.stepTarget(QueuePolicy.StepMode.Ring, 6, here = 0, delta = -1))
+        assertEquals(2, QueuePolicy.stepTarget(QueuePolicy.StepMode.Ring, 6, here = 0, delta = 2))
+    }
+
+    @Test
+    fun stepTargetLinearClampsBothEnds() {
+        assertEquals(9, QueuePolicy.stepTarget(QueuePolicy.StepMode.Linear, 10, here = 9, delta = 1))
+        assertEquals(0, QueuePolicy.stepTarget(QueuePolicy.StepMode.Linear, 10, here = 0, delta = -1))
+        assertEquals(4, QueuePolicy.stepTarget(QueuePolicy.StepMode.Linear, 10, here = 3, delta = 1))
+    }
+
+    @Test
+    fun navAvailabilityRingOpensBothDirections() {
+        val nav = QueuePolicy.navAvailability(
+            source = emptyList(),
+            fallback = list(4),
+            ringFallback = false,
+            absoluteIndex = -1,
+            upNextIndex = -1,
+            busStationUrl = "url-0",
+            pastSize = 0,
+            pastIndex = -1,
+        )
+        assertTrue(nav.hasPrev)
+        assertTrue(nav.hasNext)
+    }
+
+    @Test
+    fun navAvailabilityLinearReadsListAndPast() {
+        val atEnd = QueuePolicy.navAvailability(
+            source = list(4),
+            fallback = emptyList(),
+            ringFallback = false,
+            absoluteIndex = 3,
+            upNextIndex = 3,
+            busStationUrl = null,
+            pastSize = 0,
+            pastIndex = -1,
+        )
+        assertTrue(atEnd.hasPrev)
+        assertFalse(atEnd.hasNext)
+
+        val coldPast = QueuePolicy.navAvailability(
+            source = emptyList(),
+            fallback = listOf(list(4).first()),
+            ringFallback = false,
+            absoluteIndex = -1,
+            upNextIndex = -1,
+            busStationUrl = null,
+            pastSize = 3,
+            pastIndex = 2,
+        )
+        // Single-item fallback is not a ring; prev comes from the heard trail,
+        // and nothing is redoable past its tip.
+        assertTrue(coldPast.hasPrev)
+        assertFalse(coldPast.hasNext)
+    }
+
+    @Test
+    fun upcomingSliceFollowsRingOrFiniteTail() {
+        val source = list(6)
+        assertEquals(
+            listOf(source[1], source[2], source[3]),
+            QueuePolicy.upcomingSlice(source, absoluteIndex = 0, ringFallback = false, count = 3),
+        )
+        // Ring wraps past the end through the same helper the widget uses.
+        assertEquals(3, QueuePolicy.upcomingSlice(source, absoluteIndex = 5, ringFallback = true, count = 3).size)
+        assertEquals(
+            emptyList<Station>(),
+            QueuePolicy.upcomingSlice(source, absoluteIndex = 9, ringFallback = false),
+        )
+    }
+
+    @Test
+    fun widgetWindowsWrapShortSources() {
+        // The 6-item crash case: anchor 0 with 8 predecessors floors into range.
+        val source = list(6)
+        val windows = QueuePolicy.widgetWindowIndices(
+            source = source,
+            windowBase = 0,
+            upNextIndex = 0,
+            stationUrl = "url-0",
+            ringFallback = false,
+        )
+        assertEquals(17, windows!!.window.size)
+        assertEquals(4, windows.next.size)
+        assertEquals("url-1", windows.next.first().url)
+    }
+
+    @Test
+    fun widgetWindowsMissReturnsNull() {
+        assertNull(
+            QueuePolicy.widgetWindowIndices(
+                source = list(4),
+                windowBase = 0,
+                upNextIndex = 0,
+                stationUrl = "nope",
+                ringFallback = false,
+            )
+        )
+        assertNull(
+            QueuePolicy.widgetWindowIndices(
+                source = emptyList(),
+                windowBase = 0,
+                upNextIndex = 0,
+                stationUrl = "url-0",
+                ringFallback = false,
+            )
+        )
+    }
+
+    @Test
+    fun shuffleReorderKeepsAnchorAndElements() {
+        val base = list(10)
+        val anchor = base[4]
+        val reordered = QueuePolicy.shuffleReorder(base, anchorIndex = 4, anchor = anchor)
+        assertEquals(anchor, reordered[4])
+        assertEquals(base.map { it.url }.toSet(), reordered.map { it.url }.toSet())
+        assertNotSame(base, reordered)
+        // Base order untouched: toggling off restores it as-is.
+        assertEquals((0 until 10).map { "url-$it" }, base.map { it.url })
     }
 }

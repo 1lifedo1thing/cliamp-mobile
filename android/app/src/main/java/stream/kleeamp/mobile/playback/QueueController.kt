@@ -27,7 +27,6 @@ import stream.kleeamp.mobile.KleeampApp
 import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
-import stream.kleeamp.mobile.model.wrapNext
 import stream.kleeamp.mobile.play.QueuePolicy
 import stream.kleeamp.mobile.widget.WidgetRenderer
 import java.io.IOException
@@ -295,29 +294,17 @@ internal class QueueController(
     }
 
     private fun persistWidgetWindow(station: Station) {
-        val src = _source
-        if (src.isEmpty()) return
+        val windows = QueuePolicy.widgetWindowIndices(
+            _source,
+            windowBase,
+            _upNextIndex.value,
+            station.url,
+            _ringFallback,
+        ) ?: return
         val prefs = (context.applicationContext as KleeampApp).prefs
-        val i = (windowBase + _upNextIndex.value).takeIf { src.getOrNull(it)?.url == station.url }
-            ?: src.indexOfFirst { it.url == station.url }
-        if (i < 0) return
-        val before = 8
-        val after = 8
-        val n = src.size
-        // Wrap both sides of the window with a positive modulo. Kotlin's `%`
-        // keeps the dividend's sign, so `(i + k) % n` is NEGATIVE when k is
-        // bigger than i - and src[negative] throws an IndexOutOfBoundsException
-        // (hitting a song inside a short search result list crashed: a 6-item
-        // source, i=0, k=-8 -> src[-2]). The +n % n floors it into range, and
-        // the source is a radio-style loop anyway: the widget's prev/next walk
-        // it as a ring.
-        fun wrap(k: Int) = ((i + k) % n + n) % n
-        val win = mutableListOf<Station>()
-        for (k in -before..after) win.add(src[wrap(k)])
-        val next = if (_ringFallback) src.wrapNext(i) else src.drop(i + 1).take(4)
         scope.launch {
-            prefs.setWidgetSource(win)
-            prefs.setWidgetNext(next)
+            prefs.setWidgetSource(windows.window)
+            prefs.setWidgetNext(windows.next)
         }
     }
 
@@ -340,11 +327,8 @@ internal class QueueController(
 
 
     /** Widget preview follows the same occurrence and finite tail as the Up Next screen. */
-    internal fun upcomingStations(count: Int = 4): List<Station> {
-        val index = windowBase + _upNextIndex.value
-        if (index !in _source.indices) return emptyList()
-        return if (_ringFallback) _source.wrapNext(index, count) else _source.drop(index + 1).take(count)
-    }
+    internal fun upcomingStations(count: Int = 4): List<Station> =
+        QueuePolicy.upcomingSlice(_source, windowBase + _upNextIndex.value, _ringFallback, count)
 
     /** An Up Next tap targets this occurrence, including when a URL occurs twice. */
     fun playUpNextEntry(index: Int) {
@@ -631,15 +615,8 @@ internal class QueueController(
             ?: base.indexOfFirst { it.url == current.url }.coerceAtLeast(0)
         if (newOn) {
             if (_source.size < 2) { onSync(); return }
-            val abs = baseIndex
-            val rest = base.filterIndexed { i, s -> i != abs }.shuffled()
-            val reordered = ArrayList<Station>(base.size)
-            var ri = 0
-            for (i in base.indices) {
-                if (i == abs) reordered.add(current) else reordered.add(rest[ri++])
-            }
             _baseSource = base
-            _source = reordered
+            _source = QueuePolicy.shuffleReorder(base, baseIndex, current)
         } else {
             _baseSource = base
             _source = base
@@ -894,7 +871,6 @@ internal class QueueController(
      * and skip past the song you actually tapped to.
      */
     // Coalesced tap targeting across pending, model, live and bus positions in one place.
-    @Suppress("CyclomaticComplexMethod")
     private fun step(delta: Int) {
         val src = _source.ifEmpty { _fallbackSource }
         if (src.isEmpty()) return
@@ -907,31 +883,28 @@ internal class QueueController(
         // loading it. Prefer that occurrence over a first-URL match, which
         // would rewind duplicate songs. Media3 and the bus are fallbacks for
         // playback restored outside this session's queue.
+        val busUrl = PlaybackBus.station.value?.url
         val liveHere = controller()?.let { c ->
             if (c.mediaItemCount > 1) windowBase + c.currentMediaItemIndex else null
         }
-        val busHere = PlaybackBus.station.value?.let { s ->
-            src.indexOfFirst { it.url == s.url }.takeIf { it >= 0 }
-        }
-        val modelHere = (windowBase + _upNextIndex.value).takeIf {
-            src.getOrNull(it)?.url == PlaybackBus.station.value?.url
-        }
-        val here = pending ?: modelHere ?: liveHere ?: busHere ?: 0
-        val wrap = { k: Int -> ((k % src.size) + src.size) % src.size }
-        val abs = if (_source.isEmpty() && pending == null) {
+        val here = QueuePolicy.resolveHere(
+            pending,
+            QueuePolicy.modelHereIndex(windowBase, _upNextIndex.value, src, busUrl),
+            liveHere,
+            QueuePolicy.busHereIndex(src, busUrl),
+        )
+        val mode = if (_source.isEmpty() && pending == null) {
             val shown = (PlaybackBus.station.value ?: src.firstOrNull())?.let { s ->
                 src.indexOfFirst { it.url == s.url }
             } ?: -1
             // Launch fallback: walk history as a ring so the first prev/next
             // from the restored song have somewhere to go.
-            _ringFallback = true
-            if (shown >= 0) wrap(shown + delta) else (0 + delta).coerceIn(0, src.lastIndex)
-        } else if (_source.isEmpty() || _ringFallback) {
-            _ringFallback = true
-            wrap(here + delta)
+            QueuePolicy.StepMode.Cold(shown)
         } else {
-            (here + delta).coerceIn(0, src.lastIndex)
+            QueuePolicy.stepMode(_source.isEmpty(), pending != null, _ringFallback, shown = -1)
         }
+        if (mode != QueuePolicy.StepMode.Linear) _ringFallback = true
+        val abs = QueuePolicy.stepTarget(mode, src.size, here, delta)
         if (abs == here && _source.isNotEmpty() && pending == null) return
 
         val now = android.os.SystemClock.uptimeMillis()
@@ -1161,31 +1134,18 @@ internal class QueueController(
     internal val isTransitioning: Boolean
         get() = swapping || _navJob?.isActive == true || _shuffleJob?.isActive == true
 
-    internal data class NavAvailability(val hasPrev: Boolean, val hasNext: Boolean)
-
     /** Prev/next availability for the transport state; mirrors the nav math sync reads. */
-    // Transport availability over live, fallback and ring sources; mirrors sync math.
-    @Suppress("CyclomaticComplexMethod")
-    internal fun navAvailability(): NavAvailability {
-        val qi = _upNextIndex.value
-        val abs = windowBase + qi
-        // Prev/next navigate whichever list step walks: the live [_source]
-        // after anything has played, else the seeded fallback (recent history /
-        // favourites) so the buttons work from the song shown at launch, before
-        // anything has actually played this session.
-        val nav = _source.ifEmpty { _fallbackSource }
-        val ring = nav.size > 1 && (_source.isEmpty() || _ringFallback)
-        val navIdx = if (ring) -1
-        else if (_source.isNotEmpty() || _upNextIndex.value >= 0) abs
-        else (PlaybackBus.station.value ?: nav.firstOrNull())?.let { s ->
-            nav.indexOfFirst { it.url == s.url }
-        } ?: -1
-        return NavAvailability(
-            hasPrev = if (ring) true else (_source.isEmpty() && _pastIdx > 0) || (nav.isNotEmpty() && navIdx > 0),
-            hasNext = if (ring) true else (_source.isEmpty() && _pastIdx < _past.lastIndex) ||
-                (nav.size > 1 && navIdx in 0 until nav.lastIndex),
+    internal fun navAvailability(): QueuePolicy.NavAvailability =
+        QueuePolicy.navAvailability(
+            _source,
+            _fallbackSource,
+            _ringFallback,
+            windowBase + _upNextIndex.value,
+            _upNextIndex.value,
+            PlaybackBus.station.value?.url,
+            _past.size,
+            _pastIdx,
         )
-    }
 
     /**
      * Reconciles the Up Next window against what Media3 is actually holding,
