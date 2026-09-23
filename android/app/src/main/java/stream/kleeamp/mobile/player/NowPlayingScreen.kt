@@ -233,7 +233,10 @@ fun NowPlayingScreen(
             // player across the frame: art on the left, transport on the right.
             // Portrait keeps the original single-column stack untouched.
             if (maxWidth > maxHeight) {
-                LandscapePlayer(model, actions, frameWidth = maxWidth, frameHeight = maxHeight)
+                LandscapePlayer(
+                    model, actions,
+                    frameWidth = maxWidth, frameHeight = maxHeight,
+                )
             } else {
                 PortraitPlayer(model, actions)
             }

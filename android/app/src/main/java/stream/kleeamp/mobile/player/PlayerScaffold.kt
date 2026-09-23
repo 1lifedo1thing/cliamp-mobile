@@ -33,13 +33,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -64,6 +61,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.util.UnstableApi
 import stream.kleeamp.mobile.art.PlaceholderArt
+import stream.kleeamp.mobile.art.ArtResolve
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.model.StationSource
@@ -87,8 +85,10 @@ import stream.kleeamp.mobile.chrome.OutputMenu
 import stream.kleeamp.mobile.chrome.Scrubber
 import stream.kleeamp.mobile.chrome.StreamingRule
 import stream.kleeamp.mobile.chrome.ArtGlow
+import stream.kleeamp.mobile.chrome.ArtKind
 import stream.kleeamp.mobile.chrome.ArtPlate
 import stream.kleeamp.mobile.chrome.microPress
+import stream.kleeamp.mobile.chrome.rememberArt
 import stream.kleeamp.mobile.chrome.rememberAudioOutputs
 import stream.kleeamp.mobile.chrome.rememberStationThumbnail
 import stream.kleeamp.mobile.player.vis.VisualizerMeter
@@ -273,7 +273,10 @@ internal fun LandscapePlayer(
                 Modifier.width(side),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                StationArt(station = model.shownStation, modifier = Modifier.size(side))
+                StationArt(
+                    station = model.shownStation,
+                    modifier = Modifier.size(side),
+                )
                 PlayerStatusRow(model, actions)
             }
         }
@@ -326,7 +329,10 @@ internal fun peekArt(station: Station?): ImageBitmap? {
  * a square centre crop cuts them in half.
  */
 @Composable
-internal fun StationArt(station: Station?, modifier: Modifier = Modifier) {
+internal fun StationArt(
+    station: Station?,
+    modifier: Modifier = Modifier,
+) {
     val p = LocalPalette.current
     val context = LocalContext.current
     // Paint what memory already holds synchronously, so a song change shows
@@ -334,7 +340,8 @@ internal fun StationArt(station: Station?, modifier: Modifier = Modifier) {
     // the async lookup below re-resolves what is already known. The row
     // thumbnail doubles as a progressive preview: soft for a frame or two,
     // then replaced by the full art - still the new item, never empty.
-    var art by remember(station?.id) { mutableStateOf(peekArt(station)) }
+    val seed = remember(station?.id) { peekArt(station) }
+    val art = rememberArt(station = station, kind = ArtKind.Full) ?: seed
     val preview = station?.let { rememberStationThumbnail(it, fallback = false) }
     // No cover of its own: one of the bundled designs stands in - except
     // local and provider songs, which wear the empty plate instead. The pick
@@ -345,19 +352,6 @@ internal fun StationArt(station: Station?, modifier: Modifier = Modifier) {
             placeholderKey?.takeIf { it.isNotEmpty() }
                 ?.let { PlaceholderArt.bitmapFor(context, it)?.asImageBitmap() }
         } else null
-    }
-    LaunchedEffect(station?.id) {
-        if (art != null) return@LaunchedEffect
-        val s = station ?: return@LaunchedEffect
-        art = when {
-            // local files carry a content:// uri, provider covers an http one,
-            // and only radio needs the og:image discovery dance
-            s.source == StationSource.Local ->
-                stream.kleeamp.mobile.art.LocalArt.bitmapFor(s.cover, context.contentResolver)
-                    ?: StationArtSource.bitmapFor(s) // else embedded album art
-            s.cover.startsWith("http") -> StationArtSource.bitmapForUrl(s.cover)
-            else -> StationArtSource.bitmapFor(s)
-        }?.asImageBitmap()
     }
     val caption = when {
         station == null -> "[ no station tuned ]"

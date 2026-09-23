@@ -54,4 +54,30 @@ object PlaceholderArt {
         synchronized(thumbCache) { thumbCache[index] = bitmap }
         return bitmap
     }
+
+    /**
+     * Decodes every bundled design once, off the frame thread. Rows
+     * remember() these on Main, and a first scroll over many designs would
+     * otherwise decode PNGs on the frame thread. Call once at startup on IO.
+     */
+    fun warm(context: Context) {
+        for (i in 0 until COUNT) {
+            val name = "covers/cover_%02d.png".format(i + 1)
+            synchronized(cache) {
+                if (!cache.containsKey(i)) {
+                    cache[i] = runCatching {
+                        context.assets.open(name).use { BitmapFactory.decodeStream(it) }
+                    }.getOrNull()
+                }
+            }
+            synchronized(thumbCache) {
+                if (!thumbCache.containsKey(i)) {
+                    thumbCache[i] = runCatching {
+                        val opts = BitmapFactory.Options().apply { inSampleSize = 4 }
+                        context.assets.open(name).use { BitmapFactory.decodeStream(it, null, opts) }
+                    }.getOrNull()
+                }
+            }
+        }
+    }
 }

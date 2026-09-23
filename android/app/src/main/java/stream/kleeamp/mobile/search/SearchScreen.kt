@@ -26,9 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,8 +46,9 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.art.PlaceholderArt
+import stream.kleeamp.mobile.art.ArtResolve
 import stream.kleeamp.mobile.model.Station
-import stream.kleeamp.mobile.art.StationArtSource
+import stream.kleeamp.mobile.chrome.rememberArt
 import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.servers.ProviderAccount
 import stream.kleeamp.mobile.servers.displayName
@@ -96,6 +95,13 @@ fun SearchScreen(
     val term = uiState.term
     val results = uiState.results
     val shown = uiState.shown
+    // Warm hit art on each result set: station-keyed for playables,
+    // URL-keyed for show artwork, matching HitArt's reads.
+    val resolver = LocalContext.current.contentResolver
+    LaunchedEffect(results) {
+        ArtResolve.prefetchSmall(results.mapNotNull { it.playable }, resolver)
+        ArtResolve.prefetchSmallUrls(results.mapNotNull { (it as? SearchHit.Show)?.show?.artwork })
+    }
 
     fun open(hit: SearchHit, queue: List<SearchHit>) {
         when (hit) {
@@ -251,10 +257,7 @@ private fun HitArt(
 
     val context = LocalContext.current
     val artKey = station?.id ?: directUrl
-    val cached = remember(artKey) {
-        (directUrl?.let { StationArtSource.cachedSmallUrl(it) }
-            ?: station?.let { StationArtSource.cachedSmall(it) })?.asImageBitmap()
-    }
+    val art = rememberArt(station = station, url = directUrl, deferMs = 90)
     // Bundled design first, keyed exactly like StationThumb so a coverless
     // station wears the same design here as in the stations list - except
     // local and provider songs, which wear the empty plate instead. Never
@@ -270,19 +273,13 @@ private fun HitArt(
         }
         key?.let { PlaceholderArt.thumbnailFor(context, it)?.asImageBitmap() }
     }
-    var art by remember(artKey) { mutableStateOf(cached ?: placeholder) }
-    LaunchedEffect(artKey) {
-        if (cached != null) return@LaunchedEffect
-        delay(90)
-        (if (directUrl != null) StationArtSource.bitmapForUrlSmall(directUrl)?.asImageBitmap()
-        else station?.let { StationArtSource.bitmapForSmall(it)?.asImageBitmap() })?.let { art = it }
-    }
+    val a = art ?: placeholder
     Box(
         Modifier
             .size(40.dp)
             .clip(RoundedCornerShape(KleeampShape.small))
             .then(
-                if (art != null) Modifier.background(p.panel)
+                if (a != null) Modifier.background(p.panel)
                 else Modifier.border(
                     1.dp,
                     if (active) accent else p.chipBorder,
@@ -291,8 +288,8 @@ private fun HitArt(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        if (art != null) {
-            Image(art!!, station?.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        if (a != null) {
+            Image(a, station?.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
             Icon(iconOf(hit), null, Modifier.size(15.dp), tint = p.inkTertiary)
         }

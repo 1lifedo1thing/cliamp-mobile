@@ -56,7 +56,8 @@ import stream.kleeamp.mobile.library.durationLabel
 import stream.kleeamp.mobile.player.vis.Visualizer
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection
-import stream.kleeamp.mobile.chrome.rememberStationThumbnail
+import stream.kleeamp.mobile.chrome.rememberArt
+import stream.kleeamp.mobile.art.ArtResolve
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.BackChevron
@@ -128,6 +129,12 @@ internal fun UpNextContent(
 ) {
     val p = LocalPalette.current
     val listState = rememberLazyListState()
+    // Warm small art for the queue head on entry and on queue change, so
+    // rows compose onto warm memory.
+    val resolver = LocalContext.current.contentResolver
+    LaunchedEffect(upNext) {
+        ArtResolve.prefetchSmall(upNext, resolver)
+    }
     val scope = rememberCoroutineScope()
     // One drag state for the screen's lifetime: queue emissions merge into
     // the preview via sync instead of recreating it mid-drag.
@@ -286,7 +293,7 @@ private fun NowPlayingCard(s: Station, playing: Boolean, p: KleeampPalette, visu
 @Composable
 private fun UpNextArtwork(station: Station, modifier: Modifier = Modifier, active: Boolean = false) {
     val p = LocalPalette.current
-    val art = rememberStationThumbnail(station)
+    val art = rememberArt(station = station)
     Box(
         modifier
             .clip(RoundedCornerShape(KleeampShape.small))

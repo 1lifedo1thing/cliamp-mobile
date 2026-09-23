@@ -23,20 +23,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.model.Station
-import stream.kleeamp.mobile.art.StationArtSource
+import stream.kleeamp.mobile.art.ArtResolve
+import stream.kleeamp.mobile.chrome.ArtKind
 import stream.kleeamp.mobile.chrome.Chip
+import stream.kleeamp.mobile.chrome.rememberArt
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.EmptyNote
 import stream.kleeamp.mobile.chrome.RetryNote
@@ -98,6 +96,10 @@ fun PodcastShowScreen(
     // otherwise rebuild every Station on every recomposition.
     val queue = remember(state.episodes, show?.feedUrl) {
         show?.let { s -> state.episodes.map { it.toStation(s) } } ?: emptyList()
+    }
+    // Warm episode thumbs (URL-keyed, exactly as EpisodeRow reads them).
+    LaunchedEffect(queue) {
+        ArtResolve.prefetchSmallUrls(queue.mapNotNull { it.cover.takeIf { u -> u.startsWith("http") } })
     }
     val listState = rememberLazyListState()
 
@@ -197,13 +199,9 @@ private fun ShowHeader(
 ) {
     val p = LocalPalette.current
     if (show == null) return
-    var art by remember(show.artwork) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(show.artwork) {
-        art = null
-        if (show.artwork.startsWith("http")) {
-            art = StationArtSource.bitmapForUrl(show.artwork)?.asImageBitmap()
-        }
-    }
+    // Full decode with a memory peek, so reopening a show never flashes
+    // the mic on a cover the cache already holds.
+    val art = rememberArt(url = show.artwork, kind = ArtKind.Full)
     Column {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 14.dp),
@@ -216,9 +214,8 @@ private fun ShowHeader(
                     .border(1.dp, p.frameBorder, RoundedCornerShape(KleeampShape.small)),
                 contentAlignment = Alignment.Center,
             ) {
-                val bmp = art
-                if (bmp != null) {
-                    Image(bmp, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                if (art != null) {
+                    Image(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 } else {
                     Icon(KleeampIcons.PodsTab, null, Modifier.size(40.dp), tint = p.inkFaint)
                 }
@@ -282,15 +279,7 @@ private fun EpisodeRow(
             // show without any cover at all lands on the icon plate.
             val artUrl = station.cover.takeIf { it.startsWith("http") }
                 ?: episode.artwork.takeIf { it.startsWith("http") }
-            var thumb by remember(artUrl) {
-                mutableStateOf(artUrl?.let { StationArtSource.cachedSmallUrl(it)?.asImageBitmap() })
-            }
-            if (artUrl != null) {
-                LaunchedEffect(artUrl) {
-                    if (thumb != null) return@LaunchedEffect
-                    thumb = StationArtSource.bitmapForUrlSmall(artUrl)?.asImageBitmap()
-                }
-            }
+            val thumb = rememberArt(url = artUrl)
             Box(
                 Modifier
                     .size(40.dp)
@@ -301,9 +290,8 @@ private fun EpisodeRow(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                val b = thumb
-                if (b != null) {
-                    Image(b, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                if (thumb != null) {
+                    Image(thumb, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 } else {
                     Icon(KleeampIcons.PodRow, null, Modifier.size(18.dp), tint = p.inkFaint)
                 }

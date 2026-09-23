@@ -15,11 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,12 +23,15 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import stream.kleeamp.mobile.chrome.ArtKind
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.ArtPlate
 import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.microPress
+import stream.kleeamp.mobile.chrome.rememberArt
+import stream.kleeamp.mobile.chrome.rememberArt
 import stream.kleeamp.mobile.art.LocalArt
 import stream.kleeamp.mobile.art.PlaceholderArt
 import stream.kleeamp.mobile.model.Station
@@ -205,7 +204,8 @@ private fun MiniArt(station: Station?) {
     // cover on the first frame instead of flashing the plate on every change.
     // The bundled design seeds instantly underneath, so the slot shows a
     // cover from frame one and the lookup only ever upgrades to real art.
-    var art by remember(station?.id) { mutableStateOf(peekSmall(station)) }
+    val seed = remember(station?.id) { peekSmall(station) }
+    val art = rememberArt(station = station, kind = ArtKind.Thumb)
     val key = station?.id?.ifBlank { station.url }
     // Bundled design underneath - except local and provider songs, which
     // wear the empty plate instead.
@@ -215,26 +215,12 @@ private fun MiniArt(station: Station?) {
                 ?.let { PlaceholderArt.thumbnailFor(context, it)?.asImageBitmap() }
         } else null
     }
-    LaunchedEffect(station?.id) {
-        if (art != null) return@LaunchedEffect
-        val s = station ?: return@LaunchedEffect
-        art = when {
-            s.source == StationSource.Local ->
-                LocalArt.bitmapForSmall(s.cover, context.contentResolver)
-                    ?: StationArtSource.bitmapForSmall(s) // else embedded album art
-            s.cover.startsWith("http") -> StationArtSource.bitmapForUrl(s.cover)
-            // Radio streams carry no cover of their own, so the best available
-            // branding is scraped: og:image, then apple-touch-icon, then the
-            // directory's favicon. Cliamp channels return null here.
-            else -> StationArtSource.bitmapForSmall(s)
-        }?.asImageBitmap()
-    }
-    val a = art ?: placeholder
-    if (a != null) {
+    val bmp = art ?: seed ?: placeholder
+    if (bmp != null) {
         // Real cover art gets a square thumbnail so the plate reads as a little
         // album square, and so does the bundled stand-in.
         Image(
-            bitmap = a,
+            bitmap = bmp,
             contentDescription = station?.name,
             modifier = Modifier
                 .size(40.dp)

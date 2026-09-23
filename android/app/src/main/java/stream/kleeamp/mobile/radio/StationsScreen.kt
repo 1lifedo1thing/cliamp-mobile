@@ -47,8 +47,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.art.PlaceholderArt
+import stream.kleeamp.mobile.art.ArtResolve
 import stream.kleeamp.mobile.model.Station
-import stream.kleeamp.mobile.art.StationArtSource
+import stream.kleeamp.mobile.chrome.rememberArt
 import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.chrome.compact
 import stream.kleeamp.mobile.chrome.Chip
@@ -103,6 +104,14 @@ fun StationsScreen(
     val dirStats = ui.directoryStats
     val tags = ui.tags
     val countries = ui.countries
+
+    // Warm small art for the head of every section on entry and on page
+    // append, so rows compose onto warm memory instead of each firing a
+    // cold lookup as they scroll in.
+    val resolver = LocalContext.current.contentResolver
+    LaunchedEffect(source, cliamp.size, custom.size, directory.stations.size) {
+        ArtResolve.prefetchSmall(cliamp + custom + directory.stations, resolver)
+    }
 
     val listState = rememberLazyListState()
     // NOTE: no scroll reset on query/source change. A filter keeps its
@@ -430,24 +439,16 @@ private fun StationRow(
 private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
     val p = LocalPalette.current
     val context = LocalContext.current
+    val art = rememberArt(station = station)
     // Bundled design first - except local and provider songs, which wear
-    // the empty plate instead (see Station.bundledCover).
-    var art by remember(station.id) {
-        mutableStateOf(
-            if (station.bundledCover) {
-                PlaceholderArt.thumbnailFor(context, station.id.ifBlank { station.url })
-                    ?.asImageBitmap()
-            }
-            else null,
-        )
+    // the empty plate instead (see Station.bundledCover). Cliamp stations
+    // carry no art by design, so the bundled design is the final answer.
+    val bmp = art ?: remember(station.id) {
+        if (station.bundledCover) {
+            PlaceholderArt.thumbnailFor(context, station.id.ifBlank { station.url })
+                ?.asImageBitmap()
+        } else null
     }
-    LaunchedEffect(station.id) {
-        // Cliamp stations carry no art by design: the bundled design above
-        // is the final answer, no lookup.
-        if (station.source == StationSource.Cliamp) return@LaunchedEffect
-        StationArtSource.bitmapForSmall(station)?.asImageBitmap()?.let { art = it }
-    }
-    val bmp = art
     // No art to show, so the plate carries the broadcast mark in accent on
     // panel - the same static themed plate playlist rows wear, recognisably
     // a radio station in every theme. The play state keeps its badge below.
@@ -459,7 +460,7 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
                 .size(40.dp)
                 .clip(RoundedCornerShape(KleeampShape.small))
                 .then(
-                    if (art != null) Modifier.background(p.panel)
+                    if (bmp != null) Modifier.background(p.panel)
                     else Modifier.border(1.dp, p.accent, RoundedCornerShape(KleeampShape.small))
                 ),
             contentAlignment = Alignment.Center,

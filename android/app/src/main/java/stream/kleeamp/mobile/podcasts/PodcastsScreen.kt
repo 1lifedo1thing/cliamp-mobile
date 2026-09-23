@@ -39,11 +39,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import stream.kleeamp.mobile.art.StationArtSource
+import stream.kleeamp.mobile.art.ArtResolve
+import stream.kleeamp.mobile.chrome.ArtKind
+import stream.kleeamp.mobile.chrome.rememberArt
 import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.ChipDropdown
 import stream.kleeamp.mobile.chrome.ChipOption
@@ -107,6 +107,15 @@ fun PodcastsScreen(
     }
 
     val subscribedFeeds = remember(subscriptions) { subscriptions.mapTo(HashSet()) { it.feedUrl } }
+
+    // Warm catalogue art on entry and on page append: small for rows, full
+    // for the first tiles (which decode full-res). Full downloads share
+    // their bytes on disk, so the small path then decodes without network.
+    LaunchedEffect(pane, subscriptions.size, directory.shows.size) {
+        val urls = subscriptions.map { it.artwork } + directory.shows.map { it.artwork }
+        ArtResolve.prefetchSmallUrls(urls)
+        ArtResolve.prefetchFullUrls(urls)
+    }
 
     MainLayout(
         title = "Podcasts",
@@ -309,16 +318,7 @@ private fun ShowRow(
 @Composable
 private fun Artwork(url: String) {
     val p = LocalPalette.current
-    var art by remember(url) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(url) {
-        art = null
-        if (url.startsWith("http")) {
-            art = StationArtSource.bitmapForUrlSmall(url)?.asImageBitmap()
-        } else {
-            art = null
-        }
-    }
-    val bmp = art
+    val art = rememberArt(url = url)
     Box(
         Modifier
             .size(40.dp)
@@ -326,9 +326,9 @@ private fun Artwork(url: String) {
             .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small)),
         contentAlignment = Alignment.Center,
     ) {
-        if (bmp != null) {
+        if (art != null) {
             Image(
-                bitmap = bmp,
+                bitmap = art,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
@@ -349,13 +349,9 @@ private fun ShowTile(
     onToggleSubscribe: () -> Unit,
 ) {
     val p = LocalPalette.current
-    var art by remember(show.artwork) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(show.artwork) {
-        art = null
-        if (show.artwork.startsWith("http")) {
-            art = StationArtSource.bitmapForUrl(show.artwork)?.asImageBitmap()
-        }
-    }
+    // Tiles are large: full decode with a memory peek, so grid scrolls do
+    // not flash the mic on every rebind.
+    val art = rememberArt(url = show.artwork, kind = ArtKind.Full)
     Column(
         Modifier
             .fillMaxWidth()
@@ -371,7 +367,7 @@ private fun ShowTile(
                 .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.medium)),
         ) {
             if (art != null) {
-                Image(art!!, show.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                Image(art, show.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             } else {
                 Box(
                     Modifier.fillMaxSize().background(if (p.dark) p.ground else p.keyFace),
