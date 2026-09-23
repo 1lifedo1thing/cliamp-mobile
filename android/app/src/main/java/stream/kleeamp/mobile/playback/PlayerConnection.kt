@@ -28,6 +28,7 @@ import stream.kleeamp.mobile.data.Prefs
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationSource
 import stream.kleeamp.mobile.data.wrapNext
+import stream.kleeamp.mobile.play.QueuePolicy
 import stream.kleeamp.mobile.widget.WidgetRenderer
 import java.io.IOException
 
@@ -219,14 +220,14 @@ class PlayerConnection(
     private val NAV_DEBOUNCE_MS = 180L
 
     /** Queues larger than this are played lazily from a window, not in full. */
-    private val WINDOW = 60
+    private val WINDOW = QueuePolicy.WINDOW
 
     /**
      * Predecessors kept in front of a persisted queue window. The live window
      * starts at the tapped track, so persisting it alone remembers next but
      * not prev; this run-up from the source restores both sides.
      */
-    private val PREV_KEEP = 8
+    private val PREV_KEEP = QueuePolicy.PREV_KEEP
 
     /** How often a playing episode's position reaches the database. */
     private val PROGRESS_INTERVAL = 5_000L
@@ -550,12 +551,9 @@ class PlayerConnection(
         val q = _upNext.value
         if (q.isEmpty()) return
         val prefs = (context.applicationContext as KleeampApp).prefs
-        val idx = _upNextIndex.value.coerceIn(0, q.lastIndex)
-        val runUp = _source.takeIf { it.size > q.size }
-            ?.subList((windowBase - PREV_KEEP).coerceAtLeast(0), windowBase)
-            ?: emptyList()
-        val combined = runUp + q
-        scope.launch { prefs.setQueue(combined, runUp.size + idx) }
+        val (combined, queueIndex) =
+            QueuePolicy.persistQueueWindow(_source, windowBase, q, _upNextIndex.value)
+        scope.launch { prefs.setQueue(combined, queueIndex) }
     }
 
     /** Widget preview follows the same occurrence and finite tail as the Up Next screen. */
@@ -601,7 +599,7 @@ class PlayerConnection(
             // Navigation (step) passes preserveOrder so it rides the already
             // shuffled list instead of re-randomising - and restarting - on
             // every prev/next.
-            val order = if (!preserveOrder && _shuffle.value && from.size > 1) shuffledKeepFirst(from, station) else from
+            val order = if (!preserveOrder && _shuffle.value && from.size > 1) QueuePolicy.shuffledKeepFirst(from, station) else from
             // A fresh play from a list rebases the shuffle bookkeeping on that
             // list's own order - already the user's chosen sort from the screen
             // the tap came from. Without this rebase a stale _baseSource from an
@@ -615,10 +613,11 @@ class PlayerConnection(
             _source = order
             val srcIdxO = sourceIndex?.takeIf { it in order.indices }
                 ?: order.indexOfFirst { it.url == station.url }.coerceAtLeast(0)
-            windowBase = if (order.size > WINDOW) srcIdxO else 0
-            q = sliceAt(order, srcIdxO)
+            val playWindow = QueuePolicy.playWindow(order, srcIdxO)
+            windowBase = playWindow.base
+            q = playWindow.window
             _upNext.value = q
-            _upNextIndex.value = (srcIdxO - windowBase).coerceIn(0, q.lastIndex.coerceAtLeast(0))
+            _upNextIndex.value = playWindow.index
         } else if (q.none { it.url == station.url }) {
             _baseSource = listOf(station)
             _source = listOf(station)
@@ -628,7 +627,7 @@ class PlayerConnection(
             windowBase = 0
         } else {
             _baseSource = q
-            val order = if (_shuffle.value && q.size > 1) shuffledKeepFirst(q, station) else q
+            val order = if (_shuffle.value && q.size > 1) QueuePolicy.shuffledKeepFirst(q, station) else q
             _source = order
             q = order
             _upNext.value = order
@@ -759,10 +758,11 @@ class PlayerConnection(
         val src = _source
         if (src.isEmpty()) return
         val abs = start.coerceIn(0, src.lastIndex)
-        val slice = sliceAt(src, abs)
-        windowBase = if (src.size > WINDOW) abs else 0
-        _upNext.value = slice
-        val index = (abs - windowBase).coerceIn(0, slice.lastIndex)
+        val playWindow = QueuePolicy.playWindow(src, abs)
+        windowBase = playWindow.base
+        _upNext.value = playWindow.window
+        val slice = playWindow.window
+        val index = playWindow.index
         _upNextIndex.value = index
         // Raised around the swap so the half-second poller's sync() can't run
         // between [_upNext] being repointed at the new window and Media3 actually
@@ -791,28 +791,6 @@ class PlayerConnection(
         } finally {
             swapping = false
         }
-    }
-
-    /**
-     * Returns a bounded window into [source] beginning at [srcIndex], capped at
-     * [WINDOW] tracks when the source is huge; short sources are returned whole.
-     */
-    private fun sliceAt(source: List<Station>, srcIndex: Int): List<Station> {
-        if (source.size <= WINDOW) return source
-        val start = srcIndex.coerceIn(0, source.lastIndex)
-        val end = minOf(start + WINDOW, source.size)
-        return source.subList(start, end)
-    }
-
-    /**
-     * Returns a shuffled copy of [base] with [first] kept at the front, so the
-     * currently- or tapped-playing item is not interrupted while the rest of
-     * the list plays in random order. Works for tracks and stations alike.
-     */
-    private fun shuffledKeepFirst(base: List<Station>, first: Station): List<Station> {
-        val firstIndex = base.indexOfFirst { it.url == first.url }
-        val rest = base.filterIndexed { index, _ -> index != firstIndex }
-        return listOf(first) + rest.shuffled()
     }
 
     /**
@@ -883,10 +861,11 @@ class PlayerConnection(
         _shuffleJob = null
         val src = _source
         val absJ = baseIndex
-        windowBase = if (src.size > WINDOW) absJ else 0
-        val slice = sliceAt(src, absJ)
+        val playWindow = QueuePolicy.playWindow(src, absJ)
+        windowBase = playWindow.base
+        val slice = playWindow.window
         _upNext.value = slice
-        val idx = (absJ - windowBase).coerceIn(0, slice.lastIndex.coerceAtLeast(0))
+        val idx = playWindow.index
         _upNextIndex.value = idx
         if (!(slice.all { it.isTrack } && slice.size > 1)) {
             // Anything else keeps the single-item shape play() gave it, and
@@ -943,10 +922,11 @@ class PlayerConnection(
                     if (retry != null) {
                         anchorId = retry.id
                         val abs2 = _source.indexOfFirst { it.url == retry.url }.coerceAtLeast(0)
-                        windowBase = if (_source.size > WINDOW) abs2 else 0
-                        anchorSlice = sliceAt(_source, abs2)
+                        val retryWindow = QueuePolicy.playWindow(_source, abs2)
+                        windowBase = retryWindow.base
+                        anchorSlice = retryWindow.window
                         _upNext.value = anchorSlice
-                        anchorIdx = (abs2 - windowBase).coerceIn(0, anchorSlice.lastIndex.coerceAtLeast(0))
+                        anchorIdx = retryWindow.index
                         _upNextIndex.value = anchorIdx
                         headItems = withContext(Dispatchers.Default) {
                             anchorSlice.subList(0, anchorIdx).map { buildItem(it) }
@@ -1374,21 +1354,15 @@ class PlayerConnection(
             sync()
             return
         }
-        val q = previous.toMutableList()
-        val qi = _upNextIndex.value
-        val pos = if (at == Int.MAX_VALUE) q.size else at.coerceIn(0, q.size)
-        q.add(pos, station)
-        _upNext.value = q
-        if (pos <= qi) _upNextIndex.value = qi + 1
+        val inserted = QueuePolicy.insert(previous, at, _upNextIndex.value, station)
+        _upNext.value = inserted.queue
+        _upNextIndex.value = inserted.currentIndex
         applyUpNextToPlayer(previous)
     }
 
     /** Insert [station] right after the currently-playing item (play next). */
     fun playNext(station: Station) {
-        val q = _upNext.value
-        val qi = _upNextIndex.value
-        val insertAt = if (qi in q.indices) qi + 1 else q.size
-        addToUpNext(station, insertAt)
+        addToUpNext(station, QueuePolicy.playNextInsertAt(_upNext.value.size, _upNextIndex.value))
     }
 
     /** Play [station] with [from] as a brand-new Up Next list, replacing whatever was there. */
@@ -1400,15 +1374,9 @@ class PlayerConnection(
     fun removeFromUpNext(index: Int) {
         val q = _upNext.value
         if (index !in q.indices) return
-        val qi = _upNextIndex.value
-        val newQ = q.filterIndexed { i, _ -> i != index }
+        val (newQ, newIdx) = QueuePolicy.remove(q, index, _upNextIndex.value)
         _upNext.value = newQ
-        _upNextIndex.value = when {
-            index < qi -> (qi - 1).coerceAtLeast(-1)
-            index == qi && newQ.isEmpty() -> -1
-            index == qi -> qi
-            else -> qi
-        }
+        _upNextIndex.value = newIdx
         applyUpNextToPlayer(previousUpNext = q, edit = { it.removeMediaItem(index) })
     }
 
@@ -1432,10 +1400,10 @@ class PlayerConnection(
     fun clearUpNext() {
         val previous = _upNext.value
         val currentIndex = _upNextIndex.value
-        val current = previous.getOrNull(currentIndex)
-        _upNext.value = listOfNotNull(current)
-        _upNextIndex.value = if (current == null) -1 else 0
-        _source = _upNext.value
+        val (kept, keptIdx) = QueuePolicy.clearPending(previous, currentIndex)
+        _upNext.value = kept
+        _upNextIndex.value = keptIdx
+        _source = kept
         windowBase = 0
         applyUpNextToPlayer(previousUpNext = previous, edit = { player ->
             player.removeMediaItems(currentIndex + 1, player.mediaItemCount)
