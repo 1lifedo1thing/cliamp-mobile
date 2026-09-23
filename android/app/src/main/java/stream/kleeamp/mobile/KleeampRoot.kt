@@ -46,11 +46,11 @@ import androidx.navigation.toRoute
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import stream.kleeamp.mobile.data.DirectoryQuery
+import stream.kleeamp.mobile.radio.DirectoryQuery
 import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.podcasts.PodcastRepository
 import stream.kleeamp.mobile.podcasts.PodcastShow
-import stream.kleeamp.mobile.data.Repository
+import stream.kleeamp.mobile.radio.RadioRepository
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.play.PlayFromList
 import stream.kleeamp.mobile.playback.PlaybackBus
@@ -77,8 +77,8 @@ import stream.kleeamp.mobile.data.provider.ProviderCatalog
 import stream.kleeamp.mobile.data.provider.ProviderStore
 import stream.kleeamp.mobile.ui.screens.ProviderWizard as ProviderWizardScreen
 import stream.kleeamp.mobile.ui.screens.SettingsScreen
-import stream.kleeamp.mobile.ui.screens.StationsScreen
-import stream.kleeamp.mobile.ui.screens.StationsViewModel
+import stream.kleeamp.mobile.radio.StationsScreen
+import stream.kleeamp.mobile.radio.StationsViewModel
 import stream.kleeamp.mobile.podcasts.PodcastsViewModel
 import stream.kleeamp.mobile.podcasts.PodcastShowViewModel
 import stream.kleeamp.mobile.ui.screens.LocalViewModel
@@ -123,7 +123,7 @@ private fun rootExit(): ExitTransition = ExitTransition.None
 @UnstableApi
 @Composable
 fun KleeampRoot(
-    repository: Repository,
+    repository: RadioRepository,
     prefs: Prefs,
     player: PlayerConnection,
     providers: ProviderStore,
@@ -389,7 +389,7 @@ fun KleeampRoot(
                             )
                             Tab.Pods -> PodcastsScreen(
                                 vm = appViewModel { app ->
-                                    PodcastsViewModel(app.podcasts, app.prefs, app.repository.countries)
+                                    PodcastsViewModel(app.podcasts, app.prefs, app.radio.countries)
                                 },
                                 onOpenShow = { show: PodcastShow ->
                                     podcasts.openShow(show)
@@ -479,7 +479,7 @@ fun KleeampRoot(
                 Box(contentModifier) {
                     LibrarySmartPlaylistPane(
                         vm = appViewModel(key = kind) { app ->
-                            SmartPlaylistViewModel(kind, app.localLibrary, app.prefs, app.downloads, app.repository, app.podcasts)
+                            SmartPlaylistViewModel(kind, app.localLibrary, app.prefs, app.downloads, app.radio, app.podcasts)
                         },
                         kindName = kind,
                         current = station,
@@ -508,7 +508,7 @@ fun KleeampRoot(
                                 app.localLibrary,
                                 app.playlists,
                                 app.prefs,
-                                app.repository,
+                                app.radio,
                                 app.podcasts,
                                 app.downloads,
                             )
@@ -549,7 +549,7 @@ fun KleeampRoot(
                                 app.localLibrary,
                                 app.playlists,
                                 app.prefs,
-                                app.repository,
+                                app.radio,
                             )
                         },
                         onBack = { navController.popBackStack() },
@@ -598,7 +598,7 @@ fun KleeampRoot(
             composable<Settings> {
                 Box(contentModifier) {
                     SettingsScreen(
-                        vm = appViewModel { app -> SettingsViewModel(app.prefs, app.repository) },
+                        vm = appViewModel { app -> SettingsViewModel(app.prefs, app.radio) },
                         onBack = { navController.popBackStack() },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenScrobble = { navController.navigate(ScrobbleWizard) },
@@ -610,7 +610,7 @@ fun KleeampRoot(
                     SearchScreen(
                     vm = appViewModel { app ->
                         SearchViewModel(
-                            app.repository,
+                            app.radio,
                             app.podcasts,
                             app.prefs,
                             app.localLibrary,
@@ -813,7 +813,7 @@ private fun StationsTab(
 ) {
     val favorites by prefs.favorites.collectAsState(initial = emptyList())
     StationsScreen(
-        vm = appViewModel { app -> StationsViewModel(app.repository, app.prefs) },
+        vm = appViewModel { app -> StationsViewModel(app.radio, app.prefs) },
         current = current,
         playing = playing,
         favorites = favorites,

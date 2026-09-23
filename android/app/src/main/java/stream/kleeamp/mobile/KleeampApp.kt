@@ -28,8 +28,8 @@ import stream.kleeamp.mobile.data.LocalLibrary
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.data.PlaylistStore
 import stream.kleeamp.mobile.podcasts.PodcastRepository
-import stream.kleeamp.mobile.data.RadioBrowser
-import stream.kleeamp.mobile.data.Repository
+import stream.kleeamp.mobile.radio.RadioBrowser
+import stream.kleeamp.mobile.radio.RadioRepository
 import stream.kleeamp.mobile.data.Scrobbler
 import stream.kleeamp.mobile.playback.PlayerConnection
 import stream.kleeamp.mobile.widget.WidgetRenderer
@@ -45,7 +45,7 @@ class KleeampApp : Application() {
 
     val prefs: Prefs by lazy { Prefs(this) }
     val providers: ProviderStore by lazy { ProviderStore(this) }
-    val repository: Repository by lazy { Repository(this, prefs, appScope) }
+    val radio: RadioRepository by lazy { RadioRepository(this, prefs, appScope) }
     val podcasts: PodcastRepository by lazy { PodcastRepository(this, appScope) }
     val localLibrary: LocalLibrary by lazy { LocalLibrary(this, appScope) }
     val playlists: PlaylistStore by lazy { PlaylistStore(this) }
@@ -103,7 +103,7 @@ class KleeampApp : Application() {
         // files once per launch instead of growing forever.
         appScope.launch { StationArtSource.pruneDisk() }
 
-        repository.bootstrap()
+        radio.bootstrap()
         podcasts.bootstrap()
 
         // Local songs power search, smart playlists and resume as well as

@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data
+package stream.kleeamp.mobile.radio
 
 import stream.kleeamp.mobile.net.Http
 import stream.kleeamp.mobile.model.Station

@@ -64,10 +64,10 @@ import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.data.LocalLibrary
 import stream.kleeamp.mobile.data.PlaylistStore
 import stream.kleeamp.mobile.podcasts.PodcastShow
-import stream.kleeamp.mobile.data.Repository
+import stream.kleeamp.mobile.radio.RadioRepository
 import stream.kleeamp.mobile.podcasts.ShowState
 import stream.kleeamp.mobile.model.Station
-import stream.kleeamp.mobile.data.DirectoryState
+import stream.kleeamp.mobile.radio.DirectoryState
 import stream.kleeamp.mobile.podcasts.EpisodeProgress
 import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.podcasts.toStation
@@ -896,7 +896,7 @@ fun LibraryPlaylistPane(
 fun LibrarySongInfoPane(
     vm: SongInfoViewModel,
     stationUrl: String,
-    repository: Repository,
+    repository: RadioRepository,
     onBack: () -> Unit,
 ) {
     val p = LocalPalette.current

@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import stream.kleeamp.mobile.KleeampApp
-import stream.kleeamp.mobile.data.CliampRadio
+import stream.kleeamp.mobile.radio.CliampRadio
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.wrapNext
 import stream.kleeamp.mobile.playback.PlaybackBus
@@ -76,7 +76,7 @@ object WidgetControl {
         if (target == null) {
             // nothing loaded yet: fall back to whatever was on last
             val station = app.prefs.readLastStation()
-                ?: app.repository.cliamp.value.firstOrNull()
+                ?: app.radio.cliamp.value.firstOrNull()
                 ?: CliampRadio.builtin.first()
             tune(context, station)
         } else {

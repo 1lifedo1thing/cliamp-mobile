@@ -61,7 +61,7 @@ data class ShowState(
 )
 
 /**
- * Podcasts, held the way [Repository] holds radio: a small resident list you
+ * Podcasts, held the way [RadioRepository] holds radio: a small resident list you
  * own (subscriptions, where radio has cliamp's channels and favourites) beside
  * a large directory that is paged and never fully materialised.
  *

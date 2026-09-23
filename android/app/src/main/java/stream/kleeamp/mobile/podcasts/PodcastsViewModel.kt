@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import stream.kleeamp.mobile.data.CountryCount
+import stream.kleeamp.mobile.radio.CountryCount
 import stream.kleeamp.mobile.podcasts.PodcastDirectoryState
 import stream.kleeamp.mobile.podcasts.PodcastQuery
 import stream.kleeamp.mobile.podcasts.PodcastRepository

@@ -8,12 +8,12 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.podcasts.DownloadEntry
 import stream.kleeamp.mobile.podcasts.DownloadStore
-import stream.kleeamp.mobile.data.DirectoryState
+import stream.kleeamp.mobile.radio.DirectoryState
 import stream.kleeamp.mobile.data.LocalLibrary
 import stream.kleeamp.mobile.podcasts.PodcastRepository
 import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.prefs.Prefs
-import stream.kleeamp.mobile.data.Repository
+import stream.kleeamp.mobile.radio.RadioRepository
 import stream.kleeamp.mobile.podcasts.ShowState
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
@@ -24,7 +24,7 @@ class SmartPlaylistViewModel(
     private val localLibrary: LocalLibrary,
     private val prefs: Prefs,
     private val downloads: DownloadStore,
-    private val repository: Repository,
+    private val repository: RadioRepository,
     private val podcasts: PodcastRepository,
 ) : ViewModel() {
     val kind: SmartKind? = SmartKind.entries.firstOrNull { it.name == kindName }

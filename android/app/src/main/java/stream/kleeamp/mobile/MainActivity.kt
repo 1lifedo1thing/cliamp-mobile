@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
         if (intent?.action != Intent.ACTION_SEND) return
         val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString().orEmpty()
         val url = Regex("""https?://\S+""").find(text)?.value?.trimEnd('.', ',', ')') ?: return
-        val station = stream.kleeamp.mobile.ui.screens.customStation("", url) ?: return
+        val station = stream.kleeamp.mobile.radio.customStation("", url) ?: return
         val app = application as KleeampApp
         lifecycleScope.launch { app.prefs.addCustom(station) }
         app.player.doWhenReady { app.player.play(station, listOf(station)) }
@@ -128,7 +128,7 @@ class MainActivity : ComponentActivity() {
 
             KleeampTheme(palette = palette, haptics = haptics) {
                 KleeampRoot(
-                    repository = app.repository,
+                    repository = app.radio,
                     prefs = app.prefs,
                     player = app.player,
                     providers = app.providers,

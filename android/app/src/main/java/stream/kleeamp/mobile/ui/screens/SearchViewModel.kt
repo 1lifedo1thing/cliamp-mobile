@@ -15,16 +15,16 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import stream.kleeamp.mobile.data.DirectoryQuery
-import stream.kleeamp.mobile.data.DirectoryState
+import stream.kleeamp.mobile.radio.DirectoryQuery
+import stream.kleeamp.mobile.radio.DirectoryState
 import stream.kleeamp.mobile.data.LocalLibrary
-import stream.kleeamp.mobile.data.NameCount
+import stream.kleeamp.mobile.radio.NameCount
 import stream.kleeamp.mobile.podcasts.PodcastDirectory
 import stream.kleeamp.mobile.podcasts.PodcastEpisode
 import stream.kleeamp.mobile.podcasts.PodcastRepository
 import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.prefs.Prefs
-import stream.kleeamp.mobile.data.Repository
+import stream.kleeamp.mobile.radio.RadioRepository
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.data.provider.ProviderAccount
 import stream.kleeamp.mobile.data.provider.ProviderStore
@@ -37,7 +37,7 @@ enum class SearchScope(val label: String) {
 }
 
 class SearchViewModel(
-    private val repository: Repository,
+    private val repository: RadioRepository,
     private val podcasts: PodcastRepository,
     private val prefs: Prefs,
     private val localLibrary: LocalLibrary,

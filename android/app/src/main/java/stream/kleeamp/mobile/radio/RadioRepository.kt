@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data
+package stream.kleeamp.mobile.radio
 
 import android.content.Context
 import kotlinx.coroutines.CancellationException
@@ -55,7 +55,7 @@ data class DirectoryState(
  * small enough to keep resident, and the directory, which is paged in 60 at a
  * time and never fully materialised.
  */
-class Repository(
+class RadioRepository(
     context: Context,
     private val prefs: Prefs,
     private val scope: CoroutineScope,

@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.screens
+package stream.kleeamp.mobile.radio
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,17 +7,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import stream.kleeamp.mobile.data.CountryCount
-import stream.kleeamp.mobile.data.DirectoryQuery
-import stream.kleeamp.mobile.data.DirectoryState
-import stream.kleeamp.mobile.data.DirectoryStats
-import stream.kleeamp.mobile.data.NameCount
+import stream.kleeamp.mobile.radio.CountryCount
+import stream.kleeamp.mobile.radio.DirectoryQuery
+import stream.kleeamp.mobile.radio.DirectoryState
+import stream.kleeamp.mobile.radio.DirectoryStats
+import stream.kleeamp.mobile.radio.NameCount
 import stream.kleeamp.mobile.prefs.Prefs
-import stream.kleeamp.mobile.data.Repository
+import stream.kleeamp.mobile.radio.RadioRepository
 import stream.kleeamp.mobile.model.Station
 
 class StationsViewModel(
-    private val repository: Repository,
+    private val repository: RadioRepository,
     private val prefs: Prefs,
 ) : ViewModel() {
     data class UiState(

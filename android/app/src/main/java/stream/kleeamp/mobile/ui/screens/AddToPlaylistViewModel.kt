@@ -8,7 +8,7 @@ import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.data.LocalLibrary
 import stream.kleeamp.mobile.data.PlaylistStore
 import stream.kleeamp.mobile.prefs.Prefs
-import stream.kleeamp.mobile.data.Repository
+import stream.kleeamp.mobile.radio.RadioRepository
 import stream.kleeamp.mobile.model.Station
 
 /**
@@ -30,7 +30,7 @@ class AddToPlaylistViewModel(
     private val localLibrary: LocalLibrary,
     private val playlists: PlaylistStore,
     private val prefs: Prefs,
-    private val repository: Repository,
+    private val repository: RadioRepository,
 ) : ViewModel() {
     data class UiState(
         val song: Station? = null,

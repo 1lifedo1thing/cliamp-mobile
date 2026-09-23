@@ -8,9 +8,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import stream.kleeamp.mobile.data.DirectoryStats
+import stream.kleeamp.mobile.radio.DirectoryStats
 import stream.kleeamp.mobile.prefs.Prefs
-import stream.kleeamp.mobile.data.Repository
+import stream.kleeamp.mobile.radio.RadioRepository
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.theme.KleeampPalette
 import stream.kleeamp.mobile.theme.decodeCustomThemeOrNull
@@ -19,7 +19,7 @@ import stream.kleeamp.mobile.theme.parseCustomTheme
 
 class SettingsViewModel(
     private val prefs: Prefs,
-    private val repository: Repository,
+    private val repository: RadioRepository,
 ) : ViewModel() {
     data class UiState(
         val palette: String = "dark",
