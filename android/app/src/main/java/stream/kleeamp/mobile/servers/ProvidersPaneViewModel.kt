@@ -8,8 +8,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.common.stateInUi
-import stream.kleeamp.mobile.servers.ProviderAccount
-import stream.kleeamp.mobile.servers.ProviderStore
 
 class ProvidersPaneViewModel(
     private val providers: ProviderStore,

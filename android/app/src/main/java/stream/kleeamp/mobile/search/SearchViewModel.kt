@@ -28,8 +28,6 @@ import stream.kleeamp.mobile.radio.RadioRepository
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.servers.ProviderAccount
 import stream.kleeamp.mobile.servers.ProviderStore
-import stream.kleeamp.mobile.search.GlobalSearch
-import stream.kleeamp.mobile.search.SearchHit
 
 enum class SearchScope(val label: String) {
     All("all"), Media("local"), Radio("radio"), Pods("podcasts"),

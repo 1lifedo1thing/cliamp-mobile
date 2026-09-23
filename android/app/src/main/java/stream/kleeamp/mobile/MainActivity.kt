@@ -21,7 +21,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.util.UnstableApi
-import stream.kleeamp.mobile.KleeampRoot
 import stream.kleeamp.mobile.theme.KleeampTheme
 import stream.kleeamp.mobile.theme.decodeCustomThemeOrNull
 import stream.kleeamp.mobile.theme.paletteFor

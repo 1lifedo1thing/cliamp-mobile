@@ -11,15 +11,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
-import stream.kleeamp.mobile.player.vis.ClassicLedCore
-import stream.kleeamp.mobile.player.vis.ClassicPeakCore
-import stream.kleeamp.mobile.player.vis.KleeampCore
-import stream.kleeamp.mobile.player.vis.MeterCore
-import stream.kleeamp.mobile.player.vis.OmarchyField
-import stream.kleeamp.mobile.player.vis.StereoCore
-import stream.kleeamp.mobile.player.vis.StereoMetrics
-import stream.kleeamp.mobile.player.vis.VisMath
-import stream.kleeamp.mobile.player.vis.Visualizer
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.chrome.BrickMeter
 import stream.kleeamp.mobile.chrome.rememberMeter

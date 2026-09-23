@@ -6,7 +6,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
-import stream.kleeamp.mobile.KleeampApp
 
 /**
  * Manual-DI ViewModel wiring. The graph lives on [KleeampApp] as lazy

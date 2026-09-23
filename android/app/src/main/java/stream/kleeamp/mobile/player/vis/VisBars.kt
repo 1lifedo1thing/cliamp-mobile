@@ -6,7 +6,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.dp
-import stream.kleeamp.mobile.player.vis.VisMath
 import stream.kleeamp.mobile.theme.LocalPalette
 
 @Composable

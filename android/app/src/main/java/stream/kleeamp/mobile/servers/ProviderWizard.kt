@@ -29,10 +29,6 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import stream.kleeamp.mobile.servers.DISPLAY_NAME_KEY
-import stream.kleeamp.mobile.servers.FieldKeyboard
-import stream.kleeamp.mobile.servers.FieldSpec
-import stream.kleeamp.mobile.servers.ProviderAccount
 import stream.kleeamp.mobile.chrome.BackChevron
 import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.KleeampTextField

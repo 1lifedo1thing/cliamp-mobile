@@ -9,7 +9,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
-import stream.kleeamp.mobile.player.vis.WaveCore
 import stream.kleeamp.mobile.theme.LocalPalette
 
 /**

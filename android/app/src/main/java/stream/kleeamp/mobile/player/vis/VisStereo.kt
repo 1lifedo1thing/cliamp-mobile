@@ -10,7 +10,6 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
-import stream.kleeamp.mobile.player.vis.VisMath
 import stream.kleeamp.mobile.theme.LocalPalette
 import kotlin.math.roundToInt
 

@@ -7,14 +7,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.common.stateInUi
-import stream.kleeamp.mobile.podcasts.DownloadEntry
-import stream.kleeamp.mobile.podcasts.DownloadState
-import stream.kleeamp.mobile.podcasts.DownloadStore
-import stream.kleeamp.mobile.podcasts.EpisodeProgress
-import stream.kleeamp.mobile.podcasts.PodcastRepository
-import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.prefs.Prefs
-import stream.kleeamp.mobile.podcasts.ShowState
 import stream.kleeamp.mobile.model.Station
 
 class PodcastShowViewModel(

@@ -19,9 +19,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
-import stream.kleeamp.mobile.player.vis.BurstCore
-import stream.kleeamp.mobile.player.vis.KleeampCore
-import stream.kleeamp.mobile.player.vis.VisMath
 import stream.kleeamp.mobile.theme.KleeampPalette
 import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Poppins

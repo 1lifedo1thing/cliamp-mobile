@@ -6,7 +6,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import stream.kleeamp.mobile.player.vis.OmarchyField
 import stream.kleeamp.mobile.theme.LocalPalette
 
 @Composable

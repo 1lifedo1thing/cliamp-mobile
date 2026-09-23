@@ -8,7 +8,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
-import stream.kleeamp.mobile.player.vis.MatrixCore
 import stream.kleeamp.mobile.theme.LocalPalette
 
 @Composable
