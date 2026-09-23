@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.search
+package stream.kleeamp.mobile.search
 
 /**
  * A compact fuzzy matcher in the style of fzf/iTerm: the query characters must

@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.search
+package stream.kleeamp.mobile.search
 
 import stream.kleeamp.mobile.radio.NameCount
 import stream.kleeamp.mobile.podcasts.PodcastEpisode

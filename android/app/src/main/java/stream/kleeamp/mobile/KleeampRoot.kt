@@ -59,7 +59,7 @@ import stream.kleeamp.mobile.chrome.KleeampTabBar
 import stream.kleeamp.mobile.chrome.KleeampTabRail
 import stream.kleeamp.mobile.player.MiniPlayer
 import stream.kleeamp.mobile.chrome.Tab
-import stream.kleeamp.mobile.ui.screens.SearchScreen
+import stream.kleeamp.mobile.search.SearchScreen
 import stream.kleeamp.mobile.library.FavScope
 import stream.kleeamp.mobile.library.LibraryPlaylistPane
 import stream.kleeamp.mobile.library.LibraryAddToPlaylistPane
@@ -90,7 +90,7 @@ import stream.kleeamp.mobile.library.AddToPlaylistViewModel
 import stream.kleeamp.mobile.library.PlaylistDetailViewModel
 import stream.kleeamp.mobile.library.SongInfoViewModel
 import stream.kleeamp.mobile.player.NowPlayingViewModel
-import stream.kleeamp.mobile.ui.screens.SearchViewModel
+import stream.kleeamp.mobile.search.SearchViewModel
 import stream.kleeamp.mobile.ui.screens.SettingsViewModel
 import stream.kleeamp.mobile.servers.ProviderWizardViewModel
 import stream.kleeamp.mobile.ui.screens.ScrobbleWizardViewModel
