@@ -1,11 +1,11 @@
-package stream.kleeamp.mobile.ui.screens
+package stream.kleeamp.mobile.library
 
 import android.app.PendingIntent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import stream.kleeamp.mobile.data.LocalLibrary
+import stream.kleeamp.mobile.library.LocalLibrary
 import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.data.Scrobbler
 import stream.kleeamp.mobile.model.Station

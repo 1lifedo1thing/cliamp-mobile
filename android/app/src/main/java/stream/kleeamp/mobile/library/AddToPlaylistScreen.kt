@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.screens
+package stream.kleeamp.mobile.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,7 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import stream.kleeamp.mobile.data.PlaylistStore
+import stream.kleeamp.mobile.library.PlaylistStore
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.KleeampTextField

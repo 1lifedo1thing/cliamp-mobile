@@ -24,9 +24,9 @@ import stream.kleeamp.mobile.playback.StreamResolver
 import stream.kleeamp.mobile.net.Http
 import stream.kleeamp.mobile.podcasts.DownloadStore
 import stream.kleeamp.mobile.art.LocalArt
-import stream.kleeamp.mobile.data.LocalLibrary
+import stream.kleeamp.mobile.library.LocalLibrary
 import stream.kleeamp.mobile.art.StationArtSource
-import stream.kleeamp.mobile.data.PlaylistStore
+import stream.kleeamp.mobile.library.PlaylistStore
 import stream.kleeamp.mobile.podcasts.PodcastRepository
 import stream.kleeamp.mobile.radio.RadioBrowser
 import stream.kleeamp.mobile.radio.RadioRepository

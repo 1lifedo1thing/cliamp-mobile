@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.radio.DirectoryQuery
 import stream.kleeamp.mobile.radio.DirectoryState
-import stream.kleeamp.mobile.data.LocalLibrary
+import stream.kleeamp.mobile.library.LocalLibrary
 import stream.kleeamp.mobile.radio.NameCount
 import stream.kleeamp.mobile.podcasts.PodcastDirectory
 import stream.kleeamp.mobile.podcasts.PodcastEpisode

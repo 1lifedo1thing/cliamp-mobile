@@ -52,7 +52,7 @@ import androidx.media3.common.util.UnstableApi
 import stream.kleeamp.mobile.KleeampApp
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
-import stream.kleeamp.mobile.data.durationLabel
+import stream.kleeamp.mobile.library.durationLabel
 import stream.kleeamp.mobile.data.visualizer.Visualizer
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection

@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.screens
+package stream.kleeamp.mobile.library
 
 import android.app.PendingIntent
 import androidx.lifecycle.ViewModel
@@ -9,7 +9,7 @@ import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.podcasts.DownloadEntry
 import stream.kleeamp.mobile.podcasts.DownloadStore
 import stream.kleeamp.mobile.radio.DirectoryState
-import stream.kleeamp.mobile.data.LocalLibrary
+import stream.kleeamp.mobile.library.LocalLibrary
 import stream.kleeamp.mobile.podcasts.PodcastRepository
 import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.prefs.Prefs

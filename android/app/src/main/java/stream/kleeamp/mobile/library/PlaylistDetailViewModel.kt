@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.screens
+package stream.kleeamp.mobile.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,8 +7,8 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.radio.DirectoryState
 import stream.kleeamp.mobile.podcasts.DownloadStore
-import stream.kleeamp.mobile.data.LocalLibrary
-import stream.kleeamp.mobile.data.PlaylistStore
+import stream.kleeamp.mobile.library.LocalLibrary
+import stream.kleeamp.mobile.library.PlaylistStore
 import stream.kleeamp.mobile.podcasts.PodcastRepository
 import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.prefs.Prefs

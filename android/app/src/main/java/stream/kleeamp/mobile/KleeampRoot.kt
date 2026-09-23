@@ -60,13 +60,13 @@ import stream.kleeamp.mobile.chrome.KleeampTabRail
 import stream.kleeamp.mobile.ui.components.MiniPlayer
 import stream.kleeamp.mobile.chrome.Tab
 import stream.kleeamp.mobile.ui.screens.SearchScreen
-import stream.kleeamp.mobile.ui.screens.FavScope
-import stream.kleeamp.mobile.ui.screens.LibraryPlaylistPane
-import stream.kleeamp.mobile.ui.screens.LibraryAddToPlaylistPane
+import stream.kleeamp.mobile.library.FavScope
+import stream.kleeamp.mobile.library.LibraryPlaylistPane
+import stream.kleeamp.mobile.library.LibraryAddToPlaylistPane
 import stream.kleeamp.mobile.ui.screens.LibraryProvidersPane
-import stream.kleeamp.mobile.ui.screens.LibrarySmartPlaylistPane
-import stream.kleeamp.mobile.ui.screens.LibrarySongInfoPane
-import stream.kleeamp.mobile.ui.screens.LocalScreen
+import stream.kleeamp.mobile.library.LibrarySmartPlaylistPane
+import stream.kleeamp.mobile.library.LibrarySongInfoPane
+import stream.kleeamp.mobile.library.LibraryScreen
 import stream.kleeamp.mobile.ui.screens.NowPlayingScreen
 import stream.kleeamp.mobile.podcasts.PodcastShowScreen
 import stream.kleeamp.mobile.podcasts.PodcastsScreen
@@ -81,14 +81,14 @@ import stream.kleeamp.mobile.radio.StationsScreen
 import stream.kleeamp.mobile.radio.StationsViewModel
 import stream.kleeamp.mobile.podcasts.PodcastsViewModel
 import stream.kleeamp.mobile.podcasts.PodcastShowViewModel
-import stream.kleeamp.mobile.ui.screens.LocalViewModel
+import stream.kleeamp.mobile.library.LocalViewModel
 import stream.kleeamp.mobile.ui.screens.ProviderSongsPane
 import stream.kleeamp.mobile.ui.screens.ProviderSongsViewModel
 import stream.kleeamp.mobile.ui.screens.ProvidersPaneViewModel
-import stream.kleeamp.mobile.ui.screens.SmartPlaylistViewModel
-import stream.kleeamp.mobile.ui.screens.AddToPlaylistViewModel
-import stream.kleeamp.mobile.ui.screens.PlaylistDetailViewModel
-import stream.kleeamp.mobile.ui.screens.SongInfoViewModel
+import stream.kleeamp.mobile.library.SmartPlaylistViewModel
+import stream.kleeamp.mobile.library.AddToPlaylistViewModel
+import stream.kleeamp.mobile.library.PlaylistDetailViewModel
+import stream.kleeamp.mobile.library.SongInfoViewModel
 import stream.kleeamp.mobile.ui.screens.NowPlayingViewModel
 import stream.kleeamp.mobile.ui.screens.SearchViewModel
 import stream.kleeamp.mobile.ui.screens.SettingsViewModel
@@ -398,7 +398,7 @@ fun KleeampRoot(
                                 onOpenSearch = { navController.navigate(Search) },
                                 onOpenSettings = { navController.navigate(Settings) },
                             )
-                            Tab.Lib -> LocalScreen(
+                            Tab.Lib -> LibraryScreen(
                                 vm = appViewModel { app ->
                                     LocalViewModel(app.localLibrary, app.playlists, app.prefs, app.providers)
                                 },

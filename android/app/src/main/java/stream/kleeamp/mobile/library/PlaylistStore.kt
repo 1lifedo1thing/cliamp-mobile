@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data
+package stream.kleeamp.mobile.library
 
 import android.content.Context
 import kotlinx.coroutines.flow.Flow
