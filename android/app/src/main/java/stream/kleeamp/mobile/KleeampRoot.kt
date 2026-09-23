@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui
+package stream.kleeamp.mobile
 
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition

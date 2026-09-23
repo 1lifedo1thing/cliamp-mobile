@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui
+package stream.kleeamp.mobile
 
 import kotlinx.serialization.Serializable
 

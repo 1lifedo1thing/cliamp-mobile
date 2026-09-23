@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui
+package stream.kleeamp.mobile
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
