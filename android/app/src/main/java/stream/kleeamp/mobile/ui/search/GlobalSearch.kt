@@ -1,11 +1,11 @@
 package stream.kleeamp.mobile.ui.search
 
 import stream.kleeamp.mobile.data.NameCount
-import stream.kleeamp.mobile.data.PodcastEpisode
-import stream.kleeamp.mobile.data.PodcastShow
+import stream.kleeamp.mobile.podcasts.PodcastEpisode
+import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.data.provider.ProviderAccount
-import stream.kleeamp.mobile.data.toStation
+import stream.kleeamp.mobile.podcasts.toStation
 
 /**
  * Fans the query out across every catalogue the app knows about - local songs,

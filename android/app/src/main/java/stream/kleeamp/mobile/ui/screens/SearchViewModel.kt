@@ -19,10 +19,10 @@ import stream.kleeamp.mobile.data.DirectoryQuery
 import stream.kleeamp.mobile.data.DirectoryState
 import stream.kleeamp.mobile.data.LocalLibrary
 import stream.kleeamp.mobile.data.NameCount
-import stream.kleeamp.mobile.data.PodcastDirectory
-import stream.kleeamp.mobile.data.PodcastEpisode
-import stream.kleeamp.mobile.data.PodcastRepository
-import stream.kleeamp.mobile.data.PodcastShow
+import stream.kleeamp.mobile.podcasts.PodcastDirectory
+import stream.kleeamp.mobile.podcasts.PodcastEpisode
+import stream.kleeamp.mobile.podcasts.PodcastRepository
+import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.data.Repository
 import stream.kleeamp.mobile.model.Station

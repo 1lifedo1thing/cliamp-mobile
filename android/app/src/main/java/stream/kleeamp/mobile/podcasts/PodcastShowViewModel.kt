@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.screens
+package stream.kleeamp.mobile.podcasts
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,14 +7,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import stream.kleeamp.mobile.data.DownloadEntry
-import stream.kleeamp.mobile.data.DownloadState
-import stream.kleeamp.mobile.data.DownloadStore
-import stream.kleeamp.mobile.data.EpisodeProgress
-import stream.kleeamp.mobile.data.PodcastRepository
-import stream.kleeamp.mobile.data.PodcastShow
+import stream.kleeamp.mobile.podcasts.DownloadEntry
+import stream.kleeamp.mobile.podcasts.DownloadState
+import stream.kleeamp.mobile.podcasts.DownloadStore
+import stream.kleeamp.mobile.podcasts.EpisodeProgress
+import stream.kleeamp.mobile.podcasts.PodcastRepository
+import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.prefs.Prefs
-import stream.kleeamp.mobile.data.ShowState
+import stream.kleeamp.mobile.podcasts.ShowState
 import stream.kleeamp.mobile.model.Station
 
 class PodcastShowViewModel(

@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import stream.kleeamp.mobile.data.DownloadEntry
+import stream.kleeamp.mobile.podcasts.DownloadEntry
 import stream.kleeamp.mobile.data.LocalLibrary
 import stream.kleeamp.mobile.data.PlaylistStore
 import stream.kleeamp.mobile.prefs.Prefs

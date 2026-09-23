@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data
+package stream.kleeamp.mobile.podcasts
 
 import android.util.Xml
 import kotlinx.coroutines.Dispatchers

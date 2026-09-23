@@ -1,6 +1,6 @@
 package stream.kleeamp.mobile.ui.search
 
-import stream.kleeamp.mobile.data.PodcastShow
+import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.data.provider.ProviderAccount
 

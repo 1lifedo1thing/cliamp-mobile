@@ -22,12 +22,12 @@ import stream.kleeamp.mobile.playback.ResolvedStream
 import stream.kleeamp.mobile.playback.SftpDataSource
 import stream.kleeamp.mobile.playback.StreamResolver
 import stream.kleeamp.mobile.net.Http
-import stream.kleeamp.mobile.data.DownloadStore
+import stream.kleeamp.mobile.podcasts.DownloadStore
 import stream.kleeamp.mobile.art.LocalArt
 import stream.kleeamp.mobile.data.LocalLibrary
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.data.PlaylistStore
-import stream.kleeamp.mobile.data.PodcastRepository
+import stream.kleeamp.mobile.podcasts.PodcastRepository
 import stream.kleeamp.mobile.data.RadioBrowser
 import stream.kleeamp.mobile.data.Repository
 import stream.kleeamp.mobile.data.Scrobbler

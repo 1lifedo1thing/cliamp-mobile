@@ -32,7 +32,7 @@ import stream.kleeamp.mobile.db.toEntity
 import stream.kleeamp.mobile.prefs.SecretStore
 import stream.kleeamp.mobile.net.Http
 import stream.kleeamp.mobile.model.Station
-import stream.kleeamp.mobile.data.DownloadEntry
+import stream.kleeamp.mobile.podcasts.DownloadEntry
 
 private val Context.settingsStore: DataStore<Preferences> by preferencesDataStore("cliamp")
 

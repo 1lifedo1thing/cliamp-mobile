@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data
+package stream.kleeamp.mobile.podcasts
 
 import android.content.Context
 import kotlinx.coroutines.CancellationException

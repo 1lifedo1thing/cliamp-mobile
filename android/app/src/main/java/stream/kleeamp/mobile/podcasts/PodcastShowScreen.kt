@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.screens
+package stream.kleeamp.mobile.podcasts
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -34,14 +34,14 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import stream.kleeamp.mobile.data.DownloadState
-import stream.kleeamp.mobile.data.downloadSizeLabel
-import stream.kleeamp.mobile.data.EpisodeProgress
-import stream.kleeamp.mobile.data.PodcastEpisode
-import stream.kleeamp.mobile.data.PodcastShow
+import stream.kleeamp.mobile.podcasts.DownloadState
+import stream.kleeamp.mobile.podcasts.downloadSizeLabel
+import stream.kleeamp.mobile.podcasts.EpisodeProgress
+import stream.kleeamp.mobile.podcasts.PodcastEpisode
+import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.art.StationArtSource
-import stream.kleeamp.mobile.data.toStation
+import stream.kleeamp.mobile.podcasts.toStation
 import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.EmptyNote

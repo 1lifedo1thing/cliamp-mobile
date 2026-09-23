@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data
+package stream.kleeamp.mobile.podcasts
 
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred

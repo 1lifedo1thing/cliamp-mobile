@@ -48,8 +48,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.data.DirectoryQuery
 import stream.kleeamp.mobile.prefs.Prefs
-import stream.kleeamp.mobile.data.PodcastRepository
-import stream.kleeamp.mobile.data.PodcastShow
+import stream.kleeamp.mobile.podcasts.PodcastRepository
+import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.data.Repository
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.play.PlayFromList
@@ -68,8 +68,8 @@ import stream.kleeamp.mobile.ui.screens.LibrarySmartPlaylistPane
 import stream.kleeamp.mobile.ui.screens.LibrarySongInfoPane
 import stream.kleeamp.mobile.ui.screens.LocalScreen
 import stream.kleeamp.mobile.ui.screens.NowPlayingScreen
-import stream.kleeamp.mobile.ui.screens.PodcastShowScreen
-import stream.kleeamp.mobile.ui.screens.PodcastsScreen
+import stream.kleeamp.mobile.podcasts.PodcastShowScreen
+import stream.kleeamp.mobile.podcasts.PodcastsScreen
 import stream.kleeamp.mobile.ui.screens.UpNextScreen
 import stream.kleeamp.mobile.ui.screens.ScopeScreen
 import stream.kleeamp.mobile.ui.screens.ScrobbleWizard as ScrobbleWizardScreen
@@ -79,8 +79,8 @@ import stream.kleeamp.mobile.ui.screens.ProviderWizard as ProviderWizardScreen
 import stream.kleeamp.mobile.ui.screens.SettingsScreen
 import stream.kleeamp.mobile.ui.screens.StationsScreen
 import stream.kleeamp.mobile.ui.screens.StationsViewModel
-import stream.kleeamp.mobile.ui.screens.PodcastsViewModel
-import stream.kleeamp.mobile.ui.screens.PodcastShowViewModel
+import stream.kleeamp.mobile.podcasts.PodcastsViewModel
+import stream.kleeamp.mobile.podcasts.PodcastShowViewModel
 import stream.kleeamp.mobile.ui.screens.LocalViewModel
 import stream.kleeamp.mobile.ui.screens.ProviderSongsPane
 import stream.kleeamp.mobile.ui.screens.ProviderSongsViewModel

@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data
+package stream.kleeamp.mobile.podcasts
 
 import kotlinx.serialization.Serializable
 import stream.kleeamp.mobile.art.StationArtSource

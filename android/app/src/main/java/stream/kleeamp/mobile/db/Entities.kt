@@ -142,14 +142,14 @@ data class PodcastSubscriptionEntity(
     val position: Int = 0,
     val subscribedAt: Long = 0,
 ) {
-    fun toShow() = stream.kleeamp.mobile.data.PodcastShow(
+    fun toShow() = stream.kleeamp.mobile.podcasts.PodcastShow(
         id = showId, title = title, feedUrl = feedUrl, author = author,
         artwork = artwork, genre = genre, episodeCount = episodeCount,
         description = description,
     )
 }
 
-fun stream.kleeamp.mobile.data.PodcastShow.toEntity(position: Int = 0) = PodcastSubscriptionEntity(
+fun stream.kleeamp.mobile.podcasts.PodcastShow.toEntity(position: Int = 0) = PodcastSubscriptionEntity(
     feedUrl = feedUrl, showId = id, title = title, author = author, artwork = artwork,
     genre = genre, episodeCount = episodeCount, description = description,
     position = position, subscribedAt = System.currentTimeMillis(),
@@ -172,7 +172,7 @@ data class EpisodeProgressEntity(
     val durationMs: Long,
     val completed: Boolean,
     val updatedAt: Long,
-) {    fun toProgress() = stream.kleeamp.mobile.data.EpisodeProgress(
+) {    fun toProgress() = stream.kleeamp.mobile.podcasts.EpisodeProgress(
         url = url, positionMs = positionMs, durationMs = durationMs, completed = completed,
     )
 }
