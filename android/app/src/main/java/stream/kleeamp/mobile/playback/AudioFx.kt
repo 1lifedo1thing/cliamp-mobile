@@ -43,7 +43,15 @@ class AudioFx(private val bands: Int = 64) {
         onLiveChanged: (Boolean) -> Unit = {},
     ) {
         if (audioSessionId == 0) return
-        if (audioSessionId == sessionId && spectrumEnabled == spectrumOn) return
+        // A matching session + flag does NOT mean healthy: a failed build
+        // leaves spectrumOn set with no visualizer behind it, and an early
+        // return here would retry forever without ever rebuilding. Only
+        // skip when disabled, or when frames are actually flowing.
+        if (audioSessionId == sessionId && spectrumEnabled == spectrumOn &&
+            (!spectrumEnabled || spectrumLive)
+        ) {
+            return
+        }
         release()
         sessionId = audioSessionId
         spectrumOn = spectrumEnabled

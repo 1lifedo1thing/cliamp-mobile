@@ -532,6 +532,9 @@ class PlaybackService : MediaSessionService() {
      */
     private var progressJob: Job? = null
 
+    /** Last analyser re-attach attempt; see the ticker loop. */
+    private var lastFxRetryMs = 0L
+
     private fun syncProgressTicker() {
         val want = player.playWhenReady && player.mediaItemCount > 0
         if (want && progressJob?.isActive == true) return
@@ -546,6 +549,8 @@ class PlaybackService : MediaSessionService() {
                         dur,
                     )
                 }
+                // Self-healing analyser attach; see reattachAnalyserIfStalled.
+                reattachAnalyserIfStalled()
                 delay(500)
             }
         } else null
@@ -559,6 +564,31 @@ class PlaybackService : MediaSessionService() {
                 )
             }
         }
+    }
+
+    /**
+     * Self-healing analyser attach: a busy engine (or a session that was not
+     * ready) fails attach once and nothing retried it, leaving the meters
+     * simulated until the next pause/resume. Rechecked twice a second while
+     * playback is wanted; attach() early-returns when the live analyser
+     * already matches, and the cooldown keeps a persistently busy engine to
+     * one attempt plus one warning line every couple of seconds.
+     */
+    private fun reattachAnalyserIfStalled() {
+        val now = System.currentTimeMillis()
+        if (!player.isPlaying || !spectrumWanted || fx.spectrumLive ||
+            now - lastFxRetryMs <= FX_RETRY_MS
+        ) {
+            return
+        }
+        lastFxRetryMs = now
+        fx.attach(
+            player.audioSessionId,
+            spectrumWanted,
+            onSpectrum = ::handleSpectrum,
+            onWaveform = PlaybackBus::publishWaveform,
+            onLiveChanged = PlaybackBus::publishSpectrumLive,
+        )
     }
 
     /**
@@ -758,6 +788,9 @@ class PlaybackService : MediaSessionService() {
 
     companion object {
         const val SPECTRUM_BANDS = 64
+
+        /** Minimum gap between analyser re-attach attempts; see the ticker. */
+        const val FX_RETRY_MS = 2000L
         const val CMD_PREV_STATION = "stream.kleeamp.mobile.PREV_STATION"
         const val CMD_NEXT_STATION = "stream.kleeamp.mobile.NEXT_STATION"
         const val CMD_SHUFFLE = "stream.kleeamp.mobile.SHUFFLE"
