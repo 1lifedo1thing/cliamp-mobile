@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data.provider
+package stream.kleeamp.mobile.servers
 
 import kotlinx.coroutines.flow.StateFlow
 import stream.kleeamp.mobile.model.Station

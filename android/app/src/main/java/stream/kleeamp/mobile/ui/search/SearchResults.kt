@@ -2,7 +2,7 @@ package stream.kleeamp.mobile.ui.search
 
 import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.model.Station
-import stream.kleeamp.mobile.data.provider.ProviderAccount
+import stream.kleeamp.mobile.servers.ProviderAccount
 
 /** A single fuzzy result from any source, labelled with where it came from. */
 sealed interface SearchHit {

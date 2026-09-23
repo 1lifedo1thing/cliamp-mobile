@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.screens
+package stream.kleeamp.mobile.servers
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -29,10 +29,10 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import stream.kleeamp.mobile.data.provider.DISPLAY_NAME_KEY
-import stream.kleeamp.mobile.data.provider.FieldKeyboard
-import stream.kleeamp.mobile.data.provider.FieldSpec
-import stream.kleeamp.mobile.data.provider.ProviderAccount
+import stream.kleeamp.mobile.servers.DISPLAY_NAME_KEY
+import stream.kleeamp.mobile.servers.FieldKeyboard
+import stream.kleeamp.mobile.servers.FieldSpec
+import stream.kleeamp.mobile.servers.ProviderAccount
 import stream.kleeamp.mobile.chrome.BackChevron
 import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.KleeampTextField

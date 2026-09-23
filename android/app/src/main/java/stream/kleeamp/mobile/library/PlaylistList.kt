@@ -67,18 +67,17 @@ import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.radio.RadioRepository
 import stream.kleeamp.mobile.podcasts.ShowState
 import stream.kleeamp.mobile.model.Station
-import stream.kleeamp.mobile.ui.screens.ProvidersRow
 import stream.kleeamp.mobile.radio.DirectoryState
 import stream.kleeamp.mobile.podcasts.EpisodeProgress
 import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.podcasts.toStation
 import stream.kleeamp.mobile.library.durationLabel
 import stream.kleeamp.mobile.podcasts.downloadSizeLabel
-import stream.kleeamp.mobile.data.provider.ProviderAccount
-import stream.kleeamp.mobile.data.provider.ProviderCatalog
-import stream.kleeamp.mobile.data.provider.displayName
-import stream.kleeamp.mobile.data.provider.ProviderSpec
-import stream.kleeamp.mobile.data.provider.SftpLibrary
+import stream.kleeamp.mobile.servers.ProviderAccount
+import stream.kleeamp.mobile.servers.ProviderCatalog
+import stream.kleeamp.mobile.servers.displayName
+import stream.kleeamp.mobile.servers.ProviderSpec
+import stream.kleeamp.mobile.servers.SftpLibrary
 import stream.kleeamp.mobile.chrome.rememberStationThumbnail
 import stream.kleeamp.mobile.chrome.BackChevron
 import stream.kleeamp.mobile.chrome.Chip
@@ -414,5 +413,34 @@ private fun InlineNameField(
         Mono("CANCEL", KleeampType.tabLabel, p.inkTertiary,
             Modifier.clip(RoundedCornerShape(KleeampShape.tiny)).border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny))
                 .microPress(onClick = onCancel).padding(horizontal = 9.dp, vertical = 7.dp))
+    }
+}
+
+/**
+ * The providers entry in the pinned list: one row standing in for every
+ * connected account's songs. The count reads accounts, not songs - songs
+ * load when the row opens, so the row stays instant like the smart rows
+ * around it.
+ */
+
+@Composable
+private fun ProvidersRow(count: Int, onOpen: () -> Unit) {
+    val p = LocalPalette.current
+    ListRow(
+        onClick = onOpen,
+        verticalPadding = 8.dp,
+        leading = {
+            PlaylistGlyph(KleeampIcons.Server, "providers")
+        },
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Mono(
+                    if (count == 0) "none yet" else "$count account${if (count == 1) "" else "s"}",
+                    KleeampType.meta, p.inkFaint,
+                )
+            }
+        },
+    ) {
+        Mono("providers", KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
     }
 }

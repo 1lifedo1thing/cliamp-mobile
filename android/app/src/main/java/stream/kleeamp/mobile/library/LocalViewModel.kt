@@ -9,8 +9,8 @@ import stream.kleeamp.mobile.library.LocalLibrary
 import stream.kleeamp.mobile.library.PlaylistStore
 import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.model.Station
-import stream.kleeamp.mobile.data.provider.ProviderAccount
-import stream.kleeamp.mobile.data.provider.ProviderStore
+import stream.kleeamp.mobile.servers.ProviderAccount
+import stream.kleeamp.mobile.servers.ProviderStore
 import stream.kleeamp.mobile.prefs.PlaylistSort
 
 class LocalViewModel(

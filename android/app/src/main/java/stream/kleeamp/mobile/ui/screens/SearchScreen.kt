@@ -51,8 +51,8 @@ import stream.kleeamp.mobile.art.PlaceholderArt
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.model.StationSource
-import stream.kleeamp.mobile.data.provider.ProviderAccount
-import stream.kleeamp.mobile.data.provider.displayName
+import stream.kleeamp.mobile.servers.ProviderAccount
+import stream.kleeamp.mobile.servers.displayName
 import stream.kleeamp.mobile.chrome.BackChevron
 import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.KleeampIcons

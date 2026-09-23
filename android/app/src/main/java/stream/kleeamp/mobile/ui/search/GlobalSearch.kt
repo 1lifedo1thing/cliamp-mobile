@@ -4,7 +4,7 @@ import stream.kleeamp.mobile.radio.NameCount
 import stream.kleeamp.mobile.podcasts.PodcastEpisode
 import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.model.Station
-import stream.kleeamp.mobile.data.provider.ProviderAccount
+import stream.kleeamp.mobile.servers.ProviderAccount
 import stream.kleeamp.mobile.podcasts.toStation
 
 /**

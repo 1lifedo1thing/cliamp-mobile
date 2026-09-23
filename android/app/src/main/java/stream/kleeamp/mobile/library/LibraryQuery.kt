@@ -73,11 +73,11 @@ import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.podcasts.toStation
 import stream.kleeamp.mobile.library.durationLabel
 import stream.kleeamp.mobile.podcasts.downloadSizeLabel
-import stream.kleeamp.mobile.data.provider.ProviderAccount
-import stream.kleeamp.mobile.data.provider.ProviderCatalog
-import stream.kleeamp.mobile.data.provider.displayName
-import stream.kleeamp.mobile.data.provider.ProviderSpec
-import stream.kleeamp.mobile.data.provider.SftpLibrary
+import stream.kleeamp.mobile.servers.ProviderAccount
+import stream.kleeamp.mobile.servers.ProviderCatalog
+import stream.kleeamp.mobile.servers.displayName
+import stream.kleeamp.mobile.servers.ProviderSpec
+import stream.kleeamp.mobile.servers.SftpLibrary
 import stream.kleeamp.mobile.chrome.rememberStationThumbnail
 import stream.kleeamp.mobile.chrome.BackChevron
 import stream.kleeamp.mobile.chrome.Chip

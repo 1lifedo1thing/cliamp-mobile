@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data.provider
+package stream.kleeamp.mobile.servers
 
 /**
  * A declarative description of what a provider needs before it can be used.

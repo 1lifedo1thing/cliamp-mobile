@@ -10,8 +10,8 @@ import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
 import net.schmizz.sshj.sftp.OpenMode
 import net.schmizz.sshj.sftp.RemoteFile
-import stream.kleeamp.mobile.data.provider.SftpLibrary
-import stream.kleeamp.mobile.data.provider.SshPool
+import stream.kleeamp.mobile.servers.SftpLibrary
+import stream.kleeamp.mobile.servers.SshPool
 import java.io.IOException
 import java.io.InputStream
 

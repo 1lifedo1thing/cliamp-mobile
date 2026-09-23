@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data.provider
+package stream.kleeamp.mobile.servers
 
 import android.util.Base64
 import android.util.Log

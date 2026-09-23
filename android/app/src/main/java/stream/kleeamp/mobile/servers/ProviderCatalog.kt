@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data.provider
+package stream.kleeamp.mobile.servers
 
 /**
  * Every provider the app can add. Adding one is a data change here plus a

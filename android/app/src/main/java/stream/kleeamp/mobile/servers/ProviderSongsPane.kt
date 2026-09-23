@@ -1,4 +1,5 @@
-package stream.kleeamp.mobile.ui.screens
+package stream.kleeamp.mobile.servers
+
 
 
 import android.app.Activity
@@ -76,11 +77,11 @@ import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.podcasts.toStation
 import stream.kleeamp.mobile.library.durationLabel
 import stream.kleeamp.mobile.podcasts.downloadSizeLabel
-import stream.kleeamp.mobile.data.provider.ProviderAccount
-import stream.kleeamp.mobile.data.provider.ProviderCatalog
-import stream.kleeamp.mobile.data.provider.displayName
-import stream.kleeamp.mobile.data.provider.ProviderSpec
-import stream.kleeamp.mobile.data.provider.SftpLibrary
+import stream.kleeamp.mobile.servers.ProviderAccount
+import stream.kleeamp.mobile.servers.ProviderCatalog
+import stream.kleeamp.mobile.servers.displayName
+import stream.kleeamp.mobile.servers.ProviderSpec
+import stream.kleeamp.mobile.servers.SftpLibrary
 import stream.kleeamp.mobile.chrome.rememberStationThumbnail
 import stream.kleeamp.mobile.chrome.BackChevron
 import stream.kleeamp.mobile.chrome.Chip
@@ -109,48 +110,9 @@ import stream.kleeamp.mobile.theme.Mono
 import stream.kleeamp.mobile.prefs.PlaylistSort
 import stream.kleeamp.mobile.prefs.sortedStations
 
-/** The pinned, auto-populated smart playlists on the library tab. */
 
 /** One provider album row for the providers drill: name, song count, year. */
 private data class ProviderAlbumRow(val name: String, val count: Int, val year: Int)
-
-/** Providers as a navigation pane: connected accounts, then every addable type. */
-@Composable
-fun LibraryProvidersPane(
-    vm: ProvidersPaneViewModel,
-    onBack: () -> Unit,
-    onOpenProvider: (ProviderAccount) -> Unit,
-    onEditProvider: (ProviderAccount) -> Unit,
-    onAddProvider: (ProviderSpec) -> Unit,
-    onOpenSearch: () -> Unit = {},
-    onOpenSettings: () -> Unit = {},
-) {
-    val p = LocalPalette.current
-    val ui by vm.state.collectAsState()
-    Box(Modifier.fillMaxSize().background(p.ground)) {
-        val scope = rememberCoroutineScope()
-        val listState = rememberLazyListState()
-        MainLayout(
-            title = "providers",
-            onOpenSearch = onOpenSearch,
-            onOpenSettings = onOpenSettings,
-            onTitleClick = { scope.scrollToTop(listState) },
-            onBack = onBack,
-        ) {
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                ProvidersView(
-                    listState = listState,
-                    providers = ui.providers,
-                    onOpenProvider = onOpenProvider,
-                    onEditProvider = onEditProvider,
-                    onAddProvider = onAddProvider,
-                    onRemoveProvider = { vm.onEvent(ProvidersPaneViewModel.Event.Remove(it)) },
-                )
-            }
-        }
-    }
-}
-
 
 @Composable
 fun ProviderSongsPane(
@@ -415,150 +377,5 @@ fun ProviderSongsPane(
                 item { Spacer(Modifier.height(20.dp)) }
             }
         }
-    }
-}
-
-
-@Composable
-private fun ProvidersView(
-    listState: LazyListState,
-    providers: List<ProviderAccount>,
-    onOpenProvider: (ProviderAccount) -> Unit,
-    onEditProvider: (ProviderAccount) -> Unit,
-    onAddProvider: (ProviderSpec) -> Unit,
-    onRemoveProvider: (ProviderAccount) -> Unit,
-) {
-    val p = LocalPalette.current
-    val connectedKeys = providers.map { it.providerKey }.toSet()
-    // Every provider allows several accounts - two servers of one kind are
-    // as ordinary as two SSH hosts - so all specs stay addable.
-    val available = ProviderCatalog.all.filter { it.multiple || it.key !in connectedKeys }
-    LazyColumn(Modifier.fillMaxSize(), state = listState) {
-        item {
-            SectionLabel("connected — ${providers.size}") { }
-        }
-        if (providers.isEmpty()) {
-            item {
-                Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 8.dp)) {
-                    Mono("nothing connected yet", KleeampType.rowSecondary, p.inkFaint)
-                }
-            }
-        } else {
-            items(providers, key = { "prov:${it.id}" }) { acc ->
-                ListRow(
-                    onClick = { onOpenProvider(acc) },
-                    verticalPadding = 11.dp,
-                    leading = {
-                        Box(
-                            Modifier.size(28.dp).clip(RoundedCornerShape(KleeampShape.tiny))
-                                .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(KleeampIcons.Server, null, Modifier.size(14.dp), tint = p.amber)
-                        }
-                    },
-                    // Adding an account was always possible and removing one
-                    // never was, which mattered little when each provider could
-                    // only be connected once and matters a lot now that SSH
-                    // hosts can be added without limit.
-                    trailing = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            OverflowMenu(
-                                trigger = { open -> OverflowButton(open, size = 16) },
-                                items = listOf(
-                                    OverflowItem(
-                                        "edit account",
-                                        color = p.ink,
-                                        action = { onEditProvider(acc) },
-                                    ),
-                                    OverflowItem(
-                                        "remove account",
-                                        color = p.destructiveInk,
-                                        action = { onRemoveProvider(acc) },
-                                    ),
-                                ),
-                            )
-                        }
-                    },
-                ) {
-                    Mono(acc.displayName().ifBlank { "provider" }, KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
-                    Mono(
-                        ProviderCatalog.byKey(acc.providerKey)?.summary?.invoke(acc.values)
-                            ?: acc.url,
-                        KleeampType.rowSecondary, p.inkTertiary, maxLines = 1,
-                    )
-                }
-            }
-        }
-        item {
-            SectionLabel("available — ${available.size}") { }
-        }
-        if (available.isEmpty()) {
-            item {
-                Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 8.dp)) {
-                    Mono("every provider is connected", KleeampType.rowSecondary, p.inkFaint)
-                }
-            }
-        } else {
-            items(available, key = { "add:${it.key}" }) { spec ->
-                ListRow(
-                    onClick = { onAddProvider(spec) },
-                    verticalPadding = 11.dp,
-                    leading = {
-                        Box(
-                            Modifier.size(28.dp).clip(RoundedCornerShape(KleeampShape.tiny))
-                                .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(KleeampIcons.Server, null, Modifier.size(14.dp), tint = p.inkTertiary)
-                        }
-                    },
-                    trailing = {
-                        Icon(
-                            KleeampIcons.Plus, "add",
-                            Modifier.size(11.dp).clip(RoundedCornerShape(KleeampShape.tiny))
-                                .background(p.accent.copy(alpha = 0.14f))
-                                .padding(6.dp),
-                            tint = p.accent,
-                        )
-                    },
-                ) {
-                    Mono(spec.name, KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
-                    Mono(spec.intro.firstOrNull().orEmpty(), KleeampType.rowSecondary, p.inkTertiary, maxLines = 1)
-                }
-            }
-        }
-        item { Spacer(Modifier.height(20.dp)) }
-    }
-}
-
-
-
-/**
- * The providers entry in the pinned list: one row standing in for every
- * connected account's songs. The count reads accounts, not songs - songs
- * load when the row opens, so the row stays instant like the smart rows
- * around it.
- */
-
-@Composable
-internal fun ProvidersRow(count: Int, onOpen: () -> Unit) {
-    val p = LocalPalette.current
-    ListRow(
-        onClick = onOpen,
-        verticalPadding = 8.dp,
-        leading = {
-            PlaylistGlyph(KleeampIcons.Server, "providers")
-        },
-        trailing = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Mono(
-                    if (count == 0) "none yet" else "$count account${if (count == 1) "" else "s"}",
-                    KleeampType.meta, p.inkFaint,
-                )
-            }
-        },
-    ) {
-        Mono("providers", KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
     }
 }

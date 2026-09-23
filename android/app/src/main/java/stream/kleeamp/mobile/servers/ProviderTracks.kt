@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data.provider
+package stream.kleeamp.mobile.servers
 
 /** Builds the API client a configured account represents. */
 fun ProviderAccount.subsonic(): SubsonicClient = SubsonicClient(

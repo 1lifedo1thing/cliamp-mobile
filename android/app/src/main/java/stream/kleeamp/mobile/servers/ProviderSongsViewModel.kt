@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.screens
+package stream.kleeamp.mobile.servers
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,10 +8,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.model.Station
-import stream.kleeamp.mobile.data.provider.ProviderAccount
-import stream.kleeamp.mobile.data.provider.ProviderStore
-import stream.kleeamp.mobile.data.provider.browseClient
-import stream.kleeamp.mobile.data.provider.toStation
+import stream.kleeamp.mobile.servers.ProviderAccount
+import stream.kleeamp.mobile.servers.ProviderStore
+import stream.kleeamp.mobile.servers.browseClient
+import stream.kleeamp.mobile.servers.toStation
 
 /**
  * The "providers" playlist: every connected account's songs, flat, with a

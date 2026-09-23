@@ -1,14 +1,14 @@
-package stream.kleeamp.mobile.ui.screens
+package stream.kleeamp.mobile.servers
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import stream.kleeamp.mobile.data.provider.DISPLAY_NAME_KEY
-import stream.kleeamp.mobile.data.provider.ProviderAccount
-import stream.kleeamp.mobile.data.provider.ProviderIdentity
-import stream.kleeamp.mobile.data.provider.ProviderSpec
-import stream.kleeamp.mobile.data.provider.SubsonicClient
+import stream.kleeamp.mobile.servers.DISPLAY_NAME_KEY
+import stream.kleeamp.mobile.servers.ProviderAccount
+import stream.kleeamp.mobile.servers.ProviderIdentity
+import stream.kleeamp.mobile.servers.ProviderSpec
+import stream.kleeamp.mobile.servers.SubsonicClient
 
 sealed interface Probe {
     data object Idle : Probe

@@ -1,11 +1,11 @@
-package stream.kleeamp.mobile.ui.screens
+package stream.kleeamp.mobile.servers
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import stream.kleeamp.mobile.data.provider.ProviderAccount
-import stream.kleeamp.mobile.data.provider.ProviderStore
+import stream.kleeamp.mobile.servers.ProviderAccount
+import stream.kleeamp.mobile.servers.ProviderStore
 
 class ProvidersPaneViewModel(
     private val providers: ProviderStore,

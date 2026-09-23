@@ -63,7 +63,7 @@ import stream.kleeamp.mobile.ui.screens.SearchScreen
 import stream.kleeamp.mobile.library.FavScope
 import stream.kleeamp.mobile.library.LibraryPlaylistPane
 import stream.kleeamp.mobile.library.LibraryAddToPlaylistPane
-import stream.kleeamp.mobile.ui.screens.LibraryProvidersPane
+import stream.kleeamp.mobile.servers.LibraryProvidersPane
 import stream.kleeamp.mobile.library.LibrarySmartPlaylistPane
 import stream.kleeamp.mobile.library.LibrarySongInfoPane
 import stream.kleeamp.mobile.library.LibraryScreen
@@ -73,18 +73,18 @@ import stream.kleeamp.mobile.podcasts.PodcastsScreen
 import stream.kleeamp.mobile.ui.screens.UpNextScreen
 import stream.kleeamp.mobile.ui.screens.ScopeScreen
 import stream.kleeamp.mobile.ui.screens.ScrobbleWizard as ScrobbleWizardScreen
-import stream.kleeamp.mobile.data.provider.ProviderCatalog
-import stream.kleeamp.mobile.data.provider.ProviderStore
-import stream.kleeamp.mobile.ui.screens.ProviderWizard as ProviderWizardScreen
+import stream.kleeamp.mobile.servers.ProviderCatalog
+import stream.kleeamp.mobile.servers.ProviderStore
+import stream.kleeamp.mobile.servers.ProviderWizard as ProviderWizardScreen
 import stream.kleeamp.mobile.ui.screens.SettingsScreen
 import stream.kleeamp.mobile.radio.StationsScreen
 import stream.kleeamp.mobile.radio.StationsViewModel
 import stream.kleeamp.mobile.podcasts.PodcastsViewModel
 import stream.kleeamp.mobile.podcasts.PodcastShowViewModel
 import stream.kleeamp.mobile.library.LocalViewModel
-import stream.kleeamp.mobile.ui.screens.ProviderSongsPane
-import stream.kleeamp.mobile.ui.screens.ProviderSongsViewModel
-import stream.kleeamp.mobile.ui.screens.ProvidersPaneViewModel
+import stream.kleeamp.mobile.servers.ProviderSongsPane
+import stream.kleeamp.mobile.servers.ProviderSongsViewModel
+import stream.kleeamp.mobile.servers.ProvidersPaneViewModel
 import stream.kleeamp.mobile.library.SmartPlaylistViewModel
 import stream.kleeamp.mobile.library.AddToPlaylistViewModel
 import stream.kleeamp.mobile.library.PlaylistDetailViewModel
@@ -92,7 +92,7 @@ import stream.kleeamp.mobile.library.SongInfoViewModel
 import stream.kleeamp.mobile.ui.screens.NowPlayingViewModel
 import stream.kleeamp.mobile.ui.screens.SearchViewModel
 import stream.kleeamp.mobile.ui.screens.SettingsViewModel
-import stream.kleeamp.mobile.ui.screens.ProviderWizardViewModel
+import stream.kleeamp.mobile.servers.ProviderWizardViewModel
 import stream.kleeamp.mobile.ui.screens.ScrobbleWizardViewModel
 import stream.kleeamp.mobile.theme.LocalPalette
 

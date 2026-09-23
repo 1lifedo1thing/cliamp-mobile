@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data.provider
+package stream.kleeamp.mobile.servers
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
