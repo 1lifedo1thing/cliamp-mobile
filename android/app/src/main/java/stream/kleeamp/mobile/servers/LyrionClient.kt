@@ -47,7 +47,7 @@ class LyrionClient(
         }
     }
 
-    suspend fun albums(style: String): Result<List<ProviderAlbum>> = withContext(Dispatchers.IO) {
+    suspend fun albums(): Result<List<ProviderAlbum>> = withContext(Dispatchers.IO) {
         runCatching {
             val r = rpc(listOf("albums", "0", "200", "sort:album", "tags:adly"))
             itemArray(r).map { e ->
@@ -119,8 +119,6 @@ class LyrionClient(
         }
         return ResolvedStream(url)
     }
-
-    fun coverUrl(albumId: String): String = ""
 
     private fun userinfo(s: String): String =
         java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20")

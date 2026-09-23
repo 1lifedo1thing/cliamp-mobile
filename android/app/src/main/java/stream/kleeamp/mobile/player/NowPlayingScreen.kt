@@ -94,7 +94,6 @@ import stream.kleeamp.mobile.chrome.rememberStationThumbnail
 import stream.kleeamp.mobile.player.vis.VisualizerMeter
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
-import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Mono
 import stream.kleeamp.mobile.art.LocalArt
 import stream.kleeamp.mobile.model.NowPlaying
@@ -171,7 +170,6 @@ fun NowPlayingScreen(
     onOpenUpNext: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val p = LocalPalette.current
     var fullscreen by rememberSaveable { mutableStateOf(false) }
 
     val uiState by vm.state.collectAsState()

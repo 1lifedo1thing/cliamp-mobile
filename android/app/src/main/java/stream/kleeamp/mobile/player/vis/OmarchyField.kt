@@ -93,6 +93,9 @@ class OmarchyField {
         )
     }
 
+    // The sampler carries the frame's full render context (signal, glyph,
+    // mark bounds, geometry); splitting it would scatter one sampling pass.
+    @Suppress("LongParameterList")
     inner class Sampler(
         private val bands: FloatArray,
         private val amp: Double,
@@ -127,10 +130,13 @@ class OmarchyField {
             return min(1.0, hypot(dx, dy) / CLEAR_REACH).pow(CLEAR_CURVE)
         }
 
-        fun pixel(pr: Int, pc: Int): OmarchyPixel {
-            if (scale > 0 && pc >= markX && pr >= markY && pc < markX + markW && pr < markY + markH &&
+        /** True when a pixel falls on a set glyph cell. */
+        private fun isMarked(pr: Int, pc: Int): Boolean =
+            scale > 0 && pc >= markX && pr >= markY && pc < markX + markW && pr < markY + markH &&
                 glyph.at((pc - markX) / scale, (pr - markY) / scale)
-            ) {
+
+        fun pixel(pr: Int, pc: Int): OmarchyPixel {
+            if (isMarked(pr, pc)) {
                 return OmarchyPixel(true, VisMath.tier((0.34 + levelAt(pc) * 0.35 + amp * 0.45).toFloat()))
             }
 

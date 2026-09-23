@@ -99,7 +99,9 @@ class NowPlayingViewModel(
         // station, so fall back to the last-played station from history - the same
         // fallback the mini bar uses - rather than showing an empty "no track".
         val shownStation = bus.station ?: lib.recent.firstOrNull()
-        val activeIndex = upNextIndex.takeIf { bus.station != null && upNext.getOrNull(it)?.url == bus.station.url } ?: -1
+        val activeIndex = upNextIndex
+            .takeIf { bus.station != null && upNext.getOrNull(it)?.url == bus.station.url }
+            ?: -1
         UiState(
             playerState = bus.playerState,
             shownStation = shownStation,

@@ -31,6 +31,8 @@ val CoverIo = Dispatchers.IO.limitedParallelism(4)
  * cropped into a player it is an unreadable smear of tiny text. The generated
  * plate is per-channel and already square, so it wins there.
  */
+// Single art-source choke point; one small function per source and size.
+@Suppress("TooManyFunctions")
 object StationArtSource {
 
     private const val MAX_HTML = 64 * 1024
@@ -304,7 +306,11 @@ object StationArtSource {
         URI(base).resolve(ref.trim()).toString().takeIf { it.startsWith("http") }
     }.getOrNull()
 
-    private suspend fun download(url: String, save: String? = null, target: Int = TARGET): Bitmap? = withContext(ArtNet) {
+    private suspend fun download(
+        url: String,
+        save: String? = null,
+        target: Int = TARGET,
+    ): Bitmap? = withContext(ArtNet) {
         runCatching {
             val req = Request.Builder().url(url).header("User-Agent", Http.USER_AGENT).build()
             Http.artClient.newCall(req).execute().use { r ->

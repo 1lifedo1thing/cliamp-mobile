@@ -128,7 +128,6 @@ fun KleeampRoot(
     player: PlayerConnection,
     providers: ProviderStore,
     podcasts: PodcastRepository,
-    dark: Boolean,
     /** Bumped by MainActivity whenever the search widget (or any
      * OPEN_SEARCH intent) asks for the Search page. */
     openSearchTick: Int = 0,
@@ -479,7 +478,14 @@ fun KleeampRoot(
                 Box(contentModifier) {
                     LibrarySmartPlaylistPane(
                         vm = appViewModel(key = kind) { app ->
-                            SmartPlaylistViewModel(kind, app.localLibrary, app.prefs, app.downloads, app.radio, app.podcasts)
+                            SmartPlaylistViewModel(
+                                kind,
+                                app.localLibrary,
+                                app.prefs,
+                                app.downloads,
+                                app.radio,
+                                app.podcasts,
+                            )
                         },
                         kindName = kind,
                         current = station,
@@ -510,7 +516,6 @@ fun KleeampRoot(
                                 app.prefs,
                                 app.radio,
                                 app.podcasts,
-                                app.downloads,
                             )
                         },
                         slug = slug,
@@ -766,6 +771,8 @@ private fun rememberGuardedNav(navController: NavHostController): GuardedNav {
  */
 @UnstableApi
 @Composable
+// Screen signature: state in, callbacks out; bundling would hide the data flow.
+@Suppress("LongParameterList")
 private fun ScopedMiniPlayer(
     prefs: Prefs,
     player: PlayerConnection,
@@ -801,6 +808,8 @@ private fun ScopedMiniPlayer(
  * recomposes this tab, not the pager, the chrome or the other tabs.
  */
 @Composable
+// Screen signature: state in, callbacks out; bundling would hide the data flow.
+@Suppress("LongParameterList")
 private fun StationsTab(
     prefs: Prefs,
     current: Station?,

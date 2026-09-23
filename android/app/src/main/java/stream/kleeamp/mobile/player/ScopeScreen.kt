@@ -185,7 +185,10 @@ fun ScopeScreen(
 
         HairlineDivider(region = true)
 
-        Column(Modifier.padding(horizontal = Gutter, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(
+            Modifier.padding(horizontal = Gutter, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             Mono(station?.name ?: "nothing tuned", KleeampType.trackTitleSmall, p.ink, maxLines = 1)
             Mono(
                 streamTitle.ifBlank { station?.meta ?: "" },

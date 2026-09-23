@@ -66,11 +66,9 @@ import stream.kleeamp.mobile.library.PlaylistStore
 import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.radio.RadioRepository
 import stream.kleeamp.mobile.podcasts.ShowState
-import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.radio.DirectoryState
 import stream.kleeamp.mobile.podcasts.EpisodeProgress
 import stream.kleeamp.mobile.model.StationSource
-import stream.kleeamp.mobile.podcasts.toStation
 import stream.kleeamp.mobile.library.durationLabel
 import stream.kleeamp.mobile.podcasts.downloadSizeLabel
 import stream.kleeamp.mobile.servers.ProviderAccount
@@ -107,6 +105,8 @@ import stream.kleeamp.mobile.prefs.PlaylistSort
 import stream.kleeamp.mobile.prefs.sortedStations
 
 @Composable
+// Screen signature: state in, callbacks out; bundling would hide the data flow.
+@Suppress("LongParameterList")
 internal fun PlaylistList(
     listState: LazyListState,
     smart: List<SmartPlaylist>,
@@ -114,7 +114,6 @@ internal fun PlaylistList(
     onOpenProviderSongs: () -> Unit = {},
     pinnedPlaylists: List<PlaylistStore.Playlist>,
     playlists: List<PlaylistStore.Playlist>,
-    songs: List<Station>,
     creating: Boolean,
     renamingSlug: String?,
     editText: String,
@@ -196,7 +195,6 @@ internal fun PlaylistList(
                 } else {
                     PlaylistRow(
                         pl = pl,
-                        songs = songs,
                         pinned = true,
                         onOpen = onOpen,
                         onEdit = { onBeginRename(pl.station.slug) },
@@ -226,7 +224,6 @@ internal fun PlaylistList(
                 } else {
                     PlaylistRow(
                         pl = pl,
-                        songs = songs,
                         pinned = false,
                         onOpen = onOpen,
                         onEdit = { onBeginRename(pl.station.slug) },
@@ -247,7 +244,6 @@ internal fun PlaylistList(
 @Composable
 private fun PlaylistRow(
     pl: PlaylistStore.Playlist,
-    songs: List<Station>,
     pinned: Boolean,
     onOpen: (PlaylistStore.Playlist) -> Unit,
     onEdit: () -> Unit,
@@ -265,7 +261,13 @@ private fun PlaylistRow(
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Mono("${pl.songIds.size} songs", KleeampType.meta, p.inkFaint)
-                PlaylistMenu(pinned = pinned, onAddSongs = onAddSongs, onEdit = onEdit, onDelete = onDelete, onPin = onPin)
+                PlaylistMenu(
+                    pinned = pinned,
+                    onAddSongs = onAddSongs,
+                    onEdit = onEdit,
+                    onDelete = onDelete,
+                    onPin = onPin,
+                )
             }
         },
     ) {
@@ -394,7 +396,8 @@ private fun InlineNameField(
     val p = LocalPalette.current
     Row(
         Modifier.fillMaxWidth().padding(Gutter)
-            .clip(RoundedCornerShape(KleeampShape.small)).border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small))
+            .clip(RoundedCornerShape(KleeampShape.small))
+            .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small))
             .background(p.panel).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -411,7 +414,9 @@ private fun InlineNameField(
             Modifier.clip(RoundedCornerShape(KleeampShape.tiny)).background(p.accent.copy(alpha = 0.14f))
                 .microPress { onDone(text) }.padding(horizontal = 9.dp, vertical = 7.dp))
         Mono("CANCEL", KleeampType.tabLabel, p.inkTertiary,
-            Modifier.clip(RoundedCornerShape(KleeampShape.tiny)).border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny))
+            Modifier
+                .clip(RoundedCornerShape(KleeampShape.tiny))
+                .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny))
                 .microPress(onClick = onCancel).padding(horizontal = 9.dp, vertical = 7.dp))
     }
 }

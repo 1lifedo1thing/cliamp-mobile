@@ -54,6 +54,8 @@ object PodcastFeed {
         }
     }
 
+    // Single-pass pull-parser state machine; covered by PodcastRepositoryTest.
+    @Suppress("LongMethod", "CyclomaticComplexMethod", "NestedBlockDepth")
     private suspend fun parse(base: PodcastShow, input: InputStream): Loaded {
         val parser = Xml.newPullParser()
         parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)

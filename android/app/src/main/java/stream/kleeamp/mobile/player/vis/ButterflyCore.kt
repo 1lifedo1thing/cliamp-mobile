@@ -19,24 +19,7 @@ object ButterflyCore {
             } else {
                 bands[bi] * (1 - frac) + bands[bi + 1] * frac
             }
-
-            val t = frame * 0.08 + dy * 0.3
-            val wobble = sin(t) * 0.15
-            val wingWidth = (centerX * (energy + wobble) * 0.9).toInt()
-
-            for (dx in 0 until wingWidth) {
-                val norm = dx.toDouble() / maxOf(1, wingWidth)
-                var threshold = (1.0 - norm * norm) * energy
-                if (norm > 0.6) {
-                    threshold *= 0.5 + 0.5 * sin(frame * 0.1 + dy * 0.5 + dx * 0.3)
-                }
-                if (VisMath.scatterHash(bi, dy, dx, frame / 3) < threshold) {
-                    val rx = centerX + dx
-                    if (rx < dotCols) grid[dy * dotCols + rx] = true
-                    val lx = centerX - 1 - dx
-                    if (lx >= 0) grid[dy * dotCols + lx] = true
-                }
-            }
+            paintWing(grid, dotCols, centerX, dy, frame, bi, energy)
 
             if (energy > 0.05) {
                 grid[dy * dotCols + centerX] = true
@@ -44,5 +27,32 @@ object ButterflyCore {
             }
         }
         return grid
+    }
+
+    /** One mirrored wing row: scattered dots inside an energy-scaled span. */
+    private fun paintWing(
+        grid: BooleanArray,
+        dotCols: Int,
+        centerX: Int,
+        dy: Int,
+        frame: Long,
+        bi: Int,
+        energy: Double,
+    ) {
+        val wobble = sin(frame * 0.08 + dy * 0.3) * 0.15
+        val wingWidth = (centerX * (energy + wobble) * 0.9).toInt()
+        for (dx in 0 until wingWidth) {
+            val norm = dx.toDouble() / maxOf(1, wingWidth)
+            var threshold = (1.0 - norm * norm) * energy
+            if (norm > 0.6) {
+                threshold *= 0.5 + 0.5 * sin(frame * 0.1 + dy * 0.5 + dx * 0.3)
+            }
+            if (VisMath.scatterHash(bi, dy, dx, frame / 3) < threshold) {
+                val rx = centerX + dx
+                if (rx < dotCols) grid[dy * dotCols + rx] = true
+                val lx = centerX - 1 - dx
+                if (lx >= 0) grid[dy * dotCols + lx] = true
+            }
+        }
     }
 }

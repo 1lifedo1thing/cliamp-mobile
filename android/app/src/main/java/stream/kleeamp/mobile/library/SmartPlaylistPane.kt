@@ -336,6 +336,8 @@ internal fun GroupList(
 
 
 @Composable
+// Screen signature: state in, callbacks out; bundling would hide the data flow.
+@Suppress("LongParameterList")
 internal fun PodcastGroups(
     shows: List<PodcastShow>,
     query: String,
@@ -363,7 +365,14 @@ internal fun PodcastGroups(
                 }
             }
             if (showState.loading) {
-                item { Mono("loading episodes…", KleeampType.rowSecondary, p.inkFaint, Modifier.padding(horizontal = Gutter, vertical = 12.dp)) }
+                item {
+                    Mono(
+                        "loading episodes…",
+                        KleeampType.rowSecondary,
+                        p.inkFaint,
+                        Modifier.padding(horizontal = Gutter, vertical = 12.dp),
+                    )
+                }
             } else {
                 val eps = showState.episodes.filter {
                     it.isFull && (q.isBlank() || it.title.lowercase().contains(q))
@@ -378,7 +387,11 @@ internal fun PodcastGroups(
                             Box(
                                 Modifier.size(24.dp).clip(RoundedCornerShape(KleeampShape.tiny))
                                     .then(if (inPl) Modifier.background(p.accent)
-                                          else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny))),
+                                          else Modifier.border(
+                                              1.dp,
+                                              p.chipBorder,
+                                              RoundedCornerShape(KleeampShape.tiny),
+                                          )),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 if (inPl) Icon(KleeampIcons.Check, null, Modifier.size(10.dp), tint = p.onAccent)
@@ -386,7 +399,12 @@ internal fun PodcastGroups(
                         },
                     ) {
                         Mono(s.name, KleeampType.rowPrimary, p.ink, maxLines = 1)
-                        Mono(durationLabel(s.durationMs).ifBlank { "episode" }, KleeampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                        Mono(
+                            durationLabel(s.durationMs).ifBlank { "episode" },
+                            KleeampType.rowSecondary,
+                            p.inkTertiary,
+                            maxLines = 1,
+                        )
                     }
                 }
             }
@@ -425,6 +443,8 @@ internal fun PodcastGroups(
 /** Detail view for a pinned smart playlist: every member station, local and radio. */
 
 @Composable
+// Screen signature: state in, callbacks out; bundling would hide the data flow.
+@Suppress("LongParameterList")
 private fun SmartPlaylistDetail(
     listState: LazyListState,
     pl: SmartPlaylist,
@@ -532,7 +552,8 @@ private fun SmartPlaylistDetail(
                         when {
                             query.isNotBlank() -> "nothing matches"
                             pl.kind == SmartKind.Favorites && favScope == FavScope.Local -> "no local favourites yet"
-                            pl.kind == SmartKind.Favorites && favScope == FavScope.Stations -> "no station favourites yet"
+                            pl.kind == SmartKind.Favorites && favScope == FavScope.Stations ->
+                                "no station favourites yet"
                             pl.kind == SmartKind.Favorites && favScope == FavScope.Pods -> "no podcast favourites yet"
                             pl.kind == SmartKind.LocalSongs ->
                                 if (loading) "scanning for songs…" else "no songs on the phone yet"

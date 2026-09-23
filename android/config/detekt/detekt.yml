@@ -1,0 +1,71 @@
+# kleeamp detekt config. The Gradle extension sets buildUponDefaultConfig, so
+# this file only carries project-specific relaxations, each with a reason.
+# Goal: zero findings on :app:detekt.
+#
+# Note: detekt 1.23.8 is the latest stable (2.x is alpha-only) and analyzes
+# Kotlin 2.3 sources with its embedded frontend; only stable language
+# features are used, so no analysis gaps are expected.
+config:
+  validation: true
+  warningsAsErrors: false
+  checkExhaustiveness: false
+
+naming:
+  FunctionNaming:
+    active: true
+    # Compose requires UpperCamelCase for @Composable functions; renaming
+    # 131 call sites to satisfy lowerCamelCase would fight the framework.
+    ignoreAnnotated:
+      - 'Composable'
+
+complexity:
+  LongParameterList:
+    active: true
+    # Compose screens take Modifier + state + one callback per control, and
+    # slot lambdas (@Composable content parameters) are the framework's core
+    # composition mechanism, not complexity. Optional params with defaults
+    # don't burden call sites. What remains over threshold are DI-style
+    # constructors and pure helpers, fixed at their sites instead.
+    functionThreshold: 8
+    constructorThreshold: 9
+    ignoreDefaultParameters: true
+    ignoreAnnotatedParameter:
+      - 'Composable'
+  LongMethod:
+    active: true
+    # Declarative UI trees read top-down; splitting a screen into fragments
+    # scatters one visual routine. Non-composable offenders below are
+    # suppressed per-site with reasons instead.
+    ignoreAnnotated:
+      - 'Composable'
+  CyclomaticComplexMethod:
+    active: true
+    # Same as LongMethod: branches in UI code enumerate visual states.
+    ignoreAnnotated:
+      - 'Composable'
+  ComplexCondition:
+    active: true
+    # UI state combinations (playing + buffering + source + error checks).
+    threshold: 5
+  TooManyFunctions:
+    active: true
+    # Component files hold one tiny composable per control by design.
+    thresholdInFiles: 30
+    thresholdInClasses: 20
+    thresholdInObjects: 20
+    thresholdInInterfaces: 15
+    # Prefs is one accessor per setting by design.
+    excludes:
+      - '**/Prefs.kt'
+
+style:
+  MagicNumber:
+    # Disabled: this is a Compose UI codebase where dimension, alpha, weight
+    # and grid literals (12.dp, 0.5f, 2, ...) are idiomatic, and the audio DSP
+    # math documents its constants inline (FULL_SCALE, DYNAMIC_RANGE_DB, ...).
+    # Naming all 1800+ literals would add noise, not clarity.
+    active: false
+  ReturnCount:
+    active: true
+    # Guard-clause style: happy path plus early exits for null/empty/edge.
+    max: 4

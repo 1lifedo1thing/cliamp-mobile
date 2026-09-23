@@ -32,6 +32,8 @@ import stream.kleeamp.mobile.theme.Mono
 
 /** Leave vertical/diagonal touches to the list before claiming a deliberate left swipe. */
 @Composable
+// Single gesture recognizer; splitting risks touch behavior.
+@Suppress("CyclomaticComplexMethod", "LoopWithTooManyJumpStatements")
 internal fun UpNextSwipeToRemove(
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,

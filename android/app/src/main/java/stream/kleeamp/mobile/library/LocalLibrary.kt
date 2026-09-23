@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.ContentUris
 import android.content.Context
 import android.content.pm.PackageManager
+import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -153,46 +154,70 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
             null,
             MediaStore.Audio.Media.TITLE + " COLLATE NOCASE",
         )?.use { c ->
-            val cId = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val cTitle = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-            val cArtist = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-            val cAlbum = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-            val cDur = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-            val cAdded = runCatching { c.getColumnIndex(MediaStore.Audio.Media.DATE_ADDED) }.getOrDefault(-1)
-            // DATA is deprecated but still populated on current devices, and it
-            // is what lets us play via a readable file path and pull on-disk
-            // cover art. When it is absent a track is simply skipped.
-            val cData = runCatching { c.getColumnIndex(MediaStore.Audio.Media.DATA) }.getOrNull() ?: -1
+            val cols = SongColumns(
+                title = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE),
+                artist = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST),
+                album = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM),
+                dur = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION),
+                added = runCatching { c.getColumnIndex(MediaStore.Audio.Media.DATE_ADDED) }.getOrDefault(-1),
+                // DATA is deprecated but still populated on current devices, and it
+                // is what lets us play via a readable file path and pull on-disk
+                // cover art. When it is absent a track is simply skipped.
+                data = runCatching { c.getColumnIndex(MediaStore.Audio.Media.DATA) }.getOrNull() ?: -1,
+            )
             while (c.moveToNext()) {
-                val id = c.getLong(cId)
-                val data = if (cData >= 0) c.getString(cData) else null
-                if (data.isNullOrBlank()) continue
-                val file = File(data)
-                if (!file.isFile) continue
-                val artist = c.getString(cArtist) ?: "unknown artist"
-                val album = c.getString(cAlbum) ?: ""
-                val title = c.getString(cTitle)?.takeIf { it.isNotBlank() } ?: file.nameWithoutExtension
-                val dir = file.parentFile?.path.orEmpty()
-                val cover = coverByDir.getOrPut(dir) { nearestCover(file.parentFile) }.orEmpty()
-                out += LocalSong(
-                    path = data,
-                    title = title,
-                    artist = artist,
-                    album = album,
-                    durationMs = c.getLong(cDur),
-                    dateAdded = if (cAdded >= 0) c.getLong(cAdded) else 0L,
-                    uri = Uri.fromFile(file),
-                    cover = cover,
-                )
+                mapRow(c, cols, coverByDir)?.let {
+                    out += it
+                }
             }
         }
         return out.map { it.station }.sortedBy { it.name.lowercase() }
     }
 
+    /** MediaStore column indices for one scan. */
+    private data class SongColumns(
+        val title: Int,
+        val artist: Int,
+        val album: Int,
+        val dur: Int,
+        val added: Int,
+        val data: Int,
+    )
+
+    /** One cursor row as a song, or null for rows without a playable file. */
+    private fun mapRow(
+        c: Cursor,
+        cols: SongColumns,
+        coverByDir: MutableMap<String, String?>,
+    ): LocalSong? {
+        val data = if (cols.data >= 0) c.getString(cols.data) else null
+        if (data.isNullOrBlank()) return null
+        val file = File(data)
+        if (!file.isFile) return null
+        val artist = c.getString(cols.artist) ?: "unknown artist"
+        val album = c.getString(cols.album) ?: ""
+        val title = c.getString(cols.title)?.takeIf { it.isNotBlank() } ?: file.nameWithoutExtension
+        val dir = file.parentFile?.path.orEmpty()
+        val cover = coverByDir.getOrPut(dir) { nearestCover(file.parentFile) }.orEmpty()
+        return LocalSong(
+            path = data,
+            title = title,
+            artist = artist,
+            album = album,
+            durationMs = c.getLong(cols.dur),
+            dateAdded = if (cols.added >= 0) c.getLong(cols.added) else 0L,
+            uri = Uri.fromFile(file),
+            cover = cover,
+        )
+    }
+
     /** Companion cover image in the track's own folder, if the user keeps one. */
     private fun nearestCover(dir: File?): String? {
         if (dir == null) return null
-        val covers = listOf("cover.jpg", "cover.png", "folder.jpg", "folder.png", "albumart.jpg", "albumart.png", "front.jpg", "front.png")
+        val covers = listOf(
+            "cover.jpg", "cover.png", "folder.jpg", "folder.png",
+            "albumart.jpg", "albumart.png", "front.jpg", "front.png",
+        )
         val named = covers.firstNotNullOfOrNull { name ->
             File(dir, name).takeIf { it.isFile }
         }

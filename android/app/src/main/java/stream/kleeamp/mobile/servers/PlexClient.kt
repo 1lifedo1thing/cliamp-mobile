@@ -51,7 +51,7 @@ class PlexClient(
         }
     }
 
-    suspend fun albums(style: String): Result<List<ProviderAlbum>> = withContext(Dispatchers.IO) {
+    suspend fun albums(): Result<List<ProviderAlbum>> = withContext(Dispatchers.IO) {
         runCatching {
             val key = sectionKey()
             val body = Http.text(get("library/sections/$key/all", mapOf("type" to "9")), jsonHeaders)
@@ -118,7 +118,7 @@ class PlexClient(
     fun stream(partPath: String): ResolvedStream =
         ResolvedStream("$base$partPath?$auth")
 
-    fun coverUrl(ratingKey: String, size: Int = 512): String =
+    fun coverUrl(ratingKey: String): String =
         "$base/library/metadata/$ratingKey/thumb?$auth"
 
     private fun get(path: String, params: Map<String, String> = emptyMap()): String {

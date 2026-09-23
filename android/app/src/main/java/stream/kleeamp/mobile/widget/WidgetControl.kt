@@ -120,7 +120,11 @@ object WidgetControl {
         val here = PlaybackBus.station.value?.url ?: app.prefs.readLastStation()?.url
         val i = list.indexOfFirst { it.url == here }
         val target = if (i < 0) list.first() else list[(i + delta + list.size) % list.size]
-        android.util.Log.d("kleeamp/wid", "step delta=$delta src=${list.size} here=$here target=${target.name} ms=${System.currentTimeMillis() - t0}")
+        val elapsed = System.currentTimeMillis() - t0
+        android.util.Log.d(
+            "kleeamp/wid",
+            "step delta=$delta src=${list.size} here=$here target=${target.name} ms=$elapsed",
+        )
         tune(context, target)
     }
 

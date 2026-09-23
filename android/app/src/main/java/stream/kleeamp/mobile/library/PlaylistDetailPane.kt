@@ -109,6 +109,8 @@ import stream.kleeamp.mobile.prefs.sortedStations
 /** One user playlist as a navigation pane, with add-songs and cover editing. */
 
 @Composable
+// Screen signature: state in, callbacks out; bundling would hide the data flow.
+@Suppress("LongParameterList")
 fun LibraryPlaylistPane(
     vm: PlaylistDetailViewModel,
     slug: String,
@@ -193,6 +195,8 @@ fun LibraryPlaylistPane(
 }
 
 @Composable
+// Screen signature: state in, callbacks out; bundling would hide the data flow.
+@Suppress("LongParameterList")
 private fun PlaylistDetailShown(
     listState: LazyListState,
     playlist: PlaylistStore.Playlist,
@@ -295,8 +299,16 @@ private fun PlaylistDetailShown(
                                     OverflowMenu(
                                         trigger = { open -> OverflowButton(open, size = 16) },
                                         items = listOf(
-                                            OverflowItem("add to playlist", color = p.ink, action = { onAddToPlaylist(s) }),
-                                            OverflowItem("drop", color = p.destructiveInk, action = { onRemoveMember(s) }),
+                                            OverflowItem(
+                                                "add to playlist",
+                                                color = p.ink,
+                                                action = { onAddToPlaylist(s) },
+                                            ),
+                                            OverflowItem(
+                                                "drop",
+                                                color = p.destructiveInk,
+                                                action = { onRemoveMember(s) },
+                                            ),
                                         ),
                                     )
                             Icon(
@@ -352,6 +364,8 @@ internal fun AddSongsButton(onClick: () -> Unit) {
  * everything, so there is no done control.
  */
 @Composable
+// Screen signature: state in, callbacks out; bundling would hide the data flow.
+@Suppress("LongParameterList")
 internal fun AddSongsPicker(
     selected: Set<String>,
     playlistName: String,

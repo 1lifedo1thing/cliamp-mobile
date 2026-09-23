@@ -29,6 +29,8 @@ import java.io.IOException
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.net.retryFetch
 
+private const val PAGE = 30
+
 /** How the podcast directory is currently ordered or filtered. */
 sealed interface PodcastQuery {
     /** An empty [country] is "all countries", resolved as Apple's global chart. */
@@ -111,7 +113,6 @@ class PodcastRepository internal constructor(
         dao.allProgress().map { rows -> rows.associate { it.url to it.toProgress() } }
 
     private val pageLock = Mutex()
-    private val PAGE = 30
     private var loadJob: Job? = null
 
     /**
@@ -143,6 +144,8 @@ private var chartCursor: List<String> = emptyList()
         }
     }
 
+    // Directory load pipeline; covered by PodcastRepositoryTest.
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
     fun load(query: PodcastQuery, reset: Boolean) {
         // A new query supersedes whatever is still loading: cancel it so a
         // retap never queues behind a hung fetch, mirroring radio loads.
@@ -171,7 +174,9 @@ private var chartCursor: List<String> = emptyList()
                             retryFetch {
                                 when (query) {
                                     is PodcastQuery.Top -> {
-                                        chartCursor = PodcastDirectory.chartIds(country = query.country.ifEmpty { "us" })
+                                        chartCursor = PodcastDirectory.chartIds(
+                                            country = query.country.ifEmpty { "us" },
+                                        )
                                         PodcastDirectory.genres.forEach { g ->
                                             chartQueue.add {
                                                 PodcastDirectory.genreChartIds(query.country.ifEmpty { "us" }, g.id)
@@ -406,18 +411,23 @@ private var chartCursor: List<String> = emptyList()
         if (subs.isEmpty()) return emptyList()
         val out = ArrayList<Pair<PodcastShow, PodcastEpisode>>()
         for (show in subs) {
-            val row = cache.getFeed(show.feedUrl) ?: continue
-            val episodes = runCatching {
-                Http.json.decodeFromString<List<PodcastEpisode>>(row.episodesJson)
-            }.getOrDefault(emptyList())
-            if (episodes.isEmpty()) continue
-            val liveShow = runCatching {
-                Http.json.decodeFromString<PodcastShow>(row.showJson)
-            }.getOrDefault(show)
-            episodes.mapTo(out) { liveShow to it }
+            out += cachedEpisodes(show)
         }
         episodeIndex = out
         return out
+    }
+
+    /** One subscribed show's cached episodes, empty on any miss or bad payload. */
+    private suspend fun cachedEpisodes(show: PodcastShow): List<Pair<PodcastShow, PodcastEpisode>> {
+        val row = cache.getFeed(show.feedUrl) ?: return emptyList()
+        val episodes = runCatching {
+            Http.json.decodeFromString<List<PodcastEpisode>>(row.episodesJson)
+        }.getOrDefault(emptyList())
+        if (episodes.isEmpty()) return emptyList()
+        val liveShow = runCatching {
+            Http.json.decodeFromString<PodcastShow>(row.showJson)
+        }.getOrDefault(show)
+        return episodes.map { liveShow to it }
     }
 
     /**
@@ -428,11 +438,10 @@ private var chartCursor: List<String> = emptyList()
      * and always starts at zero.
      */
     suspend fun resumePosition(station: Station): Long {
-        if (!station.isTrack) return 0L
-        val p = dao.progress(station.url) ?: return 0L
-        if (p.completed) return 0L
-        if (p.durationMs > 0 && p.positionMs >= p.durationMs - NEAR_END) return 0L
-        return p.positionMs.coerceAtLeast(0L)
+        val progress = if (station.isTrack) dao.progress(station.url) else null
+        if (progress == null || progress.completed) return 0L
+        if (progress.durationMs > 0 && progress.positionMs >= progress.durationMs - NEAR_END) return 0L
+        return progress.positionMs.coerceAtLeast(0L)
     }
 
     suspend fun saveProgress(station: Station, positionMs: Long, durationMs: Long) {

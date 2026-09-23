@@ -152,7 +152,12 @@ object WidgetRenderer {
             val rv = RemoteViews(ctx.packageName, R.layout.widget_kleeamp)
             rv.setTextViewText(R.id.w_elapsed, clock(positionMs))
             rv.setTextViewText(R.id.w_total, "-" + clock((durationMs - positionMs).coerceAtLeast(0)))
-            rv.setProgressBar(R.id.w_seekbar, durationMs.toInt(), positionMs.toInt().coerceIn(0, durationMs.toInt()), false)
+            rv.setProgressBar(
+                R.id.w_seekbar,
+                durationMs.toInt(),
+                positionMs.toInt().coerceIn(0, durationMs.toInt()),
+                false,
+            )
             runCatching {
                 for (id in ids) mgr.partiallyUpdateAppWidget(id, rv)
             }
@@ -264,6 +269,8 @@ object WidgetRenderer {
         return w to h
     }
 
+    // Single RemoteViews builder; branches enumerate widget tiers.
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
     internal fun buildViews(
         ctx: Context,
         row: Row,

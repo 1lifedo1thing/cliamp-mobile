@@ -158,7 +158,12 @@ fun PodcastShowScreen(
             if (queue.isNotEmpty()) {
                 item {
                     SectionLabel("episodes — ${queue.size}") {
-                        Mono("refresh", KleeampType.meta, p.inkTertiary, Modifier.microPress { vm.onEvent(PodcastShowViewModel.Event.RefreshShow) })
+                        Mono(
+                            "refresh",
+                            KleeampType.meta,
+                            p.inkTertiary,
+                            Modifier.microPress { vm.onEvent(PodcastShowViewModel.Event.RefreshShow) },
+                        )
                     }
                 }
                 items(queue.indices.toList(), key = { i -> "ep:${queue[i].url}" }) { i ->
@@ -250,6 +255,8 @@ private fun ShowHeader(
 }
 
 @Composable
+// Screen signature: state in, callbacks out; bundling would hide the data flow.
+@Suppress("LongParameterList")
 private fun EpisodeRow(
     episode: PodcastEpisode,
     station: Station,

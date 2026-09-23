@@ -112,6 +112,8 @@ fun UpNextScreen(
 }
 
 @Composable
+// Screen signature: state in, callbacks out; bundling would hide the data flow.
+@Suppress("LongParameterList")
 internal fun UpNextContent(
     upNext: List<Station>,
     activeIndex: Int,

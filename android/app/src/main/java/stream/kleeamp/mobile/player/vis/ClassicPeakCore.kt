@@ -44,6 +44,8 @@ class ClassicPeakCore(val columns: Int) {
         }
     }
 
+    // Single-pass DSP kernel; splitting would obscure the per-column pipeline.
+    @Suppress("LoopWithTooManyJumpStatements")
     private fun advance(levels: FloatArray, dt: Float) {
         for (i in levels.indices) {
             barPos[i] = step(barPos[i], levels[i], dt)

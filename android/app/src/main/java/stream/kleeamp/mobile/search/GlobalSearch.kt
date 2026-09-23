@@ -14,6 +14,19 @@ import stream.kleeamp.mobile.podcasts.toStation
  */
 object GlobalSearch {
 
+    /**
+     * Dedupe order for one url across buckets: Song beats Favorite (starred),
+     * Favorite beats Recent (merely heard).
+     */
+    private fun supersedes(old: SearchHit, hit: SearchHit): Boolean =
+        old is SearchHit.Recent && hit !is SearchHit.Recent ||
+            old is SearchHit.Favorite && hit is SearchHit.Song
+
+    // Deterministic ranking pipeline; branch order is the ranking contract.
+    // Deterministic ranking pipeline; branch order is the ranking contract.
+    // Single deterministic entry over all corpora; splitting would scatter
+    // the coupled scoring and dedup order.
+    @Suppress("CyclomaticComplexMethod", "LongParameterList")
     fun run(
         query: String,
         localSongs: List<Station>,
@@ -59,10 +72,7 @@ object GlobalSearch {
         fun remember(hit: SearchHit) {
             val s = hit.playable ?: return
             val old = byUrl[s.url]
-            if (old == null ||
-                old is SearchHit.Recent && hit !is SearchHit.Recent ||
-                old is SearchHit.Favorite && hit is SearchHit.Song
-            ) {
+            if (old == null || supersedes(old, hit)) {
                 byUrl[s.url] = hit
             }
         }

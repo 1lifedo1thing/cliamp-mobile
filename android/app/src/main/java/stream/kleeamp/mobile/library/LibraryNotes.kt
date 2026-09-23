@@ -121,7 +121,11 @@ internal fun PermissionNote() {
         Spacer(Modifier.height(12.dp))
         Mono("this app needs to read your audio files to show them here.", KleeampType.rowPrimary, p.ink)
         Spacer(Modifier.height(4.dp))
-        Mono("grant media access in the app's settings to see your local songs.", KleeampType.rowSecondary, p.inkTertiary)
+        Mono(
+            "grant media access in the app's settings to see your local songs.",
+            KleeampType.rowSecondary,
+            p.inkTertiary,
+        )
         Spacer(Modifier.height(12.dp))
         HairlineDivider()
     }

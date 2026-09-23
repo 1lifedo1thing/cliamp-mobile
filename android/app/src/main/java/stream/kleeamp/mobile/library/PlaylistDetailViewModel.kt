@@ -3,10 +3,12 @@ package stream.kleeamp.mobile.library
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.radio.DirectoryState
-import stream.kleeamp.mobile.podcasts.DownloadStore
 import stream.kleeamp.mobile.library.LocalLibrary
 import stream.kleeamp.mobile.library.PlaylistStore
 import stream.kleeamp.mobile.podcasts.PodcastRepository
@@ -26,7 +28,6 @@ class PlaylistDetailViewModel(
     private val prefs: Prefs,
     private val repository: RadioRepository,
     private val podcasts: PodcastRepository,
-    private val downloads: DownloadStore,
 ) : ViewModel() {
     data class UiState(
         val playlist: PlaylistStore.Playlist? = null,

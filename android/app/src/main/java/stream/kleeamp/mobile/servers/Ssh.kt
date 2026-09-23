@@ -241,6 +241,12 @@ object SshPool {
         doomed.forEach { it.close() }
     }
 
+    // Three distinct failure exits by design: breaker cooldown, pool
+    // exhaustion, and propagation of a pooled failure after accounting.
+    // Every catch here must see any failure mode: breaker accounting and
+    // socket cleanup run for unknown SSHJ errors exactly as for known ones.
+    // Pool acquire with breaker, deadline and teardown paths.
+    @Suppress("ThrowsCount", "TooGenericExceptionCaught", "CyclomaticComplexMethod")
     private fun acquire(account: ProviderAccount): Pooled {
         val id = account.id
         val deadline = System.currentTimeMillis() + WAIT_MS
@@ -334,6 +340,9 @@ object SshPool {
         if (!keep) entry.close()
     }
 
+    // Any connect/auth failure disconnects first; the breadth is deliberate,
+    // surfacing unknown SSHJ failure modes instead of leaking the socket.
+    @Suppress("TooGenericExceptionCaught")
     fun connect(cfg: SshConfig, verifier: HostKeyVerifier = PinnedHostKey(cfg.fingerprint)): SSHClient {
         registerBouncyCastle()
         require(cfg.host.isNotBlank()) { "no host configured" }
@@ -374,6 +383,9 @@ object SshPool {
         }
     }
 
+    // Every pasted-key shape is tried in turn; any parse failure just moves
+    // to the next shape, with the last one surfacing when none load.
+    @Suppress("TooGenericExceptionCaught")
     private fun keyProvider(client: SSHClient, cfg: SshConfig): KeyProvider {
         val passfinder = cfg.passphrase.takeIf { it.isNotEmpty() }
             ?.let { PasswordUtils.createOneOff(it.toCharArray()) }

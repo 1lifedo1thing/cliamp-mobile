@@ -31,13 +31,19 @@ class MatrixCoreTest {
     fun rainAppearsOverFrames() {
         var lit = 0
         for (frame in 0L..60L step 4L) {
-            for (col in 0 until 8) {
-                for (row in 0 until 8) {
-                    if (MatrixCore.cell(1f, col, row, 8, frame) != null) lit++
-                }
-            }
+            lit += litCells(frame)
         }
         assertTrue("no rain over 16 frames", lit > 0)
+    }
+
+    private fun litCells(frame: Long): Int {
+        var lit = 0
+        for (col in 0 until 8) {
+            for (row in 0 until 8) {
+                if (MatrixCore.cell(1f, col, row, 8, frame) != null) lit++
+            }
+        }
+        return lit
     }
 
     @Test

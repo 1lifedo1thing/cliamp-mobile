@@ -76,7 +76,7 @@ fun customThemeNameOrNull(raw: String): String? = runCatching {
 /** `#RRGGBB` or `#AARRGGBB` into a Color, naming the role on failure. */
 private fun parseHex(role: String, hex: String): Color {
     val h = hex.removePrefix("#")
-    if (h.length != 6 && h.length != 8) throw IllegalArgumentException("bad colour for \"$role\": $hex")
-    val v = h.toULongOrNull(16) ?: throw IllegalArgumentException("bad colour for \"$role\": $hex")
+    require(h.length == 6 || h.length == 8) { "bad colour for \"$role\": $hex" }
+    val v = requireNotNull(h.toULongOrNull(16)) { "bad colour for \"$role\": $hex" }
     return Color(if (h.length == 6) (0xFF000000UL or v).toLong() else v.toLong())
 }

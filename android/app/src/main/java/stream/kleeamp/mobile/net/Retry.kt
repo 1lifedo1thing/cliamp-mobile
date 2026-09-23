@@ -8,7 +8,11 @@ import kotlinx.coroutines.delay
  * after the last try does the error surface so the screen can offer a manual
  * "try again" instead of retrying forever. The gap grows between tries so a
  * dead service is not hammered while it clears.
+ *
+ * Any failure type retries by contract; callers that need to distinguish
+ * failures inspect the surfaced error after the last attempt.
  */
+@Suppress("TooGenericExceptionCaught")
 suspend fun <T> retryFetch(attempts: Int = 3, block: suspend () -> T): T {
     var tryNo = 0
     while (true) {

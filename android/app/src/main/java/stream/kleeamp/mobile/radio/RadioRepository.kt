@@ -161,6 +161,8 @@ class RadioRepository(
         }
     }
 
+    // Directory load state machine across queries and mirrors.
+    @Suppress("CyclomaticComplexMethod")
     fun loadDirectory(query: DirectoryQuery, reset: Boolean) {
         // A new query supersedes whatever is still loading: cancel it so a
         // retap never queues minutes behind a hung fetch.

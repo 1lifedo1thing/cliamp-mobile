@@ -11,6 +11,10 @@ import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.prefs.Prefs
 
+    /** Half the length or four minutes, whichever is heard first. Unknown
+     * lengths cannot do halves, so they take the full four minutes. */
+private const val FOUR_MIN = 4 * 60 * 1000L
+
 /**
  * Local play counts plus ListenBrainz scrobbling, on the CLI's 50%-rule: a
  * music track counts once it has been heard for half its length or four
@@ -29,10 +33,6 @@ class Scrobbler(
     private val scope: CoroutineScope,
 ) {
     private val dao = KleeampDatabase.get(context).stats()
-
-    /** Half the length or four minutes, whichever is heard first. Unknown
-     * lengths cannot do halves, so they take the full four minutes. */
-    private val FOUR_MIN = 4 * 60 * 1000L
 
     private var trackedUrl: String? = null
     private var heardMs: Long = 0L
@@ -135,6 +135,9 @@ private data class TokenCheck(
  * the username on success. Nothing is saved until this succeeds, the same
  * rule every provider probe follows.
  */
+// The dropped message embeds the request URL including the token, which must
+// never reach logs; "token rejected" is the whole public signal.
+@Suppress("SwallowedException")
 suspend fun validateListenBrainzToken(token: String): Result<String> = runCatching {
     val raw = try {
         Http.text(
@@ -144,9 +147,9 @@ suspend fun validateListenBrainzToken(token: String): Result<String> = runCatchi
     } catch (e: IllegalStateException) {
         // Http.text raises non-2xx as "HTTP ...": a dead token, while a dead
         // network arrives as an IOException and keeps its own message.
-        throw IllegalStateException("token rejected")
+        error("token rejected")
     }
     val check = Http.json.decodeFromString(TokenCheck.serializer(), raw)
-    if (!check.valid) throw IllegalStateException("token rejected")
+    check(check.valid) { "token rejected" }
     check.userName?.takeIf { it.isNotBlank() } ?: "listenbrainz"
 }

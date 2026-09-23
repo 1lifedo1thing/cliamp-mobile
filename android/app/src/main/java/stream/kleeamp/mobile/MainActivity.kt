@@ -134,7 +134,6 @@ class MainActivity : ComponentActivity() {
                     player = app.player,
                     providers = app.providers,
                     podcasts = app.podcasts,
-                    dark = dark,
                     openSearchTick = openSearchTick,
                 )
             }

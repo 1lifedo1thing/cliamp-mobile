@@ -122,7 +122,7 @@ fun PodcastsScreen(
             val topQuery = directory.query as? PodcastQuery.Top
             ChipDropdown(
                 label = topQuery?.country?.takeIf { it.isNotEmpty() }?.let { c ->
-                    countryList.firstOrNull { it.iso_3166_1.equals(c, ignoreCase = true) }?.name ?: c
+                    countryList.firstOrNull { it.iso31661.equals(c, ignoreCase = true) }?.name ?: c
                 } ?: "all countries",
                 selected = topQuery != null && topQuery.country.isNotEmpty(),
                 options = listOf(
@@ -131,7 +131,7 @@ fun PodcastsScreen(
                     },
                 ) + countryList.map { c ->
                     ChipOption(c.name) {
-                        vm.onEvent(PodcastsViewModel.Event.Load(PodcastQuery.Top(c.iso_3166_1)))
+                        vm.onEvent(PodcastsViewModel.Event.Load(PodcastQuery.Top(c.iso31661)))
                     }
                 },
             )
@@ -174,14 +174,18 @@ fun PodcastsScreen(
                                     show = show,
                                     subscribed = true,
                                     onOpen = { onOpenShow(show) },
-                                    onToggleSubscribe = { vm.onEvent(PodcastsViewModel.Event.ToggleSubscription(show)) },
+                                    onToggleSubscribe = {
+                                        vm.onEvent(PodcastsViewModel.Event.ToggleSubscription(show))
+                                    },
                                 )
                             } else {
                                 ShowRow(
                                     show = show,
                                     subscribed = true,
                                     onOpen = { onOpenShow(show) },
-                                    onToggleSubscribe = { vm.onEvent(PodcastsViewModel.Event.ToggleSubscription(show)) },
+                                    onToggleSubscribe = {
+                                        vm.onEvent(PodcastsViewModel.Event.ToggleSubscription(show))
+                                    },
                                 )
                             }
                         }
@@ -191,7 +195,10 @@ fun PodcastsScreen(
                 if (pane != Pane.Subs) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         SectionLabel("directory", gutter = 8.dp) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
                                 Mono(directory.query.label, KleeampType.meta, p.inkTertiary)
                                 GridListToggle(podDirectoryGrid) {
                                     vm.onEvent(PodcastsViewModel.Event.TogglePodDirectoryGrid)

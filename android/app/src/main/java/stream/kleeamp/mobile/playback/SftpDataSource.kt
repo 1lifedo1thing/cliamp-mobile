@@ -38,6 +38,11 @@ class SftpDataSource : BaseDataSource(/* isNetwork = */ true) {
     private var bytesRemaining = 0L
     private var opened = false
 
+    // A failed open retires the lease for any failure mode (unknown SSHJ
+    // errors must never poison the pool), while a bad seek position recycles
+    // as before. The position-vs-connection dispatch keys on the exception
+    // reason, which catch clauses cannot express.
+    @Suppress("TooGenericExceptionCaught", "InstanceOfCheckForException")
     override fun open(dataSpec: DataSpec): Long {
         transferInitializing(dataSpec)
         uri = dataSpec.uri

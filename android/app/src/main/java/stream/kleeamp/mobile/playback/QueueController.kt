@@ -32,6 +32,17 @@ import stream.kleeamp.mobile.play.QueuePolicy
 import stream.kleeamp.mobile.widget.WidgetRenderer
 import java.io.IOException
 
+private const val NAV_DEBOUNCE_MS = 180L
+    /** Queues larger than this are played lazily from a window, not in full. */
+private const val WINDOW = QueuePolicy.WINDOW
+    /**
+     * Predecessors kept in front of a persisted queue window. The live window
+     * starts at the tapped track, so persisting it alone remembers next but
+     * not prev; this run-up from the source restores both sides.
+     */
+private const val PREV_KEEP = QueuePolicy.PREV_KEEP
+private const val PAST_CAP = 100
+
 /**
  * The queue half of playback: the source lists, the bounded Up Next window,
  * shuffle, navigation, edits and persistence. Media3 itself stays behind
@@ -39,6 +50,8 @@ import java.io.IOException
  * never touches a controller directly.
  */
 @UnstableApi
+    // STEP 17 split this as far as safely possible; queue behavior is covered by QueuePolicyTest and UpNextEditsTest.
+@Suppress("TooManyFunctions", "LargeClass")
 internal class QueueController(
     private val context: Context,
     private val scope: CoroutineScope,
@@ -146,7 +159,6 @@ internal class QueueController(
     val shuffle: StateFlow<Boolean> = _shuffle.asStateFlow()
 
 
-
     /**
      * Logical index (into [_source]) of the first item held in [_upNext]. When
      * a queue is huge the tapped track plus a small tail are queued instead of
@@ -207,19 +219,6 @@ internal class QueueController(
     // only cancelled by a new explicit play or a new toggle, so a shuffle
     // always lands.
     private var _shuffleJob: Job? = null
-
-
-    private val NAV_DEBOUNCE_MS = 180L
-
-    /** Queues larger than this are played lazily from a window, not in full. */
-    private val WINDOW = QueuePolicy.WINDOW
-
-    /**
-     * Predecessors kept in front of a persisted queue window. The live window
-     * starts at the tapped track, so persisting it alone remembers next but
-     * not prev; this run-up from the source restores both sides.
-     */
-    private val PREV_KEEP = QueuePolicy.PREV_KEEP
 
 
     /**
@@ -364,6 +363,8 @@ internal class QueueController(
         startPlayback(station, from, preserveOrder = false)
     }
 
+    // Single play choke point: model swap plus Media3 queue build must stay atomic around the swapping flag.
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
     private fun startPlayback(
         station: Station,
         from: List<Station>,
@@ -383,7 +384,11 @@ internal class QueueController(
             // Navigation (step) passes preserveOrder so it rides the already
             // shuffled list instead of re-randomising - and restarting - on
             // every prev/next.
-            val order = if (!preserveOrder && _shuffle.value && from.size > 1) QueuePolicy.shuffledKeepFirst(from, station) else from
+            val order = if (!preserveOrder && _shuffle.value && from.size > 1) {
+                QueuePolicy.shuffledKeepFirst(from, station)
+            } else {
+                from
+            }
             // A fresh play from a list rebases the shuffle bookkeeping on that
             // list's own order - already the user's chosen sort from the screen
             // the tap came from. Without this rebase a stale _baseSource from an
@@ -424,7 +429,10 @@ internal class QueueController(
         PlaybackBus.publishStation(station)
         PlaybackBus.publishSource(_source)
         recordPlay(station)
-        android.util.Log.d("kleeamp/wid", "PLAY source.size=${_source.size} station=${station.name} preserve=$preserveOrder")
+        android.util.Log.d(
+            "kleeamp/wid",
+            "PLAY source.size=${_source.size} station=${station.name} preserve=$preserveOrder",
+        )
         persistWidgetWindow(station)
         persistQueue()
         PlaybackBus.publishError(null)
@@ -585,6 +593,8 @@ internal class QueueController(
      * the original linear order from [_baseSource]. On a lone item there is
      * nothing to reorder, so only the flag flips.
      */
+    // Audibility-critical shuffle rebuild with live re-anchoring; splitting risks stop-the-world gaps.
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
     fun toggleShuffle() {
         // Model reorder plus a seamless Media3 head/tail swap. Both the model
         // and the player end up on the new order so sync() never sees a
@@ -726,7 +736,11 @@ internal class QueueController(
                                 anchorSlice.map { buildItem(it) }
                             }
                             ensureActive()
-                            p.setMediaItems(all, anchorIdx.coerceIn(0, all.lastIndex), p.currentPosition.coerceAtLeast(0))
+                            p.setMediaItems(
+                                all,
+                                anchorIdx.coerceIn(0, all.lastIndex),
+                                p.currentPosition.coerceAtLeast(0),
+                            )
                             ensureActive()
                             onSync()
                             return@launch
@@ -796,7 +810,6 @@ internal class QueueController(
     private val _past = ArrayDeque<Station>()
     private var _pastIdx = -1
     /** Cap: a session log, not an archive; persisted recents owns depth. */
-    private val PAST_CAP = 100
 
     /** Appends [station] unless it already tips the stack (re-seek, double record). */
     private fun recordPlay(station: Station) = synchronized(_past) {
@@ -880,6 +893,8 @@ internal class QueueController(
      * pending absolute target so parallel Media3 re-queues can't race each other
      * and skip past the song you actually tapped to.
      */
+    // Coalesced tap targeting across pending, model, live and bus positions in one place.
+    @Suppress("CyclomaticComplexMethod")
     private fun step(delta: Int) {
         val src = _source.ifEmpty { _fallbackSource }
         if (src.isEmpty()) return
@@ -1149,6 +1164,8 @@ internal class QueueController(
     internal data class NavAvailability(val hasPrev: Boolean, val hasNext: Boolean)
 
     /** Prev/next availability for the transport state; mirrors the nav math sync reads. */
+    // Transport availability over live, fallback and ring sources; mirrors sync math.
+    @Suppress("CyclomaticComplexMethod")
     internal fun navAvailability(): NavAvailability {
         val qi = _upNextIndex.value
         val abs = windowBase + qi
@@ -1174,6 +1191,8 @@ internal class QueueController(
      * Reconciles the Up Next window against what Media3 is actually holding,
      * publishing when the audible item genuinely changed. Called from sync.
      */
+    // Media3-to-model reconciliation with id-based resolution; splitting risks shows-wrong-song bugs.
+    @Suppress("CyclomaticComplexMethod")
     internal fun reconcileMediaWindow(c: Player, changingPlayback: Boolean) {
         val q = _upNext.value
         if (!changingPlayback && c.mediaItemCount > 0 && q.isNotEmpty()) {

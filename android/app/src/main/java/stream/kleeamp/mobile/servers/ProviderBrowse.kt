@@ -145,7 +145,7 @@ private class JellyfinBrowseClient(
 private class PlexBrowseClient(
     private val client: PlexClient,
 ) : ProviderBrowseClient {
-    override suspend fun albums(style: String): Result<List<ProviderAlbum>> = client.albums(style)
+    override suspend fun albums(style: String): Result<List<ProviderAlbum>> = client.albums()
     override suspend fun artists(): Result<List<ProviderArtist>> = client.artists()
     override suspend fun artistAlbums(artistId: String): Result<List<ProviderAlbum>> =
         client.artistAlbums(artistId)
@@ -163,20 +163,20 @@ private class PlexBrowseClient(
 private class LyrionBrowseClient(
     private val client: LyrionClient,
 ) : ProviderBrowseClient {
-    override suspend fun albums(style: String): Result<List<ProviderAlbum>> = client.albums(style)
+    override suspend fun albums(style: String): Result<List<ProviderAlbum>> = client.albums()
     override suspend fun artists(): Result<List<ProviderArtist>> = client.artists()
     override suspend fun artistAlbums(artistId: String): Result<List<ProviderAlbum>> =
         client.artistAlbums(artistId)
     override suspend fun albumTracks(albumId: String): Result<List<ProviderTrack>> =
         client.albumTracks(albumId)
     override suspend fun starred(): Result<List<ProviderTrack>> = Result.success(emptyList())
-    override fun trackCover(id: String): String = client.coverUrl(id)
+    override fun trackCover(id: String): String = ""
 }
 
 private class AbsBrowseClient(
     private val client: AudiobookshelfClient,
 ) : ProviderBrowseClient {
-    override suspend fun albums(style: String): Result<List<ProviderAlbum>> = client.albums(style)
+    override suspend fun albums(style: String): Result<List<ProviderAlbum>> = client.albums()
     override suspend fun artists(): Result<List<ProviderArtist>> = Result.success(emptyList())
     override suspend fun artistAlbums(artistId: String): Result<List<ProviderAlbum>> =
         Result.success(emptyList())

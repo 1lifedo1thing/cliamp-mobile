@@ -62,14 +62,6 @@ enum class Visualizer(val id: String, val label: String, val columns: Int) {
 }
 
 /**
- * The shared brick meter geometry. Both the in-app BrickMeter and the widget
- * painter read this so the pitch, gap and column count can never drift apart.
- */
-object BrickGeometry {
-    const val columnGapDp = 3
-}
-
-/**
  * Pure attack/release smoothing plus a lagging peak cap. This is the one
  * source of the lit levels and peak rows that every visualizer host draws,
  * so the in-app meter and the widget always agree.

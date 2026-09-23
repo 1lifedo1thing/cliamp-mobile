@@ -8,6 +8,17 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.detekt)
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
+}
+
+// detekt 1.23.8 cannot serialize its classpath into the configuration cache.
+tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
+    notCompatibleWithConfigurationCache("detekt 1.23.8 DetektGenerateConfigTask classpath")
 }
 
 /**

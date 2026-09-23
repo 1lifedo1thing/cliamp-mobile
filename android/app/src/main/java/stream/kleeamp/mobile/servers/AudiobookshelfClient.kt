@@ -45,7 +45,7 @@ class AudiobookshelfClient(
         }
     }
 
-    suspend fun albums(style: String): Result<List<ProviderAlbum>> = withContext(Dispatchers.IO) {
+    suspend fun albums(): Result<List<ProviderAlbum>> = withContext(Dispatchers.IO) {
         runCatching {
             ensureAuth()
             val lib = firstLibrary()
@@ -94,7 +94,7 @@ class AudiobookshelfClient(
         return ResolvedStream("$base/api/items/$itemId/file/$ino?token=${enc(auth)}")
     }
 
-    fun coverUrl(itemId: String, size: Int = 512): String {
+    fun coverUrl(itemId: String): String {
         val t = auth.ifBlank { token }
         return if (t.isBlank()) "" else "$base/api/items/$itemId/cover?token=${enc(t)}"
     }

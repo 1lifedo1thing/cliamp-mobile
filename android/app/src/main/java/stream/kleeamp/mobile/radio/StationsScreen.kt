@@ -165,7 +165,12 @@ fun StationsScreen(
                     },
                 ) + countries.map { c ->
                     ChipOption(c.name) {
-                        vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.Country(c.iso_3166_1, c.name), reset = true))
+                        vm.onEvent(
+                            StationsViewModel.Event.LoadDirectory(
+                                DirectoryQuery.Country(c.iso31661, c.name),
+                                reset = true,
+                            )
+                        )
                     }
                 },
             )
@@ -285,12 +290,26 @@ fun StationsScreen(
                         Chip(
                             "top",
                             directory.query == DirectoryQuery.TopVoted,
-                            onClick = { vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.TopVoted, reset = true)) },
+                            onClick = {
+                                vm.onEvent(
+                                    StationsViewModel.Event.LoadDirectory(
+                                        DirectoryQuery.TopVoted,
+                                        reset = true,
+                                    )
+                                )
+                            },
                         )
                         Chip(
                             "trending",
                             directory.query == DirectoryQuery.Trending,
-                            onClick = { vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.Trending, reset = true)) },
+                            onClick = {
+                                vm.onEvent(
+                                    StationsViewModel.Event.LoadDirectory(
+                                        DirectoryQuery.Trending,
+                                        reset = true,
+                                    )
+                                )
+                            },
                         )
                         if (tags.isNotEmpty()) {
                             tags.take(24).forEach { t ->
@@ -298,7 +317,14 @@ fun StationsScreen(
                                 Chip(
                                     t.name,
                                     selected = q is DirectoryQuery.Tag && q.tag == t.name,
-                                    onClick = { vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.Tag(t.name), reset = true)) },
+                                    onClick = {
+                                        vm.onEvent(
+                                            StationsViewModel.Event.LoadDirectory(
+                                                DirectoryQuery.Tag(t.name),
+                                                reset = true,
+                                            )
+                                        )
+                                    },
                                 )
                             }
                         }
@@ -324,7 +350,11 @@ fun StationsScreen(
                         directory.error != null -> RetryNote(
                             message = "couldn't fetch the directory",
                             prominent = directory.stations.isEmpty(),
-                            onRetry = { vm.onEvent(StationsViewModel.Event.LoadDirectory(directory.query, reset = true)) },
+                            onRetry = {
+                                vm.onEvent(
+                                    StationsViewModel.Event.LoadDirectory(directory.query, reset = true)
+                                )
+                            },
                         )
                         directory.loading -> EmptyNote("loading more…")
                         directory.exhausted -> EmptyNote("end of ${directory.query.label}")
@@ -405,7 +435,10 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
     // the empty plate instead (see Station.bundledCover).
     var art by remember(station.id) {
         mutableStateOf(
-            if (station.bundledCover) PlaceholderArt.thumbnailFor(context, station.id.ifBlank { station.url })?.asImageBitmap()
+            if (station.bundledCover) {
+                PlaceholderArt.thumbnailFor(context, station.id.ifBlank { station.url })
+                    ?.asImageBitmap()
+            }
             else null,
         )
     }
@@ -526,6 +559,8 @@ private fun CustomAddForm(onAdd: (String, String) -> Unit, onCancel: () -> Unit)
 /** One provider-wizard-style field row: label (+ optional marker), entry,
  * and the hairline underline that accents while focused. */
 @Composable
+// Screen signature: state in, callbacks out; bundling would hide the data flow.
+@Suppress("LongParameterList")
 private fun CustomField(
     label: String,
     optional: Boolean,
@@ -569,6 +604,8 @@ private fun CustomField(
 
 /** A custom station row: plays and favourites like a directory row, plus remove. */
 @Composable
+// Screen signature: state in, callbacks out; bundling would hide the data flow.
+@Suppress("LongParameterList")
 private fun CustomStationRow(
     station: Station,
     active: Boolean,

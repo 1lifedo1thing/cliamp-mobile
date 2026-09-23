@@ -27,7 +27,8 @@ import stream.kleeamp.mobile.model.StationSource
  * mirror that worked last time.
  */
 object RadioBrowser {
-
+    /** Shared ordering for the directory search endpoints. */
+    private const val SEARCH_ORDER = "order=votes&reverse=true&hidebroken=true"
     private val fallbackMirrors = listOf(
         "https://de1.api.radio-browser.info",
         "https://de2.api.radio-browser.info",
@@ -109,6 +110,9 @@ object RadioBrowser {
             true
         }.getOrDefault(false)
 
+    // Any mirror failure moves to the next mirror by design; narrowing the
+    // catch would let new failure modes skip failover and surface instead.
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun get(path: String): String {
         // An emptied mirror list is a total outage from the last probe; retry
         // re-probes rather than trusting it, so a manual "try again" after the
@@ -137,7 +141,7 @@ object RadioBrowser {
             // fresh mirror list once before giving up.
             if (pass == 0) mirrorLock.withLock { discover() }
         }
-        throw lastError ?: IllegalStateException("no radio-browser mirror reachable")
+        throw lastError ?: error("no radio-browser mirror reachable")
     }
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
@@ -153,13 +157,15 @@ object RadioBrowser {
         decode(get("/json/stations/search?order=clicktrend&reverse=true&hidebroken=true&limit=$limit&offset=$offset"))
 
     suspend fun searchByName(query: String, offset: Int = 0, limit: Int = 60): List<Station> =
-        decode(get("/json/stations/search?name=${enc(query)}&order=votes&reverse=true&hidebroken=true&limit=$limit&offset=$offset"))
+        decode(get("/json/stations/search?name=${enc(query)}&$SEARCH_ORDER&limit=$limit&offset=$offset"))
 
     suspend fun byTag(tag: String, offset: Int = 0, limit: Int = 60): List<Station> =
-        decode(get("/json/stations/search?tag=${enc(tag)}&order=votes&reverse=true&hidebroken=true&limit=$limit&offset=$offset"))
+        decode(get("/json/stations/search?tag=${enc(tag)}&$SEARCH_ORDER&limit=$limit&offset=$offset"))
 
     suspend fun byCountryCode(cc: String, offset: Int = 0, limit: Int = 60): List<Station> =
-        decode(get("/json/stations/search?countrycode=${enc(cc.uppercase())}&order=votes&reverse=true&hidebroken=true&limit=$limit&offset=$offset"))
+        decode(
+            get("/json/stations/search?countrycode=${enc(cc.uppercase())}&$SEARCH_ORDER&limit=$limit&offset=$offset")
+        )
 
     suspend fun topTags(limit: Int = 60): List<NameCount> =
         runCatching {
@@ -252,6 +258,6 @@ data class NameCount(val name: String = "", val stationcount: Int = 0)
 @Serializable
 data class CountryCount(
     val name: String = "",
-    val iso_3166_1: String = "",
+    @SerialName("iso_3166_1") val iso31661: String = "",
     val stationcount: Int = 0,
 )

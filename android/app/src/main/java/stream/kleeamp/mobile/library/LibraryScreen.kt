@@ -242,7 +242,6 @@ fun LibraryScreen(
                     onOpenProviderSongs = onOpenProviderSongs,
                     pinnedPlaylists = pinnedPlaylists,
                     playlists = unpinnedPlaylists,
-                    songs = songs,
                     creating = creatingName,
                     renamingSlug = renamingSlug,
                     editText = nameText,

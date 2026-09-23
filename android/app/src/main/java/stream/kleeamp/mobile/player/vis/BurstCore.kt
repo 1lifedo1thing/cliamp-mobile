@@ -21,7 +21,11 @@ class BurstCore(private val random: Random = Random.Default) {
         var vy: Float,
         var life: Float,
         val maxLife: Float,
-    )
+    ) {
+        /** On screen and still burning. */
+        fun isAlive(): Boolean =
+            life > 0f && x >= -0.1f && x <= 1.1f && y >= -0.1f && y <= 1.1f
+    }
 
     val sparks = ArrayList<Spark>()
 
@@ -86,7 +90,7 @@ class BurstCore(private val random: Random = Random.Default) {
             spark.y += spark.vy * step
             spark.vy += GRAVITY * step
             spark.life -= step
-            if (spark.life <= 0f || spark.x < -0.1f || spark.x > 1.1f || spark.y < -0.1f || spark.y > 1.1f) {
+            if (!spark.isAlive()) {
                 iterator.remove()
             }
         }

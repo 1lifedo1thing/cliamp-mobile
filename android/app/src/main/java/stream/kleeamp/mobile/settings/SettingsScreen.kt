@@ -144,7 +144,10 @@ fun SettingsScreen(
             checked = mono,
             onChange = { vm.onEvent(SettingsViewModel.Event.SetMono(it)) },
         )
-        Column(Modifier.padding(horizontal = Gutter, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            Modifier.padding(horizontal = Gutter, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Mono("Buffer", KleeampType.rowPrimary, p.ink)
                 Mono("${buffer}s", KleeampType.rowSecondary, p.accent)

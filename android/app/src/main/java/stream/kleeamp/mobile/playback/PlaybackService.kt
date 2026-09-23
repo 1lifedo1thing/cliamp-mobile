@@ -148,6 +148,8 @@ class PlaybackService : MediaSessionService() {
     private lateinit var prefs0: stream.kleeamp.mobile.prefs.Prefs
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
+    // Linear service wiring sequence; order matters, splitting hides it.
+    @Suppress("LongMethod")
     @ExperimentalApi
     override fun onCreate() {
         super.onCreate()
@@ -459,7 +461,12 @@ class PlaybackService : MediaSessionService() {
             seekable = seekable,
             durationMs = duration,
         )
-        Log.d("kleeamp/wid", "publishWidgetState playing=${next.playing} streamTitle=${next.track} url=${redactUrl(next.url)} station=${station?.name} seekable=${next.seekable} duration=${next.durationMs}")
+        Log.d(
+            "kleeamp/wid",
+            "publishWidgetState playing=${next.playing} streamTitle=${next.track} " +
+                "url=${redactUrl(next.url)} station=${station?.name} " +
+                "seekable=${next.seekable} duration=${next.durationMs}",
+        )
         // Both halves of the cache update synchronously. lastWidgetSourceKey
         // used to be assigned inside the launch below (and only when upNext
         // was non-empty), so after a cold start it stayed null forever, the
@@ -489,7 +496,8 @@ class PlaybackService : MediaSessionService() {
                     favs.any { it.url == station?.url },
                 )
             )
-            Log.d("kleeamp/wid", "nextUp source.size=${source.size} count=${upNext.size} names=${upNext.map { it.name }}")
+            val names = upNext.map { it.name }
+            Log.d("kleeamp/wid", "nextUp source.size=${source.size} count=${upNext.size} names=$names")
             // An active source may intentionally have no upcoming items.
             // Preserve the persisted fallback only when no session source exists.
             if (sourceChanged && source.isNotEmpty()) {
@@ -738,7 +746,11 @@ class PlaybackService : MediaSessionService() {
                 StreamFormat(
                     bitrateKbps = if (format.bitrate != Format.NO_VALUE) format.bitrate / 1000 else 0,
                     sampleRateHz = if (format.sampleRate != Format.NO_VALUE) format.sampleRate else 0,
-                    codec = format.sampleMimeType?.substringAfter('/')?.removePrefix("mpeg")?.ifBlank { "mp3" }.orEmpty(),
+                    codec = format.sampleMimeType
+                        ?.substringAfter('/')
+                        ?.removePrefix("mpeg")
+                        ?.ifBlank { "mp3" }
+                        .orEmpty(),
                 )
             )
         }

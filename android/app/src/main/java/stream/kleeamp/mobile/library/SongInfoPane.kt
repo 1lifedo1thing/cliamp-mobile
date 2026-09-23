@@ -242,14 +242,18 @@ private fun SongInfoView(
                             Mono(
                                 "♥ favourite", KleeampType.chip, p.onAccent,
                                 Modifier.align(Alignment.TopStart).padding(8.dp)
-                                    .clip(RoundedCornerShape(KleeampShape.tiny)).background(p.accent.copy(alpha = 0.92f))
+                                    .clip(RoundedCornerShape(KleeampShape.tiny))
+                                    .background(p.accent.copy(alpha = 0.92f))
                                     .padding(horizontal = 8.dp, vertical = 4.dp),
                             )
                         }
                     }
                 }
 
-                Column(Modifier.padding(horizontal = Gutter, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(
+                    Modifier.padding(horizontal = Gutter, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     Mono(s.name, KleeampType.trackTitleCompact, p.ink, maxLines = 2)
                     Mono(s.artist.ifBlank { "unknown artist" }, KleeampType.rowSecondary, p.inkTertiary)
                     if (s.album.isNotBlank()) Mono(s.album, KleeampType.body, p.inkTertiary)
@@ -277,7 +281,11 @@ private fun SongInfoView(
                 // Actions: favourite toggle and destructive remove, side by side.
                 Row(Modifier.fillMaxWidth().padding(Gutter)) {
                     Row(
-                        Modifier.padding(end = 4.dp).weight(1f).clip(RoundedCornerShape(KleeampShape.small)).background(p.panel)
+                        Modifier
+                            .padding(end = 4.dp)
+                            .weight(1f)
+                            .clip(RoundedCornerShape(KleeampShape.small))
+                            .background(p.panel)
                             .microPress { onToggleFavorite(s) }
                             .padding(vertical = 12.dp),
                         horizontalArrangement = Arrangement.Center,

@@ -45,6 +45,8 @@ import stream.kleeamp.mobile.theme.Mono
  * the settled row - the under-the-item reveal is the wash key; the commit
  * key rides above it, so the add is seen as well as felt. */
 @Composable
+// Single gesture recognizer; splitting risks touch behavior.
+@Suppress("LongMethod", "CyclomaticComplexMethod", "LoopWithTooManyJumpStatements")
 fun SwipeToQueue(
     onQueue: () -> Unit,
     modifier: Modifier = Modifier,

@@ -194,7 +194,11 @@ fun ProviderSongsPane(
         // An album's tracks are already in the server's track-number order;
         // re-sorting them alphabetically would scramble the album's own
         // running order, so only the other views get a client-side sort.
-        if (songsOfAlbum) matching else sortedStations(matching, if (sort == PlaylistSort.Artist) PlaylistSort.Title else sort)
+        if (songsOfAlbum) {
+            matching
+        } else {
+            sortedStations(matching, if (sort == PlaylistSort.Artist) PlaylistSort.Title else sort)
+        }
     }
     val favorites = ui.favorites.map { it.url }.toSet()
     val failedLabels = ui.failures.keys.mapNotNull { id ->
@@ -278,7 +282,10 @@ fun ProviderSongsPane(
                 if (browsingArtists) {
                     if (artistRows.isEmpty()) {
                         item {
-                            Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                            Box(
+                                Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
                                 Mono(
                                     if (ui.loading) "loading provider songs…" else "nothing here",
                                     KleeampType.rowSecondary, p.inkFaint,
@@ -299,7 +306,10 @@ fun ProviderSongsPane(
                 } else if (browsingAlbums) {
                     if (albumRows.isEmpty()) {
                         item {
-                            Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                            Box(
+                                Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
                                 Mono("nothing here", KleeampType.rowSecondary, p.inkFaint)
                             }
                         }
@@ -351,7 +361,12 @@ fun ProviderSongsPane(
                             },
                             onQueue = { onAddToQueue(s) },
                         ) {
-                            Mono(s.name, KleeampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
+                            Mono(
+                                s.name,
+                                KleeampType.rowPrimary,
+                                if (current?.url == s.url) p.accent else p.ink,
+                                maxLines = 1,
+                            )
                             Mono(
                                 s.artistAlbum.ifBlank { s.meta.ifBlank { "provider" } },
                                 KleeampType.rowSecondary, p.inkTertiary, maxLines = 1,

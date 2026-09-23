@@ -130,6 +130,8 @@ class SettingsViewModel(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
 
+    // Flat event dispatcher; every branch is one settings delegation.
+    @Suppress("CyclomaticComplexMethod")
     fun onEvent(e: Event) {
         when (e) {
             is Event.SetPalette -> viewModelScope.launch { prefs.setPalette(e.key) }

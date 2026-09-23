@@ -193,7 +193,10 @@ fun Chip(
             .microPress(onClick = onClick)
             .clip(RoundedCornerShape(KleeampShape.small))
             .background(if (selected) fill else Color.Transparent)
-            .then(if (selected) Modifier else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small)))
+                .then(
+                    if (selected) Modifier
+                    else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small))
+                )
             .padding(horizontal = 11.dp, vertical = 7.dp),
     ) {
         Mono(label.uppercase(), KleeampType.chip, if (selected) onFill else p.inkTertiary, maxLines = 1)
@@ -229,7 +232,10 @@ fun ChipDropdown(
                 .microPress { open = !open }
                 .clip(RoundedCornerShape(KleeampShape.small))
                 .background(if (selected) fill else Color.Transparent)
-                .then(if (selected) Modifier else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small)))
+            .then(
+                if (selected) Modifier
+                else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small))
+            )
                 .padding(horizontal = 11.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp),

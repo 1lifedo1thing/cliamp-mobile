@@ -229,24 +229,25 @@ object EqPresets {
         "late night", "podcast", "speakers", "headphone",
     )
 
-    fun byName(name: String): List<Float>? = when (name) {
-        "flat" -> flat
-        "rock" -> rock
-        "pop" -> pop
-        "jazz" -> jazz
-        "classical" -> classical
-        "bass" -> bass
-        "treble" -> treble
-        "vocal" -> vocal
-        "electronic" -> electronic
-        "acoustic" -> acoustic
-        "hip-hop" -> hiphop
-        "r&b" -> rnb
-        "loudness" -> loudness
-        "late night" -> latenight
-        "podcast" -> podcast
-        "speakers" -> speakers
-        "headphone" -> headphone
-        else -> null
-    }
+    private val byNameMap = mapOf(
+        "flat" to flat,
+        "rock" to rock,
+        "pop" to pop,
+        "jazz" to jazz,
+        "classical" to classical,
+        "bass" to bass,
+        "treble" to treble,
+        "vocal" to vocal,
+        "electronic" to electronic,
+        "acoustic" to acoustic,
+        "hip-hop" to hiphop,
+        "r&b" to rnb,
+        "loudness" to loudness,
+        "late night" to latenight,
+        "podcast" to podcast,
+        "speakers" to speakers,
+        "headphone" to headphone,
+    )
+
+    fun byName(name: String): List<Float>? = byNameMap[name]
 }

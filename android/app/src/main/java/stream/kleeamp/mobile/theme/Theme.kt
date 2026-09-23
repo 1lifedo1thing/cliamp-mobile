@@ -54,7 +54,11 @@ object KleeampShape {
  * rather than crashing, so a theme removed from the machine does not brick the
  * app.
  */
-fun paletteFor(preference: String, systemDark: Boolean, custom: KleeampPalette? = null): KleeampPalette = when (preference) {
+fun paletteFor(
+    preference: String,
+    systemDark: Boolean,
+    custom: KleeampPalette? = null,
+): KleeampPalette = when (preference) {
     "system" -> if (systemDark) OxidePalette else OxideLightPalette
     "oxide" -> OxidePalette
     "oxide-light" -> OxideLightPalette

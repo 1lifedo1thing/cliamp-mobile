@@ -111,6 +111,8 @@ private fun Note(text: String) {
 }
 
 @Composable
+// Screen signature: state in, callbacks out; bundling would hide the data flow.
+@Suppress("LongParameterList")
 private fun PickerList(
     listState: androidx.compose.foundation.lazy.LazyListState,
     song: Station,
@@ -236,7 +238,8 @@ private fun PlaylistNameField(
     val p = LocalPalette.current
     Row(
         Modifier.fillMaxWidth().padding(Gutter)
-            .clip(RoundedCornerShape(KleeampShape.small)).border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small))
+            .clip(RoundedCornerShape(KleeampShape.small))
+            .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small))
             .background(p.panel).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -253,7 +256,9 @@ private fun PlaylistNameField(
             Modifier.clip(RoundedCornerShape(KleeampShape.tiny)).background(p.accent.copy(alpha = 0.14f))
                 .microPress { onDone(text) }.padding(horizontal = 9.dp, vertical = 7.dp))
         Mono("CANCEL", KleeampType.tabLabel, p.inkTertiary,
-            Modifier.clip(RoundedCornerShape(KleeampShape.tiny)).border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny))
+            Modifier
+                .clip(RoundedCornerShape(KleeampShape.tiny))
+                .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny))
                 .microPress(onClick = onCancel).padding(horizontal = 9.dp, vertical = 7.dp))
     }
 }

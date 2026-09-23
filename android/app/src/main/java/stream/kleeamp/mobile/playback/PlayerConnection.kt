@@ -32,12 +32,17 @@ import stream.kleeamp.mobile.play.QueuePolicy
 import stream.kleeamp.mobile.widget.WidgetRenderer
 import java.io.IOException
 
+    /** How often a playing episode's position reaches the database. */
+private const val PROGRESS_INTERVAL = 5_000L
+
 /**
  * The UI's handle on playback. Transport goes through a MediaController rather
  * than straight to the ExoPlayer, so the app, the notification and any
  * Bluetooth remote all drive the same state machine.
  */
 @UnstableApi
+    // Transport shell over QueueController; every member is a delegate or a Media3 callback.
+@Suppress("TooManyFunctions")
 class PlayerConnection(
     private val context: Context,
     private val scope: CoroutineScope,
@@ -91,8 +96,6 @@ class PlayerConnection(
     val state: StateFlow<PlayerState> = _state.asStateFlow()
 
 
-
-
     /**
      * Runs [action] once the controller is connected: immediately when warm,
      * chained behind any existing onReady hook when cold (a share arriving
@@ -121,9 +124,6 @@ class PlayerConnection(
     /** Whether local files resume (podcasts and provider tracks always do). */
     private val _resumeLocal = MutableStateFlow(false)
     private var pollJob: Job? = null
-
-    /** How often a playing episode's position reaches the database. */
-    private val PROGRESS_INTERVAL = 5_000L
 
     /** The list prev/next walks. Set whenever the user plays from a list. */
 
@@ -172,6 +172,14 @@ class PlayerConnection(
         }
     }
 
+    /** Progress is writable only while a resumable track is audibly playing. */
+    private fun shouldWriteProgress(playingNow: Station, playing: Boolean): Boolean =
+        playingNow.isTrack && playing &&
+            (playingNow.source != StationSource.Local || _resumeLocal.value)
+
+    // Best-effort reconciliation: any failure is logged, never thrown, so the
+    // hot poller survives unknown player states. Cancellation still propagates.
+    @Suppress("TooGenericExceptionCaught")
     private fun sync() {
         // Best-effort reconciliation: runs on a hot poller, Media3 callbacks
         // and at the end of nav jobs, so it must never take its caller down.
@@ -187,6 +195,8 @@ class PlayerConnection(
         }
     }
 
+    // Single 2 Hz reconciliation choke point; splitting risks publish-order bugs.
+    @Suppress("CyclomaticComplexMethod", "NestedBlockDepth")
     private fun syncInternal() {
         val c = controller ?: return
 
@@ -214,9 +224,7 @@ class PlayerConnection(
         // Throttled to [PROGRESS_INTERVAL]: sync runs twice a second, and a
         // track does not need committing to disk twenty times a minute.
         val playingNow = PlaybackBus.station.value
-        if (playingNow != null && playingNow.isTrack && c.isPlaying &&
-            (playingNow.source != StationSource.Local || _resumeLocal.value)
-        ) {
+        if (playingNow != null && shouldWriteProgress(playingNow, c.isPlaying)) {
             val now = System.currentTimeMillis()
             val position = c.currentPosition
             if (position > 0 && now - lastProgressWrite >= PROGRESS_INTERVAL) {

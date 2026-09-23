@@ -21,15 +21,15 @@ object VisMath {
         else -> 0
     }
 
-    fun sampleLinear(bands: FloatArray, pos: Float): Float {
-        if (bands.isEmpty()) return 0f
-        if (bands.size == 1) return bands[0]
-        if (pos <= 0f) return bands[0]
-        val last = (bands.size - 1).toFloat()
-        if (pos >= last) return bands[bands.size - 1]
-        val idx = pos.toInt()
-        val frac = pos - idx
-        return bands[idx] * (1f - frac) + bands[idx + 1] * frac
+    fun sampleLinear(bands: FloatArray, pos: Float): Float = when {
+        bands.isEmpty() -> 0f
+        bands.size == 1 || pos <= 0f -> bands[0]
+        pos >= bands.size - 1 -> bands[bands.size - 1]
+        else -> {
+            val idx = pos.toInt()
+            val frac = pos - idx
+            bands[idx] * (1f - frac) + bands[idx + 1] * frac
+        }
     }
 
     fun resampleLinear(bands: FloatArray, columns: Int): FloatArray {

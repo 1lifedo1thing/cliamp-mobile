@@ -75,6 +75,8 @@ import stream.kleeamp.mobile.theme.Mono
  * radio directory, podcasts and providers.
  */
 @Composable
+// Screen signature: state in, callbacks out; bundling would hide the data flow.
+@Suppress("LongParameterList")
 fun SearchScreen(
     vm: SearchViewModel,
     current: Station? = null,

@@ -23,6 +23,9 @@ import stream.kleeamp.mobile.net.Http
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.prefs.Prefs
 
+    /** Auto-download keeps this many latest episodes per subscribed show. */
+private const val AUTO_KEEP = 3
+
 /**
  * One fetched file: where it lives plus the station snapshot that plays it.
  * Keyed by the remote audio URL everywhere, the same key progress and history
@@ -80,9 +83,6 @@ class DownloadStore(
     /** Global backstop on auto fetches; manual downloads are never swept. */
     private val maxAutoTotal = 60
 
-    /** Auto-download keeps this many latest episodes per subscribed show. */
-    private val AUTO_KEEP = 3
-
     private val _entries = MutableStateFlow<Map<String, DownloadEntry>>(emptyMap())
     val entries: StateFlow<Map<String, DownloadEntry>> = _entries.asStateFlow()
 
@@ -106,6 +106,9 @@ class DownloadStore(
     fun isDownloaded(url: String): Boolean = localPath(url) != null
 
     /** Queue a fetch; a no-op when already held or already running. */
+    // Any fetch failure lands in the Failed state by design; the slot,
+    // persist and state transitions stay in one state machine on purpose.
+    @Suppress("TooGenericExceptionCaught", "LongMethod", "CyclomaticComplexMethod")
     fun download(station: Station, auto: Boolean = false) {
         val url = station.url
         if (isDownloaded(url)) return

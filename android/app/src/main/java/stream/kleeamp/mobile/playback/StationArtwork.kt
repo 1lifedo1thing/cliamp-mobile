@@ -86,6 +86,8 @@ object StationArtwork {
     private inline fun <K, V> LinkedHashMap<K, V>.getOrPut(key: K, produce: () -> V): V =
         get(key) ?: produce().also { put(key, it) }
 
+    // Single artwork render pipeline from resolve to encode.
+    @Suppress("LongMethod")
     private fun render(context: Context, station: Station, art: Bitmap?): ByteArray {
         val bmp = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)

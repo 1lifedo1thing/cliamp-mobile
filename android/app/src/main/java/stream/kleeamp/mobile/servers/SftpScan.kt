@@ -68,6 +68,8 @@ class SftpScan(
         return found
     }
 
+    // Single recursive traversal; skip and cap exits are the traversal contract.
+    @Suppress("CyclomaticComplexMethod", "LoopWithTooManyJumpStatements")
     private fun walk(sftp: SFTPClient, root: String, dir: String, depth: Int) {
         if (depth > MAX_DEPTH || found >= MAX_FILES || directories >= MAX_DIRECTORIES) return
         directories++
