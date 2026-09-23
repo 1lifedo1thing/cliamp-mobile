@@ -36,7 +36,7 @@ import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Mono
 
 /** A deliberate right swipe adds the row to Up Next. The backdrop copies
- * [stream.kleeamp.mobile.ui.screens.UpNextSwipeToRemove] mirrored: a static
+ * [stream.kleeamp.mobile.player.UpNextSwipeToRemove] mirrored: a static
  * full-size accent wash with the key parked fully under the sliding item,
  * never growing with the drag. Same gesture discipline too - vertical or
  * diagonal touches belong to the list, and distance, not velocity, commits.

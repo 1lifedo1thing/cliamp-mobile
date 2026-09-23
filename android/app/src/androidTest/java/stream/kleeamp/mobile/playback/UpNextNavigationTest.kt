@@ -19,7 +19,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
-import stream.kleeamp.mobile.ui.screens.upNextEntries
+import stream.kleeamp.mobile.player.upNextEntries
 
 /** Checks navigation selection against the same entries rendered by Up next, without audio I/O. */
 @UnstableApi

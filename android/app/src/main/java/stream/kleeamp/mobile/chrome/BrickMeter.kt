@@ -16,8 +16,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import stream.kleeamp.mobile.data.visualizer.MeterCore
-import stream.kleeamp.mobile.data.visualizer.Visualizer
+import stream.kleeamp.mobile.player.vis.MeterCore
+import stream.kleeamp.mobile.player.vis.Visualizer
 import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.model.NowPlaying
 

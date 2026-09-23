@@ -5,8 +5,8 @@ import androidx.media3.common.audio.AudioProcessor
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
-import stream.kleeamp.mobile.data.visualizer.StereoCore
-import stream.kleeamp.mobile.data.visualizer.StereoMetrics
+import stream.kleeamp.mobile.player.vis.StereoCore
+import stream.kleeamp.mobile.player.vis.StereoMetrics
 
 class StereoMeterTap : AudioProcessor {
 

@@ -4,7 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import stream.kleeamp.mobile.model.Station
-import stream.kleeamp.mobile.data.visualizer.StereoMetrics
+import stream.kleeamp.mobile.player.vis.StereoMetrics
 
 /**
  * The service and the UI live in the same process, so rather than round-trip

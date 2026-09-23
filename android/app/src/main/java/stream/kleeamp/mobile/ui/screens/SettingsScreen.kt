@@ -41,7 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import stream.kleeamp.mobile.BuildConfig
 import stream.kleeamp.mobile.R
-import stream.kleeamp.mobile.data.visualizer.Visualizer
+import stream.kleeamp.mobile.player.vis.Visualizer
 import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.KleeampToggle
@@ -63,6 +63,7 @@ import stream.kleeamp.mobile.theme.OxideLightPalette
 import stream.kleeamp.mobile.theme.OxidePalette
 import stream.kleeamp.mobile.theme.OmarchyThemeKeys
 import stream.kleeamp.mobile.theme.Mono
+import stream.kleeamp.mobile.player.UpNextSwipeToRemove
 import kotlin.math.roundToInt
 
 @Composable

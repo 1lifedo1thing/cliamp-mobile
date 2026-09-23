@@ -6,8 +6,8 @@ import android.util.Log
 import kotlin.math.hypot
 import kotlin.math.log10
 import kotlin.math.pow
-import stream.kleeamp.mobile.data.visualizer.VisMath
-import stream.kleeamp.mobile.data.visualizer.WaveCore
+import stream.kleeamp.mobile.player.vis.VisMath
+import stream.kleeamp.mobile.player.vis.WaveCore
 
 /**
  * Real spectrum and real EQ, both attached to the ExoPlayer audio session.

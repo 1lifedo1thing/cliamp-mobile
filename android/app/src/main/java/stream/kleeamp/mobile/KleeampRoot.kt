@@ -57,7 +57,7 @@ import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection
 import stream.kleeamp.mobile.chrome.KleeampTabBar
 import stream.kleeamp.mobile.chrome.KleeampTabRail
-import stream.kleeamp.mobile.ui.components.MiniPlayer
+import stream.kleeamp.mobile.player.MiniPlayer
 import stream.kleeamp.mobile.chrome.Tab
 import stream.kleeamp.mobile.ui.screens.SearchScreen
 import stream.kleeamp.mobile.library.FavScope
@@ -67,11 +67,11 @@ import stream.kleeamp.mobile.servers.LibraryProvidersPane
 import stream.kleeamp.mobile.library.LibrarySmartPlaylistPane
 import stream.kleeamp.mobile.library.LibrarySongInfoPane
 import stream.kleeamp.mobile.library.LibraryScreen
-import stream.kleeamp.mobile.ui.screens.NowPlayingScreen
+import stream.kleeamp.mobile.player.NowPlayingScreen
 import stream.kleeamp.mobile.podcasts.PodcastShowScreen
 import stream.kleeamp.mobile.podcasts.PodcastsScreen
-import stream.kleeamp.mobile.ui.screens.UpNextScreen
-import stream.kleeamp.mobile.ui.screens.ScopeScreen
+import stream.kleeamp.mobile.player.UpNextScreen
+import stream.kleeamp.mobile.player.ScopeScreen
 import stream.kleeamp.mobile.ui.screens.ScrobbleWizard as ScrobbleWizardScreen
 import stream.kleeamp.mobile.servers.ProviderCatalog
 import stream.kleeamp.mobile.servers.ProviderStore
@@ -89,7 +89,7 @@ import stream.kleeamp.mobile.library.SmartPlaylistViewModel
 import stream.kleeamp.mobile.library.AddToPlaylistViewModel
 import stream.kleeamp.mobile.library.PlaylistDetailViewModel
 import stream.kleeamp.mobile.library.SongInfoViewModel
-import stream.kleeamp.mobile.ui.screens.NowPlayingViewModel
+import stream.kleeamp.mobile.player.NowPlayingViewModel
 import stream.kleeamp.mobile.ui.screens.SearchViewModel
 import stream.kleeamp.mobile.ui.screens.SettingsViewModel
 import stream.kleeamp.mobile.servers.ProviderWizardViewModel
