@@ -27,20 +27,13 @@ import stream.kleeamp.mobile.KleeampApp
 import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
+import stream.kleeamp.mobile.play.QueueModel
 import stream.kleeamp.mobile.play.QueuePolicy
 import stream.kleeamp.mobile.widget.WidgetRenderer
 import java.io.IOException
 
 private const val NAV_DEBOUNCE_MS = 180L
-    /** Queues larger than this are played lazily from a window, not in full. */
 private const val WINDOW = QueuePolicy.WINDOW
-    /**
-     * Predecessors kept in front of a persisted queue window. The live window
-     * starts at the tapped track, so persisting it alone remembers next but
-     * not prev; this run-up from the source restores both sides.
-     */
-private const val PREV_KEEP = QueuePolicy.PREV_KEEP
-private const val PAST_CAP = 100
 
 /**
  * The queue half of playback: the source lists, the bounded Up Next window,
@@ -61,6 +54,9 @@ internal class QueueController(
     private val onSync: () -> Unit,
     private val onQueueRestored: (Boolean, Boolean) -> Unit,
 ) {
+    private val model = QueueModel()
+    private val history = QueueHistory()
+
 
     init {
         val app = context.applicationContext as KleeampApp
@@ -68,19 +64,17 @@ internal class QueueController(
             val prefs = app.prefs
             val history = prefs.history.first()
             val favs = prefs.favorites.first()
-            if (_fallbackSource.isEmpty()) {
-                _fallbackSource = history.ifEmpty { favs }
+            if (model.fallback.isEmpty()) {
+                model.fallback = history.ifEmpty { favs }
             }
             restoreQueue(prefs)
         }
     }
 
-    private val _upNext = MutableStateFlow<List<Station>>(emptyList())
-    private val _upNextIndex = MutableStateFlow(-1)
 
-    val upNext: StateFlow<List<Station>> = _upNext.asStateFlow()
-    val upNextIndex: StateFlow<Int> = _upNextIndex.asStateFlow()
-    val currentUpNext: List<Station> get() = _upNext.value
+    val upNext: StateFlow<List<Station>> get() = model.upNext
+    val upNextIndex: StateFlow<Int> get() = model.upNextIndex
+    val currentUpNext: List<Station> get() = model.currentUpNext
 
     /**
      * The station behind a Media3 item id (item ids are station ids), or null.
@@ -88,43 +82,10 @@ internal class QueueController(
      * has caught up - resolve what is actually audible right now instead of
      * reading a stale bus value.
      */
-    fun stationForMediaId(id: String): Station? =
-        _upNext.value.firstOrNull { it.id == id } ?: _source.firstOrNull { it.id == id }
-
-    /**
-     * The full list a play originated from. When that list is huge - hundreds
-     * of local songs - [_upNext] only holds a bounded window starting at the
-     * tapped track, so touching a song queues a short "up next" run instead of
-     * dumping the whole library in. [_source] keeps the whole list so prev /
-     * next and the auto-roll-forward can keep walking it. For a short list
-     * [_source] and [_upNext] are the same list.
-     */
-    private var _source: List<Station> = emptyList()
-
-    /** The linear list a play originated from, before any shuffle reordering.
-     * Shuffle reorders a copy of it into [_source]; turning shuffle off restores
-     * [_source] to this so prev / next walk the natural playlist order again.
-     */
-    private var _baseSource: List<Station> = emptyList()
-
-    /**
-     * List used for prev / next before anything has played this session (e.g. at
-     * launch, when the mini player shows the last-played song from history).
-     * The root supplies recent history so stepping works from that shown song.
-     */
-    private var _fallbackSource: List<Station> = emptyList()
+    fun stationForMediaId(id: String): Station? = model.stationForMediaId(id)
 
     /** Set by the root with recent history so prev/next work from a fresh launch. */
-    fun setFallbackSource(list: List<Station>) { _fallbackSource = list }
-
-
-    /**
-     * While navigation is walking the launch-seeded fallback (nothing has been
-     * played from a real list this session), prev/next run it as a ring - the
-     * same wrap the widget uses - so both keys always have somewhere to go from
-     * the restored song. Cleared the moment the user plays from an actual list.
-     */
-    private var _ringFallback = false
+    fun setFallbackSource(list: List<Station>) = model.setFallbackSource(list)
 
 
     /**
@@ -136,16 +97,12 @@ internal class QueueController(
      */
     private suspend fun restoreQueue(prefs: Prefs) {
         val window = prefs.queue.first()
-        if (window.isEmpty() || _upNext.value.isNotEmpty()) return
+        if (window.isEmpty() || model.currentUpNext.isNotEmpty()) return
         val idx = prefs.queueIndex.first().coerceIn(0, window.lastIndex)
-        _upNext.value = window
-        _upNextIndex.value = idx
         // The full source list is deliberately not persisted (it can be the
         // whole local library), so navigation walks the restored window. The
         // next real play rebases onto its own list as before.
-        _source = window
-        _baseSource = window
-        windowBase = 0
+        model.restoreWindow(window, idx)
         PlaybackBus.publishStation(window[idx])
         PlaybackBus.publishSource(window)
         val nav = navAvailability()
@@ -154,17 +111,7 @@ internal class QueueController(
 
 
     /** Whether shuffled playback is switched on. */
-    private val _shuffle = MutableStateFlow(false)
-    val shuffle: StateFlow<Boolean> = _shuffle.asStateFlow()
-
-
-    /**
-     * Logical index (into [_source]) of the first item held in [_upNext]. When
-     * a queue is huge the tapped track plus a small tail are queued instead of
-     * the whole thing, so play starts instantly; this offset says where that
-     * window begins inside the source list. For a short queue it is 0.
-     */
-    private var windowBase = 0
+    val shuffle: StateFlow<Boolean> get() = model.shuffle
 
     /** Pending window-roll-forward job, cancelled if the window advances sooner. */
     private var _extending: Job? = null
@@ -185,7 +132,7 @@ internal class QueueController(
 
     /**
      * Coalesces rapid transport taps without lagging a plain tap. Each step
-     * keeps an absolute target in [_source] in [_navPending]. A burst of next /
+     * keeps an absolute target in [model.source] in [_navPending]. A burst of next /
      * prev fires the FIRST tap immediately (isolated taps thus respond at once)
      * and then restarts a short debounce timer on each follow-up, so the burst
      * settles on the LAST tapped song - the songs in between are never (re)played
@@ -227,10 +174,10 @@ internal class QueueController(
      * [_upNext] to the source tail while Media3 kept the old wider window, or a
      * shuffle realign that moved only [_upNext] - so the display always names the
      * same songs Media3 is playing, in the same order. Returns false when Media3
-     * holds no items we can map back to [_source] (a live stream we can't anchor).
+     * holds no items we can map back to [model.source] (a live stream we can't anchor).
      */
     private fun mirrorUpNextFromMedia3(c: Player): Boolean {
-        val src = _source
+        val src = model.source
         if (src.isEmpty()) return false
         val count = c.mediaItemCount
         if (count == 0) return false
@@ -238,13 +185,12 @@ internal class QueueController(
         val ids = (0 until count).map { c.getMediaItemAt(it).mediaId }
         fun matches(start: Int) = start >= 0 && start + count <= src.size &&
             ids.indices.all { src[start + it].id == ids[it] }
-        val base = if (matches(windowBase)) windowBase else
+        val base = if (matches(model.windowBase)) model.windowBase else
             (0..(src.size - count)).firstOrNull(::matches) ?: return false
         val items = src.subList(base, base + count)
         val playerIdx = pi
-        windowBase = base
-        _upNext.value = items
-        _upNextIndex.value = playerIdx
+        model.windowBase = base
+        model.setWindow(items, playerIdx)
         return true
     }
 
@@ -295,11 +241,11 @@ internal class QueueController(
 
     private fun persistWidgetWindow(station: Station) {
         val windows = QueuePolicy.widgetWindowIndices(
-            _source,
-            windowBase,
-            _upNextIndex.value,
+            model.source,
+            model.windowBase,
+            model.currentIndex,
             station.url,
-            _ringFallback,
+            model.ringFallback,
         ) ?: return
         val prefs = (context.applicationContext as KleeampApp).prefs
         scope.launch {
@@ -311,30 +257,30 @@ internal class QueueController(
     /**
      * The Up Next window plus the position inside it, so a cold start reopens
      * on the remembered queue. The window alone starts at the tapped track,
-     * so up to [PREV_KEEP] predecessors from the source ride in front of it -
+     * so up to [QueuePolicy.PREV_KEEP] predecessors from the source ride in front of it -
      * linear and clamped, never wrapped, so a finite list still reads in its
      * own order. Written at the same choke point as the widget window, so
      * both agree on what "now" means.
      */
     private fun persistQueue() {
-        val q = _upNext.value
+        val q = model.currentUpNext
         if (q.isEmpty()) return
         val prefs = (context.applicationContext as KleeampApp).prefs
         val (combined, queueIndex) =
-            QueuePolicy.persistQueueWindow(_source, windowBase, q, _upNextIndex.value)
+            QueuePolicy.persistQueueWindow(model.source, model.windowBase, q, model.currentIndex)
         scope.launch { prefs.setQueue(combined, queueIndex) }
     }
 
 
     /** Widget preview follows the same occurrence and finite tail as the Up Next screen. */
     internal fun upcomingStations(count: Int = 4): List<Station> =
-        QueuePolicy.upcomingSlice(_source, windowBase + _upNextIndex.value, _ringFallback, count)
+        QueuePolicy.upcomingSlice(model.source, model.windowBase + model.currentIndex, model.ringFallback, count)
 
     /** An Up Next tap targets this occurrence, including when a URL occurs twice. */
     fun playUpNextEntry(index: Int) {
-        if (index !in _upNext.value.indices) return
+        if (index !in model.currentUpNext.indices) return
         _navTimerJob?.cancel()
-        _navPending = windowBase + index
+        _navPending = model.windowBase + index
         applyNavigation()
     }
 
@@ -356,66 +302,20 @@ internal class QueueController(
         sourceIndex: Int? = null,
     ) {
         cancelPendingPlayback()
-        var q = _upNext.value
         if (from.isNotEmpty()) {
-            // A play tapped on a real screen hands navigation over to that list
-            // (linear, not the launch fallback ring).
-            if (!preserveOrder) _ringFallback = false
-            // Cap the queued list to a bounded window around the tapped track so
-            // a huge source (the whole local library) doesn't flood the queue.
-            // The active order is linear, or shuffled if shuffle is on; the
-            // tapped track keeps playing first, so it heads the shuffled list.
-            // Navigation (step) passes preserveOrder so it rides the already
-            // shuffled list instead of re-randomising - and restarting - on
-            // every prev/next.
-            val order = if (!preserveOrder && _shuffle.value && from.size > 1) {
-                QueuePolicy.shuffledKeepFirst(from, station)
-            } else {
-                from
-            }
-            // A fresh play from a list rebases the shuffle bookkeeping on that
-            // list's own order - already the user's chosen sort from the screen
-            // the tap came from. Without this rebase a stale _baseSource from an
-            // earlier play survives, so a later shuffle toggle rebuilds - and
-            // toggling off restores - the *previous* list instead of this one.
-            // Navigation (preserveOrder) rides the already-active order, so it
-            // must leave that bookkeeping untouched.
-            if (!preserveOrder) {
-                _baseSource = from
-            }
-            _source = order
-            val srcIdxO = sourceIndex?.takeIf { it in order.indices }
-                ?: order.indexOfFirst { it.url == station.url }.coerceAtLeast(0)
-            val playWindow = QueuePolicy.playWindow(order, srcIdxO)
-            windowBase = playWindow.base
-            q = playWindow.window
-            _upNext.value = q
-            _upNextIndex.value = playWindow.index
-        } else if (q.none { it.url == station.url }) {
-            _baseSource = listOf(station)
-            _source = listOf(station)
-            _upNext.value = listOf(station)
-            q = listOf(station)
-            _upNextIndex.value = 0
-            windowBase = 0
+            model.playFromList(station, from, preserveOrder, sourceIndex)
         } else {
-            _baseSource = q
-            val order = if (_shuffle.value && q.size > 1) QueuePolicy.shuffledKeepFirst(q, station) else q
-            _source = order
-            q = order
-            _upNext.value = order
-            _upNextIndex.value = order.indexOfFirst { it.url == station.url }
-            windowBase = 0
+            model.playFromWindow(station)
         }
-        val upNext = q
-        val start = windowBase + _upNextIndex.value.coerceAtLeast(0)
+        val upNext = model.currentUpNext
+        val start = model.windowBase + model.currentIndex.coerceAtLeast(0)
 
         PlaybackBus.publishStation(station)
-        PlaybackBus.publishSource(_source)
-        recordPlay(station)
+        PlaybackBus.publishSource(model.source)
+        history.record(station)
         android.util.Log.d(
             "kleeamp/wid",
-            "PLAY source.size=${_source.size} station=${station.name} preserve=$preserveOrder",
+            "PLAY source.size=${model.source.size} station=${station.name} preserve=$preserveOrder",
         )
         persistWidgetWindow(station)
         persistQueue()
@@ -460,7 +360,7 @@ internal class QueueController(
                     val wq = upNext.map { it.id }
                     val alreadyLoaded = cq.size == wq.size && wq.indices.all { cq[it] == wq[it] }
                     if (alreadyLoaded) {
-                        val target = _upNextIndex.value.coerceIn(0, c.mediaItemCount - 1)
+                        val target = model.currentIndex.coerceIn(0, c.mediaItemCount - 1)
                         val resume = upNext.getOrNull(target)?.let { resumeAt(it) } ?: 0L
                         c.seekTo(target, resume)
                     } else {
@@ -499,9 +399,9 @@ internal class QueueController(
     }
 
     private suspend fun extendWindow(c: Player) {
-        val source = _source
-        val oldUpNext = _upNext.value
-        val oldBase = windowBase
+        val source = model.source
+        val oldUpNext = model.currentUpNext
+        val oldBase = model.windowBase
         val end = oldBase + oldUpNext.size
         val newEnd = minOf(end + WINDOW - 2, source.size)
         if (end >= newEnd || !oldUpNext.all { it.isTrack }) return
@@ -509,15 +409,14 @@ internal class QueueController(
         // A mixed queue is advanced by the ended callback, one item at a time.
         if (!extra.all { it.isTrack }) return
         val items = extra.map { buildItem(it) }
-        if (_source !== source || _upNext.value != oldUpNext || swapping) return
+        if (model.source !== source || model.currentUpNext != oldUpNext || swapping) return
         val consumed = c.currentMediaItemIndex.coerceIn(0, oldUpNext.lastIndex)
         swapping = true
         try {
             c.addMediaItems(items)
             c.removeMediaItems(0, consumed)
-            windowBase = oldBase + consumed
-            _upNext.value = source.subList(windowBase, newEnd)
-            _upNextIndex.value = 0
+            model.windowBase = oldBase + consumed
+            model.setWindow(source.subList(model.windowBase, newEnd), 0)
         } finally {
             swapping = false
         }
@@ -525,21 +424,18 @@ internal class QueueController(
     }
 
     /**
-     * Advances the currently-windowed Media3 playlist to [start] in [_source],
+     * Advances the currently-windowed Media3 playlist to [start] in [model.source],
      * sliding [_upNext] to the matching bounded window. For short sources (whole
      * list fits) it pushes everything from [start] onward (or the whole list if
      * [start] is the tapped index and the list is short).
      */
     private suspend fun slideWindow(c: Player, start: Int) {
-        val src = _source
+        val src = model.source
         if (src.isEmpty()) return
         val abs = start.coerceIn(0, src.lastIndex)
-        val playWindow = QueuePolicy.playWindow(src, abs)
-        windowBase = playWindow.base
-        _upNext.value = playWindow.window
+        val playWindow = model.rewindow(abs)
         val slice = playWindow.window
         val index = playWindow.index
-        _upNextIndex.value = index
         // Raised around the swap so the half-second poller's sync() can't run
         // between [_upNext] being repointed at the new window and Media3 actually
         // switching. Un-guarded, that interleaving resolves the still-playing
@@ -572,9 +468,9 @@ internal class QueueController(
     /**
      * Toggles shuffled playback of the current list. When switched on, the list
      * the user is playing (local songs, favourites, a provider album, a station
-     * wall - whatever [_source] holds) is re-ordered so the order of the list is
+     * wall - whatever [model.source] holds) is re-ordered so the order of the list is
      * shuffled, always keeping the current item first. Toggling off restores
-     * the original linear order from [_baseSource]. On a lone item there is
+     * the original linear order from [model.baseSource]. On a lone item there is
      * nothing to reorder, so only the flag flips.
      */
     // Audibility-critical shuffle rebuild with live re-anchoring; splitting risks stop-the-world gaps.
@@ -586,10 +482,10 @@ internal class QueueController(
         // reach the loaded window - "a few random songs" - or show one song
         // while playing another) - but the audible item itself is never
         // touched, so there is no rebuffer or seek either.
-        val newOn = !_shuffle.value
+        val newOn = !model.shuffleOn
         val c = controller()
-        if (c == null || _source.isEmpty()) { _shuffle.value = newOn; onSync(); return }
-        val base = _baseSource.ifEmpty { _source }
+        if (c == null || model.source.isEmpty()) { model.setShuffled(newOn); onSync(); return }
+        val base = model.baseSource.ifEmpty { model.source }
 
         // Anchor "current" on Media3's LIVE audible item, not the model's
         // [_upNextIndex]. sync() reconciles the model to the player on a slow
@@ -603,23 +499,21 @@ internal class QueueController(
         val audibleId = if (c.mediaItemCount > 0) c.getMediaItemAt(
             c.currentMediaItemIndex.coerceIn(0, c.mediaItemCount - 1)
         ).mediaId else null
-        val currentAbs = windowBase + _upNextIndex.value
-        val current = _source.getOrNull(currentAbs)?.takeIf { it.id == audibleId }
-            ?: _source.firstOrNull { it.id == audibleId }
-            ?: _source.getOrNull(currentAbs)
-            ?: _baseSource.firstOrNull()
-            ?: _upNext.value.firstOrNull()
-            ?: _source.first()
-        _shuffle.value = newOn
+        val currentAbs = model.windowBase + model.currentIndex
+        val current = model.source.getOrNull(currentAbs)?.takeIf { it.id == audibleId }
+            ?: model.source.firstOrNull { it.id == audibleId }
+            ?: model.source.getOrNull(currentAbs)
+            ?: model.baseSource.firstOrNull()
+            ?: model.currentUpNext.firstOrNull()
+            ?: model.source.first()
+        model.setShuffled(newOn)
         val baseIndex = currentAbs.takeIf { base.getOrNull(it)?.url == current.url }
             ?: base.indexOfFirst { it.url == current.url }.coerceAtLeast(0)
         if (newOn) {
-            if (_source.size < 2) { onSync(); return }
-            _baseSource = base
-            _source = QueuePolicy.shuffleReorder(base, baseIndex, current)
+            if (model.source.size < 2) { onSync(); return }
+            model.replaceOrder(QueuePolicy.shuffleReorder(base, baseIndex, current), base)
         } else {
-            _baseSource = base
-            _source = base
+            model.replaceOrder(base, base)
         }
 
         // Re-anchor the model immediately so the panel shows the new order
@@ -630,14 +524,11 @@ internal class QueueController(
         _extending = null
         _shuffleJob?.cancel()
         _shuffleJob = null
-        val src = _source
+        val src = model.source
         val absJ = baseIndex
-        val playWindow = QueuePolicy.playWindow(src, absJ)
-        windowBase = playWindow.base
+        val playWindow = model.rewindow(absJ)
         val slice = playWindow.window
-        _upNext.value = slice
         val idx = playWindow.index
-        _upNextIndex.value = idx
         if (!(slice.all { it.isTrack } && slice.size > 1)) {
             // Anything else keeps the single-item shape play() gave it, and
             // that item is the current station itself: reordering the model
@@ -689,16 +580,13 @@ internal class QueueController(
                 var pi = p.currentMediaItemIndex.coerceIn(0, p.mediaItemCount - 1)
                 var audibleNow = p.getMediaItemAt(pi).mediaId
                 if (audibleNow != anchorId) {
-                    val retry = _source.firstOrNull { it.id == audibleNow }
+                    val retry = model.source.firstOrNull { it.id == audibleNow }
                     if (retry != null) {
                         anchorId = retry.id
-                        val abs2 = _source.indexOfFirst { it.url == retry.url }.coerceAtLeast(0)
-                        val retryWindow = QueuePolicy.playWindow(_source, abs2)
-                        windowBase = retryWindow.base
+                        val abs2 = model.source.indexOfFirst { it.url == retry.url }.coerceAtLeast(0)
+                        val retryWindow = model.rewindow(abs2)
                         anchorSlice = retryWindow.window
-                        _upNext.value = anchorSlice
                         anchorIdx = retryWindow.index
-                        _upNextIndex.value = anchorIdx
                         headItems = withContext(Dispatchers.Default) {
                             anchorSlice.subList(0, anchorIdx).map { buildItem(it) }
                         }
@@ -758,62 +646,16 @@ internal class QueueController(
     }
 
     /**
-     * Resolves [station]'s stream URL and builds its Media3 item on a
-     * background thread. Building an item renders the station's 512px artwork
-     * (a first-time PNG encode, plus a synchronised cache read on every hit) -
-     * enough to stall the main thread for every track in a queue window, which
-     * is exactly the jank felt touching a song in a long list. The tapped
-     * station is already published and composed synchronously when this runs,
-     * so the tap leg only ever brings back the finished items.
-     */
-    /**
-     * A part-listened track opens where it was left. Radio has no saved
-     * position, so this is 0 for everything but tracks, and local files
-     * additionally need the resume setting - the lookup is skipped entirely
-     * for anything that cannot resume.
-     */
-
-
-    /**
-     * Actual play order this session, oldest to newest. Prev and Next walk
-     * the loaded context; this stack is only their fallback while nothing
-     * is loaded, plus what the UI consults for the transport state. The
-     * [_source] list a tap came from is the *context* (what Next walks);
-     * this stack is what was genuinely heard. Recents stays a picker, never
-     * Up Next. Capped; consecutive duplicates never append, which also makes
-     * every record site safe to overlap (a tap plus the transition event
-     * for the same switch).
-     */
-    private val _past = ArrayDeque<Station>()
-    private var _pastIdx = -1
-    /** Cap: a session log, not an archive; persisted recents owns depth. */
-
-    /** Appends [station] unless it already tips the stack (re-seek, double record). */
-    private fun recordPlay(station: Station) = synchronized(_past) {
-        if (_past.getOrNull(_pastIdx)?.url == station.url) return@synchronized
-        // A fresh play after stepping back forks: the redo tail is dropped.
-        while (_pastIdx < _past.lastIndex) _past.removeLast()
-        _past.addLast(station)
-        _pastIdx = _past.lastIndex
-        while (_past.size > PAST_CAP) {
-            _past.removeFirst()
-            _pastIdx--
-        }
-    }
-
-    /**
      * Next follows the active Up Next list, including edits made after stepping back.
      * A history redo is only a fallback when no active source exists.
      */
     fun next() {
-        if (_source.isNotEmpty()) {
+        if (model.source.isNotEmpty()) {
             step(+1)
             return
         }
         // Claimed under lock so the goto's own record sees its tip and no-ops.
-        val fwd = synchronized(_past) {
-            if (_pastIdx < _past.lastIndex) _past[++_pastIdx] else null
-        }
+        val fwd = history.forward()
         if (fwd != null) {
             gotoHistory(fwd)
             return
@@ -829,13 +671,11 @@ internal class QueueController(
      * fallback when nothing is loaded yet.
      */
     fun prev() {
-        if (_source.isNotEmpty()) {
+        if (model.source.isNotEmpty()) {
             step(-1)
             return
         }
-        val back = synchronized(_past) {
-            if (_pastIdx > 0) _past[--_pastIdx] else null
-        }
+        val back = history.back()
         if (back != null) {
             gotoHistory(back)
             return
@@ -850,14 +690,13 @@ internal class QueueController(
      * as a fresh single - a foreign context, same as tapping it would.
      */
     private fun gotoHistory(station: Station) {
-        _ringFallback = false
+        model.ringFallback = false
         // A manual jump supersedes any coalescing burst still waiting.
         _navTimerJob?.cancel()
         _navTimerJob = null
-        val src = _source.ifEmpty { _fallbackSource }
-        val abs = src.indexOfFirst { it.url == station.url }
-        if (abs >= 0 && _source.isNotEmpty()) {
-            _navPending = abs
+        val target = history.gotoTarget(station, model.source, model.fallback)
+        if (target != null) {
+            _navPending = target
             applyNavigation()
         } else {
             play(station)
@@ -872,12 +711,12 @@ internal class QueueController(
      */
     // Coalesced tap targeting across pending, model, live and bus positions in one place.
     private fun step(delta: Int) {
-        val src = _source.ifEmpty { _fallbackSource }
+        val src = model.source.ifEmpty { model.fallback }
         if (src.isEmpty()) return
         // Base prev/next on the latest pending target (if any) rather than the
         // committed index, so rapid taps stack onto one another instead of all
         // collapsing onto the same song. Either way the value is an absolute
-        // index into [_source].
+        // index into [model.source].
         val pending = _navPending
         // The model records an explicit selection before Media3 finishes
         // loading it. Prefer that occurrence over a first-URL match, which
@@ -885,15 +724,15 @@ internal class QueueController(
         // playback restored outside this session's queue.
         val busUrl = PlaybackBus.station.value?.url
         val liveHere = controller()?.let { c ->
-            if (c.mediaItemCount > 1) windowBase + c.currentMediaItemIndex else null
+            if (c.mediaItemCount > 1) model.windowBase + c.currentMediaItemIndex else null
         }
         val here = QueuePolicy.resolveHere(
             pending,
-            QueuePolicy.modelHereIndex(windowBase, _upNextIndex.value, src, busUrl),
+            QueuePolicy.modelHereIndex(model.windowBase, model.currentIndex, src, busUrl),
             liveHere,
             QueuePolicy.busHereIndex(src, busUrl),
         )
-        val mode = if (_source.isEmpty() && pending == null) {
+        val mode = if (model.source.isEmpty() && pending == null) {
             val shown = (PlaybackBus.station.value ?: src.firstOrNull())?.let { s ->
                 src.indexOfFirst { it.url == s.url }
             } ?: -1
@@ -901,11 +740,11 @@ internal class QueueController(
             // from the restored song have somewhere to go.
             QueuePolicy.StepMode.Cold(shown)
         } else {
-            QueuePolicy.stepMode(_source.isEmpty(), pending != null, _ringFallback, shown = -1)
+            QueuePolicy.stepMode(model.source.isEmpty(), pending != null, model.ringFallback, shown = -1)
         }
-        if (mode != QueuePolicy.StepMode.Linear) _ringFallback = true
+        if (mode != QueuePolicy.StepMode.Linear) model.ringFallback = true
         val abs = QueuePolicy.stepTarget(mode, src.size, here, delta)
-        if (abs == here && _source.isNotEmpty() && pending == null) return
+        if (abs == here && model.source.isNotEmpty() && pending == null) return
 
         val now = android.os.SystemClock.uptimeMillis()
         val leadingEdge = now - _lastNavTapMs > NAV_DEBOUNCE_MS
@@ -940,31 +779,31 @@ internal class QueueController(
         // again" stall. Cancel any pending roll so a manual next/prev wins.
         _extending?.cancel()
         _extending = null
-        val src = _source.ifEmpty { _fallbackSource }
+        val src = model.source.ifEmpty { model.fallback }
         if (src.isEmpty()) return
-        val abs = if (_ringFallback && src.size > 1) ((target % src.size) + src.size) % src.size
+        val abs = if (model.ringFallback && src.size > 1) ((target % src.size) + src.size) % src.size
         else target.coerceIn(0, src.lastIndex)
         val station = src[abs]
-        val targetInWindow = abs in windowBase until (windowBase + _upNext.value.size)
-        if (targetInWindow) _upNextIndex.value = abs - windowBase
+        val targetInWindow = abs in model.windowBase until (model.windowBase + model.currentUpNext.size)
+        if (targetInWindow) model.setIndex(abs - model.windowBase)
 
         // Publish and persist the target exactly as play() would, so the UI and
         // the widget agree the instant the song is tapped - even before Media3
         // has switched over.
         PlaybackBus.publishStation(station)
         PlaybackBus.publishSource(src)
-        recordPlay(station)
+        history.record(station)
         PlaybackBus.publishError(null)
         PlaybackBus.publishFormat(StreamFormat())
         persistWidgetWindow(station)
         persistAndRefresh(station)
 
-        val q = _upNext.value
+        val q = model.currentUpNext
         val c = controller()
         val inWindow = c != null && !swapping && q.isNotEmpty() &&
-            abs >= windowBase && abs < windowBase + q.size
+            abs >= model.windowBase && abs < model.windowBase + q.size
         if (inWindow) {
-            val windowIndex = (abs - windowBase)
+            val windowIndex = (abs - model.windowBase)
             _navJob?.cancel()
             swapping = true
             val job = scope.launch(Dispatchers.Main + mediaFailureHandler) {
@@ -986,7 +825,7 @@ internal class QueueController(
                     } finally {
                         swapping = false
                     }
-                    _upNextIndex.value = windowIndex
+                    model.setIndex(windowIndex)
                 } else {
                     slideWindow(player, abs)
                     player.prepare()
@@ -1025,13 +864,15 @@ internal class QueueController(
         edit: ((MediaController) -> Unit)? = null,
     ) {
         cancelPendingPlayback()
-        val q = _upNext.value
-        _ringFallback = false
-        val idx = if (q.isEmpty()) -1 else _upNextIndex.value.coerceIn(0, q.lastIndex)
-        _source = _source.take(windowBase) + q + _source.drop(windowBase + previousUpNext.size)
-        _baseSource = _source
-        _upNextIndex.value = idx
-        PlaybackBus.publishSource(_source)
+        val q = model.currentUpNext
+        model.ringFallback = false
+        val idx = if (q.isEmpty()) -1 else model.currentIndex.coerceIn(0, q.lastIndex)
+        val head = model.source.take(model.windowBase)
+        val tail = model.source.drop(model.windowBase + previousUpNext.size)
+        model.source = head + q + tail
+        model.baseSource = model.source
+        model.setIndex(idx)
+        PlaybackBus.publishSource(model.source)
         PlaybackBus.station.value?.let(::persistWidgetWindow)
         swapping = controller() != null
         _navJob = scope.launch(Dispatchers.Main + mediaFailureHandler) {
@@ -1065,24 +906,23 @@ internal class QueueController(
 
     /** Insert without changing the originating list. Append means the full tail, not just its window. */
     fun addToUpNext(station: Station, at: Int = Int.MAX_VALUE) {
-        val previous = _upNext.value
-        if (at == Int.MAX_VALUE && windowBase + previous.size < _source.size) {
+        val previous = model.currentUpNext
+        if (at == Int.MAX_VALUE && model.windowBase + previous.size < model.source.size) {
             _extending?.cancel()
-            _source = _source + station
-            _baseSource = _source
-            PlaybackBus.publishSource(_source)
+            model.source = model.source + station
+            model.baseSource = model.source
+            PlaybackBus.publishSource(model.source)
             onSync()
             return
         }
-        val inserted = QueuePolicy.insert(previous, at, _upNextIndex.value, station)
-        _upNext.value = inserted.queue
-        _upNextIndex.value = inserted.currentIndex
+        val inserted = QueuePolicy.insert(previous, at, model.currentIndex, station)
+        model.setWindow(inserted.queue, inserted.currentIndex)
         applyUpNextToPlayer(previous)
     }
 
     /** Insert [station] right after the currently-playing item (play next). */
     fun playNext(station: Station) {
-        addToUpNext(station, QueuePolicy.playNextInsertAt(_upNext.value.size, _upNextIndex.value))
+        addToUpNext(station, QueuePolicy.playNextInsertAt(model.currentUpNext.size, model.currentIndex))
     }
 
     /** Play [station] with [from] as a brand-new Up Next list, replacing whatever was there. */
@@ -1092,39 +932,39 @@ internal class QueueController(
 
     /** Drop the station at [index], keeping the playing item stable. */
     fun removeFromUpNext(index: Int) {
-        val q = _upNext.value
+        val q = model.currentUpNext
         if (index !in q.indices) return
-        val (newQ, newIdx) = QueuePolicy.remove(q, index, _upNextIndex.value)
-        _upNext.value = newQ
-        _upNextIndex.value = newIdx
+        val (newQ, newIdx) = QueuePolicy.remove(q, index, model.currentIndex)
+        model.setWindow(newQ, newIdx)
         applyUpNextToPlayer(previousUpNext = q, edit = { it.removeMediaItem(index) })
     }
 
     /** Move the station at [from] to [to], keeping the playing item stable. */
     fun reorderUpNext(from: Int, to: Int) {
-        val q = _upNext.value
+        val q = model.currentUpNext
         if (from !in q.indices || to !in q.indices || from == to) return
-        val qi = _upNextIndex.value
+        val qi = model.currentIndex
         val item = q[from]
         val moved = q.toMutableList().apply {
             removeAt(from)
             add(to, item)
         }
-        _upNext.value = moved
-        // the playing station follows its item through the move
-        _upNextIndex.value = upNextIndexAfterMove(qi, from, to)
+        model.setWindow(
+            moved,
+            // the playing station follows its item through the move
+            upNextIndexAfterMove(qi, from, to),
+        )
         applyUpNextToPlayer(previousUpNext = q, edit = { it.moveMediaItem(from, to) })
     }
 
     /** Clear only pending playback; keep the audible item and its source identity. */
     fun clearUpNext() {
-        val previous = _upNext.value
-        val currentIndex = _upNextIndex.value
+        val previous = model.currentUpNext
+        val currentIndex = model.currentIndex
         val (kept, keptIdx) = QueuePolicy.clearPending(previous, currentIndex)
-        _upNext.value = kept
-        _upNextIndex.value = keptIdx
-        _source = kept
-        windowBase = 0
+        model.setWindow(kept, keptIdx)
+        model.source = kept
+        model.windowBase = 0
         applyUpNextToPlayer(previousUpNext = previous, edit = { player ->
             player.removeMediaItems(currentIndex + 1, player.mediaItemCount)
             if (currentIndex > 0) player.removeMediaItems(0, currentIndex)
@@ -1135,17 +975,18 @@ internal class QueueController(
         get() = swapping || _navJob?.isActive == true || _shuffleJob?.isActive == true
 
     /** Prev/next availability for the transport state; mirrors the nav math sync reads. */
-    internal fun navAvailability(): QueuePolicy.NavAvailability =
-        QueuePolicy.navAvailability(
-            _source,
-            _fallbackSource,
-            _ringFallback,
-            windowBase + _upNextIndex.value,
-            _upNextIndex.value,
-            PlaybackBus.station.value?.url,
-            _past.size,
-            _pastIdx,
+    internal fun navAvailability(): QueuePolicy.NavAvailability {
+        val nav = model.source.ifEmpty { model.fallback }
+        val busUrl = PlaybackBus.station.value?.url ?: nav.firstOrNull()?.url
+        return QueuePolicy.navAvailability(
+            model.source,
+            model.fallback,
+            model.ringFallback,
+            model.windowBase + model.currentIndex,
+            QueuePolicy.busHereIndex(nav, busUrl),
+            QueuePolicy.Trail(history.size, history.index),
         )
+    }
 
     /**
      * Reconciles the Up Next window against what Media3 is actually holding,
@@ -1154,7 +995,7 @@ internal class QueueController(
     // Media3-to-model reconciliation with id-based resolution; splitting risks shows-wrong-song bugs.
     @Suppress("CyclomaticComplexMethod")
     internal fun reconcileMediaWindow(c: Player, changingPlayback: Boolean) {
-        val q = _upNext.value
+        val q = model.currentUpNext
         if (!changingPlayback && c.mediaItemCount > 0 && q.isNotEmpty()) {
             val playerIndex = c.currentMediaItemIndex.coerceIn(0, c.mediaItemCount - 1)
             // Radio (or a lone track) is pushed as a single Media3 item while the
@@ -1180,7 +1021,7 @@ internal class QueueController(
             ) {
                 playerIndex
             } else if (c.mediaItemCount == 1) {
-                _upNextIndex.value.takeIf { q.getOrNull(it)?.id == curId }
+                model.currentIndex.takeIf { q.getOrNull(it)?.id == curId }
                     ?: q.indexOfFirst { it.id == curId }.takeIf { it >= 0 }
             } else if (mirrorUpNextFromMedia3(c)) {
                 playerIndex
@@ -1195,22 +1036,22 @@ internal class QueueController(
             // the resolved id against the published bus station keeps the title
             // honest even through a re-mirror.
             if (resolvedIndex != null) {
-                val resolved = _upNext.value.getOrNull(resolvedIndex)
-                _upNextIndex.value = resolvedIndex
+                val resolved = model.currentUpNext.getOrNull(resolvedIndex)
+                model.setIndex(resolvedIndex)
                 if (resolved != null && resolved.id != PlaybackBus.station.value?.id) {
                     PlaybackBus.publishStation(resolved)
                     // The heard trail learns Media3-side moves here - with
                     // the resolved index - never from raw transitions: a
                     // superseded seek's late transition would fork the trail
                     // with a ghost entry, and Prev would jump and loop.
-                    recordPlay(resolved)
+                    history.record(resolved)
                 }
             }
 
             // Append the next window and discard only played entries. Never seek
             // to the next song early or restart the audible item at a boundary.
-            if (oneToOne && windowBase + q.size < _source.size &&
-                _upNextIndex.value >= q.size - 2 && _extending?.isActive != true
+            if (oneToOne && model.windowBase + q.size < model.source.size &&
+                model.currentIndex >= q.size - 2 && _extending?.isActive != true
             ) {
                 _extending = scope.launch(Dispatchers.Main + mediaFailureHandler) { extendWindow(c) }
             }
@@ -1223,11 +1064,11 @@ internal class QueueController(
      */
     internal fun advanceOnEnded(changingPlayback: Boolean, ended: Boolean) {
         if (!changingPlayback && ended &&
-            _upNext.value.getOrNull(_upNextIndex.value)?.isTrack == true &&
-            windowBase + _upNextIndex.value < _source.lastIndex
+            model.currentUpNext.getOrNull(model.currentIndex)?.isTrack == true &&
+            model.windowBase + model.currentIndex < model.source.lastIndex
         ) {
             _navTimerJob?.cancel()
-            _navPending = windowBase + _upNextIndex.value + 1
+            _navPending = model.windowBase + model.currentIndex + 1
             applyNavigation()
         }
     }

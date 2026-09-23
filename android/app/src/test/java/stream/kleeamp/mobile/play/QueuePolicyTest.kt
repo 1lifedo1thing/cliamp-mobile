@@ -210,10 +210,8 @@ class QueuePolicyTest {
             fallback = list(4),
             ringFallback = false,
             absoluteIndex = -1,
-            upNextIndex = -1,
-            busStationUrl = "url-0",
-            pastSize = 0,
-            pastIndex = -1,
+            busHere = 0,
+            trail = QueuePolicy.Trail(size = 0, index = -1),
         )
         assertTrue(nav.hasPrev)
         assertTrue(nav.hasNext)
@@ -226,10 +224,8 @@ class QueuePolicyTest {
             fallback = emptyList(),
             ringFallback = false,
             absoluteIndex = 3,
-            upNextIndex = 3,
-            busStationUrl = null,
-            pastSize = 0,
-            pastIndex = -1,
+            busHere = null,
+            trail = QueuePolicy.Trail(size = 0, index = -1),
         )
         assertTrue(atEnd.hasPrev)
         assertFalse(atEnd.hasNext)
@@ -239,10 +235,8 @@ class QueuePolicyTest {
             fallback = listOf(list(4).first()),
             ringFallback = false,
             absoluteIndex = -1,
-            upNextIndex = -1,
-            busStationUrl = null,
-            pastSize = 3,
-            pastIndex = 2,
+            busHere = 0,
+            trail = QueuePolicy.Trail(size = 3, index = 2),
         )
         // Single-item fallback is not a ring; prev comes from the heard trail,
         // and nothing is redoable past its tip.

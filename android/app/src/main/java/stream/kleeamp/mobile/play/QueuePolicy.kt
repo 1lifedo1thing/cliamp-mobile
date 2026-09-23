@@ -135,33 +135,37 @@ object QueuePolicy {
         val hasNext: Boolean,
     )
 
+    /** Heard-trail position for cold-start prev/next: size and index. */
+    data class Trail(
+        val size: Int,
+        val index: Int,
+    )
+
     /**
      * Which list prev/next walks, from navigation state. Mirrors the sync
      * reader: the live source once anything has played, else the seeded
-     * fallback so stepping works from the song shown at launch.
+     * fallback so stepping works from the song shown at launch. [absoluteIndex]
+     * is the window base plus the Up Next index (-1 when nothing is current);
+     * [busHere] is the bus station resolved against the walked list, via
+     * [busHereIndex], for the cold case where the window holds no position.
      */
     fun navAvailability(
         source: List<Station>,
         fallback: List<Station>,
         ringFallback: Boolean,
         absoluteIndex: Int,
-        upNextIndex: Int,
-        busStationUrl: String?,
-        pastSize: Int,
-        pastIndex: Int,
+        busHere: Int?,
+        trail: Trail,
     ): NavAvailability {
         val nav = source.ifEmpty { fallback }
-        val ring = nav.size > 1 && (source.isEmpty() || ringFallback)
-        val navIdx = if (ring) -1
-        else if (source.isNotEmpty() || upNextIndex >= 0) absoluteIndex
-        else {
-            val url = busStationUrl ?: nav.firstOrNull()?.url
-            url?.let { u -> nav.indexOfFirst { it.url == u } } ?: -1
+        if (nav.size > 1 && (source.isEmpty() || ringFallback)) {
+            return NavAvailability(hasPrev = true, hasNext = true)
         }
+        val navIdx = if (source.isNotEmpty() || absoluteIndex >= 0) absoluteIndex
+        else busHere ?: -1
         return NavAvailability(
-            hasPrev = if (ring) true else (source.isEmpty() && pastIndex > 0) ||
-                (nav.isNotEmpty() && navIdx > 0),
-            hasNext = if (ring) true else (source.isEmpty() && pastIndex < pastSize - 1) ||
+            hasPrev = (source.isEmpty() && trail.index > 0) || (nav.isNotEmpty() && navIdx > 0),
+            hasNext = (source.isEmpty() && trail.index < trail.size - 1) ||
                 (nav.size > 1 && navIdx in 0 until nav.lastIndex),
         )
     }

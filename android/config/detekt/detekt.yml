@@ -54,9 +54,12 @@ complexity:
     thresholdInClasses: 20
     thresholdInObjects: 20
     thresholdInInterfaces: 15
-    # Prefs is one accessor per setting by design.
+    # Prefs is one accessor per setting by design. Test sources hold one
+    # function per case by design (detekt's own defaults exclude them too).
     excludes:
       - '**/Prefs.kt'
+      - '**/test/**'
+      - '**/androidTest/**'
 
 style:
   MagicNumber:
