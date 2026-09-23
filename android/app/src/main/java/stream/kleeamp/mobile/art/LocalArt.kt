@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data
+package stream.kleeamp.mobile.art
 
 import android.content.ContentResolver
 import android.graphics.Bitmap
@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.LruCache
 import kotlinx.coroutines.withContext
+import stream.kleeamp.mobile.model.Station
 
 /**
  * Artwork for local songs. Unlike radio streams, local files have real covers

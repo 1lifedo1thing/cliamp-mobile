@@ -1,8 +1,8 @@
 package stream.kleeamp.mobile.data.provider
 
 import kotlinx.coroutines.flow.StateFlow
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.StationSource
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.playback.StreamResolver
 
 /**

@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data
+package stream.kleeamp.mobile.prefs
 
 import android.content.Context
 import androidx.datastore.core.DataStore
@@ -24,13 +24,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import stream.kleeamp.mobile.data.db.KleeampDatabase
-import stream.kleeamp.mobile.data.db.CustomStationEntity
-import stream.kleeamp.mobile.data.db.FavoriteEntity
-import stream.kleeamp.mobile.data.db.HistoryEntity
-import stream.kleeamp.mobile.data.db.toEntity
-import stream.kleeamp.mobile.data.provider.SecretStore
+import stream.kleeamp.mobile.db.KleeampDatabase
+import stream.kleeamp.mobile.db.CustomStationEntity
+import stream.kleeamp.mobile.db.FavoriteEntity
+import stream.kleeamp.mobile.db.HistoryEntity
+import stream.kleeamp.mobile.db.toEntity
+import stream.kleeamp.mobile.prefs.SecretStore
 import stream.kleeamp.mobile.net.Http
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.data.DownloadEntry
 
 private val Context.settingsStore: DataStore<Preferences> by preferencesDataStore("cliamp")
 

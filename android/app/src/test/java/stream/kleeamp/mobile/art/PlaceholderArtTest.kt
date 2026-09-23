@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data
+package stream.kleeamp.mobile.art
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

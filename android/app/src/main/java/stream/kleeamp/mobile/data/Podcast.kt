@@ -1,6 +1,9 @@
 package stream.kleeamp.mobile.data
 
 import kotlinx.serialization.Serializable
+import stream.kleeamp.mobile.art.StationArtSource
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.StationSource
 
 /**
  * A show, as opposed to an episode.

@@ -6,8 +6,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
-import stream.kleeamp.mobile.data.Prefs
-import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.prefs.Prefs
+import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.data.provider.ProviderAccount
 import stream.kleeamp.mobile.data.provider.ProviderStore
 import stream.kleeamp.mobile.data.provider.browseClient

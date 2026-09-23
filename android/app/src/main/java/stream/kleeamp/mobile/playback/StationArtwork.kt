@@ -8,8 +8,8 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.core.content.res.ResourcesCompat
 import stream.kleeamp.mobile.R
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.StationSource
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.StationSource
 import java.io.ByteArrayOutputStream
 
 /**

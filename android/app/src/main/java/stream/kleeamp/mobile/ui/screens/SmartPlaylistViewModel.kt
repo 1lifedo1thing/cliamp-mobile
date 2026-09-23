@@ -10,14 +10,14 @@ import stream.kleeamp.mobile.data.DownloadEntry
 import stream.kleeamp.mobile.data.DownloadStore
 import stream.kleeamp.mobile.data.DirectoryState
 import stream.kleeamp.mobile.data.LocalLibrary
-import stream.kleeamp.mobile.data.PlaylistSort
 import stream.kleeamp.mobile.data.PodcastRepository
 import stream.kleeamp.mobile.data.PodcastShow
-import stream.kleeamp.mobile.data.Prefs
+import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.data.Repository
 import stream.kleeamp.mobile.data.ShowState
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.StationSource
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.StationSource
+import stream.kleeamp.mobile.prefs.PlaylistSort
 
 class SmartPlaylistViewModel(
     val kindName: String,

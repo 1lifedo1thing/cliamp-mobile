@@ -47,11 +47,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.data.DirectoryQuery
-import stream.kleeamp.mobile.data.Prefs
+import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.data.PodcastRepository
 import stream.kleeamp.mobile.data.PodcastShow
 import stream.kleeamp.mobile.data.Repository
-import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.play.PlayFromList
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection

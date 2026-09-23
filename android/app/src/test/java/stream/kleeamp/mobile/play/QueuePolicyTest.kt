@@ -4,8 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.StationSource
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.StationSource
 
 class QueuePolicyTest {
     private fun station(i: Int) = Station(

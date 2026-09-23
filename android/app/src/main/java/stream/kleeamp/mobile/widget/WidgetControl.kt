@@ -14,8 +14,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import stream.kleeamp.mobile.KleeampApp
 import stream.kleeamp.mobile.data.CliampRadio
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.wrapNext
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.wrapNext
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlaybackService
 import kotlin.coroutines.resume

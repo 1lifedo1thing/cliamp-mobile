@@ -2,8 +2,8 @@ package stream.kleeamp.mobile.ui.screens
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.StationSource
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.playback.upNextIndices
 
 class UpNextEntriesTest {

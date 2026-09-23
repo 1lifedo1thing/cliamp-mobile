@@ -17,8 +17,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.StationSource
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.ui.screens.upNextEntries
 
 /** Checks navigation selection against the same entries rendered by Up next, without audio I/O. */

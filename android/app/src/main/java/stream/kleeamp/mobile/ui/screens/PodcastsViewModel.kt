@@ -12,7 +12,7 @@ import stream.kleeamp.mobile.data.PodcastDirectoryState
 import stream.kleeamp.mobile.data.PodcastQuery
 import stream.kleeamp.mobile.data.PodcastRepository
 import stream.kleeamp.mobile.data.PodcastShow
-import stream.kleeamp.mobile.data.Prefs
+import stream.kleeamp.mobile.prefs.Prefs
 
 class PodcastsViewModel(
     private val podcasts: PodcastRepository,

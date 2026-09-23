@@ -11,17 +11,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import stream.kleeamp.mobile.data.db.KleeampDatabase
-import stream.kleeamp.mobile.data.db.SftpDao
-import stream.kleeamp.mobile.data.db.SftpIndexEntity
-import stream.kleeamp.mobile.data.db.SftpTrackEntity
+import stream.kleeamp.mobile.db.KleeampDatabase
+import stream.kleeamp.mobile.db.SftpDao
+import stream.kleeamp.mobile.db.SftpIndexEntity
+import stream.kleeamp.mobile.db.SftpTrackEntity
+import stream.kleeamp.mobile.art.StationArtSource
+import stream.kleeamp.mobile.db.toEntity
 
 private const val TAG = "kleeamp/sftp"
 
 /**
  * The scanned contents of every SSH account, and the scans that fill them.
  *
- * A singleton for the same reason [stream.kleeamp.mobile.data.StationArtSource]
+ * A singleton for the same reason [stream.kleeamp.mobile.art.StationArtSource]
  * is one: the data source that feeds the player runs on ExoPlayer's loader
  * thread with nothing but an account id and a path, and threading a context and
  * a repository down to it would mean plumbing through Media3.

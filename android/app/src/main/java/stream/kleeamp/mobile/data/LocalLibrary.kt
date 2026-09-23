@@ -15,9 +15,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import stream.kleeamp.mobile.data.db.KleeampDatabase
-import stream.kleeamp.mobile.data.db.LocalSongEntity
+import stream.kleeamp.mobile.db.KleeampDatabase
+import stream.kleeamp.mobile.db.LocalSongEntity
 import java.io.File
+import stream.kleeamp.mobile.art.LocalArt
+import stream.kleeamp.mobile.art.StationArtSource
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.StationSource
 
 /**
  * A song picked out of the device. The [station] form is what the rest of the

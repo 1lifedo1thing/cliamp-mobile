@@ -63,10 +63,10 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.util.UnstableApi
-import stream.kleeamp.mobile.data.PlaceholderArt
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.StationArtSource
-import stream.kleeamp.mobile.data.StationSource
+import stream.kleeamp.mobile.art.PlaceholderArt
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.art.StationArtSource
+import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.data.visualizer.StereoMetrics
 import stream.kleeamp.mobile.data.visualizer.Visualizer
 import stream.kleeamp.mobile.playback.AudioOutput
@@ -96,6 +96,8 @@ import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Mono
+import stream.kleeamp.mobile.art.LocalArt
+import stream.kleeamp.mobile.model.NowPlaying
 
 // Swallows taps, drags and swipes entirely so a gesture landing on the cover
 // art or the inert strip around it can never fall through to advance or
@@ -778,7 +780,7 @@ private fun peekArt(station: Station?): ImageBitmap? {
     if (station == null) return null
     val bmp = when {
         station.source == StationSource.Local ->
-            stream.kleeamp.mobile.data.LocalArt.cached(station.cover)
+            stream.kleeamp.mobile.art.LocalArt.cached(station.cover)
                 ?: StationArtSource.cached(station)
         station.cover.startsWith("http") ->
             StationArtSource.cachedUrl(station.cover)
@@ -825,7 +827,7 @@ private fun StationArt(station: Station?, modifier: Modifier = Modifier) {
             // local files carry a content:// uri, provider covers an http one,
             // and only radio needs the og:image discovery dance
             s.source == StationSource.Local ->
-                stream.kleeamp.mobile.data.LocalArt.bitmapFor(s.cover, context.contentResolver)
+                stream.kleeamp.mobile.art.LocalArt.bitmapFor(s.cover, context.contentResolver)
                     ?: StationArtSource.bitmapFor(s) // else embedded album art
             s.cover.startsWith("http") -> StationArtSource.bitmapForUrl(s.cover)
             else -> StationArtSource.bitmapFor(s)

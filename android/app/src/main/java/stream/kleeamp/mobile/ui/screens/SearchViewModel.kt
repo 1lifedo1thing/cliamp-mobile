@@ -23,9 +23,9 @@ import stream.kleeamp.mobile.data.PodcastDirectory
 import stream.kleeamp.mobile.data.PodcastEpisode
 import stream.kleeamp.mobile.data.PodcastRepository
 import stream.kleeamp.mobile.data.PodcastShow
-import stream.kleeamp.mobile.data.Prefs
+import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.data.Repository
-import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.data.provider.ProviderAccount
 import stream.kleeamp.mobile.data.provider.ProviderStore
 import stream.kleeamp.mobile.ui.search.GlobalSearch

@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.data.visualizer.MeterCore
 import stream.kleeamp.mobile.data.visualizer.Visualizer
 import stream.kleeamp.mobile.theme.LocalPalette
+import stream.kleeamp.mobile.model.NowPlaying
 
 /**
  * The signature element. Each column is three layers, all anchored to the

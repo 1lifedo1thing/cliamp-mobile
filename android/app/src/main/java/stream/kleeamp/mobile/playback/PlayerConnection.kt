@@ -24,10 +24,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import stream.kleeamp.mobile.KleeampApp
-import stream.kleeamp.mobile.data.Prefs
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.StationSource
-import stream.kleeamp.mobile.data.wrapNext
+import stream.kleeamp.mobile.prefs.Prefs
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.StationSource
+import stream.kleeamp.mobile.model.wrapNext
 import stream.kleeamp.mobile.play.QueuePolicy
 import stream.kleeamp.mobile.widget.WidgetRenderer
 import java.io.IOException

@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data
+package stream.kleeamp.mobile.net
 
 import kotlinx.coroutines.delay
 

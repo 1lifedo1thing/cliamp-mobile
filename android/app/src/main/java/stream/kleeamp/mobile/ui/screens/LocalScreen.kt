@@ -59,22 +59,20 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import stream.kleeamp.mobile.data.LocalArt
-import stream.kleeamp.mobile.data.StationArtSource
+import stream.kleeamp.mobile.art.LocalArt
+import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.data.LocalLibrary
 import stream.kleeamp.mobile.data.PlaylistStore
 import stream.kleeamp.mobile.data.PodcastShow
 import stream.kleeamp.mobile.data.Repository
 import stream.kleeamp.mobile.data.ShowState
-import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.data.DirectoryState
 import stream.kleeamp.mobile.data.EpisodeProgress
-import stream.kleeamp.mobile.data.StationSource
+import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.data.toStation
-import stream.kleeamp.mobile.data.PlaylistSort
 import stream.kleeamp.mobile.data.durationLabel
 import stream.kleeamp.mobile.data.downloadSizeLabel
-import stream.kleeamp.mobile.data.sortedStations
 import stream.kleeamp.mobile.data.provider.ProviderAccount
 import stream.kleeamp.mobile.data.provider.ProviderCatalog
 import stream.kleeamp.mobile.data.provider.displayName
@@ -105,6 +103,8 @@ import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Mono
+import stream.kleeamp.mobile.prefs.PlaylistSort
+import stream.kleeamp.mobile.prefs.sortedStations
 
 /** The pinned, auto-populated smart playlists on the library tab. */
 enum class SmartKind(val label: String) {

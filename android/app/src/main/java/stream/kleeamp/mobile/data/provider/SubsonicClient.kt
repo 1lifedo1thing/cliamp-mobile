@@ -9,6 +9,7 @@ import stream.kleeamp.mobile.net.Http
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.net.URLEncoder
+import stream.kleeamp.mobile.prefs.SecretStore
 
 /**
  * Navidrome speaks the Subsonic API, so this one client also covers Gonic,

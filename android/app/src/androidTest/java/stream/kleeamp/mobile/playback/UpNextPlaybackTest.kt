@@ -27,8 +27,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import stream.kleeamp.mobile.KleeampApp
 import stream.kleeamp.mobile.MainActivity
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.StationSource
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.widget.WidgetControl
 
 /** Real Media3 playback with local silent WAV fixtures; no remote audio dependency. */

@@ -10,7 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.playback.upNextIndices
-import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.model.Station
 
 internal data class UpNextEntry(val key: String, val upNextIndex: Int, val station: Station)
 

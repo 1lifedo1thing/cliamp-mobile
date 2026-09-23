@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data
+package stream.kleeamp.mobile.art
 
 import android.content.Context
 import android.graphics.Bitmap

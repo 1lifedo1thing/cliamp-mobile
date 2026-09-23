@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data.provider
+package stream.kleeamp.mobile.prefs
 
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties

@@ -20,6 +20,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import okhttp3.Request
 import stream.kleeamp.mobile.net.Http
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.prefs.Prefs
 
 /**
  * One fetched file: where it lives plus the station snapshot that plays it.

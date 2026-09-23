@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data
+package stream.kleeamp.mobile.art
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -9,6 +9,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.Request
 import stream.kleeamp.mobile.net.Http
 import java.net.URI
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.StationSource
 
 /**
  * Cover work - reading files, MediaMetadataRetriever, decoding - all funnelled

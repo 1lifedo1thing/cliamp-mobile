@@ -3,6 +3,7 @@ package stream.kleeamp.mobile.data.visualizer
 import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.sin
+import stream.kleeamp.mobile.model.NowPlaying
 
 /**
  * The visualizer families the app can draw, shared by the in-app Compose

@@ -56,13 +56,14 @@ import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.KleeampApp
 import stream.kleeamp.mobile.MainActivity
 import stream.kleeamp.mobile.R
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.StationArtSource
-import stream.kleeamp.mobile.data.StationSource
-import stream.kleeamp.mobile.data.wrapNext
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.art.StationArtSource
+import stream.kleeamp.mobile.model.StationSource
+import stream.kleeamp.mobile.model.wrapNext
 import stream.kleeamp.mobile.net.Http
 import stream.kleeamp.mobile.net.redactUrl
 import stream.kleeamp.mobile.widget.WidgetRenderer
+import stream.kleeamp.mobile.prefs.Prefs
 
 /**
  * Owns the player, the session and the audio effects. Everything the phone
@@ -140,7 +141,7 @@ class PlaybackService : MediaSessionService() {
     @Volatile private var spectrumWanted = true
     private var artworkJob: kotlinx.coroutines.Job? = null
     private var reconnector: Reconnector? = null
-    private lateinit var prefs0: stream.kleeamp.mobile.data.Prefs
+    private lateinit var prefs0: stream.kleeamp.mobile.prefs.Prefs
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     override fun onCreate() {

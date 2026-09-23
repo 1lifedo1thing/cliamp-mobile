@@ -1,7 +1,6 @@
 package stream.kleeamp.mobile.play
 
-import stream.kleeamp.mobile.data.Station
-// after STEP 07 this import becomes stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.Station
 
 /**
  * Pure queue math behind [stream.kleeamp.mobile.playback.PlayerConnection].

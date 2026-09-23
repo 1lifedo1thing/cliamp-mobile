@@ -39,8 +39,8 @@ import stream.kleeamp.mobile.data.downloadSizeLabel
 import stream.kleeamp.mobile.data.EpisodeProgress
 import stream.kleeamp.mobile.data.PodcastEpisode
 import stream.kleeamp.mobile.data.PodcastShow
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.StationArtSource
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.data.toStation
 import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.KleeampIcons

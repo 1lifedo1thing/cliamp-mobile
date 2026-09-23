@@ -6,9 +6,9 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.data.LocalLibrary
-import stream.kleeamp.mobile.data.Prefs
+import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.data.Scrobbler
-import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.model.Station
 
 class SongInfoViewModel(
     val stationUrl: String,

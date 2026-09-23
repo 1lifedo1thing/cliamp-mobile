@@ -7,9 +7,9 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.data.LocalLibrary
 import stream.kleeamp.mobile.data.PlaylistStore
-import stream.kleeamp.mobile.data.Prefs
+import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.data.Repository
-import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.model.Station
 
 /**
  * The add-to-playlist picker: one song, favourites plus every user playlist.

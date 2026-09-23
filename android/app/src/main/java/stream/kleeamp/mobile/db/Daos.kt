@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data.db
+package stream.kleeamp.mobile.db
 
 import androidx.room.Dao
 import androidx.room.Insert

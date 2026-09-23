@@ -1,7 +1,7 @@
 package stream.kleeamp.mobile.ui.search
 
 import stream.kleeamp.mobile.data.PodcastShow
-import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.data.provider.ProviderAccount
 
 /** A single fuzzy result from any source, labelled with where it came from. */

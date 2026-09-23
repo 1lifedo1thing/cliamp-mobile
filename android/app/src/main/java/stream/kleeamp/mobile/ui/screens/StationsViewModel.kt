@@ -12,9 +12,9 @@ import stream.kleeamp.mobile.data.DirectoryQuery
 import stream.kleeamp.mobile.data.DirectoryState
 import stream.kleeamp.mobile.data.DirectoryStats
 import stream.kleeamp.mobile.data.NameCount
-import stream.kleeamp.mobile.data.Prefs
+import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.data.Repository
-import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.model.Station
 
 class StationsViewModel(
     private val repository: Repository,

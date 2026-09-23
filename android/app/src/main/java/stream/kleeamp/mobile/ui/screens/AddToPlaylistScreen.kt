@@ -29,7 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.data.PlaylistStore
-import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.KleeampTextField
 import stream.kleeamp.mobile.chrome.Gutter

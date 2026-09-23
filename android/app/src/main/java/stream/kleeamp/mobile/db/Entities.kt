@@ -1,10 +1,10 @@
-package stream.kleeamp.mobile.data.db
+package stream.kleeamp.mobile.db
 
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.StationSource
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.StationSource
 
 /**
  * A station, however it was obtained. Radio, a local file and a provider track

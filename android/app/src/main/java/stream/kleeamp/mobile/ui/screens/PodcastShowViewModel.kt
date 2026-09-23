@@ -13,9 +13,9 @@ import stream.kleeamp.mobile.data.DownloadStore
 import stream.kleeamp.mobile.data.EpisodeProgress
 import stream.kleeamp.mobile.data.PodcastRepository
 import stream.kleeamp.mobile.data.PodcastShow
-import stream.kleeamp.mobile.data.Prefs
+import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.data.ShowState
-import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.model.Station
 
 class PodcastShowViewModel(
     private val podcasts: PodcastRepository,

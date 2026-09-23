@@ -22,8 +22,8 @@ import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.KleeampApp
 import stream.kleeamp.mobile.MainActivity
 import stream.kleeamp.mobile.R
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.StationSource
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.chrome.clock
 import stream.kleeamp.mobile.theme.KleeampPalette
 import stream.kleeamp.mobile.theme.decodeCustomThemeOrNull

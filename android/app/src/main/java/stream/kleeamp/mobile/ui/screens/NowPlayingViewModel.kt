@@ -7,8 +7,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import stream.kleeamp.mobile.data.Prefs
-import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.prefs.Prefs
+import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection
 import stream.kleeamp.mobile.playback.upNextIndices

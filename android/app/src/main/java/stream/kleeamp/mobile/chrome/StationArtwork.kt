@@ -9,10 +9,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import stream.kleeamp.mobile.data.LocalArt
-import stream.kleeamp.mobile.data.PlaceholderArt
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.StationArtSource
+import stream.kleeamp.mobile.art.LocalArt
+import stream.kleeamp.mobile.art.PlaceholderArt
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.art.StationArtSource
 
 /**
  * Shared small-cover lookup for library and queue rows; decoding uses the

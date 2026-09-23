@@ -3,9 +3,10 @@ package stream.kleeamp.mobile.data.provider
 import android.content.Context
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import stream.kleeamp.mobile.data.db.KleeampDatabase
-import stream.kleeamp.mobile.data.db.ProviderEntity
+import stream.kleeamp.mobile.db.KleeampDatabase
+import stream.kleeamp.mobile.db.ProviderEntity
 import stream.kleeamp.mobile.net.Http
+import stream.kleeamp.mobile.prefs.SecretStore
 
 /**
  * Configured provider accounts. Secret fields are encrypted through

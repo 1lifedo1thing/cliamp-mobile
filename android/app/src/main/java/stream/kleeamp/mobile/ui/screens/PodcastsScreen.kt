@@ -46,7 +46,7 @@ import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.data.PodcastDirectory
 import stream.kleeamp.mobile.data.PodcastQuery
 import stream.kleeamp.mobile.data.PodcastShow
-import stream.kleeamp.mobile.data.StationArtSource
+import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.ChipDropdown
 import stream.kleeamp.mobile.chrome.ChipOption

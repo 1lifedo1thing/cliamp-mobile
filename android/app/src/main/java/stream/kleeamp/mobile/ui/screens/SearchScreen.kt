@@ -47,10 +47,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import stream.kleeamp.mobile.data.PodcastShow
-import stream.kleeamp.mobile.data.PlaceholderArt
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.StationArtSource
-import stream.kleeamp.mobile.data.StationSource
+import stream.kleeamp.mobile.art.PlaceholderArt
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.art.StationArtSource
+import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.data.provider.ProviderAccount
 import stream.kleeamp.mobile.data.provider.displayName
 import stream.kleeamp.mobile.chrome.BackChevron

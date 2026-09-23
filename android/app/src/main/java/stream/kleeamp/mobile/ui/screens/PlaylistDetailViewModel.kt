@@ -8,16 +8,16 @@ import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.data.DirectoryState
 import stream.kleeamp.mobile.data.DownloadStore
 import stream.kleeamp.mobile.data.LocalLibrary
-import stream.kleeamp.mobile.data.PlaylistSort
 import stream.kleeamp.mobile.data.PlaylistStore
 import stream.kleeamp.mobile.data.PodcastRepository
 import stream.kleeamp.mobile.data.PodcastShow
-import stream.kleeamp.mobile.data.Prefs
+import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.data.Repository
 import stream.kleeamp.mobile.data.ShowState
-import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.data.StationSource
-import stream.kleeamp.mobile.data.sortedStations
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.StationSource
+import stream.kleeamp.mobile.prefs.PlaylistSort
+import stream.kleeamp.mobile.prefs.sortedStations
 
 class PlaylistDetailViewModel(
     private val slug: String,

@@ -1,6 +1,8 @@
 package stream.kleeamp.mobile.data
 
 import stream.kleeamp.mobile.net.Http
+import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.StationSource
 
 /**
  * cliamp's own stations. The fifteen below are the offline seed - the same list

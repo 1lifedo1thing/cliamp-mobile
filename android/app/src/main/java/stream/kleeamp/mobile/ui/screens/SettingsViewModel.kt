@@ -9,9 +9,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.data.DirectoryStats
-import stream.kleeamp.mobile.data.Prefs
+import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.data.Repository
-import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.theme.KleeampPalette
 import stream.kleeamp.mobile.theme.decodeCustomThemeOrNull
 import stream.kleeamp.mobile.theme.customThemeNameOrNull

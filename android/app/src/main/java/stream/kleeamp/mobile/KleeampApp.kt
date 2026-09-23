@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
-import stream.kleeamp.mobile.data.Prefs
+import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.data.provider.ProviderStore
 import stream.kleeamp.mobile.data.provider.SftpLibrary
 import stream.kleeamp.mobile.data.provider.audiobookshelf
@@ -23,9 +23,9 @@ import stream.kleeamp.mobile.playback.SftpDataSource
 import stream.kleeamp.mobile.playback.StreamResolver
 import stream.kleeamp.mobile.net.Http
 import stream.kleeamp.mobile.data.DownloadStore
-import stream.kleeamp.mobile.data.LocalArt
+import stream.kleeamp.mobile.art.LocalArt
 import stream.kleeamp.mobile.data.LocalLibrary
-import stream.kleeamp.mobile.data.StationArtSource
+import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.data.PlaylistStore
 import stream.kleeamp.mobile.data.PodcastRepository
 import stream.kleeamp.mobile.data.RadioBrowser

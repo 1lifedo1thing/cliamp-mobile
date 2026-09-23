@@ -32,8 +32,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
-import stream.kleeamp.mobile.data.Prefs
-import stream.kleeamp.mobile.data.Station
+import stream.kleeamp.mobile.prefs.Prefs
+import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.data.visualizer.StereoMetrics
 import stream.kleeamp.mobile.data.visualizer.Visualizer
 import stream.kleeamp.mobile.playback.EqPresets

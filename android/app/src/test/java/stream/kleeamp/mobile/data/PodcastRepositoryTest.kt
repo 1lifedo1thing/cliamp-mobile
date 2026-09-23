@@ -12,12 +12,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import stream.kleeamp.mobile.data.db.CacheDao
-import stream.kleeamp.mobile.data.db.EpisodeProgressEntity
-import stream.kleeamp.mobile.data.db.KvCacheEntity
-import stream.kleeamp.mobile.data.db.PodcastDao
-import stream.kleeamp.mobile.data.db.PodcastFeedCacheEntity
-import stream.kleeamp.mobile.data.db.PodcastSubscriptionEntity
+import stream.kleeamp.mobile.db.CacheDao
+import stream.kleeamp.mobile.db.EpisodeProgressEntity
+import stream.kleeamp.mobile.db.KvCacheEntity
+import stream.kleeamp.mobile.db.PodcastDao
+import stream.kleeamp.mobile.db.PodcastFeedCacheEntity
+import stream.kleeamp.mobile.db.PodcastSubscriptionEntity
 import stream.kleeamp.mobile.net.Http
 
 @OptIn(ExperimentalCoroutinesApi::class)

@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.data
+package stream.kleeamp.mobile.model
 
 import kotlinx.serialization.Serializable
 
