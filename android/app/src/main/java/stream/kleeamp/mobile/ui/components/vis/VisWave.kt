@@ -10,7 +10,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import stream.kleeamp.mobile.data.visualizer.WaveCore
-import stream.kleeamp.mobile.ui.theme.LocalPalette
+import stream.kleeamp.mobile.theme.LocalPalette
 
 /**
  * The oscilloscope, ported from cliamp's braille wave (`ui/vis_wave.go`):

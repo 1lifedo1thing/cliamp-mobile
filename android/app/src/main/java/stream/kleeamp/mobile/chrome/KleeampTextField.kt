@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.components
+package stream.kleeamp.mobile.chrome
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.text.BasicTextField
@@ -16,9 +16,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import stream.kleeamp.mobile.ui.theme.KleeampType
-import stream.kleeamp.mobile.ui.theme.LocalPalette
-import stream.kleeamp.mobile.ui.theme.Mono
+import stream.kleeamp.mobile.theme.KleeampType
+import stream.kleeamp.mobile.theme.LocalPalette
+import stream.kleeamp.mobile.theme.Mono
 
 /**
  * The one text input in the app. Styled to the concept, but text entry itself

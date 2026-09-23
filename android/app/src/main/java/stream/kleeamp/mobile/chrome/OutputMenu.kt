@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.components
+package stream.kleeamp.mobile.chrome
 
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
@@ -30,10 +30,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import stream.kleeamp.mobile.playback.AudioOutput
 import stream.kleeamp.mobile.playback.AudioOutputs
-import stream.kleeamp.mobile.ui.theme.KleeampShape
-import stream.kleeamp.mobile.ui.theme.KleeampType
-import stream.kleeamp.mobile.ui.theme.LocalPalette
-import stream.kleeamp.mobile.ui.theme.Mono
+import stream.kleeamp.mobile.theme.KleeampShape
+import stream.kleeamp.mobile.theme.KleeampType
+import stream.kleeamp.mobile.theme.LocalPalette
+import stream.kleeamp.mobile.theme.Mono
 
 const val SYSTEM_OUTPUT_ID = -1
 

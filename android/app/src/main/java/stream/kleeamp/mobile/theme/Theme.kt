@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.theme
+package stream.kleeamp.mobile.theme
 
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background

@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.components
+package stream.kleeamp.mobile.chrome
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
@@ -72,11 +72,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.window.Popup
-import stream.kleeamp.mobile.ui.theme.KleeampShape
-import stream.kleeamp.mobile.ui.theme.KleeampType
-import stream.kleeamp.mobile.ui.theme.LocalHapticsEnabled
-import stream.kleeamp.mobile.ui.theme.LocalPalette
-import stream.kleeamp.mobile.ui.theme.Mono
+import stream.kleeamp.mobile.theme.KleeampShape
+import stream.kleeamp.mobile.theme.KleeampType
+import stream.kleeamp.mobile.theme.LocalHapticsEnabled
+import stream.kleeamp.mobile.theme.LocalPalette
+import stream.kleeamp.mobile.theme.Mono
 
 /**
  * A key with real mechanical travel.

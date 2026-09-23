@@ -5,7 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import stream.kleeamp.mobile.ui.theme.LocalPalette
+import stream.kleeamp.mobile.theme.LocalPalette
 import kotlin.math.floor
 
 @Composable

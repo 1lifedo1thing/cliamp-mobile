@@ -27,16 +27,22 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import stream.kleeamp.mobile.chrome.Gutter
+import stream.kleeamp.mobile.chrome.HairlineDivider
+import stream.kleeamp.mobile.chrome.KleeampIcons
+import stream.kleeamp.mobile.chrome.ArtPlate
+import stream.kleeamp.mobile.chrome.GlyphPlate
+import stream.kleeamp.mobile.chrome.microPress
 import stream.kleeamp.mobile.data.LocalArt
 import stream.kleeamp.mobile.data.PlaceholderArt
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationArtSource
 import stream.kleeamp.mobile.data.StationSource
 import stream.kleeamp.mobile.data.sourceLine
-import stream.kleeamp.mobile.ui.theme.KleeampShape
-import stream.kleeamp.mobile.ui.theme.KleeampType
-import stream.kleeamp.mobile.ui.theme.LocalPalette
-import stream.kleeamp.mobile.ui.theme.Mono
+import stream.kleeamp.mobile.theme.KleeampShape
+import stream.kleeamp.mobile.theme.KleeampType
+import stream.kleeamp.mobile.theme.LocalPalette
+import stream.kleeamp.mobile.theme.Mono
 
 /** The lockscreen widget's in-app twin: art plate, one key. */
 @Composable

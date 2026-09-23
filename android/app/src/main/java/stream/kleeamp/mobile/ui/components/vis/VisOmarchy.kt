@@ -7,7 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import stream.kleeamp.mobile.data.visualizer.OmarchyField
-import stream.kleeamp.mobile.ui.theme.LocalPalette
+import stream.kleeamp.mobile.theme.LocalPalette
 
 @Composable
 internal fun VisOmarchy(frame: OmarchyFrame, modifier: Modifier) {

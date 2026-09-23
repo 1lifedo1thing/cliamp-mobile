@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.components
+package stream.kleeamp.mobile.chrome
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.data.visualizer.MeterCore
 import stream.kleeamp.mobile.data.visualizer.Visualizer
-import stream.kleeamp.mobile.ui.theme.LocalPalette
+import stream.kleeamp.mobile.theme.LocalPalette
 
 /**
  * The signature element. Each column is three layers, all anchored to the

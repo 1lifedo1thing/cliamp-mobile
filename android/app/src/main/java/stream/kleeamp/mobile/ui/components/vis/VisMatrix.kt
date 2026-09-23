@@ -9,7 +9,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import stream.kleeamp.mobile.data.visualizer.MatrixCore
-import stream.kleeamp.mobile.ui.theme.LocalPalette
+import stream.kleeamp.mobile.theme.LocalPalette
 
 @Composable
 internal fun VisMatrix(frame: MatrixFrame, modifier: Modifier) {

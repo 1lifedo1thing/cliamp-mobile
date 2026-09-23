@@ -21,8 +21,8 @@ import stream.kleeamp.mobile.data.visualizer.StereoMetrics
 import stream.kleeamp.mobile.data.visualizer.VisMath
 import stream.kleeamp.mobile.data.visualizer.Visualizer
 import stream.kleeamp.mobile.playback.PlaybackBus
-import stream.kleeamp.mobile.ui.components.BrickMeter
-import stream.kleeamp.mobile.ui.components.rememberMeter
+import stream.kleeamp.mobile.chrome.BrickMeter
+import stream.kleeamp.mobile.chrome.rememberMeter
 
 @Stable
 sealed class VisFrame(val columns: Int, val minTickNs: Long) {

@@ -24,10 +24,10 @@ import stream.kleeamp.mobile.MainActivity
 import stream.kleeamp.mobile.R
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationSource
-import stream.kleeamp.mobile.ui.clock
-import stream.kleeamp.mobile.ui.theme.KleeampPalette
-import stream.kleeamp.mobile.ui.theme.decodeCustomThemeOrNull
-import stream.kleeamp.mobile.ui.theme.paletteFor
+import stream.kleeamp.mobile.chrome.clock
+import stream.kleeamp.mobile.theme.KleeampPalette
+import stream.kleeamp.mobile.theme.decodeCustomThemeOrNull
+import stream.kleeamp.mobile.theme.paletteFor
 
 const val WIDGET_ACTION_TOGGLE = "stream.kleeamp.mobile.widget.TOGGLE"
 const val WIDGET_ACTION_NEXT = "stream.kleeamp.mobile.widget.NEXT"

@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.components
+package stream.kleeamp.mobile.chrome
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor

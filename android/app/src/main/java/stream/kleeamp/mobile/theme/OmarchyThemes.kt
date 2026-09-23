@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.theme
+package stream.kleeamp.mobile.theme
 
 import androidx.compose.ui.graphics.Color
 

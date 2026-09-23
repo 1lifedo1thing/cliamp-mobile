@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.components
+package stream.kleeamp.mobile.chrome
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -30,10 +30,10 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import stream.kleeamp.mobile.ui.theme.KleeampShape
-import stream.kleeamp.mobile.ui.theme.KleeampType
-import stream.kleeamp.mobile.ui.theme.LocalPalette
-import stream.kleeamp.mobile.ui.theme.Mono
+import stream.kleeamp.mobile.theme.KleeampShape
+import stream.kleeamp.mobile.theme.KleeampType
+import stream.kleeamp.mobile.theme.LocalPalette
+import stream.kleeamp.mobile.theme.Mono
 
 /** A deliberate right swipe adds the row to Up Next. The backdrop copies
  * [stream.kleeamp.mobile.ui.screens.UpNextSwipeToRemove] mirrored: a static

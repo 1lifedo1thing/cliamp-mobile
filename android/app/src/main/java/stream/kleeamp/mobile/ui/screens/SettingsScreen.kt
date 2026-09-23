@@ -42,27 +42,27 @@ import androidx.core.net.toUri
 import stream.kleeamp.mobile.BuildConfig
 import stream.kleeamp.mobile.R
 import stream.kleeamp.mobile.data.visualizer.Visualizer
-import stream.kleeamp.mobile.ui.components.Chip
-import stream.kleeamp.mobile.ui.components.KleeampIcons
-import stream.kleeamp.mobile.ui.components.KleeampToggle
-import stream.kleeamp.mobile.ui.components.Gutter
-import stream.kleeamp.mobile.ui.components.scrollToTop
-import stream.kleeamp.mobile.ui.components.HairlineDivider
-import stream.kleeamp.mobile.ui.components.MainLayout
-import stream.kleeamp.mobile.ui.components.MechSlider
-import stream.kleeamp.mobile.ui.components.microPress
-import stream.kleeamp.mobile.ui.components.SectionLabel
-import stream.kleeamp.mobile.ui.theme.AmberPalette
-import stream.kleeamp.mobile.ui.theme.KleeampShape
-import stream.kleeamp.mobile.ui.theme.KleeampType
-import stream.kleeamp.mobile.ui.theme.DarkPalette
-import stream.kleeamp.mobile.ui.theme.LightPalette
-import stream.kleeamp.mobile.ui.theme.LocalPalette
-import stream.kleeamp.mobile.ui.theme.OmarchyPalettes
-import stream.kleeamp.mobile.ui.theme.OxideLightPalette
-import stream.kleeamp.mobile.ui.theme.OxidePalette
-import stream.kleeamp.mobile.ui.theme.OmarchyThemeKeys
-import stream.kleeamp.mobile.ui.theme.Mono
+import stream.kleeamp.mobile.chrome.Chip
+import stream.kleeamp.mobile.chrome.KleeampIcons
+import stream.kleeamp.mobile.chrome.KleeampToggle
+import stream.kleeamp.mobile.chrome.Gutter
+import stream.kleeamp.mobile.chrome.scrollToTop
+import stream.kleeamp.mobile.chrome.HairlineDivider
+import stream.kleeamp.mobile.chrome.MainLayout
+import stream.kleeamp.mobile.chrome.MechSlider
+import stream.kleeamp.mobile.chrome.microPress
+import stream.kleeamp.mobile.chrome.SectionLabel
+import stream.kleeamp.mobile.theme.AmberPalette
+import stream.kleeamp.mobile.theme.KleeampShape
+import stream.kleeamp.mobile.theme.KleeampType
+import stream.kleeamp.mobile.theme.DarkPalette
+import stream.kleeamp.mobile.theme.LightPalette
+import stream.kleeamp.mobile.theme.LocalPalette
+import stream.kleeamp.mobile.theme.OmarchyPalettes
+import stream.kleeamp.mobile.theme.OxideLightPalette
+import stream.kleeamp.mobile.theme.OxidePalette
+import stream.kleeamp.mobile.theme.OmarchyThemeKeys
+import stream.kleeamp.mobile.theme.Mono
 import kotlin.math.roundToInt
 
 @Composable
@@ -340,7 +340,7 @@ private fun ToggleRow(title: String, checked: Boolean, onChange: (Boolean) -> Un
 @Composable
 private fun ThemeRow(
     key: String,
-    theme: stream.kleeamp.mobile.ui.theme.KleeampPalette,
+    theme: stream.kleeamp.mobile.theme.KleeampPalette,
     selected: Boolean,
     subtitle: String? = null,
     // False on the last row before a section break: the divider runs full

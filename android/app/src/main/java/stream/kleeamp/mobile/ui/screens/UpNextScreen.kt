@@ -56,22 +56,22 @@ import stream.kleeamp.mobile.data.durationLabel
 import stream.kleeamp.mobile.data.visualizer.Visualizer
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection
-import stream.kleeamp.mobile.ui.components.rememberStationThumbnail
-import stream.kleeamp.mobile.ui.components.KleeampIcons
-import stream.kleeamp.mobile.ui.components.HairlineDivider
-import stream.kleeamp.mobile.ui.components.BackChevron
+import stream.kleeamp.mobile.chrome.rememberStationThumbnail
+import stream.kleeamp.mobile.chrome.KleeampIcons
+import stream.kleeamp.mobile.chrome.HairlineDivider
+import stream.kleeamp.mobile.chrome.BackChevron
 import stream.kleeamp.mobile.ui.components.vis.VisualizerMeter
-import stream.kleeamp.mobile.ui.components.Gutter
-import stream.kleeamp.mobile.ui.components.ListRow
-import stream.kleeamp.mobile.ui.components.ScreenHeader
-import stream.kleeamp.mobile.ui.components.SectionLabel
-import stream.kleeamp.mobile.ui.components.microPress
-import stream.kleeamp.mobile.ui.theme.KleeampPalette
-import stream.kleeamp.mobile.ui.theme.KleeampShape
-import stream.kleeamp.mobile.ui.theme.KleeampType
-import stream.kleeamp.mobile.ui.theme.LocalHapticsEnabled
-import stream.kleeamp.mobile.ui.theme.LocalPalette
-import stream.kleeamp.mobile.ui.theme.Mono
+import stream.kleeamp.mobile.chrome.Gutter
+import stream.kleeamp.mobile.chrome.ListRow
+import stream.kleeamp.mobile.chrome.ScreenHeader
+import stream.kleeamp.mobile.chrome.SectionLabel
+import stream.kleeamp.mobile.chrome.microPress
+import stream.kleeamp.mobile.theme.KleeampPalette
+import stream.kleeamp.mobile.theme.KleeampShape
+import stream.kleeamp.mobile.theme.KleeampType
+import stream.kleeamp.mobile.theme.LocalHapticsEnabled
+import stream.kleeamp.mobile.theme.LocalPalette
+import stream.kleeamp.mobile.theme.Mono
 
 /**
  * The always-available Up Next panel: a pinned "now playing" card on top, then

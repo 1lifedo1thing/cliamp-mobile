@@ -53,22 +53,22 @@ import stream.kleeamp.mobile.data.StationArtSource
 import stream.kleeamp.mobile.data.StationSource
 import stream.kleeamp.mobile.data.provider.ProviderAccount
 import stream.kleeamp.mobile.data.provider.displayName
-import stream.kleeamp.mobile.ui.components.BackChevron
-import stream.kleeamp.mobile.ui.components.Chip
-import stream.kleeamp.mobile.ui.components.KleeampIcons
-import stream.kleeamp.mobile.ui.components.KleeampTextField
-import stream.kleeamp.mobile.ui.components.Gutter
-import stream.kleeamp.mobile.ui.components.HairlineDivider
-import stream.kleeamp.mobile.ui.components.ListRow
-import stream.kleeamp.mobile.ui.components.ScreenHeader
-import stream.kleeamp.mobile.ui.components.SectionLabel
+import stream.kleeamp.mobile.chrome.BackChevron
+import stream.kleeamp.mobile.chrome.Chip
+import stream.kleeamp.mobile.chrome.KleeampIcons
+import stream.kleeamp.mobile.chrome.KleeampTextField
+import stream.kleeamp.mobile.chrome.Gutter
+import stream.kleeamp.mobile.chrome.HairlineDivider
+import stream.kleeamp.mobile.chrome.ListRow
+import stream.kleeamp.mobile.chrome.ScreenHeader
+import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.ui.search.Fuzzy
 import stream.kleeamp.mobile.ui.search.SearchHit
-import stream.kleeamp.mobile.ui.theme.KleeampShape
-import stream.kleeamp.mobile.ui.theme.KleeampType
-import stream.kleeamp.mobile.ui.theme.LocalHapticsEnabled
-import stream.kleeamp.mobile.ui.theme.LocalPalette
-import stream.kleeamp.mobile.ui.theme.Mono
+import stream.kleeamp.mobile.theme.KleeampShape
+import stream.kleeamp.mobile.theme.KleeampType
+import stream.kleeamp.mobile.theme.LocalHapticsEnabled
+import stream.kleeamp.mobile.theme.LocalPalette
+import stream.kleeamp.mobile.theme.Mono
 
 /**
  * The app-wide fuzzy finder: one query spans local songs, favourites, the

@@ -18,8 +18,8 @@ import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.KleeampApp
 import stream.kleeamp.mobile.MainActivity
 import stream.kleeamp.mobile.R
-import stream.kleeamp.mobile.ui.theme.paletteFor
-import stream.kleeamp.mobile.ui.theme.decodeCustomThemeOrNull
+import stream.kleeamp.mobile.theme.paletteFor
+import stream.kleeamp.mobile.theme.decodeCustomThemeOrNull
 
 /**
  * Static home-screen search bar: one tappable row that opens the app's
@@ -85,7 +85,7 @@ object SearchWidgetRenderer {
 
     internal fun buildViews(
         ctx: Context,
-        p: stream.kleeamp.mobile.ui.theme.KleeampPalette,
+        p: stream.kleeamp.mobile.theme.KleeampPalette,
         compact: Boolean = false,
     ): RemoteViews {
         val rv = RemoteViews(

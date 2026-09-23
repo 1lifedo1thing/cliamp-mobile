@@ -27,14 +27,14 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import stream.kleeamp.mobile.ui.components.BackChevron
-import stream.kleeamp.mobile.ui.components.KleeampTextField
-import stream.kleeamp.mobile.ui.components.Gutter
-import stream.kleeamp.mobile.ui.components.HairlineDivider
-import stream.kleeamp.mobile.ui.components.MechKey
-import stream.kleeamp.mobile.ui.theme.KleeampType
-import stream.kleeamp.mobile.ui.theme.LocalPalette
-import stream.kleeamp.mobile.ui.theme.Mono
+import stream.kleeamp.mobile.chrome.BackChevron
+import stream.kleeamp.mobile.chrome.KleeampTextField
+import stream.kleeamp.mobile.chrome.Gutter
+import stream.kleeamp.mobile.chrome.HairlineDivider
+import stream.kleeamp.mobile.chrome.MechKey
+import stream.kleeamp.mobile.theme.KleeampType
+import stream.kleeamp.mobile.theme.LocalPalette
+import stream.kleeamp.mobile.theme.Mono
 
 /**
  * The ListenBrainz setup wizard, cut to the provider wizard's pattern:

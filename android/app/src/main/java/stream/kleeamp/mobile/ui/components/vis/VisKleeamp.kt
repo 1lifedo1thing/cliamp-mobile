@@ -22,9 +22,9 @@ import androidx.compose.ui.unit.em
 import stream.kleeamp.mobile.data.visualizer.BurstCore
 import stream.kleeamp.mobile.data.visualizer.KleeampCore
 import stream.kleeamp.mobile.data.visualizer.VisMath
-import stream.kleeamp.mobile.ui.theme.KleeampPalette
-import stream.kleeamp.mobile.ui.theme.LocalPalette
-import stream.kleeamp.mobile.ui.theme.Poppins
+import stream.kleeamp.mobile.theme.KleeampPalette
+import stream.kleeamp.mobile.theme.LocalPalette
+import stream.kleeamp.mobile.theme.Poppins
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min

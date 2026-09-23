@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui
+package stream.kleeamp.mobile.chrome
 
 /**
  * Shared ms -> "h:mm:ss"/"m:ss" clock, and large-number compaction. These were

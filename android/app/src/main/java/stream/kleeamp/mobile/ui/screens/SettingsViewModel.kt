@@ -12,10 +12,10 @@ import stream.kleeamp.mobile.data.DirectoryStats
 import stream.kleeamp.mobile.data.Prefs
 import stream.kleeamp.mobile.data.Repository
 import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.ui.theme.KleeampPalette
-import stream.kleeamp.mobile.ui.theme.decodeCustomThemeOrNull
-import stream.kleeamp.mobile.ui.theme.customThemeNameOrNull
-import stream.kleeamp.mobile.ui.theme.parseCustomTheme
+import stream.kleeamp.mobile.theme.KleeampPalette
+import stream.kleeamp.mobile.theme.decodeCustomThemeOrNull
+import stream.kleeamp.mobile.theme.customThemeNameOrNull
+import stream.kleeamp.mobile.theme.parseCustomTheme
 
 class SettingsViewModel(
     private val prefs: Prefs,

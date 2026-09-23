@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.components
+package stream.kleeamp.mobile.chrome
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -13,7 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
-import stream.kleeamp.mobile.ui.theme.LocalHapticsEnabled
+import stream.kleeamp.mobile.theme.LocalHapticsEnabled
 
 /**
  * The app's feel layer for flat controls: a quick springing scale-down with a

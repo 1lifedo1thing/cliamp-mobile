@@ -38,18 +38,18 @@ import stream.kleeamp.mobile.data.visualizer.StereoMetrics
 import stream.kleeamp.mobile.data.visualizer.Visualizer
 import stream.kleeamp.mobile.playback.EqPresets
 import stream.kleeamp.mobile.playback.PlaybackBus
-import stream.kleeamp.mobile.ui.components.BackChevron
-import stream.kleeamp.mobile.ui.components.Chip
-import stream.kleeamp.mobile.ui.components.KleeampToggle
-import stream.kleeamp.mobile.ui.components.Gutter
-import stream.kleeamp.mobile.ui.components.HairlineDivider
-import stream.kleeamp.mobile.ui.components.MechSliderVertical
-import stream.kleeamp.mobile.ui.components.MeterSize
-import stream.kleeamp.mobile.ui.components.SectionLabel
+import stream.kleeamp.mobile.chrome.BackChevron
+import stream.kleeamp.mobile.chrome.Chip
+import stream.kleeamp.mobile.chrome.KleeampToggle
+import stream.kleeamp.mobile.chrome.Gutter
+import stream.kleeamp.mobile.chrome.HairlineDivider
+import stream.kleeamp.mobile.chrome.MechSliderVertical
+import stream.kleeamp.mobile.chrome.MeterSize
+import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.ui.components.vis.VisualizerMeter
-import stream.kleeamp.mobile.ui.theme.KleeampType
-import stream.kleeamp.mobile.ui.theme.LocalPalette
-import stream.kleeamp.mobile.ui.theme.Mono
+import stream.kleeamp.mobile.theme.KleeampType
+import stream.kleeamp.mobile.theme.LocalPalette
+import stream.kleeamp.mobile.theme.Mono
 
 private val bandLabels = listOf("60", "150", "400", "1k", "3k", "8k", "16k")
 private val rulerLabels = listOf("32", "125", "500", "2k", "8k", "20k")

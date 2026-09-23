@@ -1,4 +1,4 @@
-package stream.kleeamp.mobile.ui.theme
+package stream.kleeamp.mobile.theme
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

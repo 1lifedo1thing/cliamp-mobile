@@ -47,23 +47,23 @@ import stream.kleeamp.mobile.data.PodcastDirectory
 import stream.kleeamp.mobile.data.PodcastQuery
 import stream.kleeamp.mobile.data.PodcastShow
 import stream.kleeamp.mobile.data.StationArtSource
-import stream.kleeamp.mobile.ui.components.Chip
-import stream.kleeamp.mobile.ui.components.ChipDropdown
-import stream.kleeamp.mobile.ui.components.ChipOption
-import stream.kleeamp.mobile.ui.components.KleeampIcons
-import stream.kleeamp.mobile.ui.components.EmptyNote
-import stream.kleeamp.mobile.ui.components.GridListToggle
-import stream.kleeamp.mobile.ui.components.microPress
-import stream.kleeamp.mobile.ui.components.Gutter
-import stream.kleeamp.mobile.ui.components.ListRow
-import stream.kleeamp.mobile.ui.components.RetryNote
-import stream.kleeamp.mobile.ui.components.MainLayout
-import stream.kleeamp.mobile.ui.components.SectionLabel
-import stream.kleeamp.mobile.ui.components.scrollToTop
-import stream.kleeamp.mobile.ui.theme.KleeampShape
-import stream.kleeamp.mobile.ui.theme.KleeampType
-import stream.kleeamp.mobile.ui.theme.LocalPalette
-import stream.kleeamp.mobile.ui.theme.Mono
+import stream.kleeamp.mobile.chrome.Chip
+import stream.kleeamp.mobile.chrome.ChipDropdown
+import stream.kleeamp.mobile.chrome.ChipOption
+import stream.kleeamp.mobile.chrome.KleeampIcons
+import stream.kleeamp.mobile.chrome.EmptyNote
+import stream.kleeamp.mobile.chrome.GridListToggle
+import stream.kleeamp.mobile.chrome.microPress
+import stream.kleeamp.mobile.chrome.Gutter
+import stream.kleeamp.mobile.chrome.ListRow
+import stream.kleeamp.mobile.chrome.RetryNote
+import stream.kleeamp.mobile.chrome.MainLayout
+import stream.kleeamp.mobile.chrome.SectionLabel
+import stream.kleeamp.mobile.chrome.scrollToTop
+import stream.kleeamp.mobile.theme.KleeampShape
+import stream.kleeamp.mobile.theme.KleeampType
+import stream.kleeamp.mobile.theme.LocalPalette
+import stream.kleeamp.mobile.theme.Mono
 
 private enum class Pane(val label: String) {
     All("all"), Subs("subscribed"), Directory("directory")

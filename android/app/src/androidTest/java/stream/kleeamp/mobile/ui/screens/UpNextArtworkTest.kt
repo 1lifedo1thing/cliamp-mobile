@@ -31,7 +31,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.StationSource
-import stream.kleeamp.mobile.ui.theme.KleeampTheme
+import stream.kleeamp.mobile.theme.KleeampTheme
 
 @RunWith(AndroidJUnit4::class)
 class UpNextArtworkTest {

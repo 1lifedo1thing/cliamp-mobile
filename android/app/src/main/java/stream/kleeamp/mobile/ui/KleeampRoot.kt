@@ -55,10 +55,10 @@ import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.play.PlayFromList
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection
-import stream.kleeamp.mobile.ui.components.KleeampTabBar
-import stream.kleeamp.mobile.ui.components.KleeampTabRail
+import stream.kleeamp.mobile.chrome.KleeampTabBar
+import stream.kleeamp.mobile.chrome.KleeampTabRail
 import stream.kleeamp.mobile.ui.components.MiniPlayer
-import stream.kleeamp.mobile.ui.components.Tab
+import stream.kleeamp.mobile.chrome.Tab
 import stream.kleeamp.mobile.ui.screens.SearchScreen
 import stream.kleeamp.mobile.ui.screens.FavScope
 import stream.kleeamp.mobile.ui.screens.LibraryPlaylistPane
@@ -94,7 +94,7 @@ import stream.kleeamp.mobile.ui.screens.SearchViewModel
 import stream.kleeamp.mobile.ui.screens.SettingsViewModel
 import stream.kleeamp.mobile.ui.screens.ProviderWizardViewModel
 import stream.kleeamp.mobile.ui.screens.ScrobbleWizardViewModel
-import stream.kleeamp.mobile.ui.theme.LocalPalette
+import stream.kleeamp.mobile.theme.LocalPalette
 
 /**
  * Forward push: the new page slides in from the right edge while the page

@@ -30,18 +30,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.data.PlaylistStore
 import stream.kleeamp.mobile.data.Station
-import stream.kleeamp.mobile.ui.components.KleeampIcons
-import stream.kleeamp.mobile.ui.components.KleeampTextField
-import stream.kleeamp.mobile.ui.components.Gutter
-import stream.kleeamp.mobile.ui.components.ListRow
-import stream.kleeamp.mobile.ui.components.MainLayout
-import stream.kleeamp.mobile.ui.components.SectionLabel
-import stream.kleeamp.mobile.ui.components.microPress
-import stream.kleeamp.mobile.ui.components.scrollToTop
-import stream.kleeamp.mobile.ui.theme.KleeampShape
-import stream.kleeamp.mobile.ui.theme.KleeampType
-import stream.kleeamp.mobile.ui.theme.LocalPalette
-import stream.kleeamp.mobile.ui.theme.Mono
+import stream.kleeamp.mobile.chrome.KleeampIcons
+import stream.kleeamp.mobile.chrome.KleeampTextField
+import stream.kleeamp.mobile.chrome.Gutter
+import stream.kleeamp.mobile.chrome.ListRow
+import stream.kleeamp.mobile.chrome.MainLayout
+import stream.kleeamp.mobile.chrome.SectionLabel
+import stream.kleeamp.mobile.chrome.microPress
+import stream.kleeamp.mobile.chrome.scrollToTop
+import stream.kleeamp.mobile.theme.KleeampShape
+import stream.kleeamp.mobile.theme.KleeampType
+import stream.kleeamp.mobile.theme.LocalPalette
+import stream.kleeamp.mobile.theme.Mono
 
 /**
  * The add-to-playlist page: one song, favourites plus every user playlist.
