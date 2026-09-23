@@ -49,9 +49,48 @@ class KleeampApp : Application() {
     val podcasts: PodcastRepository by lazy { PodcastRepository(this, appScope) }
     val localLibrary: LocalLibrary by lazy { LocalLibrary(this, appScope) }
     val playlists: PlaylistStore by lazy { PlaylistStore(this) }
-    val player: PlayerConnection by lazy { PlayerConnection(this, CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)) }
+    val player: PlayerConnection by lazy {
+        PlayerConnection(
+            this,
+            CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+            streamResolver,
+            resumeLookup = { station -> podcasts.resumePosition(station) },
+            progressSink = { station, position, duration ->
+                podcasts.saveProgress(station, position, duration)
+            },
+            scrobbleTick = { station, playing, durationMs ->
+                scrobbler.onTick(station, playing, durationMs)
+            },
+        )
+    }
     val downloads: DownloadStore by lazy { DownloadStore(this, prefs, appScope) }
     val scrobbler: Scrobbler by lazy { Scrobbler(this, prefs, appScope) }
+
+    /**
+     * Provider stream URLs are signed per request, so they are resolved
+     * here at play time rather than stored. Episode positions are the one
+     * thing the player cannot work out for itself — wired here for the same
+     * reason: playback should not be holding a database.
+     */
+    val streamResolver: StreamResolver by lazy {
+        StreamResolver(
+            providerResolver = resolve@ { accountId, trackId ->
+                val account = providers.read().firstOrNull { it.id == accountId } ?: return@resolve null
+                when (account.providerKey) {
+                    // Not an HTTP URL at all: the track id is the remote path, and
+                    // the data source opens it over the account's SSH connection.
+                    "ssh" -> ResolvedStream(SftpDataSource.uriFor(account.id, trackId))
+                    "jellyfin", "emby" -> account.jellyfin().stream(trackId)
+                    "plex" -> account.plex().stream(trackId)
+                    "abs" -> account.audiobookshelf().stream(trackId)
+                    "lyrion" -> account.lyrion().stream(trackId)
+                    else -> ResolvedStream(account.subsonic().streamUrl(trackId))
+                }
+            },
+            // A fetched episode plays from its file instead of the network.
+            downloadLookup = { url -> downloads.localPath(url) },
+        )
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -63,34 +102,6 @@ class KleeampApp : Application() {
         // The disk cache only TTL-checks on read, so prune stale + excess
         // files once per launch instead of growing forever.
         appScope.launch { StationArtSource.pruneDisk() }
-
-        // Provider stream URLs are signed per request, so they are resolved
-        // here at play time rather than stored.
-        StreamResolver.providerResolver = resolve@ { accountId, trackId ->
-            val account = providers.read().firstOrNull { it.id == accountId } ?: return@resolve null
-            when (account.providerKey) {
-                // Not an HTTP URL at all: the track id is the remote path, and
-                // the data source opens it over the account's SSH connection.
-                "ssh" -> ResolvedStream(SftpDataSource.uriFor(account.id, trackId))
-                "jellyfin", "emby" -> account.jellyfin().stream(trackId)
-                "plex" -> account.plex().stream(trackId)
-                "abs" -> account.audiobookshelf().stream(trackId)
-                "lyrion" -> account.lyrion().stream(trackId)
-                else -> ResolvedStream(account.subsonic().streamUrl(trackId))
-            }
-        }
-        // Episode positions are the one thing the player cannot work out for
-        // itself, and the one thing a podcast is useless without. Wired here
-        // for the same reason the provider resolver is: playback should not be
-        // holding a database.
-        StreamResolver.downloadLookup = { url -> downloads.localPath(url) }
-        player.scrobbleTick = { station, playing, durationMs ->
-            scrobbler.onTick(station, playing, durationMs)
-        }
-        player.resumeLookup = { station -> podcasts.resumePosition(station) }
-        player.progressSink = { station, position, duration ->
-            podcasts.saveProgress(station, position, duration)
-        }
 
         repository.bootstrap()
         podcasts.bootstrap()

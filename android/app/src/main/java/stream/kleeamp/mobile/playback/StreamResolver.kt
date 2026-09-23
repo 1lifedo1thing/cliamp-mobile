@@ -20,38 +20,41 @@ data class ResolvedStream(
  * Directory entries sometimes point at a playlist file rather than the stream.
  * `.m3u8` is HLS and Media3 handles it natively; plain `.m3u` and `.pls` are
  * just text pointing somewhere else, so we follow them one hop.
+ *
+ * Collaborators arrive via the constructor from KleeampApp — playback needs
+ * the answers but has no business holding a database handle to get them.
  */
-object StreamResolver {
-
-    /** Scheme for a provider track whose real URL must be resolved on demand. */
-    const val PROVIDER_SCHEME = "cliamp-provider://"
-
+class StreamResolver(
     /**
-     * Set once at startup. Provider tracks are stored as
-     * `cliamp-provider://<accountId>/<trackId>` rather than as a signed URL,
-     * because provider stream URLs and headers can embed credentials (a Subsonic
-     * `t=md5(password+salt)` token, a Bearer token) that never expire. Baking
-     * one into a Station would write a replayable credential into the history
-     * and last-station preferences, which are plain files - undoing the point
-     * of encrypting them in the first place.
+     * Provider tracks are stored as `cliamp-provider://<accountId>/<trackId>`
+     * rather than as a signed URL, because provider stream URLs and headers
+     * can embed credentials (a Subsonic `t=md5(password+salt)` token, a
+     * Bearer token) that never expire. Baking one into a Station would write
+     * a replayable credential into the history and last-station preferences,
+     * which are plain files — undoing the point of encrypting them in the
+     * first place.
      */
-    @Volatile var providerResolver: (suspend (String, String) -> ResolvedStream?)? = null
-
+    private val providerResolver: (suspend (String, String) -> ResolvedStream?)? = null,
     /**
-     * Set once at startup. A fetched episode plays from its file instead of
-     * the network - the offline half of the downloads playlist. Returns an
-     * absolute path for a live file, or null to stream as usual.
+     * A fetched episode plays from its file instead of the network — the
+     * offline half of the downloads playlist. Returns an absolute path for
+     * a live file, or null to stream as usual.
      */
-    @Volatile var downloadLookup: ((String) -> String?)? = null
+    private val downloadLookup: ((String) -> String?)? = null,
+) {
+    companion object {
+        /** Scheme for a provider track whose real URL must be resolved on demand. */
+        const val PROVIDER_SCHEME = "cliamp-provider://"
 
-    /**
-     * Aggregate bound on one resolution: the provider hop is ensureAuth plus
-     * queries in sequence, each with its own generous call timeout, so
-     * without this a sick server parks the nav job and retaps queue behind
-     * it. Falls back to nothing - a timeout surfaces as a resolve error
-     * like any other failed hop.
-     */
-    const val RESOLVE_TIMEOUT_MS = 60_000L
+        /**
+         * Aggregate bound on one resolution: the provider hop is ensureAuth plus
+         * queries in sequence, each with its own generous call timeout, so
+         * without this a sick server parks the nav job and retaps queue behind
+         * it. Falls back to nothing — a timeout surfaces as a resolve error
+         * like any other failed hop.
+         */
+        const val RESOLVE_TIMEOUT_MS = 60_000L
+    }
 
     suspend fun resolve(url: String): ResolvedStream =
         withTimeoutOrNull(RESOLVE_TIMEOUT_MS) { resolveUnsafe(url) }

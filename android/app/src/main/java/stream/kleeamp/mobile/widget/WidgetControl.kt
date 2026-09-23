@@ -18,7 +18,6 @@ import stream.kleeamp.mobile.data.Station
 import stream.kleeamp.mobile.data.wrapNext
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlaybackService
-import stream.kleeamp.mobile.playback.StreamResolver
 import kotlin.coroutines.resume
 
 /**
@@ -158,7 +157,7 @@ object WidgetControl {
             positionMs = 0L,
         )
 
-        val resolved = StreamResolver.resolve(station.url)
+        val resolved = app.streamResolver.resolve(station.url)
         android.util.Log.d("kleeamp/wid", "tune resolve ms=${System.currentTimeMillis() - t0}")
         withController(context) { c ->
             c.setMediaItem(PlaybackService.mediaItem(context, station, resolved))

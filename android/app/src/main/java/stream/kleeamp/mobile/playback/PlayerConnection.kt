@@ -41,6 +41,18 @@ import java.io.IOException
 class PlayerConnection(
     private val context: Context,
     private val scope: CoroutineScope,
+    private val streams: StreamResolver = StreamResolver(),
+    /**
+     * Where a podcast episode should start, in millis. Passed in from the
+     * application: playback needs the answer but has no business holding a
+     * database handle to get it. Returns 0 for everything else, which is
+     * every station radio ever plays.
+     */
+    private val resumeLookup: (suspend (Station) -> Long)? = null,
+    /** Receives (station, position, duration) for episodes as they play. */
+    private val progressSink: (suspend (Station, Long, Long) -> Unit)? = null,
+    /** Receives (station, playing, duration) twice a second for scrobbling. */
+    private val scrobbleTick: ((Station?, Boolean, Long) -> Unit)? = null,
 ) {
     private var controller: MediaController? = null
 
@@ -251,20 +263,6 @@ class PlayerConnection(
 
     /** Called once the controller is live, if the user asked for auto-resume. */
     var onReady: (() -> Unit)? = null
-
-    /**
-     * Where a podcast episode should start, in millis. Set from Application,
-     * the way StreamResolver's provider hook is: playback needs the answer but
-     * has no business holding a database handle to get it. Returns 0 for
-     * everything else, which is every station radio ever plays.
-     */
-    var resumeLookup: (suspend (Station) -> Long)? = null
-
-    /** Receives (station, position, duration) for episodes as they play. */
-    var progressSink: (suspend (Station, Long, Long) -> Unit)? = null
-
-    /** Receives (station, playing, duration) twice a second for scrobbling. */
-    var scrobbleTick: ((Station?, Boolean, Long) -> Unit)? = null
 
     private var lastProgressWrite = 0L
     /** A slow sink must not stack: one write per tick, never overlapping. */
@@ -1011,7 +1009,7 @@ class PlayerConnection(
             // this over a slice, so an unbounded item multiplies into an
             // unbounded queue swap.
             withTimeoutOrNull(StreamResolver.RESOLVE_TIMEOUT_MS) {
-                PlaybackService.mediaItem(context, station, StreamResolver.resolve(station.url))
+                PlaybackService.mediaItem(context, station, streams.resolve(station.url))
             } ?: throw IOException("stream resolve timed out")
         }
 
