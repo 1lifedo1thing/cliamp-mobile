@@ -13,13 +13,7 @@ import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.servers.ProviderStore
 import stream.kleeamp.mobile.servers.SftpLibrary
-import stream.kleeamp.mobile.servers.audiobookshelf
-import stream.kleeamp.mobile.servers.jellyfin
-import stream.kleeamp.mobile.servers.lyrion
-import stream.kleeamp.mobile.servers.plex
-import stream.kleeamp.mobile.servers.subsonic
-import stream.kleeamp.mobile.playback.ResolvedStream
-import stream.kleeamp.mobile.playback.SftpDataSource
+import stream.kleeamp.mobile.servers.ProviderRouter
 import stream.kleeamp.mobile.playback.StreamResolver
 import stream.kleeamp.mobile.net.Http
 import stream.kleeamp.mobile.podcasts.DownloadStore
@@ -65,6 +59,7 @@ class KleeampApp : Application() {
     }
     val downloads: DownloadStore by lazy { DownloadStore(this, prefs, appScope) }
     val scrobbler: Scrobbler by lazy { Scrobbler(this, prefs, appScope) }
+    val providerRouter: ProviderRouter by lazy { ProviderRouter(ProviderRouter.defaults()) }
 
     /**
      * Provider stream URLs are signed per request, so they are resolved
@@ -76,16 +71,7 @@ class KleeampApp : Application() {
         StreamResolver(
             providerResolver = resolve@ { accountId, trackId ->
                 val account = providers.read().firstOrNull { it.id == accountId } ?: return@resolve null
-                when (account.providerKey) {
-                    // Not an HTTP URL at all: the track id is the remote path, and
-                    // the data source opens it over the account's SSH connection.
-                    "ssh" -> ResolvedStream(SftpDataSource.uriFor(account.id, trackId))
-                    "jellyfin", "emby" -> account.jellyfin().stream(trackId)
-                    "plex" -> account.plex().stream(trackId)
-                    "abs" -> account.audiobookshelf().stream(trackId)
-                    "lyrion" -> account.lyrion().stream(trackId)
-                    else -> ResolvedStream(account.subsonic().streamUrl(trackId))
-                }
+                providerRouter.stream(account, trackId)
             },
             // A fetched episode plays from its file instead of the network.
             downloadLookup = { url -> downloads.localPath(url) },
