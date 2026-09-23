@@ -69,10 +69,6 @@ object QueuePolicy {
         return listOf(first) + rest.shuffled()
     }
 
-    /** Where play-next lands: right after current, or appended when nothing is current. */
-    fun playNextInsertAt(queueSize: Int, currentIndex: Int): Int =
-        if (currentIndex in 0 until queueSize) currentIndex + 1 else queueSize
-
     /**
      * Insert [item] into [queue] at [at] ([APPEND] appends), shifting the
      * current index when the insert lands at or before it.
@@ -107,26 +103,6 @@ object QueuePolicy {
     fun clearPending(queue: List<Station>, currentIndex: Int): Pair<List<Station>, Int> {
         val current = queue.getOrNull(currentIndex)
         return Pair(listOfNotNull(current), if (current == null) -1 else 0)
-    }
-
-    /**
-     * Cold-start persist window for [window] (at [windowBase] in [source]):
-     * up to [prevKeep] predecessors ride in front so both prev and next
-     * survive a restart. Returns the combined list and the index inside it.
-     * Callers skip empty windows, as before.
-     */
-    fun persistQueueWindow(
-        source: List<Station>,
-        windowBase: Int,
-        window: List<Station>,
-        currentIndex: Int,
-        prevKeep: Int = PREV_KEEP,
-    ): Pair<List<Station>, Int> {
-        val idx = currentIndex.coerceIn(0, window.lastIndex)
-        val runUp = source.takeIf { it.size > window.size }
-            ?.subList((windowBase - prevKeep).coerceAtLeast(0), windowBase)
-            ?: emptyList()
-        return Pair(runUp + window, runUp.size + idx)
     }
 
     /** Prev/next availability: the transport's hasPrev/hasNext inputs. */
@@ -285,4 +261,57 @@ object QueuePolicy {
         }
         return reordered
     }
+
+    /** Shuffle anchor: the audible station and its index in the base order. */
+    data class ShuffleAnchor(
+        val current: Station,
+        val baseIndex: Int,
+    )
+
+    /**
+     * Audible anchor for a shuffle rebuild. Media3's live item wins over the
+     * model's index, which can lag a track auto-advance between sync polls;
+     * rebuilding off a stale index applies the running position to the wrong
+     * song and the error persists after toggling off. Then the model
+     * occurrence (never a first-URL match, which would rewind duplicates),
+     * the base head and the window head. [source] must be non-empty.
+     */
+    fun shuffleAnchor(
+        source: List<Station>,
+        base: List<Station>,
+        windowBase: Int,
+        currentIndex: Int,
+        upNextFirst: Station?,
+        audibleId: String?,
+    ): ShuffleAnchor {
+        val currentAbs = windowBase + currentIndex
+        val current = source.getOrNull(currentAbs)?.takeIf { it.id == audibleId }
+            ?: source.firstOrNull { it.id == audibleId }
+            ?: source.getOrNull(currentAbs)
+            ?: base.firstOrNull()
+            ?: upNextFirst
+            ?: source.first()
+        val baseIndex = currentAbs.takeIf { base.getOrNull(it)?.url == current.url }
+            ?: base.indexOfFirst { it.url == current.url }.coerceAtLeast(0)
+        return ShuffleAnchor(current, baseIndex)
+    }
+
+    /** Index of the audible item in a single-item Media3 window, by id. */
+    fun singleItemIndex(queue: List<Station>, modelIndex: Int, curId: String): Int? =
+        modelIndex.takeIf { queue.getOrNull(it)?.id == curId }
+            ?: queue.indexOfFirst { it.id == curId }.takeIf { it >= 0 }
+
+    /**
+     * Whether the window-roll should append the next slice: Media3 holds the
+     * whole queue one-to-one, the source continues past the window, and the
+     * audible item is within two of the window tail.
+     */
+    fun shouldExtend(
+        oneToOne: Boolean,
+        windowBase: Int,
+        queueSize: Int,
+        sourceSize: Int,
+        currentIndex: Int,
+    ): Boolean =
+        oneToOne && windowBase + queueSize < sourceSize && currentIndex >= queueSize - 2
 }

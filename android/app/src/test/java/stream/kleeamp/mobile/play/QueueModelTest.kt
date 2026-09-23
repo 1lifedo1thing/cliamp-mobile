@@ -121,4 +121,38 @@ class QueueModelTest {
         model.setFallbackSource(list(3))
         assertEquals(3, model.fallback.size)
     }
+
+    @Test
+    fun playNextInsertsRightAfterCurrent() {
+        val model = QueueModel()
+        model.setWindow(list(5), 2)
+        assertEquals(3, model.playNextInsertAt())
+        // Nothing current: appends.
+        model.setWindow(list(5), -1)
+        assertEquals(5, model.playNextInsertAt())
+        model.setWindow(emptyList(), -1)
+        assertEquals(0, model.playNextInsertAt())
+    }
+
+    @Test
+    fun persistWindowPrependsPredecessorsAndOffsetsIndex() {
+        val model = QueueModel()
+        val source = list(200)
+        model.playFromList(source[50], source, preserveOrder = false, sourceIndex = null)
+        model.setIndex(5)
+        val (combined, idx) = model.persistWindow(model.currentUpNext)
+        assertEquals(68, combined.size)
+        assertEquals(source[42], combined.first())
+        assertEquals(13, idx)
+    }
+
+    @Test
+    fun persistWindowOnShortSourceKeepsWindow() {
+        val model = QueueModel()
+        val source = list(10)
+        model.playFromList(source[3], source, preserveOrder = false, sourceIndex = null)
+        val (combined, idx) = model.persistWindow(model.currentUpNext)
+        assertEquals(source, combined)
+        assertEquals(3, idx)
+    }
 }

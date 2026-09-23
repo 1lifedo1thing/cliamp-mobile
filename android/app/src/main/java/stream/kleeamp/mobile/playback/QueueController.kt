@@ -1,48 +1,38 @@
 package stream.kleeamp.mobile.playback
 
-import android.content.ComponentName
 import android.content.Context
-import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
-import androidx.media3.session.SessionToken
-import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import stream.kleeamp.mobile.KleeampApp
 import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.model.Station
-import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.play.QueueModel
 import stream.kleeamp.mobile.play.QueuePolicy
 import stream.kleeamp.mobile.widget.WidgetRenderer
-import java.io.IOException
 
 private const val NAV_DEBOUNCE_MS = 180L
-private const val WINDOW = QueuePolicy.WINDOW
 
 /**
  * The queue half of playback: the source lists, the bounded Up Next window,
- * shuffle, navigation, edits and persistence. Media3 itself stays behind
- * [PlayerConnection], reached through constructor callbacks, so this class
- * never touches a controller directly.
+ * shuffle, navigation, edits and persistence. Media3 application (queue
+ * builds, slides, swaps, the swap guard and media jobs) lives on
+ * [QueueMediaBridge]; Media3 itself stays behind [PlayerConnection], reached
+ * through constructor callbacks.
  */
 @UnstableApi
-    // STEP 17 split this as far as safely possible; queue behavior is covered by QueuePolicyTest and UpNextEditsTest.
+    // Function/line count is queue surface (play/next/prev/edits/persist);
+    // the Media3 halves moved to QueueMediaBridge. Covered by QueuePolicyTest.
 @Suppress("TooManyFunctions", "LargeClass")
 internal class QueueController(
     private val context: Context,
@@ -113,22 +103,6 @@ internal class QueueController(
     /** Whether shuffled playback is switched on. */
     val shuffle: StateFlow<Boolean> get() = model.shuffle
 
-    /** Pending window-roll-forward job, cancelled if the window advances sooner. */
-    private var _extending: Job? = null
-
-
-    /**
-     * Raised while [play] is rebuilding the Media3 queue. [sync] maps Media3's
-     * window index back onto the new logical queue, but during the transition
-     * Media3 still holds the previous items, so a poller tick can collide the
-     * old window with the fresh [_upNext] and jump to - and publish - the wrong
-     * track (e.g. tapping a song in the middle of a list plays the first item).
-     * While the queue swap is in flight sync stays out of that bookkeeping and
-     * only refreshes transport state; [play] finalises the index itself.
-     */
-    @Volatile
-    private var swapping = false
-
 
     /**
      * Coalesces rapid transport taps without lagging a plain tap. Each step
@@ -137,9 +111,8 @@ internal class QueueController(
      * and then restarts a short debounce timer on each follow-up, so the burst
      * settles on the LAST tapped song - the songs in between are never (re)played
      * and playback isn't restarted per tap. [_navTimerJob] only waits and hands
-     * off to play(); the media job itself lives on [_navJob] and is unaffected.
+     * off to play(); the media job itself lives on the bridge and is unaffected.
      */
-    private var _navJob: Job? = null
     private var _navTimerJob: Job? = null
     private var _navPending: Int? = null
     private var _lastNavTapMs = 0L
@@ -157,67 +130,13 @@ internal class QueueController(
         PlaybackBus.publishError("couldn't play this station")
     }
 
-    // Shuffle's Media3 rebuild deliberately lives off [_navJob]. A toggle
-    // followed immediately by prev/next (or an auto-advance) cancels [_navJob]
-    // to stop navigation racing a stale rebuild; routing the shuffle rebuild
-    // through [_navJob] meant that same cancel killed the shuffle window before
-    // it was applied, snapping playback back to the linear queue. This job is
-    // only cancelled by a new explicit play or a new toggle, so a shuffle
-    // always lands.
-    private var _shuffleJob: Job? = null
+    // Media3 application half: media jobs, the swap guard, window slides and
+    // edits. This facade keeps list math, tap debounce and persistence.
+    private val bridge = QueueMediaBridge(
+        scope, model, controller, buildItem, resumeAt, currentSpeed, onSync, mediaFailureHandler,
+    )
 
 
-    /**
-     * Rebuilds the [_upNext] window mirror to match exactly what Media3 is
-     * actually holding, item by item, keyed on media id. Used when [_upNext] and
-     * Media3's window have drifted out of phase - a near-tail roll that shrank
-     * [_upNext] to the source tail while Media3 kept the old wider window, or a
-     * shuffle realign that moved only [_upNext] - so the display always names the
-     * same songs Media3 is playing, in the same order. Returns false when Media3
-     * holds no items we can map back to [model.source] (a live stream we can't anchor).
-     */
-    private fun mirrorUpNextFromMedia3(c: Player): Boolean {
-        val src = model.source
-        if (src.isEmpty()) return false
-        val count = c.mediaItemCount
-        if (count == 0) return false
-        val pi = c.currentMediaItemIndex.coerceIn(0, count - 1)
-        val ids = (0 until count).map { c.getMediaItemAt(it).mediaId }
-        fun matches(start: Int) = start >= 0 && start + count <= src.size &&
-            ids.indices.all { src[start + it].id == ids[it] }
-        val base = if (matches(model.windowBase)) model.windowBase else
-            (0..(src.size - count)).firstOrNull(::matches) ?: return false
-        val items = src.subList(base, base + count)
-        val playerIdx = pi
-        model.windowBase = base
-        model.setWindow(items, playerIdx)
-        return true
-    }
-
-    /**
-     * Persist a bounded window of the list being played, centred on [station],
-     * so the widget's prev/next can walk the current domain (local / radio /
-     * podcast) without depending on the in-memory PlaybackBus, which is empty
-     * when the widget wakes a cold process. Kept small because the whole source
-     * (e.g. the full local library) is far too large to serialize per play.
-     *
-     * The up-next four are written in the same write so the widget's "next"
-     * row updates in lockstep with its title the instant a song changes, rather
-     * than waiting on the service's next player event.
-     */
-
-
-    /**
-     * Persist a bounded window of the list being played, centred on [station],
-     * so the widget's prev/next can walk the current domain (local / radio /
-     * podcast) without depending on the in-memory PlaybackBus, which is empty
-     * when the widget wakes a cold process. Kept small because the whole source
-     * (e.g. the full local library) is far too large to serialize per play.
-     *
-     * The up-next four are written in the same write so the widget's "next"
-     * row updates in lockstep with its title the instant a song changes, rather
-     * than waiting on the service's next player event.
-     */
     /** Persist the now-current station and push it to the widget, as a single choke point. */
     private fun persistAndRefresh(station: Station) {
         val prefs = (context.applicationContext as KleeampApp).prefs
@@ -266,8 +185,7 @@ internal class QueueController(
         val q = model.currentUpNext
         if (q.isEmpty()) return
         val prefs = (context.applicationContext as KleeampApp).prefs
-        val (combined, queueIndex) =
-            QueuePolicy.persistQueueWindow(model.source, model.windowBase, q, model.currentIndex)
+        val (combined, queueIndex) = model.persistWindow(q)
         scope.launch { prefs.setQueue(combined, queueIndex) }
     }
 
@@ -293,8 +211,8 @@ internal class QueueController(
         startPlayback(station, from, preserveOrder = false)
     }
 
-    // Single play choke point: model swap plus Media3 queue build must stay atomic around the swapping flag.
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
+    // Single play choke point: the model swap stays atomic with the bridge
+    // handoff, so sync never sees a half-built queue.
     private fun startPlayback(
         station: Station,
         from: List<Station>,
@@ -330,139 +248,15 @@ internal class QueueController(
 
         // The tapped station is published and rendered first, on the calling
         // thread, so the music screen and mini bar update the instant a song is
-        // touched. MediaController insists its methods run on the main thread,
-        // but launching on the plain Main dispatcher (not `immediate`) yields
-        // to the looper first, so that already-published new title and plate
-        // draw a frame before the blocking setMediaItems/prepare work runs.
-        _navJob?.cancel()
-        _shuffleJob?.cancel()
-        swapping = controller() != null
-        val job = scope.launch(Dispatchers.Main + mediaFailureHandler) {
-            val c = controller() ?: return@launch
-            // Any queue of finite tracks is a real playlist, so Media3 plays one
-            // after another regardless of where they came from: local files and
-            // provider albums alike. A live radio stream has no end to advance
-            // from, so it is pushed as ONE Media3 item even though the queue
-            // panel still shows the rest of its list as up-next to switch to.
-            val allTracks = upNext.all { it.isTrack } && upNext.size > 1
-            swapping = true
-            try {
-                ensureActive()
-                if (allTracks) {
-                    // If Media3 already holds exactly the window the model now
-                    // expects (same ids, same order - the common case of tapping a
-                    // song inside a source that is already loaded), switch in place
-                    // by index with seekTo instead of tearing the whole window down
-                    // and rebuilding it. A full setMediaItems keeps the previous
-                    // song audible for a second or two while every item in the new
-                    // window is re-resolved and re-published; seekTo is instant.
-                    val cq = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId }
-                    val wq = upNext.map { it.id }
-                    val alreadyLoaded = cq.size == wq.size && wq.indices.all { cq[it] == wq[it] }
-                    if (alreadyLoaded) {
-                        val target = model.currentIndex.coerceIn(0, c.mediaItemCount - 1)
-                        val resume = upNext.getOrNull(target)?.let { resumeAt(it) } ?: 0L
-                        c.seekTo(target, resume)
-                    } else {
-                        slideWindow(c, start)
-                    }
-                } else {
-                    // Single live stream or lone track: Media3 holds just the
-                    // tapped playable. The queue window was already computed
-                    // above so the panel shows the neighbours. sync() advances
-                    // finite items when they end; live radio waits for Next.
-                    // A part-listened episode still opens where it was left.
-                    c.setMediaItems(listOf(buildItem(station)), 0, resumeAt(station))
-                }
-                ensureActive()
-                c.prepare()
-                c.play()
-                c.setPlaybackSpeed(currentSpeed())
-            } finally {
-                swapping = false
-            }
-            ensureActive()
-            onSync()
-        }
-        _navJob = job
+        // touched; the bridge builds the Media3 queue right after.
+        bridge.playNew(station, upNext, start)
     }
 
     private fun cancelPendingPlayback() {
-        _navJob?.cancel()
         _navTimerJob?.cancel()
         _navTimerJob = null
         _navPending = null
-        _shuffleJob?.cancel()
-        _extending?.cancel()
-        _extending = null
-        swapping = false
-    }
-
-    private suspend fun extendWindow(c: Player) {
-        val source = model.source
-        val oldUpNext = model.currentUpNext
-        val oldBase = model.windowBase
-        val end = oldBase + oldUpNext.size
-        val newEnd = minOf(end + WINDOW - 2, source.size)
-        if (end >= newEnd || !oldUpNext.all { it.isTrack }) return
-        val extra = source.subList(end, newEnd)
-        // A mixed queue is advanced by the ended callback, one item at a time.
-        if (!extra.all { it.isTrack }) return
-        val items = extra.map { buildItem(it) }
-        if (model.source !== source || model.currentUpNext != oldUpNext || swapping) return
-        val consumed = c.currentMediaItemIndex.coerceIn(0, oldUpNext.lastIndex)
-        swapping = true
-        try {
-            c.addMediaItems(items)
-            c.removeMediaItems(0, consumed)
-            model.windowBase = oldBase + consumed
-            model.setWindow(source.subList(model.windowBase, newEnd), 0)
-        } finally {
-            swapping = false
-        }
-        onSync()
-    }
-
-    /**
-     * Advances the currently-windowed Media3 playlist to [start] in [model.source],
-     * sliding [_upNext] to the matching bounded window. For short sources (whole
-     * list fits) it pushes everything from [start] onward (or the whole list if
-     * [start] is the tapped index and the list is short).
-     */
-    private suspend fun slideWindow(c: Player, start: Int) {
-        val src = model.source
-        if (src.isEmpty()) return
-        val abs = start.coerceIn(0, src.lastIndex)
-        val playWindow = model.rewindow(abs)
-        val slice = playWindow.window
-        val index = playWindow.index
-        // Raised around the swap so the half-second poller's sync() can't run
-        // between [_upNext] being repointed at the new window and Media3 actually
-        // switching. Un-guarded, that interleaving resolves the still-playing
-        // Media3 item against the fresh [_upNext], falls back to the raw index and
-        // publishes a station that is not what is audible - "shows one song while
-        // playing another". Once Media3 is set, [_upNext] and its index are coherent
-        // so the consumer side of sync() is safe to resume.
-        swapping = true
-        try {
-            // Tracks ride a real multi-item window so they auto-advance and
-            // seek in place. Anything else (live radio, mixed walls) loads
-            // exactly the audible item - same as play()'s single-item path -
-            // so a next/prev never resolves dozens of streams and artworks it
-            // will never play. The [_upNext] mirror above still holds the whole
-            // window, so the panel, the widget ring and the anchors keep
-            // walking the full list either way.
-            if (slice.all { it.isTrack } && slice.size > 1) {
-                val items = slice.map { buildItem(it) }
-                val startAt = slice.getOrNull(index)?.let { resumeAt(it) } ?: 0L
-                c.setMediaItems(items, index.coerceIn(0, items.lastIndex), startAt)
-            } else {
-                val target = slice.getOrNull(index) ?: return
-                c.setMediaItems(listOf(buildItem(target)), 0, resumeAt(target))
-            }
-        } finally {
-            swapping = false
-        }
+        bridge.cancelMedia()
     }
 
     /**
@@ -473,8 +267,6 @@ internal class QueueController(
      * the original linear order from [model.baseSource]. On a lone item there is
      * nothing to reorder, so only the flag flips.
      */
-    // Audibility-critical shuffle rebuild with live re-anchoring; splitting risks stop-the-world gaps.
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
     fun toggleShuffle() {
         // Model reorder plus a seamless Media3 head/tail swap. Both the model
         // and the player end up on the new order so sync() never sees a
@@ -488,45 +280,29 @@ internal class QueueController(
         val base = model.baseSource.ifEmpty { model.source }
 
         // Anchor "current" on Media3's LIVE audible item, not the model's
-        // [_upNextIndex]. sync() reconciles the model to the player on a slow
-        // poll, so between a track auto-advancing (a real playlist of local
-        // songs) and the next sync() the model can lag what is genuinely
-        // audible. Rebuilding off a stale model index applies the running
-        // position across to the wrong song, then re-anchors Media3 around it -
-        // and since both model and player now agree on that wrong song, the
-        // error persists even after toggling off again. The live Media3 item is
-        // the only anchor that cannot drift.
+        // index - sync() reconciles the model on a slow poll, so it can lag a
+        // track auto-advance. The live item is the only anchor that cannot
+        // drift; the resolution itself is pure policy, unit-tested.
         val audibleId = if (c.mediaItemCount > 0) c.getMediaItemAt(
             c.currentMediaItemIndex.coerceIn(0, c.mediaItemCount - 1)
         ).mediaId else null
-        val currentAbs = model.windowBase + model.currentIndex
-        val current = model.source.getOrNull(currentAbs)?.takeIf { it.id == audibleId }
-            ?: model.source.firstOrNull { it.id == audibleId }
-            ?: model.source.getOrNull(currentAbs)
-            ?: model.baseSource.firstOrNull()
-            ?: model.currentUpNext.firstOrNull()
-            ?: model.source.first()
+        val anchor = QueuePolicy.shuffleAnchor(
+            model.source, base, model.windowBase, model.currentIndex,
+            model.currentUpNext.firstOrNull(), audibleId,
+        )
         model.setShuffled(newOn)
-        val baseIndex = currentAbs.takeIf { base.getOrNull(it)?.url == current.url }
-            ?: base.indexOfFirst { it.url == current.url }.coerceAtLeast(0)
         if (newOn) {
             if (model.source.size < 2) { onSync(); return }
-            model.replaceOrder(QueuePolicy.shuffleReorder(base, baseIndex, current), base)
+            model.replaceOrder(QueuePolicy.shuffleReorder(base, anchor.baseIndex, anchor.current), base)
         } else {
             model.replaceOrder(base, base)
         }
 
         // Re-anchor the model immediately so the panel shows the new order
-        // instantly - the same reason the stations path feels smooth. The
-        // Media3 tail is then swapped around the still-playing item below,
-        // without touching it, so there is no rebuffer or seek.
-        _extending?.cancel()
-        _extending = null
-        _shuffleJob?.cancel()
-        _shuffleJob = null
-        val src = model.source
-        val absJ = baseIndex
-        val playWindow = model.rewindow(absJ)
+        // instantly. The Media3 tail is then swapped around the still-playing
+        // item by the bridge, without touching it, so no rebuffer or seek.
+        bridge.cancelShuffleWork()
+        val playWindow = model.rewindow(anchor.baseIndex)
         val slice = playWindow.window
         val idx = playWindow.index
         if (!(slice.all { it.isTrack } && slice.size > 1)) {
@@ -538,111 +314,10 @@ internal class QueueController(
             return
         }
         // Track playlist: keep the audible item playing exactly where it is
-        // and only swap the items around it - the stations equivalent of
-        // "reordering the model IS the shuffle". The old code rebuilt the
-        // whole Media3 queue with setMediaItems(..., pos), which threw away
-        // the current decoder and reloaded the same song from `pos`: an
-        // audible gap plus up to WINDOW item resolves on the main thread.
-        // Removing/adding only head and tail leaves the current item (and
-        // its position) untouched, so toggling shuffle never interrupts.
-        swapping = true
-        val currentId = current.id
-        _shuffleJob = scope.launch(Dispatchers.Main + mediaFailureHandler) {
-            try {
-                ensureActive()
-                var anchorId = currentId
-                var anchorSlice = slice
-                var anchorIdx = idx
-                // Build neighbours off the main thread: resolving + artwork
-                // per item is what made the old toggle jank on long lists.
-                var headItems = withContext(Dispatchers.Default) {
-                    anchorSlice.subList(0, anchorIdx).map { buildItem(it) }
-                }
-                ensureActive()
-                var tailItems = withContext(Dispatchers.Default) {
-                    anchorSlice.subList(anchorIdx + 1, anchorSlice.size).map { buildItem(it) }
-                }
-                ensureActive()
-                var p = controller() ?: return@launch
-                if (p.mediaItemCount == 0) {
-                    val all = withContext(Dispatchers.Default) {
-                        anchorSlice.map { buildItem(it) }
-                    }
-                    ensureActive()
-                    p.setMediaItems(all, anchorIdx.coerceIn(0, all.lastIndex), 0L)
-                    ensureActive()
-                    onSync()
-                    return@launch
-                }
-                // The track may have rolled forward while the tail was
-                // building; re-anchor on what is actually audible rather than
-                // swapping a stale tail around the wrong song.
-                var pi = p.currentMediaItemIndex.coerceIn(0, p.mediaItemCount - 1)
-                var audibleNow = p.getMediaItemAt(pi).mediaId
-                if (audibleNow != anchorId) {
-                    val retry = model.source.firstOrNull { it.id == audibleNow }
-                    if (retry != null) {
-                        anchorId = retry.id
-                        val abs2 = model.source.indexOfFirst { it.url == retry.url }.coerceAtLeast(0)
-                        val retryWindow = model.rewindow(abs2)
-                        anchorSlice = retryWindow.window
-                        anchorIdx = retryWindow.index
-                        headItems = withContext(Dispatchers.Default) {
-                            anchorSlice.subList(0, anchorIdx).map { buildItem(it) }
-                        }
-                        ensureActive()
-                        tailItems = withContext(Dispatchers.Default) {
-                            anchorSlice.subList(anchorIdx + 1, anchorSlice.size).map { buildItem(it) }
-                        }
-                        ensureActive()
-                        p = controller() ?: return@launch
-                        if (p.mediaItemCount == 0) {
-                            val all = withContext(Dispatchers.Default) {
-                                anchorSlice.map { buildItem(it) }
-                            }
-                            ensureActive()
-                            p.setMediaItems(
-                                all,
-                                anchorIdx.coerceIn(0, all.lastIndex),
-                                p.currentPosition.coerceAtLeast(0),
-                            )
-                            ensureActive()
-                            onSync()
-                            return@launch
-                        }
-                        pi = p.currentMediaItemIndex.coerceIn(0, p.mediaItemCount - 1)
-                        audibleNow = p.getMediaItemAt(pi).mediaId
-                        if (audibleNow != anchorId) return@launch
-                    } else {
-                        return@launch
-                    }
-                }
-                // Tail first: the current index is unaffected, so `pi` stays
-                // valid for the head swap that follows.
-                val tailCount = p.mediaItemCount
-                if (pi + 1 < tailCount || tailItems.isNotEmpty()) {
-                    ensureActive()
-                    if (pi + 1 < tailCount) p.removeMediaItems(pi + 1, tailCount)
-                    ensureActive()
-                    if (tailItems.isNotEmpty()) p.addMediaItems(pi + 1, tailItems)
-                }
-                ensureActive()
-                // Head second: removing shifts the current item to 0, adding
-                // the new head slides it to its shuffled index - playback of
-                // the untouched current item continues throughout.
-                if (pi > 0 || headItems.isNotEmpty()) {
-                    ensureActive()
-                    if (pi > 0) p.removeMediaItems(0, pi)
-                    ensureActive()
-                    if (headItems.isNotEmpty()) p.addMediaItems(0, headItems)
-                }
-                ensureActive()
-                onSync()
-            } finally {
-                if (_shuffleJob === coroutineContext[Job]) swapping = false
-                else if (_shuffleJob == null) swapping = false
-            }
-        }
+        // and only swap the items around it. The old code rebuilt the whole
+        // Media3 queue, throwing away the current decoder and reloading the
+        // same song: an audible gap plus up to WINDOW item resolves on Main.
+        bridge.swapShuffle(slice, idx, anchor.current.id)
     }
 
     /**
@@ -777,8 +452,7 @@ internal class QueueController(
         // index as a position in the freshly-rolled window and snaps playback
         // to the wrong (repeated) song - the "won't advance / plays same song
         // again" stall. Cancel any pending roll so a manual next/prev wins.
-        _extending?.cancel()
-        _extending = null
+        bridge.cancelExtend()
         val src = model.source.ifEmpty { model.fallback }
         if (src.isEmpty()) return
         val abs = if (model.ringFallback && src.size > 1) ((target % src.size) + src.size) % src.size
@@ -800,41 +474,10 @@ internal class QueueController(
 
         val q = model.currentUpNext
         val c = controller()
-        val inWindow = c != null && !swapping && q.isNotEmpty() &&
+        val inWindow = c != null && !bridge.isSwapping && q.isNotEmpty() &&
             abs >= model.windowBase && abs < model.windowBase + q.size
         if (inWindow) {
-            val windowIndex = (abs - model.windowBase)
-            _navJob?.cancel()
-            swapping = true
-            val job = scope.launch(Dispatchers.Main + mediaFailureHandler) {
-                val player = controller() ?: return@launch
-                // Only seek in place when the target is actually loaded by Media3;
-                // a bare seekTo clamps to the last loaded item when the index is
-                // out of range, silently freezing playback on that song. Otherwise
-                // slide the window so the tapped song becomes the audible item.
-                if (player.mediaItemCount == q.size &&
-                    player.getMediaItemAt(windowIndex).mediaId == station.id
-                ) {
-                    swapping = true
-                    try {
-                        ensureActive()
-                        val resume = resumeAt(station)
-                        ensureActive()
-                        player.seekTo(windowIndex.coerceIn(0, player.mediaItemCount - 1), resume)
-                        player.play()
-                    } finally {
-                        swapping = false
-                    }
-                    model.setIndex(windowIndex)
-                } else {
-                    slideWindow(player, abs)
-                    player.prepare()
-                    player.play()
-                }
-                ensureActive()
-                onSync()
-            }
-            _navJob = job
+            bridge.seekOrSlide(station, q, abs - model.windowBase, abs)
         } else {
             startPlayback(station, src, preserveOrder = true, sourceIndex = abs)
         }
@@ -874,41 +517,14 @@ internal class QueueController(
         model.setIndex(idx)
         PlaybackBus.publishSource(model.source)
         PlaybackBus.station.value?.let(::persistWidgetWindow)
-        swapping = controller() != null
-        _navJob = scope.launch(Dispatchers.Main + mediaFailureHandler) {
-            val c = controller() ?: return@launch
-            try {
-                val canEdit = edit != null && q.all { it.isTrack } &&
-                    c.mediaItemCount == previousUpNext.size &&
-                    previousUpNext.indices.all { c.getMediaItemAt(it).mediaId == previousUpNext[it].id }
-                if (q.isEmpty()) {
-                    c.clearMediaItems()
-                } else if (canEdit) {
-                    // Move/remove upcoming items without restarting the audible item.
-                    edit(c)
-                } else {
-                    val position = if (c.currentMediaItem?.mediaId == q[idx].id) c.currentPosition else 0L
-                    if (q.size > 1 && q.all { it.isTrack }) {
-                        val items = q.map { buildItem(it) }
-                        c.setMediaItems(items, idx, position)
-                        c.prepare()
-                    } else if (c.mediaItemCount != 1 || c.currentMediaItem?.mediaId != q[idx].id) {
-                        c.setMediaItems(listOf(buildItem(q[idx])), 0, position)
-                        c.prepare()
-                    }
-                }
-            } finally {
-                swapping = false
-            }
-            onSync()
-        }
+        bridge.applyEdit(q, idx, previousUpNext, edit)
     }
 
     /** Insert without changing the originating list. Append means the full tail, not just its window. */
     fun addToUpNext(station: Station, at: Int = Int.MAX_VALUE) {
         val previous = model.currentUpNext
         if (at == Int.MAX_VALUE && model.windowBase + previous.size < model.source.size) {
-            _extending?.cancel()
+            bridge.cancelExtend()
             model.source = model.source + station
             model.baseSource = model.source
             PlaybackBus.publishSource(model.source)
@@ -922,7 +538,7 @@ internal class QueueController(
 
     /** Insert [station] right after the currently-playing item (play next). */
     fun playNext(station: Station) {
-        addToUpNext(station, QueuePolicy.playNextInsertAt(model.currentUpNext.size, model.currentIndex))
+        addToUpNext(station, model.playNextInsertAt())
     }
 
     /** Play [station] with [from] as a brand-new Up Next list, replacing whatever was there. */
@@ -972,7 +588,7 @@ internal class QueueController(
     }
 
     internal val isTransitioning: Boolean
-        get() = swapping || _navJob?.isActive == true || _shuffleJob?.isActive == true
+        get() = bridge.isTransitioning
 
     /** Prev/next availability for the transport state; mirrors the nav math sync reads. */
     internal fun navAvailability(): QueuePolicy.NavAvailability {
@@ -991,70 +607,60 @@ internal class QueueController(
     /**
      * Reconciles the Up Next window against what Media3 is actually holding,
      * publishing when the audible item genuinely changed. Called from sync.
+     * Resolution is by id, never by stored index: a stored index is what
+     * caused "shows one song while playing another" when the window and
+     * Media3's queue drifted out of phase.
      */
-    // Media3-to-model reconciliation with id-based resolution; splitting risks shows-wrong-song bugs.
-    @Suppress("CyclomaticComplexMethod")
     internal fun reconcileMediaWindow(c: Player, changingPlayback: Boolean) {
         val q = model.currentUpNext
         if (!changingPlayback && c.mediaItemCount > 0 && q.isNotEmpty()) {
             val playerIndex = c.currentMediaItemIndex.coerceIn(0, c.mediaItemCount - 1)
             // Radio (or a lone track) is pushed as a single Media3 item while the
             // panel still shows a full window around it, so Media3's index can't
-            // be mapped straight onto [_upNext] - that would repoint the active
+            // be mapped straight onto the window - that would repoint the active
             // item back to the head of the list. Only read back the index when
             // Media3 actually holds the whole queue.
             val oneToOne = c.mediaItemCount == q.size
             val curId = c.getMediaItemAt(playerIndex).mediaId
-            // Resolve which queued station is actually audible. For a real
-            // playlist [_upNext] must mirror Media3's window exactly, so the
-            // currently-playing item is at [_upNext][playerIndex] - by id, not by
-            // a stored index. A raw stored index is what caused "shows one song
-            // while playing another": when a near-tail roll shrank [_upNext] to
-            // the source tail while Media3 kept the old wider window (or shuffle
-            // drifted the two), [_upNextIndex] and Media3's index no longer named
-            // the same item. Rebuilding [_upNext] from Media3's actual window
-            // keeps the display honest in every case. A radio / lone-track item
-            // (Media3 count == 1) deliberately plays a full panel window around
-            // a single Media3 item, so we find it by id instead of collapsing.
             val resolvedIndex: Int? = if (oneToOne &&
                 q.getOrNull(playerIndex)?.id == curId
             ) {
                 playerIndex
             } else if (c.mediaItemCount == 1) {
-                model.currentIndex.takeIf { q.getOrNull(it)?.id == curId }
-                    ?: q.indexOfFirst { it.id == curId }.takeIf { it >= 0 }
-            } else if (mirrorUpNextFromMedia3(c)) {
+                QueuePolicy.singleItemIndex(q, model.currentIndex, curId)
+            } else if (bridge.mirrorWindowFromMedia3(c)) {
                 playerIndex
             } else {
                 null
             }
-            // Publish whenever the resolved item is genuinely different from what
-            // the bus already shows - by ID, not by queue-index. When the window
-            // had to be re-mirrored the audible song lands back at [playerIndex],
-            // so comparing indices would see "no change" and freeze the title on
-            // a stale song while its shuffle / roll actually advanced; comparing
-            // the resolved id against the published bus station keeps the title
-            // honest even through a re-mirror.
             if (resolvedIndex != null) {
                 val resolved = model.currentUpNext.getOrNull(resolvedIndex)
                 model.setIndex(resolvedIndex)
-                if (resolved != null && resolved.id != PlaybackBus.station.value?.id) {
-                    PlaybackBus.publishStation(resolved)
-                    // The heard trail learns Media3-side moves here - with
-                    // the resolved index - never from raw transitions: a
-                    // superseded seek's late transition would fork the trail
-                    // with a ghost entry, and Prev would jump and loop.
-                    history.record(resolved)
-                }
+                if (resolved != null) publishResolved(resolved)
             }
 
             // Append the next window and discard only played entries. Never seek
             // to the next song early or restart the audible item at a boundary.
-            if (oneToOne && model.windowBase + q.size < model.source.size &&
-                model.currentIndex >= q.size - 2 && _extending?.isActive != true
+            if (QueuePolicy.shouldExtend(
+                    oneToOne, model.windowBase, q.size, model.source.size, model.currentIndex,
+                )
             ) {
-                _extending = scope.launch(Dispatchers.Main + mediaFailureHandler) { extendWindow(c) }
+                bridge.launchExtend(c)
             }
+        }
+    }
+
+    /**
+     * Publishes a reconciled item when it genuinely differs from the bus - by
+     * id, not by queue index, so a re-mirrored window can't freeze the title
+     * on a stale song. The heard trail learns Media3-side moves here, never
+     * from raw transitions: a superseded seek's late transition would fork
+     * the trail with a ghost entry, and Prev would jump and loop.
+     */
+    private fun publishResolved(resolved: Station) {
+        if (resolved.id != PlaybackBus.station.value?.id) {
+            PlaybackBus.publishStation(resolved)
+            history.record(resolved)
         }
     }
 

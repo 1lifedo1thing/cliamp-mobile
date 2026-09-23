@@ -80,6 +80,10 @@ class QueueModel {
         _upNextIndex.value = index
     }
 
+    /** Where play-next lands: right after current, or appended when nothing is current. */
+    fun playNextInsertAt(): Int =
+        if (currentIndex in 0 until currentUpNext.size) currentIndex + 1 else currentUpNext.size
+
     fun stationForMediaId(id: String): Station? =
         _upNext.value.firstOrNull { it.id == id } ?: source.firstOrNull { it.id == id }
 
@@ -111,6 +115,21 @@ class QueueModel {
         source = window
         baseSource = window
         windowBase = 0
+    }
+
+    /**
+     * Cold-start persist encoding for [window]: the window alone starts at
+     * the tapped track, so up to [prevKeep] predecessors from the source
+     * ride in front of it - linear and clamped, never wrapped, so a finite
+     * list still reads in its own order. Returns the combined list and the
+     * index inside it. Callers skip empty windows, as before.
+     */
+    fun persistWindow(window: List<Station>, prevKeep: Int = QueuePolicy.PREV_KEEP): Pair<List<Station>, Int> {
+        val idx = currentIndex.coerceIn(0, window.lastIndex)
+        val runUp = source.takeIf { it.size > window.size }
+            ?.subList((windowBase - prevKeep).coerceAtLeast(0), windowBase)
+            ?: emptyList()
+        return Pair(runUp + window, runUp.size + idx)
     }
 
     /**

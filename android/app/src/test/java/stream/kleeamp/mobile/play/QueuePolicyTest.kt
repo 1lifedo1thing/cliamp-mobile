@@ -62,14 +62,6 @@ class QueuePolicyTest {
     }
 
     @Test
-    fun playNextInsertsRightAfterCurrent() {
-        assertEquals(3, QueuePolicy.playNextInsertAt(5, 2))
-        // Nothing current: appends.
-        assertEquals(5, QueuePolicy.playNextInsertAt(5, -1))
-        assertEquals(0, QueuePolicy.playNextInsertAt(0, -1))
-    }
-
-    @Test
     fun addToQueueAppendsAndKeepsIndex() {
         val q = list(3)
         val r = QueuePolicy.insert(q, QueuePolicy.APPEND, 1, station(99))
@@ -132,24 +124,6 @@ class QueuePolicyTest {
         assertNotSame(base, shuffled)
         // Base order untouched: off restores it as-is.
         assertEquals((0 until 10).map { "url-$it" }, base.map { it.url })
-    }
-
-    @Test
-    fun persistWindowPrependsPredecessorsAndOffsetsIndex() {
-        val source = list(200)
-        val window = source.subList(50, 110)
-        val (combined, idx) = QueuePolicy.persistQueueWindow(source, 50, window, 5)
-        assertEquals(68, combined.size)
-        assertEquals(source[42], combined.first())
-        assertEquals(13, idx)
-    }
-
-    @Test
-    fun persistWindowOnShortSourceKeepsWindow() {
-        val source = list(10)
-        val (combined, idx) = QueuePolicy.persistQueueWindow(source, 0, source, 3)
-        assertEquals(source, combined)
-        assertEquals(3, idx)
     }
 
     @Test
@@ -307,5 +281,56 @@ class QueuePolicyTest {
         assertNotSame(base, reordered)
         // Base order untouched: toggling off restores it as-is.
         assertEquals((0 until 10).map { "url-$it" }, base.map { it.url })
+    }
+
+    @Test
+    fun shuffleAnchorPrefersLiveAudibleOverModelIndex() {
+        val source = list(10)
+        // Model lags at 2 while Media3 audibly plays 5: the rebuild anchors 5.
+        val anchor = QueuePolicy.shuffleAnchor(
+            source = source,
+            base = source,
+            windowBase = 0,
+            currentIndex = 2,
+            upNextFirst = source[0],
+            audibleId = "id-5",
+        )
+        assertEquals(source[5], anchor.current)
+        assertEquals(5, anchor.baseIndex)
+    }
+
+    @Test
+    fun shuffleAnchorFallsBackToModelOccurrence() {
+        val source = list(10)
+        // No live anchor (null id): the model occurrence wins, never a
+        // first-URL match that would rewind duplicate songs.
+        val anchor = QueuePolicy.shuffleAnchor(
+            source = source,
+            base = source,
+            windowBase = 0,
+            currentIndex = 3,
+            upNextFirst = source[0],
+            audibleId = null,
+        )
+        assertEquals(source[3], anchor.current)
+        assertEquals(3, anchor.baseIndex)
+    }
+
+    @Test
+    fun singleItemIndexReadsModelThenSearchesById() {
+        val q = list(4)
+        assertEquals(2, QueuePolicy.singleItemIndex(q, modelIndex = 2, curId = "id-2"))
+        assertEquals(1, QueuePolicy.singleItemIndex(q, modelIndex = 3, curId = "id-1"))
+        assertNull(QueuePolicy.singleItemIndex(q, modelIndex = 3, curId = "id-9"))
+    }
+
+    @Test
+    fun shouldExtendOnlyNearTailOfLongerSource() {
+        fun extend(oneToOne: Boolean, base: Int, size: Int, source: Int, index: Int) =
+            QueuePolicy.shouldExtend(oneToOne, base, size, source, index)
+        assertTrue(extend(oneToOne = true, base = 0, size = 60, source = 200, index = 58))
+        assertFalse(extend(oneToOne = true, base = 0, size = 60, source = 200, index = 10))
+        assertFalse(extend(oneToOne = true, base = 0, size = 60, source = 60, index = 58))
+        assertFalse(extend(oneToOne = false, base = 0, size = 60, source = 200, index = 58))
     }
 }
