@@ -45,7 +45,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import stream.kleeamp.mobile.podcasts.PodcastShow
-import stream.kleeamp.mobile.art.PlaceholderArt
+import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.art.ArtResolve
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.chrome.rememberArt
@@ -255,41 +255,38 @@ private fun HitArt(
         return
     }
 
-    val context = LocalContext.current
-    val artKey = station?.id ?: directUrl
     val art = rememberArt(station = station, url = directUrl, deferMs = 90)
-    // Bundled design first, keyed exactly like StationThumb so a coverless
-    // station wears the same design here as in the stations list - except
-    // local and provider songs, which wear the empty plate instead. Never
+    // Generated plate, keyed exactly like StationThumb so a coverless
+    // station wears the same plate here as in the stations list. Never
     // key by cover URL: signed provider URLs rotate, which would change the
-    // design on every list build. The lookup below only ever upgrades to
+    // plate on every list build. The lookup below only ever upgrades to
     // real art.
-    val placeholder = remember(artKey) {
-        val key = when {
-            station != null && station.bundledCover -> station.id.ifBlank { station.url }
-            station != null -> null
-            hit is SearchHit.Show -> hit.show.feedUrl
-            else -> null
-        }
-        key?.let { PlaceholderArt.thumbnailFor(context, it)?.asImageBitmap() }
+    val seedKey = when {
+        station != null -> station.id.ifBlank { station.url }
+        hit is SearchHit.Show -> hit.show.feedUrl
+        else -> null
     }
-    val a = art ?: placeholder
+    val a = art
     Box(
         Modifier
             .size(40.dp)
-            .clip(RoundedCornerShape(KleeampShape.small))
-            .then(
-                if (a != null) Modifier.background(p.panel)
-                else Modifier.border(
-                    1.dp,
-                    if (active) accent else p.chipBorder,
-                    RoundedCornerShape(KleeampShape.small),
-                )
-            ),
+            .clip(RoundedCornerShape(KleeampShape.small)),
         contentAlignment = Alignment.Center,
     ) {
         if (a != null) {
-            Image(a, station?.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            Image(
+                a,
+                station?.name,
+                Modifier.fillMaxSize().background(p.panel),
+                contentScale = ContentScale.Crop,
+            )
+        } else if (!seedKey.isNullOrEmpty()) {
+            SeedPlate(
+                key = seedKey,
+                name = station?.name ?: (hit as? SearchHit.Show)?.show?.title,
+                modifier = Modifier.fillMaxSize(),
+                radius = KleeampShape.small,
+            )
         } else {
             Icon(iconOf(hit), null, Modifier.size(15.dp), tint = p.inkTertiary)
         }

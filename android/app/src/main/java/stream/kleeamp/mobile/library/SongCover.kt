@@ -60,6 +60,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import stream.kleeamp.mobile.art.LocalArt
+import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.radio.RadioRepository
@@ -121,47 +122,30 @@ internal fun SongCover(s: Station, current: Station?, playing: Boolean) {
     val p = LocalPalette.current
     val art = rememberStationThumbnail(s)
     val active = current?.url == s.url
-    // Coverless local files, provider tracks and live stations wear the
-    // themed plate - the same accent glyph plate the playlist rows wear -
-    // instead of a faint outline box, so the fallback follows the theme
-    // like everything else.
-    if (art == null && (s.source == StationSource.Local || s.source == StationSource.Provider || !s.isTrack)) {
+    // Coverless rows wear a generated plate seeded by the item - the same
+    // plate its home screen shows - instead of a faint outline box, so the
+    // fallback follows the theme like everything else.
+    if (art == null) {
         Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-            GlyphPlate(
-                if (s.isTrack) KleeampIcons.MusicNote else KleeampIcons.StationsTab,
-                s.name,
-                Modifier.size(40.dp),
+            SeedPlate(
+                key = s.id.ifBlank { s.url },
+                name = s.name,
+                modifier = Modifier.fillMaxSize(),
+                radius = KleeampShape.small,
             )
             if (active) CoverBadge(playing)
         }
         return
     }
+    // Real art from here on: coverless took the SeedPlate return above.
     Box(
         Modifier
             .size(40.dp)
             .clip(RoundedCornerShape(KleeampShape.small))
-            .then(
-                if (art != null) Modifier.background(p.panel)
-                else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small))
-            ),
+            .background(p.panel),
         contentAlignment = Alignment.Center,
     ) {
-        if (art != null) {
-            Image(art, s.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        } else {
-            // Coverless episodes keep their home mark in the row box; local
-            // files, provider tracks and stations take the music mark -
-            // never a play glyph. Play state keeps its badge below.
-            Icon(
-                when (s.source) {
-                    StationSource.Podcast -> KleeampIcons.PodRow
-                    else -> KleeampIcons.MusicNote
-                },
-                null,
-                Modifier.size(if (s.source == StationSource.Podcast) 18.dp else 15.dp),
-                tint = if (s.source == StationSource.Podcast) p.inkFaint else p.inkTertiary,
-            )
-        }
+        Image(art, s.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         if (active) CoverBadge(playing)
     }
 }

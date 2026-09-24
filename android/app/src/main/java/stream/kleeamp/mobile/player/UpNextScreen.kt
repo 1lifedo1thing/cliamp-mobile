@@ -58,6 +58,7 @@ import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection
 import stream.kleeamp.mobile.chrome.rememberArt
 import stream.kleeamp.mobile.art.ArtResolve
+import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.BackChevron
@@ -258,7 +259,7 @@ private fun NowPlayingCard(s: Station, playing: Boolean, p: KleeampPalette, visu
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            UpNextArtwork(s, Modifier.size(50.dp), active = true)
+            UpNextArtwork(s, Modifier.size(50.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -291,25 +292,24 @@ private fun NowPlayingCard(s: Station, playing: Boolean, p: KleeampPalette, visu
 }
 
 @Composable
-private fun UpNextArtwork(station: Station, modifier: Modifier = Modifier, active: Boolean = false) {
-    val p = LocalPalette.current
+private fun UpNextArtwork(station: Station, modifier: Modifier = Modifier) {
     val art = rememberArt(station = station)
     Box(
         modifier
-            .clip(RoundedCornerShape(KleeampShape.small))
-            .background(p.panelRaised)
-            .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small)),
+            .clip(RoundedCornerShape(KleeampShape.small)),
         contentAlignment = Alignment.Center,
     ) {
         if (art != null) {
             Image(art, "Cover art for ${station.name}", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
-            val icon = when {
-                station.source == StationSource.Podcast -> KleeampIcons.PodRow
-                !station.isTrack -> KleeampIcons.StationsTab
-                else -> KleeampIcons.MusicNote
-            }
-            Icon(icon, null, Modifier.size(16.dp), tint = if (active) p.accent else p.inkFaint)
+            // Same seeded plate every other row wears, so the queue reads
+            // as one list whether or not items carry real art.
+            SeedPlate(
+                key = station.id.ifBlank { station.url },
+                name = station.name,
+                modifier = Modifier.fillMaxSize(),
+                radius = KleeampShape.small,
+            )
         }
     }
 }

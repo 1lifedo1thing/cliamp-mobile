@@ -11,7 +11,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
 import stream.kleeamp.mobile.art.ArtResolve
-import stream.kleeamp.mobile.art.PlaceholderArt
 import stream.kleeamp.mobile.model.Station
 
 /**
@@ -46,19 +45,11 @@ fun rememberArt(
 
 /**
  * Shared small-cover lookup for library and queue rows; decoding uses the
- * bounded cover pool. With [fallback], an item that has no art of its own
- * gets one of the bundled cover designs instead of an empty plate - seeded
- * synchronously from the row-sized cache, so the first frame already shows
- * it and the background lookup only ever upgrades to real art. Local and
- * provider songs never take the fallback (see [Station.bundledCover]).
+ * bounded cover pool. Returns real art or null - callers render a generated
+ * [stream.kleeamp.mobile.art.SeedPlate] for the null case, seeded
+ * synchronously from the row, so the first frame already shows a plate and
+ * the background lookup only ever upgrades to real art.
  */
 @Composable
-internal fun rememberStationThumbnail(station: Station, fallback: Boolean = true): ImageBitmap? {
-    val context = LocalContext.current
-    val key = station.id.ifBlank { station.url }
-    val state = rememberArt(station = station, kind = ArtKind.Thumb)
-    val placeholder = remember(key, fallback) {
-        if (fallback && station.bundledCover) PlaceholderArt.thumbnailFor(context, key)?.asImageBitmap() else null
-    }
-    return state ?: placeholder
-}
+internal fun rememberStationThumbnail(station: Station): ImageBitmap? =
+    rememberArt(station = station, kind = ArtKind.Thumb)
