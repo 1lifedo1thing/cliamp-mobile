@@ -4,7 +4,11 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 import stream.kleeamp.mobile.net.Http
@@ -35,7 +39,10 @@ val CoverIo = Dispatchers.IO.limitedParallelism(4)
 @Suppress("TooManyFunctions")
 object StationArtSource {
 
-    private const val MAX_HTML = 64 * 1024
+    // og:image and friends live in <head>, virtually always within the
+    // first kilobytes: waiting on more of a slow homepage only delays art
+    // that is already past us.
+    private const val MAX_HTML = 24 * 1024
     private const val MAX_IMAGE = 4 * 1024 * 1024
     private const val TARGET = 512
 
@@ -82,10 +89,43 @@ object StationArtSource {
         cacheDir = java.io.File(context.cacheDir, "covers").apply { mkdirs() }
     }
 
-    /** Network art fetch pool: bounded separately from [CoverIo] so a few
-     * slow scrapes never starve every other decode - including the player
-     * art - behind them. */
-    private val ArtNet = Dispatchers.IO.limitedParallelism(3)
+    /**
+     * Split slow-lane / fast-lane for cover traffic. A coverless station
+     * costs two sequential roundtrips (homepage scrape, then image), and a
+     * list prefetch fires dozens of stations at once through one 3-wide
+     * pool: every visible row queued behind 40 scrapes. Scrapes keep a
+     * narrow lane so dead homepages cannot crowd out anything; downloads -
+     * single roundtrips, usually CDN-fast - get the wide lane, so a row's
+     * image never waits on another station's HTML.
+     */
+    private val ArtScrape = Dispatchers.IO.limitedParallelism(2)
+    private val ArtFetch = Dispatchers.IO.limitedParallelism(6)
+
+    /**
+     * In-flight fetch coalescing. Prefetch storms and per-row lookups ask
+     * for the same station at the same time; without this every duplicate
+     * burns its own scrape plus download on the pools above. Concurrent
+     * callers for one key share the winner's result; sequential callers
+     * (cache hits, retries) never touch the map.
+     */
+    private val flightMutex = Mutex()
+    private val flights = HashMap<String, Deferred<Any?>>()
+
+    @Suppress("UNCHECKED_CAST")
+    private suspend fun <T> coalesced(key: String, work: suspend () -> T): T {
+        val mine = CompletableDeferred<Any?>()
+        val active = flightMutex.withLock {
+            flights[key] ?: run { flights[key] = mine; null }
+        }
+        if (active != null) return active.await() as T
+        // runCatching rather than a try/catch: completing the box on every
+        // path (cancellation included) is what keeps joiners from hanging.
+        return runCatching { work() }
+            .onSuccess { mine.complete(it) }
+            .onFailure { mine.completeExceptionally(it) }
+            .also { flightMutex.withLock { if (flights[key] === mine) flights.remove(key) } }
+            .getOrThrow()
+    }
 
     /** Drop decoded bitmaps under memory pressure; disk + network re-serve. */
     fun onTrimMemory(level: Int) {
@@ -261,7 +301,9 @@ object StationArtSource {
 
     private suspend fun imageUrl(station: Station): String? {
         resolved.get(station.id)?.let { return it }
-        val fromPage = station.homepage.takeIf { it.startsWith("http") }?.let { scrape(it) }
+        val fromPage = station.homepage.takeIf { it.startsWith("http") }?.let { page ->
+            coalesced("page:${station.id}") { scrape(page) }
+        }
         val candidate = fromPage ?: station.favicon.takeIf { it.startsWith("http") }
         if (candidate != null) resolved.put(station.id, candidate)
         return candidate
@@ -281,7 +323,7 @@ object StationArtSource {
     private val contentAttr = Regex("""content\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
     private val hrefAttr = Regex("""href\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
 
-    private suspend fun scrape(homepage: String): String? = withContext(ArtNet) {
+    private suspend fun scrape(homepage: String): String? = withContext(ArtScrape) {
         runCatching {
             val req = Request.Builder().url(homepage)
                 .header("User-Agent", Http.USER_AGENT)
@@ -310,19 +352,21 @@ object StationArtSource {
         url: String,
         save: String? = null,
         target: Int = TARGET,
-    ): Bitmap? = withContext(ArtNet) {
-        runCatching {
-            val req = Request.Builder().url(url).header("User-Agent", Http.USER_AGENT).build()
-            Http.artClient.newCall(req).execute().use { r ->
-                if (!r.isSuccessful) return@use null
-                val ct = r.header("Content-Type").orEmpty().substringBefore(';').trim().lowercase()
-                if (ct.isNotEmpty() && (!ct.startsWith("image/") || ct in undecodable)) return@use null
-                val bytes = r.body.byteStream().readAtMost(MAX_IMAGE) ?: return@use null
-                if (bytes.size < 64) return@use null
-                save?.let { runCatching { coverFile(it).writeBytes(bytes) } }
-                decodeScaled(bytes, target)
-            }
-        }.getOrNull()
+    ): Bitmap? = coalesced("dl:$url@$target") {
+        withContext(ArtFetch) {
+            runCatching {
+                val req = Request.Builder().url(url).header("User-Agent", Http.USER_AGENT).build()
+                Http.artClient.newCall(req).execute().use { r ->
+                    if (!r.isSuccessful) return@use null
+                    val ct = r.header("Content-Type").orEmpty().substringBefore(';').trim().lowercase()
+                    if (ct.isNotEmpty() && (!ct.startsWith("image/") || ct in undecodable)) return@use null
+                    val bytes = r.body.byteStream().readAtMost(MAX_IMAGE) ?: return@use null
+                    if (bytes.size < 64) return@use null
+                    save?.let { runCatching { coverFile(it).writeBytes(bytes) } }
+                    decodeScaled(bytes, target)
+                }
+            }.getOrNull()
+        }
     }
 
     /**
