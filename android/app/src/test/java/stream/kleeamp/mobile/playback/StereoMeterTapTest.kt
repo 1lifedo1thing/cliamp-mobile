@@ -33,14 +33,22 @@ class StereoMeterTapTest {
         assertEquals(-1000, output.getShort(2).toInt())
     }
 
+    /**
+     * The speed-change path: ExoPlayer flushes the chain and keeps feeding.
+     * Passthrough must survive the flush with output intact.
+     */
     @Test
-    fun recyclesItsOwnOutputAsInputWithoutThrowing() {
+    fun flushKeepsPassthroughWorking() {
         val tap = StereoMeterTap()
         tap.configure(format)
         tap.queueInput(pcm(500, -500))
-        val recycled = tap.getOutput()
-        tap.queueInput(recycled)
-        assertTrue(tap.getOutput().remaining() >= 0)
+        tap.flush(AudioProcessor.StreamMetadata.DEFAULT)
+        assertEquals(0, tap.getOutput().remaining())
+        tap.queueInput(pcm(700, -700))
+        val output = tap.getOutput()
+        assertEquals(4, output.remaining())
+        assertEquals(700, output.getShort(0).toInt())
+        assertEquals(-700, output.getShort(2).toInt())
     }
 
     @Test
