@@ -112,9 +112,11 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
     }
 
     private suspend fun scan() {
+        val t0 = System.currentTimeMillis()
         // Cache read and MediaStore scan both live on this background
-        // context so a warm launch's per-song File.isFile check never
-        // janks the UI.
+        // context, and neither stats the filesystem on the way to first
+        // paint: the cache publishes as-is and missing files are pruned
+        // quietly below, so opening the Library never waits on disk.
         val cached = readCache()
         if (_songs.value.isEmpty() && !cached.isNullOrEmpty()) {
             _songs.value = cached
@@ -124,11 +126,33 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
             if (_songs.value.isEmpty()) _error.value = e.message ?: "could not read the library"
             _songs.value
         }
-        if (found.isNotEmpty()) {
+        // The library barely changes between launches; rewriting the whole
+        // table (clear + thousands of inserts) every time was pure overhead.
+        if (found.isNotEmpty() && found != _songs.value) {
             _songs.value = found
             writeCache(found)
         }
         _loading.value = false
+        android.util.Log.d(
+            "kleeamp/library",
+            "scan took ${System.currentTimeMillis() - t0}ms for ${_songs.value.size} songs",
+        )
+        pruneMissing()
+    }
+
+    /**
+     * Drops songs whose files vanished since the scan, without ever blocking
+     * first paint. Existence is checked only here, after the list is already
+     * on screen, and the list is republished only when something actually
+     * disappeared - the common case changes nothing.
+     */
+    private suspend fun pruneMissing() {
+        val current = _songs.value
+        if (current.isEmpty()) return
+        val missing = current.filterNot { File(pathOf(it)).isFile }.map { it.id }.toSet()
+        if (missing.isEmpty()) return
+        _songs.value = current.filterNot { it.id in missing }
+        missing.forEach { id -> runCatching { dao.delete(id) } }
     }
 
     private fun querySongs(): List<Station> {
@@ -192,8 +216,10 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
     ): LocalSong? {
         val data = if (cols.data >= 0) c.getString(cols.data) else null
         if (data.isNullOrBlank()) return null
+        // No existence check here: MediaStore is the OS-maintained index and
+        // a stat per row is what made every scan crawl. Vanished files are
+        // pruned quietly by pruneMissing after first paint.
         val file = File(data)
-        if (!file.isFile) return null
         val artist = c.getString(cols.artist) ?: "unknown artist"
         val album = c.getString(cols.album) ?: ""
         val title = c.getString(cols.title)?.takeIf { it.isNotBlank() } ?: file.nameWithoutExtension
@@ -241,7 +267,6 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
     private suspend fun readCache(): List<Station>? =
         runCatching {
             dao.read()
-                .filter { File(it.path).isFile } // dropped since last scan
                 .map { row ->
                     LocalSong(
                         path = row.path,
