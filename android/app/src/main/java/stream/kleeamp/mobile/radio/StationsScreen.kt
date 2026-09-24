@@ -46,7 +46,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import stream.kleeamp.mobile.art.PlaceholderArt
+import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.art.ArtResolve
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.chrome.rememberArt
@@ -432,63 +432,51 @@ private fun StationRow(
  * A station row's leading thumbnail. Loads real cover art through the same
  * source podcast rows use (scraped og:image / favicon, small decode, LRU
  * cache) so any station with a cover shows it, and overlays the play / pause
- * badge when it is the current track. Falls back to just the badge when there
- * is no art to show.
+ * badge when it is the current track. Coverless stations wear a generated
+ * plate seeded by the station id.
  */
 @Composable
 private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
     val p = LocalPalette.current
-    val context = LocalContext.current
     val art = rememberArt(station = station)
-    // Bundled design first - except local and provider songs, which wear
-    // the empty plate instead (see Station.bundledCover). Cliamp stations
-    // carry no art by design, so the bundled design is the final answer.
-    val bmp = art ?: remember(station.id) {
-        if (station.bundledCover) {
-            PlaceholderArt.thumbnailFor(context, station.id.ifBlank { station.url })
-                ?.asImageBitmap()
-        } else null
-    }
-    // No art to show, so the plate carries the broadcast mark in accent on
-    // panel - the same static themed plate playlist rows wear, recognisably
-    // a radio station in every theme. The play state keeps its badge below.
-    if (bmp == null && !active) {
-        GlyphPlate(KleeampIcons.StationsTab, station.name, Modifier.size(40.dp))
-    } else {
-        Box(
-            Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(KleeampShape.small))
-                .then(
-                    if (bmp != null) Modifier.background(p.panel)
-                    else Modifier.border(1.dp, p.accent, RoundedCornerShape(KleeampShape.small))
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (bmp != null) {
-                Image(
-                    bitmap = bmp,
-                    contentDescription = station.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(KleeampShape.small)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (art != null) {
+            Image(
+                bitmap = art,
+                contentDescription = station.name,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(p.panel),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            SeedPlate(
+                key = station.id.ifBlank { station.url },
+                name = station.name,
+                modifier = Modifier.fillMaxSize(),
+                radius = KleeampShape.small,
+            )
+        }
+        if (active) {
+            Box(
+                Modifier
+                    .align(Alignment.Center)
+                    .size(18.dp)
+                    .clip(RoundedCornerShape(KleeampShape.tiny))
+                    .background(p.accent.copy(alpha = 0.92f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (playing) KleeampIcons.Pause else KleeampIcons.PlayRow,
+                    null,
+                    Modifier.size(9.dp),
+                    tint = p.onAccent,
                 )
-            }
-            if (active) {
-                Box(
-                    Modifier
-                        .align(Alignment.Center)
-                        .size(18.dp)
-                        .clip(RoundedCornerShape(KleeampShape.tiny))
-                        .background(p.accent.copy(alpha = 0.92f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        if (playing) KleeampIcons.Pause else KleeampIcons.PlayRow,
-                        null,
-                        Modifier.size(9.dp),
-                        tint = p.onAccent,
-                    )
-                }
             }
         }
     }

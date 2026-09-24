@@ -60,7 +60,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.util.UnstableApi
-import stream.kleeamp.mobile.art.PlaceholderArt
+import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.art.ArtResolve
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.art.StationArtSource
@@ -334,7 +334,6 @@ internal fun StationArt(
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
-    val context = LocalContext.current
     // Paint what memory already holds synchronously, so a song change shows
     // its cover on the first frame instead of flashing the empty plate while
     // the async lookup below re-resolves what is already known. The row
@@ -342,17 +341,10 @@ internal fun StationArt(
     // then replaced by the full art - still the new item, never empty.
     val seed = remember(station?.id) { peekArt(station) }
     val art = rememberArt(station = station, kind = ArtKind.Full) ?: seed
-    val preview = station?.let { rememberStationThumbnail(it, fallback = false) }
-    // No cover of its own: one of the bundled designs stands in - except
-    // local and provider songs, which wear the empty plate instead. The pick
-    // is stable per station, so the plate does not reshuffle on every change.
-    val placeholderKey = station?.id?.ifBlank { station.url }
-    val placeholder = remember(placeholderKey) {
-        if (station?.bundledCover != false) {
-            placeholderKey?.takeIf { it.isNotEmpty() }
-                ?.let { PlaceholderArt.bitmapFor(context, it)?.asImageBitmap() }
-        } else null
-    }
+    val preview = station?.let { rememberStationThumbnail(it) }
+    // No cover of its own: a generated plate seeded by the station id, so
+    // the hero never reshuffles and never needs the network or the disk.
+    val seedKey = station?.id?.ifBlank { station.url }.orEmpty()
     val caption = when {
         station == null -> "[ no station tuned ]"
         station.source == StationSource.Local ->
@@ -393,7 +385,7 @@ internal fun StationArt(
             }
             .consumeAllGestures(),
         radius = KleeampShape.large,
-        caption = if (art == null && preview == null && placeholder == null) caption else null,
+        caption = if (art == null && preview == null && (seedKey.isEmpty() || station == null)) caption else null,
     ) {
         (art ?: preview)?.let { bmp ->
             // Real album art is square and fills the plate edge to edge. Radio
@@ -425,28 +417,18 @@ internal fun StationArt(
                 contentScale = if (fills) ContentScale.Crop else ContentScale.Fit,
             )
         }
-        // No cover at all: a bundled stand-in where allowed, otherwise an
-        // honest glyph rather than a blank hole.
+        // No cover at all: the seeded plate, wearing the caption line so
+        // the hero still names what is playing.
         if (art == null && preview == null) {
-            placeholder?.let { bmp ->
-                Image(
-                    bitmap = bmp,
-                    contentDescription = station?.name,
+            if (station != null && seedKey.isNotEmpty()) {
+                SeedPlate(
+                    key = seedKey,
+                    name = station.name,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
+                    caption = caption,
+                    radius = KleeampShape.large,
                 )
-                Mono(
-                    "no cover · random art",
-                    KleeampType.meta,
-                    p.inkTertiary,
-                    Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(12.dp)
-                        .background(p.ground.copy(alpha = 0.72f), RoundedCornerShape(KleeampShape.tiny))
-                        .padding(horizontal = 6.dp, vertical = 3.dp),
-                    maxLines = 1,
-                )
-            } ?: station?.let {
+            } else station?.let {
                 Icon(
                     KleeampIcons.MusicNote,
                     it.name,

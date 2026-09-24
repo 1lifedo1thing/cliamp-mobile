@@ -19,7 +19,6 @@ import stream.kleeamp.mobile.net.Http
 import stream.kleeamp.mobile.podcasts.DownloadStore
 import stream.kleeamp.mobile.art.LocalArt
 import stream.kleeamp.mobile.art.CoverIo
-import stream.kleeamp.mobile.art.PlaceholderArt
 import stream.kleeamp.mobile.library.LocalLibrary
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.library.PlaylistStore
@@ -104,9 +103,6 @@ class KleeampApp : Application() {
         // The disk cache only TTL-checks on read, so prune stale + excess
         // files once per launch instead of growing forever.
         appScope.launch { StationArtSource.pruneDisk() }
-        // Rows remember() bundled designs on Main: decode all fifty once on
-        // IO at startup so a first scroll never decodes PNGs on the frame.
-        appScope.launch(CoverIo) { PlaceholderArt.warm(this@KleeampApp) }
 
         radio.bootstrap()
         podcasts.bootstrap()

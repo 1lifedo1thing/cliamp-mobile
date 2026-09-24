@@ -31,9 +31,8 @@ import stream.kleeamp.mobile.chrome.ArtPlate
 import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.microPress
 import stream.kleeamp.mobile.chrome.rememberArt
-import stream.kleeamp.mobile.chrome.rememberArt
 import stream.kleeamp.mobile.art.LocalArt
-import stream.kleeamp.mobile.art.PlaceholderArt
+import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.model.StationSource
@@ -199,26 +198,17 @@ private fun peekSmall(station: Station?): androidx.compose.ui.graphics.ImageBitm
 
 @Composable
 private fun MiniArt(station: Station?) {
-    val context = LocalContext.current
     // Same synchronous-first treatment as the player screen: paint a known
     // cover on the first frame instead of flashing the plate on every change.
-    // The bundled design seeds instantly underneath, so the slot shows a
-    // cover from frame one and the lookup only ever upgrades to real art.
+    // The seeded plate sits underneath from frame one, and the lookup only
+    // ever upgrades to real art.
     val seed = remember(station?.id) { peekSmall(station) }
     val art = rememberArt(station = station, kind = ArtKind.Thumb)
-    val key = station?.id?.ifBlank { station.url }
-    // Bundled design underneath - except local and provider songs, which
-    // wear the empty plate instead.
-    val placeholder = remember(key) {
-        if (station?.bundledCover != false) {
-            key?.takeIf { it.isNotEmpty() }
-                ?.let { PlaceholderArt.thumbnailFor(context, it)?.asImageBitmap() }
-        } else null
-    }
-    val bmp = art ?: seed ?: placeholder
+    val key = station?.id?.ifBlank { station.url }.orEmpty()
+    val bmp = art ?: seed
     if (bmp != null) {
         // Real cover art gets a square thumbnail so the plate reads as a little
-        // album square, and so does the bundled stand-in.
+        // album square, and so does the generated stand-in.
         Image(
             bitmap = bmp,
             contentDescription = station?.name,
@@ -227,14 +217,14 @@ private fun MiniArt(station: Station?) {
                 .clip(RoundedCornerShape(KleeampShape.medium)),
             contentScale = ContentScale.Crop,
         )
-    } else if (station != null) {
-        // Coverless local and provider songs: an honest glyph, never a
-        // bundled design and never a blank hole.
-        GlyphPlate(
-            KleeampIcons.MusicNote,
-            station.name,
-            Modifier.size(40.dp),
-            iconSize = 15.dp,
+    } else if (station != null && key.isNotEmpty()) {
+        // Coverless songs, stations and episodes: a generated plate seeded
+        // by the item, never a blank hole.
+        SeedPlate(
+            key = key,
+            name = station.name,
+            modifier = Modifier.size(40.dp),
+            radius = KleeampShape.medium,
         )
     } else {
         ArtPlate(
