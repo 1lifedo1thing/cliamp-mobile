@@ -73,6 +73,7 @@ import stream.kleeamp.mobile.playback.AudioOutputs
 import stream.kleeamp.mobile.playback.OutputKind
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerState
+import stream.kleeamp.mobile.play.RepeatMode as Repeat
 import stream.kleeamp.mobile.chrome.clock
 import stream.kleeamp.mobile.chrome.compact
 import stream.kleeamp.mobile.chrome.BackChevron
@@ -179,6 +180,7 @@ internal fun PlayerStatusRow(
             if (model.shuffled) "stop shuffling" else "shuffle",
             tint = if (model.shuffled) p.accent else p.inkSecondary,
         ) { actions.onToggleShuffle() }
+        RepeatAction(repeat = model.state.repeat) { actions.onCycleRepeat() }
         SpeedAction(speed = model.state.speed) { actions.onCycleSpeed() }
         SmallAction(KleeampIcons.MeterSmall, "scope and equaliser", onClick = actions.onOpenScope)
         SmallAction(
@@ -318,6 +320,30 @@ internal fun SpeedAction(speed: Float, onClick: () -> Unit) {    val p = LocalPa
             speedLabel(speed),
             KleeampType.meta,
             if (speed != 1f) p.accent else p.inkSecondary,
+            maxLines = 1,
+        )
+    }
+}
+
+/** Repeat mode as a terse mono key: taps cycle off/all/one like cliamp. */
+@Composable
+internal fun RepeatAction(repeat: Repeat, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    Box(
+        Modifier
+            .size(28.dp)
+            .clip(RoundedCornerShape(KleeampShape.small))
+            .microPress(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Mono(
+            when (repeat) {
+                Repeat.Off -> "RPT"
+                Repeat.All -> "ALL"
+                Repeat.One -> "ONE"
+            },
+            KleeampType.meta,
+            if (repeat != Repeat.Off) p.accent else p.inkSecondary,
             maxLines = 1,
         )
     }

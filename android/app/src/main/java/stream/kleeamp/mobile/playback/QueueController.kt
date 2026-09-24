@@ -19,6 +19,7 @@ import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.play.QueueModel
 import stream.kleeamp.mobile.play.QueuePolicy
+import stream.kleeamp.mobile.play.RepeatMode
 import stream.kleeamp.mobile.widget.WidgetRenderer
 
 private const val NAV_DEBOUNCE_MS = 180L
@@ -57,6 +58,7 @@ internal class QueueController(
             if (model.fallback.isEmpty()) {
                 model.fallback = history.ifEmpty { favs }
             }
+            model.setRepeatMode(RepeatMode.of(prefs.repeat.first()))
             restoreQueue(prefs)
         }
     }
@@ -102,6 +104,20 @@ internal class QueueController(
 
     /** Whether shuffled playback is switched on. */
     val shuffle: StateFlow<Boolean> get() = model.shuffle
+
+    /** Repeat mode, cycling off/all/one. */
+    val repeat: StateFlow<RepeatMode> get() = model.repeat
+    val repeatMode: RepeatMode get() = model.repeatMode
+
+    /** Steps the repeat cycle and persists it, so the mode survives restarts. */
+    fun toggleRepeat() {
+        val next = model.repeatMode.next()
+        model.setRepeatMode(next)
+        scope.launch {
+            (context.applicationContext as KleeampApp).prefs.setRepeat(next.key)
+        }
+        onSync()
+    }
 
 
     /**
@@ -418,7 +434,7 @@ internal class QueueController(
             QueuePolicy.stepMode(model.source.isEmpty(), pending != null, model.ringFallback, shown = -1)
         }
         if (mode != QueuePolicy.StepMode.Linear) model.ringFallback = true
-        val abs = QueuePolicy.stepTarget(mode, src.size, here, delta)
+        val abs = QueuePolicy.stepTarget(mode, src.size, here, delta, model.repeatMode)
         if (abs == here && model.source.isNotEmpty() && pending == null) return
 
         val now = android.os.SystemClock.uptimeMillis()
@@ -593,6 +609,11 @@ internal class QueueController(
     /** Prev/next availability for the transport state; mirrors the nav math sync reads. */
     internal fun navAvailability(): QueuePolicy.NavAvailability {
         val nav = model.source.ifEmpty { model.fallback }
+        // Repeat-all walks every list as a ring, so both keys always have
+        // somewhere to go.
+        if (model.repeatMode == RepeatMode.All && nav.size > 1) {
+            return QueuePolicy.NavAvailability(hasPrev = true, hasNext = true)
+        }
         val busUrl = PlaybackBus.station.value?.url ?: nav.firstOrNull()?.url
         return QueuePolicy.navAvailability(
             model.source,
@@ -665,17 +686,29 @@ internal class QueueController(
     }
 
     /**
-     * Advances one item when a finite window plays to its end before the next
-     * window could be appended. Called from sync.
+     * Advances when a finite item plays to its end before the next window
+     * could be appended: repeat-one replays the audible item, repeat-all
+     * wraps past the tail, otherwise the next item plays. Called from sync.
+     * Live streams never end on their own, so repeat-one cannot stall one.
      */
     internal fun advanceOnEnded(changingPlayback: Boolean, ended: Boolean) {
-        if (!changingPlayback && ended &&
-            model.currentUpNext.getOrNull(model.currentIndex)?.isTrack == true &&
-            model.windowBase + model.currentIndex < model.source.lastIndex
-        ) {
-            _navTimerJob?.cancel()
-            _navPending = model.windowBase + model.currentIndex + 1
-            applyNavigation()
+        if (changingPlayback || !ended) return
+        if (model.currentUpNext.getOrNull(model.currentIndex)?.isTrack != true) return
+        when (model.repeatMode) {
+            RepeatMode.One -> bridge.replayCurrent()
+            RepeatMode.All -> {
+                _navTimerJob?.cancel()
+                val abs = model.windowBase + model.currentIndex
+                _navPending = if (abs >= model.source.lastIndex) 0 else abs + 1
+                applyNavigation()
+            }
+            RepeatMode.Off -> {
+                if (model.windowBase + model.currentIndex < model.source.lastIndex) {
+                    _navTimerJob?.cancel()
+                    _navPending = model.windowBase + model.currentIndex + 1
+                    applyNavigation()
+                }
+            }
         }
     }
 }
