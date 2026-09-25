@@ -5,17 +5,24 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.chrome.Gutter
+import stream.kleeamp.mobile.chrome.KleeampTextField
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.chrome.clock
@@ -86,6 +93,49 @@ internal fun SleepDialog(
                         .padding(horizontal = Gutter, vertical = 9.dp),
                     maxLines = 1,
                 )
+            }
+            var customOpen by remember { mutableStateOf(false) }
+            var customText by remember { mutableStateOf("") }
+            if (!customOpen) {
+                Mono(
+                    "custom…",
+                    KleeampType.rowPrimary,
+                    p.ink,
+                    Modifier
+                        .microPress { customOpen = true }
+                        .padding(horizontal = Gutter, vertical = 9.dp),
+                    maxLines = 1,
+                )
+            } else {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Gutter, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    KleeampTextField(
+                        value = customText,
+                        onValueChange = { customText = it.filter(Char::isDigit).take(3) },
+                        modifier = Modifier.weight(1f),
+                        placeholder = "minutes",
+                        keyboardType = KeyboardType.Number,
+                    )
+                    Mono(
+                        "SET",
+                        KleeampType.chip,
+                        p.accent,
+                        Modifier
+                            .microPress {
+                                customText.toIntOrNull()?.takeIf { it in 1..999 }?.let {
+                                    onPick(it)
+                                    onDismiss()
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }

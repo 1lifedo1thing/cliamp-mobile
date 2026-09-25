@@ -12,6 +12,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
@@ -174,13 +175,27 @@ internal fun PlayerTransport(
                     p.inkSecondary,
                     Modifier.microPress(onClick = actions.onOpenSleep),
                 )
-                Mono(
-                    if (model.state.playing) "${model.state.bufferedMs / 1000}s buffered"
-                    else "tap the meter for scope · eq",
-                    KleeampType.timeSmall,
-                    p.inkFaint,
-                    maxLines = 1,
-                )
+                // The station status always lives here: a live dot plus the
+                // label (ON AIR, BUFFERING, PAUSED, …). The tap-the-meter
+                // hint is gone.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    StatusDot(model)
+                    Mono(
+                        statusLabel(model),
+                        KleeampType.timeSmall,
+                        if (model.state.playing || model.state.buffering ||
+                            model.reconnect > 0 || model.error != null
+                        ) {
+                            statusColor(model)
+                        } else {
+                            p.inkFaint
+                        },
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }
@@ -240,7 +255,36 @@ internal fun statusColor(model: PlayerModel): androidx.compose.ui.graphics.Color
     return when {
         model.reconnect > 0 -> p.amber
         model.error != null -> p.destructiveInk
+        model.state.buffering -> p.amber
         else -> p.accent
+    }
+}
+
+/**
+ * The live dot in front of the station status: breathes in accent while on
+ * air, holds amber while buffering or reconnecting, red on stream error,
+ * faint otherwise.
+ */
+@Composable
+private fun StatusDot(model: PlayerModel, modifier: Modifier = Modifier) {
+    val p = LocalPalette.current
+    val live = model.state.playing && model.reconnect == 0 &&
+        model.error == null && !model.state.buffering
+    val pulseTransition = rememberInfiniteTransition(label = "statusDot")
+    val pulse by pulseTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(650, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "statusDotAlpha",
+    )
+    val color = when {
+        model.reconnect > 0 || model.state.buffering -> p.amber
+        model.error != null -> p.destructiveInk
+        model.state.playing -> p.accent
+        else -> p.inkFaint
+    }
+    Canvas(modifier.size(7.dp)) {
+        drawCircle(color.copy(alpha = if (live) pulse else 1f))
     }
 }
 

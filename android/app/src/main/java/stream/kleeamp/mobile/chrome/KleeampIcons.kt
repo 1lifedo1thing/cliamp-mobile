@@ -256,6 +256,31 @@ object KleeampIcons {
         ).forEach { addPath(addPathNodes(it), fill = SolidColor(Color.White)) }
     }.build()
     /**
+     * A wristwatch: square face, strap loops, two hands, crown nub. The
+     * sleep timer key wears this instead of the hourglass, so "sleep" reads
+     * as a watch at a glance. Straight edges only, like the rest of the set.
+     */
+    val Watch = ImageVector.Builder(
+        defaultWidth = 20.dp, defaultHeight = 20.dp, viewportWidth = 20f, viewportHeight = 20f,
+    ).apply {
+        listOf(
+            rect(5f, 5f, 10f, 10f),
+            "M7.6 5V1.6h4.8V5",
+            "M7.6 15v3.4h4.8V15",
+            "M10 10V6.8",
+            "M10 10l2.6 1.7",
+        ).forEach {
+            addPath(
+                addPathNodes(it),
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = 1.7f,
+                strokeLineCap = StrokeCap.Butt,
+                strokeLineJoin = StrokeJoin.Miter,
+            )
+        }
+        addPath(addPathNodes(rect(15f, 9.1f, 1.8f, 1.8f)), fill = SolidColor(Color.White))
+    }.build()
+    /**
      * Two stacked rack units with a status light and a vent line each.
      *
      * This replaces a globe built from a circle and two ellipse arcs, which

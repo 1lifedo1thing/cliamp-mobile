@@ -136,32 +136,19 @@ internal fun PlayerStatusRow(
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
-    // LIVE: the little signal mark breathes in and out while the stream runs.
-    val onAir = model.state.playing && model.reconnect == 0 && model.error == null
-    val onAirTransition = rememberInfiniteTransition(label = "onAir")
-    val onAirAlpha by onAirTransition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(650, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "onAirAlpha",
-    )
+    // The sleep timer key sits where the signal mark was: armed wears the
+    // accent, otherwise it rests with the secondary keys.
+    val sleepArmed = model.state.sleepAtMs != null
     Row(
         modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(
-            KleeampIcons.PlayTiny,
-            null,
-            Modifier.size(width = 9.dp, height = 10.dp),
-            tint = p.accent.copy(alpha = if (onAir) onAirAlpha else 1f),
-        )
-        Mono(
-            statusLabel(model),
-            KleeampType.nowPlayingLabel,
-            statusColor(model),
-            modifier = Modifier.consumeAllGestures(),
-        )
+        SmallAction(
+            KleeampIcons.Watch,
+            if (sleepArmed) "sleep timer armed" else "sleep timer",
+            tint = if (sleepArmed) p.accent else p.inkSecondary,
+        ) { actions.onOpenSleep() }
         Spacer(
             Modifier
                 .weight(1f)
