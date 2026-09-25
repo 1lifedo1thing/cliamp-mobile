@@ -317,6 +317,42 @@ fun ContextMenuSheet(
     actions: List<MenuAction>,
     onDismiss: () -> Unit,
 ) {
+    MenuSheetShell(onDismiss = onDismiss, header = {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(Modifier.size(52.dp)) { art() }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Mono(title.ifBlank { "unknown" }, KleeampType.trackTitleCompact, LocalPalette.current.ink, maxLines = 2)
+                if (subtitle.isNotBlank()) {
+                    Mono(subtitle, KleeampType.rowSecondary, LocalPalette.current.inkTertiary, maxLines = 2)
+                }
+            }
+        }
+    }) {
+        val (safe, danger) = actions.partition { !it.destructive }
+        safe.forEach { MenuActionRow(it, onDismiss) }
+        if (danger.isNotEmpty()) {
+            HairlineDivider(region = true)
+            danger.forEach { MenuActionRow(it, onDismiss) }
+        }
+    }
+}
+
+/**
+ * The sheet chrome both menus and pickers share: rounded top, dimmed
+ * scrim, drag handle, fixed header, scrolling body. One component, so a
+ * timer or speed sheet can never drift from the menu look.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MenuSheetShell(
+    onDismiss: () -> Unit,
+    header: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+) {
     val p = LocalPalette.current
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -336,29 +372,44 @@ fun ContextMenuSheet(
         },
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = Gutter)) {
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Box(Modifier.size(52.dp)) { art() }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Mono(title.ifBlank { "unknown" }, KleeampType.trackTitleCompact, p.ink, maxLines = 2)
-                    if (subtitle.isNotBlank()) {
-                        Mono(subtitle, KleeampType.rowSecondary, p.inkTertiary, maxLines = 2)
-                    }
-                }
-            }
+            header()
             HairlineDivider(region = true)
-            val (safe, danger) = actions.partition { !it.destructive }
             Column(Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-                safe.forEach { MenuActionRow(it, onDismiss) }
-                if (danger.isNotEmpty()) {
-                    HairlineDivider(region = true)
-                    danger.forEach { MenuActionRow(it, onDismiss) }
-                }
+                content()
             }
             Spacer(Modifier.navigationBarsPadding().height(14.dp))
+        }
+    }
+}
+
+/**
+ * A picker row for timer/speed sheets: label left, check right when
+ * selected. The checkmark is the app's selection language, same as the
+ * playlist picker's ticked rows.
+ */
+@Composable
+fun SheetOptionRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    subtitle: String? = null,
+) {
+    val p = LocalPalette.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 52.dp)
+            .microPress(onClick = onClick)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Mono(label, KleeampType.rowPrimary, if (selected) p.accent else p.ink, maxLines = 1)
+            subtitle?.let { Mono(it, KleeampType.rowSecondary, p.inkTertiary, maxLines = 2) }
+        }
+        if (selected) {
+            Icon(KleeampIcons.Check, null, Modifier.size(18.dp), tint = p.accent)
         }
     }
 }
