@@ -121,6 +121,21 @@ class PlaylistStore(private val context: Context) {
     suspend fun setOrder(slug: String, songIds: List<String>) = dao.replaceMembers(slug, songIds)
 
     /**
+     * Imports already-matched stations as a new playlist, skipping
+     * duplicates. Returns the slug, or null when nothing matched.
+     */
+    suspend fun importPlaylist(name: String, stations: List<Station>): String? {
+        if (stations.isEmpty()) return null
+        val slug = create(name) ?: return null
+        val seen = LinkedHashSet<String>()
+        for (s in stations) {
+            if (!seen.add(s.id)) continue
+            addStation(slug, s)
+        }
+        return slug
+    }
+
+    /**
      * A persisted non-local station by playback URL. This is how the
      * add-to-playlist page re-finds a song that is only reachable as a
      * playlist member snapshot (a podcast episode or a provider track that was

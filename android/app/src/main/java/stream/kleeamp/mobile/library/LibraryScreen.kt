@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -159,6 +160,38 @@ fun LibraryScreen(
 
     var haveAudio by remember { mutableStateOf(LocalLibrary.hasAudioPermission(context)) }
 
+    // Playlist-file import: pick an .m3u/.pls, parse and match it, land on
+    // the new playlist. Unrecognized files and total misses report inline
+    // under the header instead of failing silently.
+    val report by vm.importReport.collectAsState()
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch(Dispatchers.IO) {
+            val name = runCatching {
+                context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                    if (c.moveToFirst()) {
+                        val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (idx >= 0) c.getString(idx) else null
+                    } else null
+                }
+            }.getOrNull() ?: uri.lastPathSegment.orEmpty()
+            val text = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+            }.getOrNull()
+            if (text != null) vm.onEvent(LocalViewModel.Event.Import(name, text))
+        }
+    }
+    LaunchedEffect(report) {
+        report?.let {
+            if (it.slug.isNotEmpty()) {
+                onOpenPlaylist(it.slug)
+                vm.onEvent(LocalViewModel.Event.ClearImportReport)
+            }
+        }
+    }
+
     // The media permission is requested once at app launch. Recheck it whenever
     // this screen resumes, so granting it in system Settings (without another
     // in-app dialog) is picked up here.
@@ -226,6 +259,18 @@ fun LibraryScreen(
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
+            chips = {
+                Chip("import", selected = false, onClick = { importLauncher.launch("*/*") })
+                report?.takeIf { it.slug.isEmpty() }?.let {
+                    Mono(
+                        if (!it.recognized) "not a playlist file"
+                        else "nothing matched",
+                        KleeampType.meta,
+                        p.destructiveInk,
+                        maxLines = 1,
+                    )
+                }
+            },
         ) {
 
         Box(Modifier.weight(1f).fillMaxWidth()) {

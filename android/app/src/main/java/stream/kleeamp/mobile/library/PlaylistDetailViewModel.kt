@@ -37,6 +37,12 @@ class PlaylistDetailViewModel(
         val subscribedShows: List<PodcastShow> = emptyList(),
         val showState: ShowState = ShowState(),
         val favorites: List<Station> = emptyList(),
+        /** Repeat ids beyond the first occurrence. */
+        val dupCount: Int = 0,
+        /** Stored ids with nothing playable behind them. */
+        val missingCount: Int = 0,
+        /** Bookmarked member index, clamped into range. */
+        val bookmarkIndex: Int? = null,
     )
 
     sealed interface Event {
@@ -46,6 +52,9 @@ class PlaylistDetailViewModel(
         data class SetCover(val cover: String) : Event
         data class SetSort(val sort: PlaylistSort) : Event
         data class OpenShow(val show: PodcastShow) : Event
+        data object Dedupe : Event
+        data object PurgeMissing : Event
+        data class Bookmark(val index: Int?) : Event
     }
 
     private data class CollectionState(
@@ -60,6 +69,7 @@ class PlaylistDetailViewModel(
         val favorites: List<Station> = emptyList(),
         val sort: PlaylistSort = PlaylistSort.Title,
         val showState: ShowState = ShowState(),
+        val bookmark: Int? = null,
     )
 
     val state: StateFlow<UiState> = combine(
@@ -75,12 +85,14 @@ class PlaylistDetailViewModel(
             prefs.favorites,
             prefs.playlistSort(slug),
             podcasts.show,
+            prefs.playlistBookmark(slug),
             ::MetaState,
         ),
     ) { col, meta ->
         val pl = col.all.firstOrNull { it.station.slug == slug }
         val ids = pl?.songIds.orEmpty()
         val members = if (ids.isEmpty()) emptyList() else playlists.resolveMembers(ids, col.songs)
+        val memberIds = members.map { it.id }.toSet()
         val favRadio = meta.favorites.filterNot {
             it.source == StationSource.Local || it.source == StationSource.Podcast
         }
@@ -95,6 +107,9 @@ class PlaylistDetailViewModel(
             subscribedShows = col.subscriptions,
             showState = meta.showState,
             favorites = meta.favorites,
+            dupCount = ids.size - ids.toSet().size,
+            missingCount = (ids.toSet() - memberIds).size,
+            bookmarkIndex = meta.bookmark?.takeIf { it in members.indices },
         )
     }.stateInUi(
         viewModelScope,
@@ -120,6 +135,25 @@ class PlaylistDetailViewModel(
             is Event.SetCover -> viewModelScope.launch { playlists.setCover(slug, e.cover) }
             is Event.SetSort -> prefs.setPlaylistSort(slug, e.sort)
             is Event.OpenShow -> podcasts.openShow(e.show)
+            Event.Dedupe -> viewModelScope.launch(NonCancellable) {
+                val ids = state.value.songIds
+                val (kept, _) = dedupeIds(ids)
+                if (kept.size != ids.size) playlists.setOrder(slug, kept)
+            }
+            Event.PurgeMissing -> viewModelScope.launch(NonCancellable) {
+                val ids = state.value.songIds
+                val live = state.value.members.map { it.id }.toSet()
+                val kept = ids.filter { it in live }
+                if (kept.size != ids.size) playlists.setOrder(slug, kept)
+            }
+            is Event.Bookmark -> prefs.setPlaylistBookmark(slug, e.index)
         }
+    }
+
+    /** M3U text for the resolved members, or null when there is nothing to share. */
+    suspend fun exportM3u(): String? {
+        val members = state.value.members
+        if (members.isEmpty()) return null
+        return renderM3u(members)
     }
 }

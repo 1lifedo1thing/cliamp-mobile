@@ -94,6 +94,8 @@ import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
 import stream.kleeamp.mobile.chrome.OverflowButton
+import stream.kleeamp.mobile.chrome.OverflowItem
+import stream.kleeamp.mobile.chrome.OverflowMenu
 import stream.kleeamp.mobile.chrome.ContextMenuSheet
 import stream.kleeamp.mobile.chrome.DestructiveAction
 import stream.kleeamp.mobile.chrome.MenuKind
@@ -112,6 +114,45 @@ import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Mono
 import stream.kleeamp.mobile.prefs.PlaylistSort
 import stream.kleeamp.mobile.prefs.sortedStations
+
+/** Playlist maintenance: dedupe, missing-file purge and position bookmark. */
+@Composable
+private fun PlaylistToolsMenu(
+    state: PlaylistToolsState,
+    onDedupe: () -> Unit,
+    onPurgeMissing: () -> Unit,
+    onBookmarkCurrent: () -> Unit,
+    onGoBookmark: () -> Unit,
+    onClearBookmark: () -> Unit,
+) {
+    val p = LocalPalette.current
+    val items = buildList {
+        if (state.dupCount > 0) {
+            add(OverflowItem("remove ${state.dupCount} duplicates", onDedupe, p.ink))
+        }
+        if (state.missingCount > 0) {
+            add(OverflowItem("remove ${state.missingCount} missing", onPurgeMissing, p.ink))
+        }
+        if (state.canBookmark) add(OverflowItem("bookmark current", onBookmarkCurrent, p.ink))
+        if (state.bookmarkIndex != null) {
+            add(OverflowItem("go to bookmark", onGoBookmark, p.accent))
+            add(OverflowItem("clear bookmark", onClearBookmark, p.ink))
+        }
+    }
+    if (items.isEmpty()) return
+    OverflowMenu(
+        trigger = { open -> OverflowButton(open, size = 16) },
+        items = items,
+    )
+}
+
+/** Inputs for [PlaylistToolsMenu], read off the detail state. */
+private data class PlaylistToolsState(
+    val dupCount: Int,
+    val missingCount: Int,
+    val bookmarkIndex: Int?,
+    val canBookmark: Boolean,
+)
 
 /** One user playlist as a navigation pane, with add-songs and cover editing. */
 
@@ -174,6 +215,52 @@ fun LibraryPlaylistPane(
             chips = if (pl != null) {
                 @Composable {
                     Chip("set cover", selected = false, onClick = { coverLauncher.launch(arrayOf("image/*")) })
+                    if (ui.members.isNotEmpty()) {
+                        Chip(
+                            "export",
+                            selected = false,
+                            onClick = {
+                                scope.launch {
+                                    vm.exportM3u()?.let { text ->
+                                        context.startActivity(
+                                            android.content.Intent.createChooser(
+                                                android.content.Intent(
+                                                    android.content.Intent.ACTION_SEND
+                                                ).setType("text/plain").putExtra(
+                                                    android.content.Intent.EXTRA_TEXT,
+                                                    text,
+                                                ),
+                                                "share playlist",
+                                            )
+                                        )
+                                    }
+                                }
+                            },
+                        )
+                    }
+                    PlaylistToolsMenu(
+                        state = PlaylistToolsState(
+                            dupCount = ui.dupCount,
+                            missingCount = ui.missingCount,
+                            bookmarkIndex = ui.bookmarkIndex,
+                            canBookmark = current != null &&
+                                ui.members.indexOfFirst { it.url == current.url } >= 0,
+                        ),
+                        onDedupe = { vm.onEvent(PlaylistDetailViewModel.Event.Dedupe) },
+                        onPurgeMissing = { vm.onEvent(PlaylistDetailViewModel.Event.PurgeMissing) },
+                        onBookmarkCurrent = {
+                            val at = ui.members.indexOfFirst { it.url == current?.url }
+                            if (at >= 0) vm.onEvent(PlaylistDetailViewModel.Event.Bookmark(at))
+                        },
+                        onGoBookmark = {
+                            ui.bookmarkIndex?.let { idx ->
+                                ui.members.getOrNull(idx)?.let { onPlay(it, ui.members) }
+                            }
+                        },
+                        onClearBookmark = {
+                            vm.onEvent(PlaylistDetailViewModel.Event.Bookmark(null))
+                        },
+                    )
                 }
             } else null,
         ) {

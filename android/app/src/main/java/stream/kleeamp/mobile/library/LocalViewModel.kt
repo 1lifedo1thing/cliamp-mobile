@@ -2,7 +2,10 @@ package stream.kleeamp.mobile.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.common.stateInUi
@@ -40,7 +43,20 @@ class LocalViewModel(
         data class Delete(val slug: String) : Event
         data class SetPinned(val slug: String, val pinned: Boolean) : Event
         data object Refresh : Event
+        data class Import(val filename: String, val text: String) : Event
+        data object ClearImportReport : Event
     }
+
+    /** Outcome of the last playlist-file import, until cleared. */
+    data class ImportReport(
+        val slug: String,
+        val imported: Int,
+        val missing: Int,
+        val recognized: Boolean = true,
+    )
+
+    private val _importReport = MutableStateFlow<ImportReport?>(null)
+    val importReport: StateFlow<ImportReport?> = _importReport.asStateFlow()
 
     private data class DeviceState(
         val songs: List<Station> = emptyList(),
@@ -113,6 +129,29 @@ class LocalViewModel(
             is Event.Delete -> viewModelScope.launch { playlists.delete(e.slug) }
             is Event.SetPinned -> viewModelScope.launch { playlists.setPinned(e.slug, e.pinned) }
             Event.Refresh -> localLibrary.refresh()
+            Event.ClearImportReport -> {
+                _importReport.value = null
+            }
+            is Event.Import -> viewModelScope.launch(NonCancellable) {
+                val kind = detectPlaylistKind(e.filename, e.text)
+                if (kind == null) {
+                    _importReport.value = ImportReport("", 0, 0, recognized = false)
+                    return@launch
+                }
+                val entries = when (kind) {
+                    PlaylistKind.M3U -> parseM3u(e.text)
+                    PlaylistKind.PLS -> parsePls(e.text)
+                }
+                val match = matchEntries(entries, localLibrary.songs.value)
+                val name = e.filename.substringAfterLast('/')
+                    .substringBeforeLast('.').ifBlank { "imported" }
+                val slug = playlists.importPlaylist(name, match.matched)
+                _importReport.value = if (slug == null) {
+                    ImportReport("", 0, match.missing + match.matched.size)
+                } else {
+                    ImportReport(slug, match.matched.size, match.missing)
+                }
+            }
         }
     }
 }
