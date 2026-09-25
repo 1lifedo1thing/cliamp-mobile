@@ -35,13 +35,16 @@ class SongInfoViewModel(
         data class DeleteLocal(val station: Station) : Event
     }
 
+    // Declared before init: the launch below can complete without ever
+    // suspending (snapshot hits memory), which would otherwise write the
+    // field before its initializer runs.
+    private val _snapshot = MutableStateFlow<Station?>(null)
+
     init {
         viewModelScope.launch {
             _snapshot.value = playlists.snapshotByUrl(stationUrl)
         }
     }
-
-    private val _snapshot = MutableStateFlow<Station?>(null)
 
     val state: StateFlow<UiState> = combine(
         localLibrary.songs,
