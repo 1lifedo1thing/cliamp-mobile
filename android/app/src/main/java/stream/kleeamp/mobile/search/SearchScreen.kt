@@ -247,7 +247,17 @@ private fun HitArt(
         is SearchHit.Show -> hit.show.artwork.takeIf { it.startsWith("http") }
         else -> station?.cover?.takeIf { it.startsWith("http") }
     }
-    if (station == null && directUrl == null) {
+    // Generated plate, keyed exactly like StationThumb so a coverless
+    // station wears the same plate here as in the stations list. Never
+    // key by cover URL: signed provider URLs rotate, which would change the
+    // plate on every list build. The lookup below only ever upgrades to
+    // real art. Shows without artwork still get a plate from their feed.
+    val seedKey = when {
+        station != null -> station.id.ifBlank { station.url }
+        hit is SearchHit.Show -> hit.show.feedUrl
+        else -> null
+    }
+    if (directUrl == null && seedKey.isNullOrEmpty()) {
         Icon(
             iconOf(hit), null, Modifier.size(15.dp),
             tint = p.inkTertiary,
@@ -256,16 +266,6 @@ private fun HitArt(
     }
 
     val art = rememberArt(station = station, url = directUrl, deferMs = 90)
-    // Generated plate, keyed exactly like StationThumb so a coverless
-    // station wears the same plate here as in the stations list. Never
-    // key by cover URL: signed provider URLs rotate, which would change the
-    // plate on every list build. The lookup below only ever upgrades to
-    // real art.
-    val seedKey = when {
-        station != null -> station.id.ifBlank { station.url }
-        hit is SearchHit.Show -> hit.show.feedUrl
-        else -> null
-    }
     val a = art
     Box(
         Modifier

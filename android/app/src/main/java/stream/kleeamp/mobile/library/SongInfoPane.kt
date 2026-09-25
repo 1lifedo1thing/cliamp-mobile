@@ -60,6 +60,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import stream.kleeamp.mobile.art.LocalArt
+import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.radio.RadioRepository
@@ -239,7 +240,12 @@ private fun SongInfoView(
                         if (art != null) {
                             Image(art!!, s.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                         } else {
-                            Icon(KleeampIcons.MusicNote, null, Modifier.size(40.dp), tint = p.inkTertiary)
+                            SeedPlate(
+                                key = s.id.ifBlank { s.url },
+                                name = s.name,
+                                modifier = Modifier.fillMaxSize(),
+                                radius = KleeampShape.large,
+                            )
                         }
                         if (favorite) {
                             Mono(
