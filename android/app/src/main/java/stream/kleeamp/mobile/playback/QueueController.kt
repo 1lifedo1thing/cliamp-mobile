@@ -11,7 +11,9 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.KleeampApp
@@ -220,6 +222,7 @@ internal class QueueController(
         sourceIndex: Int? = null,
     ) {
         cancelPendingPlayback()
+        clearUndo()
         if (from.isNotEmpty()) {
             model.playFromList(station, from, preserveOrder, sourceIndex)
         } else {
@@ -257,6 +260,57 @@ internal class QueueController(
         _navTimerJob = null
         _navPending = null
         bridge.cancelMedia()
+    }
+
+    /**
+     * One-step undo for queue edits (remove / reorder / clear / insert).
+     * The snapshot captures the whole walking order plus the window, taken
+     * before the edit mutates anything; a fresh play starts a new history
+     * and drops it. Restoring rebuilds the Media3 window around the same
+     * audible item, keeping its position when it survives the undo.
+     */
+    private data class QueueSnapshot(
+        val source: List<Station>,
+        val baseSource: List<Station>,
+        val windowBase: Int,
+        val window: List<Station>,
+        val index: Int,
+    )
+
+    private var undoSnapshot: QueueSnapshot? = null
+    private val _canUndo = MutableStateFlow(false)
+    val canUndo: StateFlow<Boolean> get() = _canUndo.asStateFlow()
+
+    private fun snapshotForUndo() {
+        undoSnapshot = QueueSnapshot(
+            source = model.source,
+            baseSource = model.baseSource,
+            windowBase = model.windowBase,
+            window = model.currentUpNext,
+            index = model.currentIndex,
+        )
+        _canUndo.value = true
+    }
+
+    private fun clearUndo() {
+        undoSnapshot = null
+        _canUndo.value = false
+    }
+
+    /** Restores the queue as it was before the last edit. */
+    fun undo() {
+        val snap = undoSnapshot ?: return
+        undoSnapshot = null
+        _canUndo.value = false
+        cancelPendingPlayback()
+        model.source = snap.source
+        model.baseSource = snap.baseSource
+        model.windowBase = snap.windowBase
+        model.setWindow(snap.window, snap.index)
+        model.ringFallback = false
+        PlaybackBus.publishSource(model.source)
+        PlaybackBus.station.value?.let(::persistWidgetWindow)
+        bridge.rebuildWindow(snap.window, snap.index)
     }
 
     /**
@@ -507,6 +561,7 @@ internal class QueueController(
         edit: ((MediaController) -> Unit)? = null,
     ) {
         cancelPendingPlayback()
+        snapshotForUndo()
         val q = model.currentUpNext
         model.ringFallback = false
         val idx = if (q.isEmpty()) -1 else model.currentIndex.coerceIn(0, q.lastIndex)
@@ -525,6 +580,7 @@ internal class QueueController(
         val previous = model.currentUpNext
         if (at == Int.MAX_VALUE && model.windowBase + previous.size < model.source.size) {
             bridge.cancelExtend()
+            snapshotForUndo()
             model.source = model.source + station
             model.baseSource = model.source
             PlaybackBus.publishSource(model.source)

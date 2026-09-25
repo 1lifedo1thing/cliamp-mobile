@@ -72,6 +72,40 @@ internal class QueueMediaBridge(
         extending = null
     }
 
+    /**
+     * Reloads Media3 with exactly [items] at [index]: the undo path, which
+     * restores a dropped or reordered window the incremental edits cannot
+     * express. The audible item keeps its position when it survives the
+     * restore; playback intent (playing or paused) is preserved.
+     */
+    fun rebuildWindow(items: List<Station>, index: Int) {
+        navJob?.cancel()
+        swapping = true
+        navJob = scope.launch(Dispatchers.Main + failureHandler) {
+            val c = controller() ?: return@launch
+            try {
+                ensureActive()
+                if (items.isEmpty()) {
+                    c.clearMediaItems()
+                    return@launch
+                }
+                val keep = c.currentMediaItem?.mediaId
+                    ?.let { id -> items.getOrNull(index)?.id == id } == true
+                val position = if (keep) c.currentPosition.coerceAtLeast(0) else 0L
+                val wasPlaying = c.playWhenReady
+                val built = items.map { buildItem(it) }
+                ensureActive()
+                c.setMediaItems(built, index.coerceIn(0, built.lastIndex), position)
+                c.prepare()
+                if (wasPlaying) c.play() else c.pause()
+            } finally {
+                swapping = false
+            }
+            ensureActive()
+            onSync()
+        }
+    }
+
     /** Cancels shuffle/extend work; a new toggle supersedes both. */
     fun cancelShuffleWork() {
         shuffleJob?.cancel()

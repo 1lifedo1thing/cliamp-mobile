@@ -198,6 +198,9 @@ fun StationsScreen(
                 item {
                     SectionLabel("cliamp radio — ${cliamp.size}", gutter = 8.dp)
                 }
+                item {
+                    CliampStatsRow(vm)
+                }
                 if (cliampError != null) {
                     item {
                         RetryNote(
@@ -482,9 +485,33 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
     }
 }
 
+/**
+ * Live "who's listening" line under the cliamp header, from the same
+ * statistics document cliamp.stream renders. Fetches once per screen
+ * lifetime; tapping refreshes. Hidden until the first fetch lands.
+ */
+@Composable
+private fun CliampStatsRow(vm: StationsViewModel) {
+    val p = LocalPalette.current
+    val stats by vm.cliampStats.collectAsState()
+    LaunchedEffect(Unit) {
+        if (stats == null) vm.onEvent(StationsViewModel.Event.RefreshStats)
+    }
+    stats?.let {
+        Mono(
+            "${it.activeNow} listening now · peak ${it.peak}",
+            KleeampType.meta,
+            p.inkFaint,
+            Modifier
+                .padding(start = 8.dp, bottom = 4.dp)
+                .microPress { vm.onEvent(StationsViewModel.Event.RefreshStats) },
+            maxLines = 1,
+        )
+    }
+}
+
 /** A hand-added station: name plus stream URL, playable like anything else. */
-fun customStation(name: String, rawUrl: String): Station? {
-    val url = rawUrl.trim()
+fun customStation(name: String, rawUrl: String): Station? {    val url = rawUrl.trim()
     if (url.isBlank()) return null
     val fixed = if ("://" in url) url else "https://$url"
     if (!fixed.startsWith("http://") && !fixed.startsWith("https://")) return null

@@ -157,6 +157,7 @@ internal data class PlayerActions(
     val onPrev: () -> Unit,
     val onPlayPause: () -> Unit,
     val onNext: () -> Unit,
+    val onOpenSleep: () -> Unit,
     val onSelectOutput: (Int) -> Unit,
     val onToggleFullscreen: () -> Unit,
 )
@@ -170,7 +171,7 @@ fun NowPlayingScreen(
     onBack: () -> Unit,
 ) {
     var fullscreen by rememberSaveable { mutableStateOf(false) }
-
+    var sleepOpen by rememberSaveable { mutableStateOf(false) }
     val uiState by vm.state.collectAsState()
     // The meters read the live analyser straight off the bus in their frame
     // loops: routing spectrum through VM state would recompose this whole
@@ -213,6 +214,7 @@ fun NowPlayingScreen(
         onPrev = { vm.player.prev() },
         onPlayPause = { vm.player.toggle(uiState.shownStation) },
         onNext = { vm.player.next() },
+        onOpenSleep = { sleepOpen = true },
         onSelectOutput = { vm.onEvent(NowPlayingViewModel.Event.SetOutputDevice(it)) },
         onToggleFullscreen = { fullscreen = true },
     )
@@ -243,6 +245,14 @@ fun NowPlayingScreen(
 
         if (fullscreen) {
             FullscreenVisualizer(model) { fullscreen = false }
+        }
+
+        if (sleepOpen) {
+            SleepDialog(
+                sleepAtMs = uiState.playerState.sleepAtMs,
+                onPick = { vm.player.setSleepTimer(it) },
+                onDismiss = { sleepOpen = false },
+            )
         }
     }
 }

@@ -92,6 +92,8 @@ class PlayerConnection(
     fun removeFromUpNext(index: Int) = queue.removeFromUpNext(index)
     fun reorderUpNext(from: Int, to: Int) = queue.reorderUpNext(from, to)
     fun clearUpNext() = queue.clearUpNext()
+    val canUndo: StateFlow<Boolean> get() = queue.canUndo
+    fun undo() = queue.undo()
     private val _state = MutableStateFlow(PlayerState())
     val state: StateFlow<PlayerState> = _state.asStateFlow()
 
@@ -117,9 +119,24 @@ class PlayerConnection(
     // yet), there is no root to seed the fallback list, so prime it from history and
     // favourites ourselves. The root's seed wins when it arrives.
 
-    /** Playback speed multiplier, 0.5–2.0. Persisted; re-applied on every play. */
+    /** Playback speed multiplier, 0.25–2.0. Persisted; re-applied on every play. */
     private val _speed = MutableStateFlow(1f)
     val speed: StateFlow<Float> = _speed.asStateFlow()
+
+    /**
+     * Sleep timer deadline (epoch ms), or null when off. Checked on every
+     * sync tick, so it fires even with the screen off; deliberately not
+     * persisted - a deadline makes no sense after a restart.
+     */
+    private val _sleepAtMs = MutableStateFlow<Long?>(null)
+    val sleepAtMs: StateFlow<Long?> = _sleepAtMs.asStateFlow()
+
+    /** Arms the sleep timer for [minutes], or disarms it when null. */
+    fun setSleepTimer(minutes: Int?) {
+        _sleepAtMs.value = minutes?.takeIf { it > 0 }
+            ?.let { System.currentTimeMillis() + it * 60_000L }
+        sync()
+    }
 
     /** Whether local files resume (podcasts and provider tracks always do). */
     private val _resumeLocal = MutableStateFlow(false)
@@ -188,11 +205,24 @@ class PlayerConnection(
         // Cancellation still propagates.
         try {
             syncInternal()
+            checkSleepTimer()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             android.util.Log.e("kleeamp/player", "sync failed", e)
         }
+    }
+
+    /**
+     * Fires an expired sleep timer: pause and disarm. Runs inside sync, so
+     * the 2 Hz poller carries it with the screen off; the next tick
+     * publishes the paused state everywhere (UI, widget, notification).
+     */
+    private fun checkSleepTimer() {
+        val at = _sleepAtMs.value ?: return
+        if (System.currentTimeMillis() < at) return
+        _sleepAtMs.value = null
+        controller?.pause()
     }
 
     // Single 2 Hz reconciliation choke point; splitting risks publish-order bugs.
@@ -215,6 +245,7 @@ class PlayerConnection(
             seekable = c.isCurrentMediaItemSeekable,
             live = c.isCurrentMediaItemLive,
             speed = c.playbackParameters.speed,
+            sleepAtMs = _sleepAtMs.value,
             hasPrev = navAvailability.hasPrev,
             hasNext = navAvailability.hasNext,
         )
@@ -332,7 +363,7 @@ class PlayerConnection(
 
     /** Speed applies live and persists, so podcasts reopen at your pace. */
     fun setSpeed(v: Float) {
-        val s = v.coerceIn(0.5f, 2f)
+        val s = v.coerceIn(0.25f, 2f)
         _speed.value = s
         controller?.setPlaybackSpeed(s)
         scope.launch {
@@ -363,6 +394,8 @@ data class PlayerState(
     val seekable: Boolean = false,
     val live: Boolean = false,
     val speed: Float = 1f,
+    /** Sleep timer deadline (epoch ms), null when off. */
+    val sleepAtMs: Long? = null,
 ) {
     /** A scrubber is only honest when there is a length to scrub through. */
     val scrubbable: Boolean get() = seekable && !live && durationMs > 0

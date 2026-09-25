@@ -140,11 +140,20 @@ internal fun PlayerTransport(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                Mono(clock(model.state.positionMs), KleeampType.time, p.inkSecondary)
+                // The elapsed clock opens the sleep timer; the remaining
+                // clock shows its countdown while one runs.
                 Mono(
-                    "-" + clock((model.state.durationMs - model.state.positionMs).coerceAtLeast(0)),
+                    clock(model.state.positionMs),
                     KleeampType.time,
                     p.inkSecondary,
+                    Modifier.microPress(onClick = actions.onOpenSleep),
+                )
+                Mono(
+                    sleepRemaining(model) ?: "-" + clock(
+                        (model.state.durationMs - model.state.positionMs).coerceAtLeast(0),
+                    ),
+                    KleeampType.time,
+                    if (model.state.sleepAtMs != null) p.accent else p.inkSecondary,
                 )
             }
         } else {
@@ -159,7 +168,12 @@ internal fun PlayerTransport(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                Mono(clock(model.state.positionMs), KleeampType.time, p.inkSecondary)
+                Mono(
+                    clock(model.state.positionMs),
+                    KleeampType.time,
+                    p.inkSecondary,
+                    Modifier.microPress(onClick = actions.onOpenSleep),
+                )
                 Mono(
                     if (model.state.playing) "${model.state.bufferedMs / 1000}s buffered"
                     else "tap the meter for scope · eq",
@@ -205,6 +219,12 @@ internal fun TransportKeys(
         ) { Icon(KleeampIcons.Next, "next station", Modifier.size(width = 21.dp, height = 17.dp)) }
     }
 }
+/** "SLEEP m:ss" countdown while a timer runs, else null. */
+internal fun sleepRemaining(model: PlayerModel): String? =
+    model.state.sleepAtMs?.let { at ->
+        "SLEEP " + clock((at - System.currentTimeMillis()).coerceAtLeast(0))
+    }
+
 internal fun statusLabel(model: PlayerModel): String = when {
     model.reconnect > 0 -> "RECONNECTING · ${model.reconnect}"
     model.error != null -> "STREAM ERROR"

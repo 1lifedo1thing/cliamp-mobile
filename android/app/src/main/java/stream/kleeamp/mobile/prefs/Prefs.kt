@@ -129,8 +129,8 @@ class Prefs(private val context: Context) {
     /** Local files reopen where they stopped. Off by default: songs restart. */
     val resumeLocal: Flow<Boolean> = context.settingsStore.data.map { it[K.resumeLocal] ?: false }
     val volume: Flow<Float> = context.settingsStore.data.map { it[K.volume] ?: 1f }
-    /** Playback speed multiplier, 0.5–2.0. Applied to every play. */
-    val speed: Flow<Float> = context.settingsStore.data.map { (it[K.speed] ?: 1f).coerceIn(0.5f, 2f) }
+    /** Playback speed multiplier, 0.25–2.0 like cliamp. Applied to every play. */
+    val speed: Flow<Float> = context.settingsStore.data.map { (it[K.speed] ?: 1f).coerceIn(0.25f, 2f) }
 
     /** Podcasts subscribed-shows section as a grid. */
     val subsGrid: StateFlow<Boolean> = subsGridFlag.asStateFlow()
@@ -287,7 +287,7 @@ class Prefs(private val context: Context) {
     suspend fun setAutoDownload(v: Boolean) = put(K.autoDownload, v)
     suspend fun setResumeLocal(v: Boolean) = put(K.resumeLocal, v)
     suspend fun setVolume(v: Float) = put(K.volume, v)
-    suspend fun setSpeed(v: Float) = put(K.speed, v.coerceIn(0.5f, 2f))
+    suspend fun setSpeed(v: Float) = put(K.speed, v.coerceIn(0.25f, 2f))
     suspend fun setSubsGrid(v: Boolean) {
         subsGridFlag.value = v
         put(K.subsGrid, v)

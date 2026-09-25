@@ -15,7 +15,7 @@ import stream.kleeamp.mobile.playback.upNextIndices
 import stream.kleeamp.mobile.playback.PlayerState
 
 /** Tap-steps through the speed ladder, wrapping back to normal. */
-private val SpeedSteps = listOf(1f, 1.25f, 1.5f, 1.75f, 2f, 0.5f, 0.75f)
+private val SpeedSteps = listOf(1f, 1.25f, 1.5f, 1.75f, 2f, 0.5f, 0.75f, 0.25f)
 
 private fun nextSpeed(now: Float): Float {
     val i = SpeedSteps.indexOfFirst { kotlin.math.abs(it - now) < 0.01f }
