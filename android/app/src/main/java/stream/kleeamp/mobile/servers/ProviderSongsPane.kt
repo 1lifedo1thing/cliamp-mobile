@@ -85,7 +85,12 @@ import stream.kleeamp.mobile.chrome.KleeampTextField
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
-import stream.kleeamp.mobile.chrome.StationMenu
+import stream.kleeamp.mobile.chrome.OverflowButton
+import stream.kleeamp.mobile.chrome.ContextMenuSheet
+import stream.kleeamp.mobile.chrome.MenuKind
+import stream.kleeamp.mobile.chrome.MenuSubject
+import stream.kleeamp.mobile.chrome.StationMenuArt
+import stream.kleeamp.mobile.chrome.menuActions
 import stream.kleeamp.mobile.chrome.ScreenHeader
 import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.scrollToTop
@@ -133,6 +138,8 @@ fun ProviderSongsPane(
     }
     var sort by rememberSaveable { mutableStateOf(PlaylistSort.Title) }
     var query by rememberSaveable { mutableStateOf("") }
+    // The row menu's subject: set by the ⋮ trigger, cleared on dismiss.
+    var menuFor by remember { mutableStateOf<Station?>(null) }
     var selectedArtist by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedAlbum by rememberSaveable { mutableStateOf<String?>(null) }
     val pool = ui.songsByAccount[selected].orEmpty()
@@ -341,18 +348,7 @@ fun ProviderSongsPane(
                                 SongCover(s = s, current = current, playing = playing)
                             },
                             trailing = {
-                                // Provider tracks resolve in info only once
-                                // favourited, so the info entry is gated on it.
-                                val fav = s.url in favorites
-                                StationMenu(
-                                    favorite = fav,
-                                    onToggleFavorite = {
-                                        vm.onEvent(ProviderSongsViewModel.Event.ToggleFavorite(s))
-                                    },
-                                    onAddToPlaylist = { onAddToPlaylist(s) },
-                                    onAddToQueue = { onAddToQueue(s) },
-                                    onInfo = if (fav) onInfo?.let { show -> { show(s) } } else null,
-                                )
+                                OverflowButton({ menuFor = s }, size = 16)
                             },
                             onQueue = { onAddToQueue(s) },
                         ) {
@@ -385,6 +381,31 @@ fun ProviderSongsPane(
                     }
                 }
                 item { Spacer(Modifier.height(20.dp)) }
+            }
+
+            // The row menu as a bottom sheet. Provider tracks resolve in
+            // info only once favourited, so the info entry is gated on it.
+            menuFor?.let { s ->
+                val fav = s.url in favorites
+                ContextMenuSheet(
+                    title = s.name,
+                    subtitle = s.artistAlbum.ifBlank { s.meta.ifBlank { "provider" } },
+                    art = { StationMenuArt(s) },
+                    actions = menuActions(
+                        MenuSubject(
+                            kind = MenuKind.STATION,
+                            favorite = fav,
+                            infoAvailable = fav,
+                            onQueue = { onAddToQueue(s) },
+                            onToggleFavorite = {
+                                vm.onEvent(ProviderSongsViewModel.Event.ToggleFavorite(s))
+                            },
+                            onAddToPlaylist = { onAddToPlaylist(s) },
+                            onInfo = if (fav) onInfo?.let { show -> { show(s) } } else null,
+                        ),
+                    ),
+                    onDismiss = { menuFor = null },
+                )
             }
         }
     }

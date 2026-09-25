@@ -87,8 +87,13 @@ import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
-import stream.kleeamp.mobile.chrome.OverflowItem
-import stream.kleeamp.mobile.chrome.StationMenu
+import stream.kleeamp.mobile.chrome.OverflowButton
+import stream.kleeamp.mobile.chrome.ContextMenuSheet
+import stream.kleeamp.mobile.chrome.DestructiveAction
+import stream.kleeamp.mobile.chrome.MenuKind
+import stream.kleeamp.mobile.chrome.MenuSubject
+import stream.kleeamp.mobile.chrome.StationMenuArt
+import stream.kleeamp.mobile.chrome.menuActions
 import stream.kleeamp.mobile.chrome.ScreenHeader
 import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.scrollToTop
@@ -197,6 +202,8 @@ fun LibrarySmartPlaylistPane(
     val members = if (pl?.kind == SmartKind.LocalSongs && folder != null) {
         folders.firstOrNull { it.path == folder }?.songs.orEmpty()
     } else pl?.stations.orEmpty()
+    // The row menu's subject: set by the ⋮ trigger, cleared on dismiss.
+    var menuFor by remember { mutableStateOf<Station?>(null) }
     // The header carries no chip rows; pickers ride the scrolling rows
     // below, on top of the filter.
     Box(Modifier.fillMaxSize().background(p.ground)) {
@@ -235,9 +242,8 @@ fun LibrarySmartPlaylistPane(
                         current = current,
                         playing = playing,
                         onPlay = onPlay,
-                        onToggleFavorite = { vm.onEvent(SmartPlaylistViewModel.Event.ToggleFavorite(it)) },
-                        favorites = favorites.map { it.url }.toSet(),
                         onAddToQueue = onAddToQueue,
+                        onOpenMenu = { menuFor = it },
                         loading = loading,
                         favScope = favScope,
                         onFavScopeChange = onFavScopeChange,
@@ -245,25 +251,58 @@ fun LibrarySmartPlaylistPane(
                         folders = folders,
                         folder = folder,
                         onFolder = { folder = it },
-                        onInfo = onOpenSongInfo,
-                        // Removing from downloads deletes the fetched file and
-                        // untracks the URL; anywhere else it drops the song.
-                        onRemove = { s ->
-                            if (pl.kind == SmartKind.Downloads) {
-                                vm.onEvent(SmartPlaylistViewModel.Event.RemoveDownload(s))
-                            } else removeLocalSong(s)
-                        },
                         progress = progress,
                         showResume = showResume,
                         sort = detailSort,
                         fetchedBytes = fetched.mapValues { it.value.bytes },
-                        onAddToPlaylist = onAddToPlaylist,
                         onBeginAdd = if (pl.kind == SmartKind.Favorites) {
                             { adding = true }
                         } else null,
                     )
                 }
             }
+        }
+
+        // The row menu as a bottom sheet: capabilities decide the rows, so
+        // local files offer Delete, downloads offer remove-download, and
+        // favourites/recent offer neither.
+        menuFor?.let { s ->
+            val downloaded = pl?.kind == SmartKind.Downloads
+            ContextMenuSheet(
+                title = s.name,
+                subtitle = smartMenuSubtitle(s),
+                art = { StationMenuArt(s) },
+                actions = menuActions(
+                    MenuSubject(
+                        kind = MenuKind.STATION,
+                        favorite = favorites.any { it.url == s.url },
+                        infoAvailable = s.source != StationSource.Podcast,
+                        destructive = when {
+                            downloaded -> DestructiveAction(
+                                "remove download",
+                                "delete the fetched file",
+                                {
+                                    vm.onEvent(SmartPlaylistViewModel.Event.RemoveDownload(s))
+                                },
+                            )
+                            s.source == StationSource.Local &&
+                                pl?.kind == SmartKind.LocalSongs -> DestructiveAction(
+                                "Delete",
+                                "remove from this device",
+                                { removeLocalSong(s) },
+                            )
+                            else -> null
+                        },
+                        onQueue = { onAddToQueue(s) },
+                        onToggleFavorite = {
+                            vm.onEvent(SmartPlaylistViewModel.Event.ToggleFavorite(s))
+                        },
+                        onAddToPlaylist = { onAddToPlaylist(s) },
+                        onInfo = { onOpenSongInfo(s) },
+                    ),
+                ),
+                onDismiss = { menuFor = null },
+            )
         }
     }
 }
@@ -436,6 +475,18 @@ internal fun PodcastGroups(
     }
 }
 
+/** The sheet header line under the title: same words the smart rows wear. */
+private fun smartMenuSubtitle(s: Station): String = buildList {
+    when (s.source) {
+        StationSource.Podcast -> add(s.artist.ifBlank { s.meta.ifBlank { "podcast" } })
+        StationSource.Local -> add(s.artistAlbum.ifBlank { s.meta })
+        else -> {
+            s.meta.takeIf { it.isNotBlank() }?.let { add(it) }
+            s.tagList.take(2).forEach { add(it) }
+        }
+    }
+}.joinToString(" · ")
+
 /** Detail view for a pinned smart playlist: every member station, local and radio. */
 
 @Composable
@@ -448,8 +499,8 @@ private fun SmartPlaylistDetail(
     current: Station?,
     playing: Boolean,
     onPlay: (Station, List<Station>) -> Unit,
-    onToggleFavorite: (Station) -> Unit,
-    favorites: Set<String>,
+    onAddToQueue: (Station) -> Unit = {},
+    onOpenMenu: (Station) -> Unit = {},
     loading: Boolean = false,
     favScope: FavScope = FavScope.All,
     onFavScopeChange: (FavScope) -> Unit = {},
@@ -457,14 +508,10 @@ private fun SmartPlaylistDetail(
     folders: List<SongFolder> = emptyList(),
     folder: String? = null,
     onFolder: (String?) -> Unit = {},
-    onInfo: (Station) -> Unit = {},
-    onRemove: (Station) -> Unit = {},
     progress: Map<String, EpisodeProgress> = emptyMap(),
     showResume: Boolean = false,
     sort: PlaylistSort = PlaylistSort.Title,
     fetchedBytes: Map<String, Long> = emptyMap(),
-    onAddToPlaylist: (Station) -> Unit = {},
-    onAddToQueue: (Station) -> Unit = {},
     /** Non-null on lists that can grow: renders the section + button. */
     onBeginAdd: (() -> Unit)? = null,
 ) {
@@ -582,27 +629,7 @@ private fun SmartPlaylistDetail(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            StationMenu(
-                                favorite = s.url in favorites,
-                                onToggleFavorite = { onToggleFavorite(s) },
-                                onAddToPlaylist = { onAddToPlaylist(s) },
-                                onAddToQueue = { onAddToQueue(s) },
-                                onInfo = { onInfo(s) },
-                                // Only the on-device lists are writable;
-                                // favourites and recently-played are
-                                // read-only views, like episode rows.
-                                extra = if (local) {
-                                    listOf(
-                                        OverflowItem(
-                                            "remove",
-                                            color = p.destructiveInk,
-                                            action = { onRemove(s) },
-                                        ),
-                                    )
-                                } else {
-                                    emptyList()
-                                },
-                            )
+                            OverflowButton({ onOpenMenu(s) }, size = 16)
                         }
                     },
                 ) {

@@ -87,8 +87,13 @@ import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
-import stream.kleeamp.mobile.chrome.OverflowItem
-import stream.kleeamp.mobile.chrome.StationMenu
+import stream.kleeamp.mobile.chrome.OverflowButton
+import stream.kleeamp.mobile.chrome.ContextMenuSheet
+import stream.kleeamp.mobile.chrome.DestructiveAction
+import stream.kleeamp.mobile.chrome.MenuKind
+import stream.kleeamp.mobile.chrome.MenuSubject
+import stream.kleeamp.mobile.chrome.StationMenuArt
+import stream.kleeamp.mobile.chrome.menuActions
 import stream.kleeamp.mobile.chrome.ScreenHeader
 import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.scrollToTop
@@ -126,6 +131,8 @@ fun LibraryPlaylistPane(
     val scope = rememberCoroutineScope()
     var adding by rememberSaveable(slug) { mutableStateOf(startAdding) }
     var query by rememberSaveable(slug) { mutableStateOf("") }
+    // The row menu's subject: set by the ⋮ trigger, cleared on dismiss.
+    var menuFor by remember { mutableStateOf<Station?>(null) }
     val ui by vm.state.collectAsState()
     // Back closes the picker first; writes already landed per tap, so there
     // is nothing to save — a second back leaves the page.
@@ -177,14 +184,47 @@ fun LibraryPlaylistPane(
                         playing = playing,
                         onPlay = onPlay,
                         onToggle = { vm.onEvent(PlaylistDetailViewModel.Event.ToggleMember(it)) },
-                        onRemoveMember = { vm.onEvent(PlaylistDetailViewModel.Event.RemoveMember(it)) },
                         onAddToQueue = onAddToQueue,
+                        onOpenMenu = { menuFor = it },
                         adding = adding,
-                        onAddToPlaylist = onAddToPlaylist,
-                        onInfo = onInfo,
                         onBeginAdd = { adding = true },
-                        favorites = ui.favorites.map { it.url }.toSet(),
-                        onToggleFavorite = { vm.onEvent(PlaylistDetailViewModel.Event.ToggleFavorite(it)) },
+                    )
+                }
+
+                // The row menu as a bottom sheet: favourites, playlists,
+                // queue, info where it resolves, and drop from the list.
+                menuFor?.let { s ->
+                    val fav = ui.favorites.any { it.url == s.url }
+                    val info = if (s.source != StationSource.Custom || fav) onInfo else null
+                    ContextMenuSheet(
+                        title = s.name,
+                        subtitle = s.artistAlbum.ifBlank {
+                            when {
+                                s.source == StationSource.Local -> durationLabel(s.durationMs)
+                                s.source == StationSource.Podcast -> "podcast"
+                                else -> s.meta
+                            }
+                        },
+                        art = { StationMenuArt(s) },
+                        actions = menuActions(
+                            MenuSubject(
+                                kind = MenuKind.STATION,
+                                favorite = fav,
+                                infoAvailable = info != null,
+                                destructive = DestructiveAction(
+                                    "drop",
+                                    "remove from this playlist",
+                                    { vm.onEvent(PlaylistDetailViewModel.Event.RemoveMember(s)) },
+                                ),
+                                onQueue = { onAddToQueue(s) },
+                                onToggleFavorite = {
+                                    vm.onEvent(PlaylistDetailViewModel.Event.ToggleFavorite(s))
+                                },
+                                onAddToPlaylist = { onAddToPlaylist(s) },
+                                onInfo = info?.let { show -> { show(s) } },
+                            ),
+                        ),
+                        onDismiss = { menuFor = null },
                     )
                 }
             }
@@ -215,13 +255,9 @@ private fun PlaylistDetailShown(
     onPlay: (Station, List<Station>) -> Unit,
     onToggle: (Station) -> Unit,
     adding: Boolean,
-    onAddToPlaylist: (Station) -> Unit = {},
-    onInfo: ((Station) -> Unit)? = null,
-    onRemoveMember: (Station) -> Unit = {},
     onBeginAdd: () -> Unit = {},
-    favorites: Set<String> = emptySet(),
-    onToggleFavorite: (Station) -> Unit = {},
     onAddToQueue: (Station) -> Unit = {},
+    onOpenMenu: (Station) -> Unit = {},
 ) {
     val p = LocalPalette.current
 
@@ -295,28 +331,7 @@ private fun PlaylistDetailShown(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            // Info resolves for members from any catalogue or
-                            // snapshot; only an unfavourited custom station
-                            // would land on "song gone".
-                            val fav = s.url in favorites
-                            StationMenu(
-                                favorite = fav,
-                                onToggleFavorite = { onToggleFavorite(s) },
-                                onAddToPlaylist = { onAddToPlaylist(s) },
-                                onAddToQueue = { onAddToQueue(s) },
-                                onInfo = if (s.source != StationSource.Custom || fav) {
-                                    onInfo?.let { show -> { show(s) } }
-                                } else {
-                                    null
-                                },
-                                extra = listOf(
-                                    OverflowItem(
-                                        "drop",
-                                        color = p.destructiveInk,
-                                        action = { onRemoveMember(s) },
-                                    ),
-                                ),
-                            )
+                            OverflowButton({ onOpenMenu(s) }, size = 16)
                         }
                     },
                 ) {

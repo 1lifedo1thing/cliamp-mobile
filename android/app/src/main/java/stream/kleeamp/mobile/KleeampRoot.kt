@@ -378,7 +378,6 @@ fun KleeampRoot(
                                 onPlay = { s, from -> play(s, from) },
                                 onAddToQueue = { player.addToUpNext(it) },
                                 onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
-                                onInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
                                 onOpenSearch = {
                                     navController.navigate(Search)
                                 },
@@ -823,7 +822,6 @@ private fun StationsTab(
     onPlay: (Station, List<Station>) -> Unit,
     onAddToQueue: (Station) -> Unit,
     onAddToPlaylist: (Station) -> Unit,
-    onInfo: (Station) -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSettings: () -> Unit,
     focusDirectory: Boolean,
@@ -838,7 +836,6 @@ private fun StationsTab(
         onPlay = onPlay,
         onAddToQueue = onAddToQueue,
         onAddToPlaylist = onAddToPlaylist,
-        onInfo = onInfo,
         onOpenSearch = onOpenSearch,
         onOpenSettings = onOpenSettings,
         focusDirectory = focusDirectory,

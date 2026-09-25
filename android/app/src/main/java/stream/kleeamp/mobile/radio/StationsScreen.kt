@@ -61,8 +61,13 @@ import stream.kleeamp.mobile.chrome.EmptyNote
 import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.ListRow
-import stream.kleeamp.mobile.chrome.OverflowItem
-import stream.kleeamp.mobile.chrome.StationMenu
+import stream.kleeamp.mobile.chrome.OverflowButton
+import stream.kleeamp.mobile.chrome.ContextMenuSheet
+import stream.kleeamp.mobile.chrome.DestructiveAction
+import stream.kleeamp.mobile.chrome.MenuKind
+import stream.kleeamp.mobile.chrome.MenuSubject
+import stream.kleeamp.mobile.chrome.StationMenuArt
+import stream.kleeamp.mobile.chrome.menuActions
 import stream.kleeamp.mobile.chrome.microPress
 import stream.kleeamp.mobile.chrome.RetryNote
 
@@ -87,8 +92,6 @@ fun StationsScreen(
     onPlay: (Station, List<Station>) -> Unit,
     onAddToQueue: (Station) -> Unit = {},
     onAddToPlaylist: (Station) -> Unit = {},
-    /** Null hides the menu's info entry: info only shows where it resolves. */
-    onInfo: ((Station) -> Unit)? = null,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     focusDirectory: Boolean = false,
@@ -116,6 +119,9 @@ fun StationsScreen(
     }
 
     val listState = rememberLazyListState()
+    // The row menu's subject: set by the ⋮ trigger, cleared on dismiss.
+    // The sheet itself is emitted after the list below.
+    var menuFor by remember { mutableStateOf<Station?>(null) }
     // NOTE: no scroll reset on query/source change. A filter keeps its
     // scroll position while the repository swaps content underneath
     // (stale rows stay until the live page lands), and returning from
@@ -219,12 +225,9 @@ fun StationsScreen(
                             station = s,
                             active = current?.url == s.url,
                             playing = playing && current?.url == s.url,
-                            favorite = favorites.any { it.url == s.url },
                             onPlay = { onPlay(s, cliamp) },
-                            onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                             onQueue = { onAddToQueue(s) },
-                            onAddToPlaylist = { onAddToPlaylist(s) },
-                            onInfo = onInfo,
+                            onOpenMenu = { menuFor = s },
                         )
                     }
                 }
@@ -269,21 +272,13 @@ fun StationsScreen(
                     custom,
                     key = { "cu:${it.url}" },
                 ) { s ->
-                    // Info only resolves for catalogue stations or ones the
-                    // user already owns (favourited): anything else lands on
-                    // the pane's "song gone".
-                    val fav = favorites.any { it.url == s.url }
                     CustomStationRow(
                         station = s,
                         active = current?.url == s.url,
                         playing = playing && current?.url == s.url,
-                        favorite = fav,
                         onPlay = { onPlay(s, custom) },
-                        onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
-                        onRemove = { vm.onEvent(StationsViewModel.Event.RemoveCustom(s)) },
                         onQueue = { onAddToQueue(s) },
-                        onAddToPlaylist = { onAddToPlaylist(s) },
-                        onInfo = if (fav) onInfo else null,
+                        onOpenMenu = { menuFor = s },
                     )
                 }
             }
@@ -360,12 +355,9 @@ fun StationsScreen(
                         station = s,
                         active = current?.url == s.url,
                         playing = playing && current?.url == s.url,
-                        favorite = favorites.any { it.url == s.url },
                         onPlay = { onPlay(s, directory.stations) },
-                        onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                         onQueue = { onAddToQueue(s) },
-                        onAddToPlaylist = { onAddToPlaylist(s) },
-                        onInfo = onInfo,
+                        onOpenMenu = { menuFor = s },
                     )
                 }
                 item {
@@ -388,7 +380,50 @@ fun StationsScreen(
 
             item { Spacer(Modifier.height(20.dp)) }
         }
+
+        // The row menu as a bottom sheet: one reusable component fed by the
+        // subject below, so stations never hardcode their own action list.
+        // No info entry: radio needs none.
+        menuFor?.let { s ->
+            val fav = favorites.any { it.url == s.url }
+            val isCustom = custom.any { it.url == s.url }
+            ContextMenuSheet(
+                title = s.name,
+                subtitle = stationMenuSubtitle(s),
+                art = { StationMenuArt(s) },
+                actions = menuActions(
+                    MenuSubject(
+                        kind = MenuKind.STATION,
+                        favorite = fav,
+                        infoAvailable = false,
+                        destructive = if (isCustom) {
+                            DestructiveAction(
+                                "remove station",
+                                "delete this station",
+                                { vm.onEvent(StationsViewModel.Event.RemoveCustom(s)) },
+                            )
+                        } else {
+                            null
+                        },
+                        onQueue = { onAddToQueue(s) },
+                        onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
+                        onAddToPlaylist = { onAddToPlaylist(s) },
+                    ),
+                ),
+                onDismiss = { menuFor = null },
+            )
+        }
     }
+}
+
+/** The sheet header line under the title: same words the row itself wears. */
+private fun stationMenuSubtitle(s: Station): String {
+    if (s.source == StationSource.Custom) return "custom station"
+    return buildList {
+        if (s.source == StationSource.Cliamp) add("cliamp radio")
+        s.meta.takeIf { it.isNotBlank() }?.let { add(it) }
+        s.tagList.take(2).forEach { add(it) }
+    }.joinToString(" · ")
 }
 
 @Composable
@@ -396,12 +431,9 @@ private fun StationRow(
     station: Station,
     active: Boolean,
     playing: Boolean,
-    favorite: Boolean,
     onPlay: () -> Unit,
-    onToggleFavorite: () -> Unit,
     onQueue: () -> Unit,
-    onAddToPlaylist: (Station) -> Unit = {},
-    onInfo: ((Station) -> Unit)? = null,
+    onOpenMenu: () -> Unit,
 ) {
     val p = LocalPalette.current
     ListRow(
@@ -417,13 +449,7 @@ private fun StationRow(
                 if (station.votes > 0) {
                     Mono(compact(station.votes), KleeampType.meta, p.inkFaint)
                 }
-                StationMenu(
-                    favorite = favorite,
-                    onToggleFavorite = onToggleFavorite,
-                    onAddToPlaylist = { onAddToPlaylist(station) },
-                    onAddToQueue = onQueue,
-                    onInfo = onInfo?.let { show -> { show(station) } },
-                )
+                OverflowButton(onOpenMenu, size = 16)
             }
         },
     ) {
@@ -634,19 +660,13 @@ private fun CustomField(
 
 /** A custom station row: plays like a directory row, plus remove. */
 @Composable
-// Screen signature: state in, callbacks out; bundling would hide the data flow.
-@Suppress("LongParameterList")
 private fun CustomStationRow(
     station: Station,
     active: Boolean,
     playing: Boolean,
-    favorite: Boolean,
     onPlay: () -> Unit,
-    onToggleFavorite: () -> Unit,
-    onRemove: () -> Unit,
     onQueue: () -> Unit,
-    onAddToPlaylist: (Station) -> Unit = {},
-    onInfo: ((Station) -> Unit)? = null,
+    onOpenMenu: () -> Unit,
 ) {
     val p = LocalPalette.current
     ListRow(
@@ -659,20 +679,7 @@ private fun CustomStationRow(
         onQueue = onQueue,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StationMenu(
-                    favorite = favorite,
-                    onToggleFavorite = onToggleFavorite,
-                    onAddToPlaylist = { onAddToPlaylist(station) },
-                    onAddToQueue = onQueue,
-                    onInfo = onInfo?.let { show -> { show(station) } },
-                    extra = listOf(
-                        OverflowItem(
-                            "remove station",
-                            color = p.destructiveInk,
-                            action = onRemove,
-                        ),
-                    ),
-                )
+                OverflowButton(onOpenMenu, size = 16)
             }
         },
     ) {
