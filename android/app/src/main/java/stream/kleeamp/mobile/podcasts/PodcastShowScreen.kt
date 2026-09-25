@@ -23,8 +23,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,6 +34,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.art.ArtResolve
+import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.chrome.ArtKind
 import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.rememberArt
@@ -42,8 +45,12 @@ import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
 import stream.kleeamp.mobile.chrome.microPress
-import stream.kleeamp.mobile.chrome.OverflowItem
-import stream.kleeamp.mobile.chrome.StationMenu
+import stream.kleeamp.mobile.chrome.OverflowButton
+import stream.kleeamp.mobile.chrome.ContextMenuSheet
+import stream.kleeamp.mobile.chrome.MenuKind
+import stream.kleeamp.mobile.chrome.MenuSubject
+import stream.kleeamp.mobile.chrome.StationMenuArt
+import stream.kleeamp.mobile.chrome.menuActions
 import stream.kleeamp.mobile.chrome.MainLayout
 import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.scrollToTop
@@ -102,6 +109,9 @@ fun PodcastShowScreen(
         ArtResolve.prefetchSmallUrls(queue.mapNotNull { it.cover.takeIf { u -> u.startsWith("http") } })
     }
     val listState = rememberLazyListState()
+    // The episode menu's index into the parallel queue/episodes lists, set
+    // by the ⋮ trigger and cleared on dismiss.
+    var menuIndex by remember { mutableStateOf<Int?>(null) }
 
     // Subscribed + auto-download on: the latest episodes fetch themselves
     // whenever the feed lands. Idempotent, so refreshes re-firing it cost
@@ -172,26 +182,67 @@ fun PodcastShowScreen(
                         progress = progress[station.url],
                         active = current?.url == station.url,
                         playing = playing && current?.url == station.url,
-                        favorite = station.url in ui.favorites,
                         dlState = dl,
                         downloadedBytes = fetched?.bytes ?: 0L,
                         onPlay = { onPlay(station, queue) },
-                        onPlayNext = { onPlayNext(station) },
-                        onAddToUpNext = { onAddToUpNext(station) },
-                        onToggleFavorite = {
-                            vm.onEvent(PodcastShowViewModel.Event.ToggleFavorite(station))
-                        },
-                        onAddToPlaylist = { onAddToPlaylist(station) },
-                        onMarkPlayed = { vm.onEvent(PodcastShowViewModel.Event.MarkCompleted(station)) },
-                        onForget = { vm.onEvent(PodcastShowViewModel.Event.ClearProgress(station)) },
-                        onDownload = { vm.onEvent(PodcastShowViewModel.Event.Download(station)) },
-                        onCancelDownload = { vm.onEvent(PodcastShowViewModel.Event.CancelDownload(station.url)) },
-                        onRemoveDownload = { vm.onEvent(PodcastShowViewModel.Event.RemoveDownload(station.url)) },
+                        onQueue = { onAddToUpNext(station) },
+                        onOpenMenu = { menuIndex = i },
                     )
                 }
             }
 
             item { Spacer(Modifier.height(24.dp)) }
+        }
+
+        // The episode menu as a bottom sheet: play-next, queue,
+        // favourites, playlists plus the download and played rows for
+        // the episode's current state. No info entry - episodes are
+        // not resolvable by the info pane.
+        menuIndex?.let { mi ->
+            queue.getOrNull(mi)?.let { s ->
+                val mdl = dlStates[s.url] ?: DownloadState.Idle
+                val done = progress[s.url]?.completed == true
+                ContextMenuSheet(
+                    title = s.name,
+                    subtitle = listOfNotNull(
+                        shortDate(state.episodes.getOrNull(mi)?.publishedAt ?: 0L),
+                        clock(s.durationMs),
+                    ).joinToString(" · "),
+                    art = { StationMenuArt(s) },
+                    actions = menuActions(
+                        MenuSubject(
+                            kind = MenuKind.EPISODE,
+                            favorite = s.url in ui.favorites,
+                            downloaded = (dlEntries[s.url]?.bytes ?: 0L) > 0L,
+                            downloading = mdl is DownloadState.Active,
+                            downloadFailed = mdl is DownloadState.Failed,
+                            playedDone = done,
+                            onPlayNext = { onPlayNext(s) },
+                            onQueue = { onAddToUpNext(s) },
+                            onToggleFavorite = {
+                                vm.onEvent(PodcastShowViewModel.Event.ToggleFavorite(s))
+                            },
+                            onAddToPlaylist = { onAddToPlaylist(s) },
+                            onDownload = {
+                                vm.onEvent(PodcastShowViewModel.Event.Download(s))
+                            },
+                            onCancelDownload = {
+                                vm.onEvent(PodcastShowViewModel.Event.CancelDownload(s.url))
+                            },
+                            onRemoveDownload = {
+                                vm.onEvent(PodcastShowViewModel.Event.RemoveDownload(s.url))
+                            },
+                            onMarkPlayed = {
+                                vm.onEvent(PodcastShowViewModel.Event.MarkCompleted(s))
+                            },
+                            onForgetPlayed = {
+                                vm.onEvent(PodcastShowViewModel.Event.ClearProgress(s))
+                            },
+                        ),
+                    ),
+                    onDismiss = { menuIndex = null },
+                )
+            }
         }
     }
 }
@@ -205,7 +256,7 @@ private fun ShowHeader(
     val p = LocalPalette.current
     if (show == null) return
     // Full decode with a memory peek, so reopening a show never flashes
-    // the mic on a cover the cache already holds.
+    // the plate on a cover the cache already holds.
     val art = rememberArt(url = show.artwork, kind = ArtKind.Full)
     Column {
         Row(
@@ -222,7 +273,12 @@ private fun ShowHeader(
                 if (art != null) {
                     Image(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 } else {
-                    Icon(KleeampIcons.PodsTab, null, Modifier.size(40.dp), tint = p.inkFaint)
+                    SeedPlate(
+                        key = show.feedUrl.ifBlank { show.id },
+                        name = show.title,
+                        modifier = Modifier.fillMaxSize(),
+                        radius = KleeampShape.small,
+                    )
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -259,19 +315,11 @@ private fun EpisodeRow(
     progress: EpisodeProgress?,
     active: Boolean,
     playing: Boolean,
-    favorite: Boolean,
     onPlay: () -> Unit,
-    onPlayNext: () -> Unit,
-    onAddToUpNext: () -> Unit,
-    onToggleFavorite: () -> Unit,
-    onAddToPlaylist: () -> Unit,
-    onMarkPlayed: () -> Unit,
-    onForget: () -> Unit,
+    onQueue: () -> Unit = {},
+    onOpenMenu: () -> Unit = {},
     dlState: DownloadState = DownloadState.Idle,
     downloadedBytes: Long = 0L,
-    onDownload: () -> Unit = {},
-    onCancelDownload: () -> Unit = {},
-    onRemoveDownload: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val done = progress?.completed == true
@@ -280,11 +328,11 @@ private fun EpisodeRow(
         rail = active,
         onClick = onPlay,
         verticalPadding = 11.dp,
-        onQueue = onAddToUpNext,
+        onQueue = onQueue,
         leading = {
             // The resolved station cover already falls back to the show's own
             // artwork when the episode has none (see toStation), so only a
-            // show without any cover at all lands on the icon plate.
+            // show without any cover at all lands on the generated plate.
             val artUrl = station.cover.takeIf { it.startsWith("http") }
                 ?: episode.artwork.takeIf { it.startsWith("http") }
             val thumb = rememberArt(url = artUrl)
@@ -301,7 +349,12 @@ private fun EpisodeRow(
                 if (thumb != null) {
                     Image(thumb, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 } else {
-                    Icon(KleeampIcons.PodRow, null, Modifier.size(18.dp), tint = p.inkFaint)
+                    SeedPlate(
+                        key = station.id.ifBlank { station.url },
+                        name = station.name,
+                        modifier = Modifier.fillMaxSize(),
+                        radius = KleeampShape.small,
+                    )
                 }
                 if (active || done) {
                     Box(
@@ -328,57 +381,9 @@ private fun EpisodeRow(
         },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Fetch state lives left of the ⋮: idle offers the download,
-                // active reads percent (tap cancels), done wears accent (the
-                // ⋮ removes it), failed offers a retry.
-                when (val d = dlState) {
-                    is DownloadState.Active -> Mono(
-                        if (d.indeterminate) downloadSizeLabel(d.bytesRead)
-                        else "${(d.fraction * 100).toInt()}%",
-                        KleeampType.meta, p.amber,
-                        Modifier.padding(8.dp, 4.dp).microPress { onCancelDownload() },
-                    )
-                    is DownloadState.Failed -> Mono(
-                        "retry", KleeampType.meta, p.destructiveInk,
-                        Modifier.padding(8.dp, 4.dp).microPress { onDownload() },
-                    )
-                    is DownloadState.Idle ->
-                        if (fetched) Icon(
-                            KleeampIcons.Download, "downloaded",
-                            Modifier.size(15.dp), tint = p.accent,
-                        )
-                        else Icon(
-                            KleeampIcons.Download, "download",
-                            Modifier.size(15.dp).microPress { onDownload() }, tint = p.inkTertiary,
-                        )
-                }
-                StationMenu(
-                    favorite = favorite,
-                    onToggleFavorite = onToggleFavorite,
-                    onAddToPlaylist = onAddToPlaylist,
-                    onAddToQueue = onAddToUpNext,
-                    // Episodes are not resolvable by the info pane, so no
-                    // info entry: favourites, playlists and queue only.
-                    onInfo = null,
-                    extra = buildList {
-                        add(OverflowItem("play next", onPlayNext))
-                        when {
-                            fetched -> add(
-                                OverflowItem("remove download", color = p.destructiveInk, action = onRemoveDownload)
-                            )
-                            dlState is DownloadState.Active -> add(
-                                OverflowItem("cancel download", color = p.destructiveInk, action = onCancelDownload)
-                            )
-                            else -> add(OverflowItem("download", onDownload))
-                        }
-                        add(
-                            OverflowItem(
-                                if (done) "mark unplayed" else "mark played",
-                                { if (done) onForget() else onMarkPlayed() },
-                            )
-                        )
-                    },
-                )
+                // Fetch actions live in the ⋮ menu now; the subtitle below
+                // still names the fetch state (offline · size, fetching %).
+                OverflowButton(onOpenMenu)
             }
         },
     ) {

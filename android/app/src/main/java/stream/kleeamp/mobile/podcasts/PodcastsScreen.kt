@@ -42,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.art.ArtResolve
+import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.chrome.ArtKind
 import stream.kleeamp.mobile.chrome.rememberArt
 import stream.kleeamp.mobile.chrome.Chip
@@ -54,8 +55,11 @@ import stream.kleeamp.mobile.chrome.microPress
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.ListRow
 import stream.kleeamp.mobile.chrome.OverflowButton
-import stream.kleeamp.mobile.chrome.OverflowItem
-import stream.kleeamp.mobile.chrome.OverflowMenu
+import stream.kleeamp.mobile.chrome.ContextMenuSheet
+import stream.kleeamp.mobile.chrome.MenuKind
+import stream.kleeamp.mobile.chrome.MenuSubject
+import stream.kleeamp.mobile.chrome.ShowMenuArt
+import stream.kleeamp.mobile.chrome.menuActions
 import stream.kleeamp.mobile.chrome.RetryNote
 import stream.kleeamp.mobile.chrome.MainLayout
 import stream.kleeamp.mobile.chrome.SectionLabel
@@ -110,6 +114,8 @@ fun PodcastsScreen(
     }
 
     val subscribedFeeds = remember(subscriptions) { subscriptions.mapTo(HashSet()) { it.feedUrl } }
+    // The show menu's subject: set by the ⋮ trigger, cleared on dismiss.
+    var menuShow by remember { mutableStateOf<PodcastShow?>(null) }
 
     // Warm catalogue art on entry and on page append: small for rows, full
     // for the first tiles (which decode full-res). Full downloads share
@@ -170,7 +176,7 @@ fun PodcastsScreen(
                     }
                     if (subscriptions.isEmpty()) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
-                            EmptyNote("nothing subscribed — open a show and hit the star")
+                            EmptyNote("nothing subscribed — open a show and subscribe")
                         }
                     } else {
                         items(
@@ -181,20 +187,15 @@ fun PodcastsScreen(
                             if (subsGrid) {
                                 ShowTile(
                                     show = show,
-                                    subscribed = true,
                                     onOpen = { onOpenShow(show) },
-                                    onToggleSubscribe = {
-                                        vm.onEvent(PodcastsViewModel.Event.ToggleSubscription(show))
-                                    },
+                                    onOpenMenu = { menuShow = show },
                                 )
                             } else {
                                 ShowRow(
                                     show = show,
                                     subscribed = true,
                                     onOpen = { onOpenShow(show) },
-                                    onToggleSubscribe = {
-                                        vm.onEvent(PodcastsViewModel.Event.ToggleSubscription(show))
-                                    },
+                                    onOpenMenu = { menuShow = show },
                                 )
                             }
                         }
@@ -249,16 +250,15 @@ fun PodcastsScreen(
                         if (podDirectoryGrid) {
                             ShowTile(
                                 show = show,
-                                subscribed = show.feedUrl in subscribedFeeds,
                                 onOpen = { onOpenShow(show) },
-                                onToggleSubscribe = { vm.onEvent(PodcastsViewModel.Event.ToggleSubscription(show)) },
+                                onOpenMenu = { menuShow = show },
                             )
                         } else {
                             ShowRow(
                                 show = show,
                                 subscribed = show.feedUrl in subscribedFeeds,
                                 onOpen = { onOpenShow(show) },
-                                onToggleSubscribe = { vm.onEvent(PodcastsViewModel.Event.ToggleSubscription(show)) },
+                                onOpenMenu = { menuShow = show },
                             )
                         }
                     }
@@ -278,39 +278,52 @@ fun PodcastsScreen(
 
                 item(span = { GridItemSpan(maxLineSpan) }) { Spacer(Modifier.height(20.dp)) }
             }
+
+            // The show menu as a bottom sheet: the subscription alone, since
+            // shows are feeds - favourites, playlists, queue and info live
+            // on episode rows instead.
+            menuShow?.let { show ->
+                val subscribed = show.feedUrl in subscribedFeeds
+                ContextMenuSheet(
+                    title = show.title,
+                    subtitle = show.meta,
+                    art = { ShowMenuArt(show.artwork, show.feedUrl.ifBlank { show.id }, show.title) },
+                    actions = menuActions(
+                        MenuSubject(
+                            kind = MenuKind.SHOW,
+                            subscribed = subscribed,
+                            onToggleSubscribe = {
+                                vm.onEvent(PodcastsViewModel.Event.ToggleSubscription(show))
+                            },
+                        ),
+                    ),
+                    onDismiss = { menuShow = null },
+                )
+            }
         }
     }
 }
 
-/** A show: artwork, title, author and count, with the subscribe star. */
+/** A show: artwork, title, author and count, with the subscribe menu. */
 @Composable
 private fun ShowRow(
     show: PodcastShow,
     subscribed: Boolean,
     onOpen: () -> Unit,
-    onToggleSubscribe: () -> Unit,
+    onOpenMenu: () -> Unit,
 ) {
     val p = LocalPalette.current
     ListRow(
         onClick = onOpen,
         verticalPadding = 9.dp,
         gutter = 8.dp,
-        leading = { Artwork(show.artwork) },
+        leading = { Artwork(show) },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Shows are feeds, not playable stations, so their menu is
-                // the subscription alone: favourites, playlists, queue and
-                // info live on episode rows instead.
-                OverflowMenu(
-                    trigger = { open -> OverflowButton(open, size = 16) },
-                    items = listOf(
-                        OverflowItem(
-                            if (subscribed) "unsubscribe" else "subscribe",
-                            color = p.ink,
-                            action = onToggleSubscribe,
-                        ),
-                    ),
-                )
+                if (subscribed) {
+                    Mono("SUB", KleeampType.tabLabel, p.accent)
+                }
+                OverflowButton(onOpenMenu, size = 16)
                 Icon(KleeampIcons.CaretRight, null, Modifier.size(9.dp), tint = p.inkFaint)
             }
         },
@@ -321,14 +334,14 @@ private fun ShowRow(
 }
 
 /**
- * Show artwork, or the mic if there is none yet. A row icon only ever sits at
- * thumbnails size, so it decodes small like a station's row thumbnail does;
- * the grid tile decodes full-res separately.
+ * Show artwork, or its generated plate when there is none yet. A row icon
+ * only ever sits at thumbnails size, so it decodes small like a station's
+ * row thumbnail does; the grid tile decodes full-res separately.
  */
 @Composable
-private fun Artwork(url: String) {
+private fun Artwork(show: PodcastShow) {
     val p = LocalPalette.current
-    val art = rememberArt(url = url)
+    val art = rememberArt(url = show.artwork)
     Box(
         Modifier
             .size(40.dp)
@@ -344,23 +357,27 @@ private fun Artwork(url: String) {
                 contentScale = ContentScale.Crop,
             )
         } else {
-            Icon(KleeampIcons.PodRow, null, Modifier.size(15.dp), tint = p.inkFaint)
+            SeedPlate(
+                key = show.feedUrl.ifBlank { show.id },
+                name = show.title,
+                modifier = Modifier.fillMaxSize(),
+                radius = KleeampShape.small,
+            )
         }
     }
 }
 
-/** A show as a small square tile: artwork (or the mic mark), subscribe star,
+/** A show as a small square tile: artwork (or its plate), menu,
  * and title/author on a scrim. The grid layout's cell. */
 @Composable
 private fun ShowTile(
     show: PodcastShow,
-    subscribed: Boolean,
     onOpen: () -> Unit,
-    onToggleSubscribe: () -> Unit,
+    onOpenMenu: () -> Unit,
 ) {
     val p = LocalPalette.current
     // Tiles are large: full decode with a memory peek, so grid scrolls do
-    // not flash the mic on every rebind.
+    // not flash the plate on every rebind.
     val art = rememberArt(url = show.artwork, kind = ArtKind.Full)
     Column(
         Modifier
@@ -379,24 +396,15 @@ private fun ShowTile(
             if (art != null) {
                 Image(art, show.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             } else {
-                Box(
-                    Modifier.fillMaxSize().background(if (p.dark) p.ground else p.keyFace),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(KleeampIcons.PodRow, null, Modifier.size(26.dp), tint = p.chipBorder)
-                }
+                SeedPlate(
+                    key = show.feedUrl.ifBlank { show.id },
+                    name = show.title,
+                    modifier = Modifier.fillMaxSize(),
+                    radius = KleeampShape.medium,
+                )
             }
             Box(Modifier.align(Alignment.TopEnd).padding(10.dp)) {
-                OverflowMenu(
-                    trigger = { open -> OverflowButton(open, size = 15) },
-                    items = listOf(
-                        OverflowItem(
-                            if (subscribed) "unsubscribe" else "subscribe",
-                            color = p.ink,
-                            action = onToggleSubscribe,
-                        ),
-                    ),
-                )
+                OverflowButton(onOpenMenu, size = 15)
             }
         }
         Spacer(Modifier.height(7.dp))
