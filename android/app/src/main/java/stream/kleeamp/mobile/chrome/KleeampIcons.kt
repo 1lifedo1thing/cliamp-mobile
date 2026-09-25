@@ -206,6 +206,37 @@ object KleeampIcons {
     val Down = stroked(16f, 10f, 1.8f, "M1 1l7 8 7-8")
     val Left = stroked(16f, 16f, 1.8f, "M8 1L1 8l7 7")
     val Download = stroked(16f, 16f, 1.6f, "M8 1v9", "M4.5 6.5L8 10l3.5-3.5", "M1.5 13.5h13")
+    /** A lowercase i from two bars: the info / details mark. */
+    val Info = solid(16f, 16f, rect(7f, 1.5f, 2f, 2.2f), rect(7f, 5f, 2f, 9f))
+    /**
+     * Three list rails with a plus badge: add the row to a playlist. Rails
+     * are stroked like the other line glyphs, the badge is solid so it
+     * reads at row size.
+     */
+    val PlaylistAdd = ImageVector.Builder(
+        defaultWidth = 18.dp, defaultHeight = 18.dp, viewportWidth = 18f, viewportHeight = 18f,
+    ).apply {
+        listOf("M1 3.5h10", "M1 8h10", "M1 12.5h6").forEach {
+            addPath(
+                addPathNodes(it),
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = 1.7f,
+                strokeLineCap = StrokeCap.Butt,
+                strokeLineJoin = StrokeJoin.Miter,
+            )
+        }
+        listOf(rect(11.5f, 12f, 5f, 2f), rect(13f, 10.25f, 2f, 5.5f)).forEach {
+            addPath(addPathNodes(it), fill = SolidColor(Color.White))
+        }
+    }.build()
+    /** A lidded bin with two inner rails: delete / remove download. */
+    val Trash = stroked(
+        16f, 16f, 1.7f,
+        "M1.5 3.5h13",
+        "M6 3.5V1.5h4v2",
+        "M3.5 3.5L4.6 14.5h6.8L12.5 3.5",
+        "M7 6.5v5.5M10 6.5v5.5",
+    )
     /** Vertical ellipsis: row overflow menu. */
     val More = solid(16f, 16f, circle(8f, 3f, 2.2f), circle(8f, 8f, 2.2f), circle(8f, 13f, 2.2f))
     val Lines = solid(16f, 14f, rect(0f, 0f, 16f, 2f), rect(0f, 6f, 16f, 2f), rect(0f, 12f, 16f, 2f))
