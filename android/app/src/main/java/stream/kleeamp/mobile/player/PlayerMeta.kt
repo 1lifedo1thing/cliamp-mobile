@@ -129,7 +129,7 @@ internal fun UpNextButton(
     }
 }
 
-/** The status strip: ON AIR / BUFFERING badge, then the shuffle-scope-fav keys. */
+/** One centered secondary toolbar: sound, speed, timer, shuffle, scope, favourite. */
 @Composable
 internal fun PlayerStatusRow(
     model: PlayerModel,
@@ -137,37 +137,31 @@ internal fun PlayerStatusRow(
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
-    // The sleep timer key sits where the signal mark was: armed wears the
-    // accent, otherwise it rests with the secondary keys.
+    // Armed the sleep key wears the accent, otherwise it rests quiet with
+    // the secondary keys.
     val sleepArmed = model.state.sleepAtMs != null
     Row(
         modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
     ) {
-        SmallAction(
-            KleeampIcons.Watch,
-            if (sleepArmed) "sleep timer armed" else "sleep timer",
-            tint = if (sleepArmed) p.accent else p.inkSecondary,
-        ) { actions.onOpenSleep() }
-        Spacer(
-            Modifier
-                .weight(1f)
-                .height(18.dp)
-                .consumeAllGestures(),
-        )
         OutputAction(
             current = model.currentOutput,
             outputs = model.outputs,
             selectedId = model.outputDevice,
             onSelect = actions.onSelectOutput,
         )
+        SpeedAction(speed = model.state.speed) { actions.onOpenSpeed() }
+        SmallAction(
+            KleeampIcons.Watch,
+            if (sleepArmed) "sleep timer armed" else "sleep timer",
+            tint = if (sleepArmed) p.accent else p.inkSecondary,
+        ) { actions.onOpenSleep() }
         SmallAction(
             KleeampIcons.Shuffle,
             if (model.shuffled) "stop shuffling" else "shuffle",
             tint = if (model.shuffled) p.accent else p.inkSecondary,
         ) { actions.onToggleShuffle() }
-        SpeedAction(speed = model.state.speed) { actions.onOpenSpeed() }
         SmallAction(KleeampIcons.MeterSmall, "scope and equaliser", onClick = actions.onOpenScope)
         SmallAction(
             if (model.isFav) KleeampIcons.HeartFilled else KleeampIcons.Heart,
@@ -267,7 +261,7 @@ internal fun sourceLine(shownStation: Station?): String {
 }
 
 
-/** A 15dp icon in a 28dp tap target, sized for a secondary action. */
+/** A toolbar key: compact 15dp icon in a 44dp touch target. */
 @Composable
 internal fun SmallAction(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -278,7 +272,7 @@ internal fun SmallAction(
     val p = LocalPalette.current
     Box(
         Modifier
-            .size(28.dp)
+            .size(44.dp)
             .clip(RoundedCornerShape(KleeampShape.small))
             .microPress(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -295,11 +289,12 @@ internal fun speedLabel(v: Float): String {
 /** Playback speed as a terse mono key: opens the speed sheet. */
 @Composable
 internal fun SpeedAction(speed: Float, onClick: () -> Unit) {    val p = LocalPalette.current
-    // Sized to the label (5 glyphs at 0.25x) with a 28dp minimum tap
-    // target: a fixed box ellipsized the slow speeds to "0.2…".
+    // Sized to the label (5 glyphs at 0.25x) with a 44dp minimum tap
+    // target like the icon keys: a fixed box ellipsized the slow speeds
+    // to "0.2…".
     Box(
         Modifier
-            .sizeIn(minWidth = 28.dp, minHeight = 28.dp)
+            .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
             .clip(RoundedCornerShape(KleeampShape.small))
             .microPress(onClick = onClick),
         contentAlignment = Alignment.Center,
