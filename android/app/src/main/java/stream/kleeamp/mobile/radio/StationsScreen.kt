@@ -204,10 +204,9 @@ fun StationsScreen(
 
             if (source == Source.All || source == Source.Cliamp) {
                 item {
-                    SectionLabel("cliamp radio — ${cliamp.size}", gutter = 8.dp)
-                }
-                item {
-                    CliampStatsRow(vm)
+                    SectionLabel("cliamp radio — ${cliamp.size}", gutter = 8.dp) {
+                        CliampStatsText(vm)
+                    }
                 }
                 if (cliampError != null) {
                     item {
@@ -527,12 +526,12 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
 }
 
 /**
- * Live "who's listening" line under the cliamp header, from the same
- * statistics document cliamp.stream renders. Fetches once per screen
- * lifetime; tapping refreshes. Hidden until the first fetch lands.
+ * Live "who's listening" line at the right end of the cliamp header, from
+ * the same statistics document cliamp.stream renders. Fetches once per
+ * screen lifetime; tapping refreshes. Hidden until the first fetch lands.
  */
 @Composable
-private fun CliampStatsRow(vm: StationsViewModel) {
+private fun CliampStatsText(vm: StationsViewModel) {
     val p = LocalPalette.current
     val stats by vm.cliampStats.collectAsState()
     LaunchedEffect(Unit) {
@@ -543,9 +542,7 @@ private fun CliampStatsRow(vm: StationsViewModel) {
             "${it.activeNow} listening now · peak ${it.peak}",
             KleeampType.meta,
             p.inkFaint,
-            Modifier
-                .padding(start = 8.dp, bottom = 4.dp)
-                .microPress { vm.onEvent(StationsViewModel.Event.RefreshStats) },
+            Modifier.microPress { vm.onEvent(StationsViewModel.Event.RefreshStats) },
             maxLines = 1,
         )
     }
