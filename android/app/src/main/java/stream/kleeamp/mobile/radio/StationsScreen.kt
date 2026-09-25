@@ -61,9 +61,8 @@ import stream.kleeamp.mobile.chrome.EmptyNote
 import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.ListRow
-import stream.kleeamp.mobile.chrome.OverflowButton
 import stream.kleeamp.mobile.chrome.OverflowItem
-import stream.kleeamp.mobile.chrome.OverflowMenu
+import stream.kleeamp.mobile.chrome.StationMenu
 import stream.kleeamp.mobile.chrome.microPress
 import stream.kleeamp.mobile.chrome.RetryNote
 
@@ -87,6 +86,9 @@ fun StationsScreen(
     favorites: List<Station>,
     onPlay: (Station, List<Station>) -> Unit,
     onAddToQueue: (Station) -> Unit = {},
+    onAddToPlaylist: (Station) -> Unit = {},
+    /** Null hides the menu's info entry: info only shows where it resolves. */
+    onInfo: ((Station) -> Unit)? = null,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     focusDirectory: Boolean = false,
@@ -221,6 +223,8 @@ fun StationsScreen(
                             onPlay = { onPlay(s, cliamp) },
                             onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                             onQueue = { onAddToQueue(s) },
+                            onAddToPlaylist = { onAddToPlaylist(s) },
+                            onInfo = onInfo,
                         )
                     }
                 }
@@ -265,15 +269,21 @@ fun StationsScreen(
                     custom,
                     key = { "cu:${it.url}" },
                 ) { s ->
+                    // Info only resolves for catalogue stations or ones the
+                    // user already owns (favourited): anything else lands on
+                    // the pane's "song gone".
+                    val fav = favorites.any { it.url == s.url }
                     CustomStationRow(
                         station = s,
                         active = current?.url == s.url,
                         playing = playing && current?.url == s.url,
-                        favorite = favorites.any { it.url == s.url },
+                        favorite = fav,
                         onPlay = { onPlay(s, custom) },
                         onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                         onRemove = { vm.onEvent(StationsViewModel.Event.RemoveCustom(s)) },
                         onQueue = { onAddToQueue(s) },
+                        onAddToPlaylist = { onAddToPlaylist(s) },
+                        onInfo = if (fav) onInfo else null,
                     )
                 }
             }
@@ -354,6 +364,8 @@ fun StationsScreen(
                         onPlay = { onPlay(s, directory.stations) },
                         onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                         onQueue = { onAddToQueue(s) },
+                        onAddToPlaylist = { onAddToPlaylist(s) },
+                        onInfo = onInfo,
                     )
                 }
                 item {
@@ -388,6 +400,8 @@ private fun StationRow(
     onPlay: () -> Unit,
     onToggleFavorite: () -> Unit,
     onQueue: () -> Unit,
+    onAddToPlaylist: (Station) -> Unit = {},
+    onInfo: ((Station) -> Unit)? = null,
 ) {
     val p = LocalPalette.current
     ListRow(
@@ -403,11 +417,12 @@ private fun StationRow(
                 if (station.votes > 0) {
                     Mono(compact(station.votes), KleeampType.meta, p.inkFaint)
                 }
-                Icon(
-                    if (favorite) KleeampIcons.StarFilled else KleeampIcons.Star,
-                    "favourite",
-                    Modifier.size(15.dp).microPress(onClick = onToggleFavorite),
-                    tint = if (favorite) p.accent else p.inkFaint,
+                StationMenu(
+                    favorite = favorite,
+                    onToggleFavorite = onToggleFavorite,
+                    onAddToPlaylist = { onAddToPlaylist(station) },
+                    onAddToQueue = onQueue,
+                    onInfo = onInfo?.let { show -> { show(station) } },
                 )
             }
         },
@@ -617,7 +632,7 @@ private fun CustomField(
     }
 }
 
-/** A custom station row: plays and favourites like a directory row, plus remove. */
+/** A custom station row: plays like a directory row, plus remove. */
 @Composable
 // Screen signature: state in, callbacks out; bundling would hide the data flow.
 @Suppress("LongParameterList")
@@ -630,6 +645,8 @@ private fun CustomStationRow(
     onToggleFavorite: () -> Unit,
     onRemove: () -> Unit,
     onQueue: () -> Unit,
+    onAddToPlaylist: (Station) -> Unit = {},
+    onInfo: ((Station) -> Unit)? = null,
 ) {
     val p = LocalPalette.current
     ListRow(
@@ -642,15 +659,13 @@ private fun CustomStationRow(
         onQueue = onQueue,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(
-                    if (favorite) KleeampIcons.StarFilled else KleeampIcons.Star,
-                    "favourite",
-                    Modifier.size(15.dp).microPress(onClick = onToggleFavorite),
-                    tint = if (favorite) p.accent else p.inkFaint,
-                )
-                OverflowMenu(
-                    trigger = { open -> OverflowButton(open, size = 16) },
-                    items = listOf(
+                StationMenu(
+                    favorite = favorite,
+                    onToggleFavorite = onToggleFavorite,
+                    onAddToPlaylist = { onAddToPlaylist(station) },
+                    onAddToQueue = onQueue,
+                    onInfo = onInfo?.let { show -> { show(station) } },
+                    extra = listOf(
                         OverflowItem(
                             "remove station",
                             color = p.destructiveInk,

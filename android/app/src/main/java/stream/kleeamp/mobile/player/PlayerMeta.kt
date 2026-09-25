@@ -170,7 +170,7 @@ internal fun PlayerStatusRow(
         SpeedAction(speed = model.state.speed) { actions.onOpenSpeed() }
         SmallAction(KleeampIcons.MeterSmall, "scope and equaliser", onClick = actions.onOpenScope)
         SmallAction(
-            if (model.isFav) KleeampIcons.StarFilled else KleeampIcons.Star,
+            if (model.isFav) KleeampIcons.HeartFilled else KleeampIcons.Heart,
             if (model.isFav) "remove favourite" else "favourite",
             tint = if (model.isFav) p.accent else p.inkTertiary,
         ) { actions.onToggleFav() }

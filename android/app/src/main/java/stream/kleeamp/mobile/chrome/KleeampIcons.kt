@@ -93,8 +93,13 @@ object KleeampIcons {
         "M1 11h4l8-8h3",
         "M14.5 2.5l1.5 1.5-1.5 1.5",
     )
-    val Star = stroked(16f, 16f, 1.8f, "M8 1.5l1.9 4.2 4.6.5-3.4 3.1.9 4.5L8 11.6 4 13.8l.9-4.5L1.5 6.2l4.6-.5z")
-    val StarFilled = solid(16f, 16f, "M8 1.5l1.9 4.2 4.6.5-3.4 3.1.9 4.5L8 11.6 4 13.8l.9-4.5L1.5 6.2l4.6-.5z")
+    /**
+     * A geometric heart: two straight lobes, a notched top, one bottom
+     * point. No curves, like the rest of the set - the favourite mark.
+     */
+    private const val HeartPath = "M8 14.2L1.8 8V4.6L4.4 2H7.2L8 2.9L8.8 2H11.6L14.2 4.6V8z"
+    val Heart = stroked(16f, 16f, 1.8f, HeartPath)
+    val HeartFilled = solid(16f, 16f, HeartPath)
 
     /** Headphones: band over two ear cups, for wired and hearing-aid routes. */
     val Headphones = stroked(

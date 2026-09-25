@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -32,7 +31,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -83,15 +81,11 @@ import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.ChipDropdown
 import stream.kleeamp.mobile.chrome.ChipOption
 import stream.kleeamp.mobile.chrome.FilterRow
-import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.KleeampTextField
-import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
-import stream.kleeamp.mobile.chrome.OverflowButton
-import stream.kleeamp.mobile.chrome.OverflowItem
-import stream.kleeamp.mobile.chrome.OverflowMenu
+import stream.kleeamp.mobile.chrome.StationMenu
 import stream.kleeamp.mobile.chrome.ScreenHeader
 import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.scrollToTop
@@ -116,6 +110,8 @@ fun ProviderSongsPane(
     playing: Boolean,
     onPlay: (Station, List<Station>) -> Unit,
     onAddToQueue: (Station) -> Unit = {},
+    onAddToPlaylist: (Station) -> Unit = {},
+    onInfo: ((Station) -> Unit)? = null,
     onBack: () -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
@@ -345,13 +341,17 @@ fun ProviderSongsPane(
                                 SongCover(s = s, current = current, playing = playing)
                             },
                             trailing = {
-                                Icon(
-                                    if (s.url in favorites) KleeampIcons.StarFilled else KleeampIcons.Star,
-                                    "favourite",
-                                    Modifier.size(15.dp).microPress {
+                                // Provider tracks resolve in info only once
+                                // favourited, so the info entry is gated on it.
+                                val fav = s.url in favorites
+                                StationMenu(
+                                    favorite = fav,
+                                    onToggleFavorite = {
                                         vm.onEvent(ProviderSongsViewModel.Event.ToggleFavorite(s))
                                     },
-                                    tint = if (s.url in favorites) p.accent else p.inkFaint,
+                                    onAddToPlaylist = { onAddToPlaylist(s) },
+                                    onAddToQueue = { onAddToQueue(s) },
+                                    onInfo = if (fav) onInfo?.let { show -> { show(s) } } else null,
                                 )
                             },
                             onQueue = { onAddToQueue(s) },

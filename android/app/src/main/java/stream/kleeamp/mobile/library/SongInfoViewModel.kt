@@ -3,6 +3,7 @@ package stream.kleeamp.mobile.library
 import android.app.PendingIntent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -16,11 +17,14 @@ class SongInfoViewModel(
     private val localLibrary: LocalLibrary,
     private val prefs: Prefs,
     private val scrobbler: Scrobbler,
+    private val playlists: PlaylistStore,
 ) : ViewModel() {
     data class UiState(
         val songs: List<Station> = emptyList(),
         val favorites: List<Station> = emptyList(),
         val recent: List<Station> = emptyList(),
+        /** Playlist snapshot fallback, like the add-to-playlist picker. */
+        val snapshot: Station? = null,
         val plays: Int = 0,
         val lastPlayedAt: Long = 0L,
         val favorite: Boolean = false,
@@ -31,16 +35,26 @@ class SongInfoViewModel(
         data class DeleteLocal(val station: Station) : Event
     }
 
+    init {
+        viewModelScope.launch {
+            _snapshot.value = playlists.snapshotByUrl(stationUrl)
+        }
+    }
+
+    private val _snapshot = MutableStateFlow<Station?>(null)
+
     val state: StateFlow<UiState> = combine(
         localLibrary.songs,
         prefs.favorites,
         prefs.history,
         scrobbler.statsFor(stationUrl),
-    ) { songs, favs, rec, stat ->
+        _snapshot,
+    ) { songs, favs, rec, stat, snapshot ->
         UiState(
             songs = songs,
             favorites = favs,
             recent = rec,
+            snapshot = snapshot,
             plays = stat?.plays ?: 0,
             lastPlayedAt = stat?.lastPlayedAt ?: 0L,
             favorite = favs.any { it.url == stationUrl },

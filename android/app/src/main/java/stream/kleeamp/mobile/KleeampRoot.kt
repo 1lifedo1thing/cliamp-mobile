@@ -377,6 +377,8 @@ fun KleeampRoot(
                                 playing = playerState.playing,
                                 onPlay = { s, from -> play(s, from) },
                                 onAddToQueue = { player.addToUpNext(it) },
+                                onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
+                                onInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
                                 onOpenSearch = {
                                     navController.navigate(Search)
                                 },
@@ -430,6 +432,7 @@ fun KleeampRoot(
                         onPlay = { s, from -> play(s, from) },
                         onAddToUpNext = { player.addToUpNext(it) },
                         onPlayNext = { player.playNext(it) },
+                        onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenSettings = { navController.navigate(Settings) },
                     )
@@ -466,6 +469,8 @@ fun KleeampRoot(
                         playing = playerState.playing,
                         onPlay = { s, from -> play(s, from) },
                         onAddToQueue = { player.addToUpNext(it) },
+                        onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
+                        onInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
                         onBack = { navController.popBackStack() },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenSettings = { navController.navigate(Settings) },
@@ -527,6 +532,7 @@ fun KleeampRoot(
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenSettings = { navController.navigate(Settings) },
                         onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
+                        onInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
                         startAdding = route.pickSongs,
                     )
                 }
@@ -536,7 +542,7 @@ fun KleeampRoot(
                 Box(contentModifier) {
                     LibrarySongInfoPane(
                         vm = appViewModel(key = stationUrl) { app ->
-                            SongInfoViewModel(stationUrl, app.localLibrary, app.prefs, app.scrobbler)
+                            SongInfoViewModel(stationUrl, app.localLibrary, app.prefs, app.scrobbler, app.playlists)
                         },
                         stationUrl = stationUrl,
                         repository = repository,
@@ -816,6 +822,8 @@ private fun StationsTab(
     playing: Boolean,
     onPlay: (Station, List<Station>) -> Unit,
     onAddToQueue: (Station) -> Unit,
+    onAddToPlaylist: (Station) -> Unit,
+    onInfo: (Station) -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSettings: () -> Unit,
     focusDirectory: Boolean,
@@ -829,6 +837,8 @@ private fun StationsTab(
         favorites = favorites,
         onPlay = onPlay,
         onAddToQueue = onAddToQueue,
+        onAddToPlaylist = onAddToPlaylist,
+        onInfo = onInfo,
         onOpenSearch = onOpenSearch,
         onOpenSettings = onOpenSettings,
         focusDirectory = focusDirectory,

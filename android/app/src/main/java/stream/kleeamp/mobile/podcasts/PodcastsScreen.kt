@@ -53,6 +53,9 @@ import stream.kleeamp.mobile.chrome.GridListToggle
 import stream.kleeamp.mobile.chrome.microPress
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.ListRow
+import stream.kleeamp.mobile.chrome.OverflowButton
+import stream.kleeamp.mobile.chrome.OverflowItem
+import stream.kleeamp.mobile.chrome.OverflowMenu
 import stream.kleeamp.mobile.chrome.RetryNote
 import stream.kleeamp.mobile.chrome.MainLayout
 import stream.kleeamp.mobile.chrome.SectionLabel
@@ -295,11 +298,18 @@ private fun ShowRow(
         leading = { Artwork(show.artwork) },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(
-                    if (subscribed) KleeampIcons.StarFilled else KleeampIcons.Star,
-                    "subscribe",
-                    Modifier.size(15.dp).microPress(onClick = onToggleSubscribe),
-                    tint = if (subscribed) p.accent else p.inkFaint,
+                // Shows are feeds, not playable stations, so their menu is
+                // the subscription alone: favourites, playlists, queue and
+                // info live on episode rows instead.
+                OverflowMenu(
+                    trigger = { open -> OverflowButton(open, size = 16) },
+                    items = listOf(
+                        OverflowItem(
+                            if (subscribed) "unsubscribe" else "subscribe",
+                            color = p.ink,
+                            action = onToggleSubscribe,
+                        ),
+                    ),
                 )
                 Icon(KleeampIcons.CaretRight, null, Modifier.size(9.dp), tint = p.inkFaint)
             }
@@ -376,12 +386,18 @@ private fun ShowTile(
                     Icon(KleeampIcons.PodRow, null, Modifier.size(26.dp), tint = p.chipBorder)
                 }
             }
-            Icon(
-                if (subscribed) KleeampIcons.StarFilled else KleeampIcons.Star,
-                "subscribe",
-                Modifier.align(Alignment.TopEnd).padding(10.dp).size(15.dp).microPress(onClick = onToggleSubscribe),
-                tint = if (subscribed) p.accent else p.inkFaint,
-            )
+            Box(Modifier.align(Alignment.TopEnd).padding(10.dp)) {
+                OverflowMenu(
+                    trigger = { open -> OverflowButton(open, size = 15) },
+                    items = listOf(
+                        OverflowItem(
+                            if (subscribed) "unsubscribe" else "subscribe",
+                            color = p.ink,
+                            action = onToggleSubscribe,
+                        ),
+                    ),
+                )
+            }
         }
         Spacer(Modifier.height(7.dp))
         Column(Modifier.padding(horizontal = 2.dp)) {

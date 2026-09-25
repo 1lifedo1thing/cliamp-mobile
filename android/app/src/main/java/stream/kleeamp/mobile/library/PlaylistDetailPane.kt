@@ -87,9 +87,8 @@ import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
-import stream.kleeamp.mobile.chrome.OverflowButton
 import stream.kleeamp.mobile.chrome.OverflowItem
-import stream.kleeamp.mobile.chrome.OverflowMenu
+import stream.kleeamp.mobile.chrome.StationMenu
 import stream.kleeamp.mobile.chrome.ScreenHeader
 import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.scrollToTop
@@ -119,6 +118,7 @@ fun LibraryPlaylistPane(
     onOpenSettings: () -> Unit = {},
     onAddToPlaylist: (Station) -> Unit = {},
     onAddToQueue: (Station) -> Unit = {},
+    onInfo: ((Station) -> Unit)? = null,
     /** True when opened from a playlist row's add menu: lands in the song picker. */
     startAdding: Boolean = false,
 ) {
@@ -181,6 +181,7 @@ fun LibraryPlaylistPane(
                         onAddToQueue = onAddToQueue,
                         adding = adding,
                         onAddToPlaylist = onAddToPlaylist,
+                        onInfo = onInfo,
                         onBeginAdd = { adding = true },
                         favorites = ui.favorites.map { it.url }.toSet(),
                         onToggleFavorite = { vm.onEvent(PlaylistDetailViewModel.Event.ToggleFavorite(it)) },
@@ -215,6 +216,7 @@ private fun PlaylistDetailShown(
     onToggle: (Station) -> Unit,
     adding: Boolean,
     onAddToPlaylist: (Station) -> Unit = {},
+    onInfo: ((Station) -> Unit)? = null,
     onRemoveMember: (Station) -> Unit = {},
     onBeginAdd: () -> Unit = {},
     favorites: Set<String> = emptySet(),
@@ -293,26 +295,27 @@ private fun PlaylistDetailShown(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                                    OverflowMenu(
-                                        trigger = { open -> OverflowButton(open, size = 16) },
-                                        items = listOf(
-                                            OverflowItem(
-                                                "add to playlist",
-                                                color = p.ink,
-                                                action = { onAddToPlaylist(s) },
-                                            ),
-                                            OverflowItem(
-                                                "drop",
-                                                color = p.destructiveInk,
-                                                action = { onRemoveMember(s) },
-                                            ),
-                                        ),
-                                    )
-                            Icon(
-                                if (s.url in favorites) KleeampIcons.StarFilled else KleeampIcons.Star,
-                                "favourite",
-                                Modifier.size(15.dp).microPress { onToggleFavorite(s) },
-                                tint = if (s.url in favorites) p.accent else p.inkFaint,
+                            // Info resolves for members from any catalogue or
+                            // snapshot; only an unfavourited custom station
+                            // would land on "song gone".
+                            val fav = s.url in favorites
+                            StationMenu(
+                                favorite = fav,
+                                onToggleFavorite = { onToggleFavorite(s) },
+                                onAddToPlaylist = { onAddToPlaylist(s) },
+                                onAddToQueue = { onAddToQueue(s) },
+                                onInfo = if (s.source != StationSource.Custom || fav) {
+                                    onInfo?.let { show -> { show(s) } }
+                                } else {
+                                    null
+                                },
+                                extra = listOf(
+                                    OverflowItem(
+                                        "drop",
+                                        color = p.destructiveInk,
+                                        action = { onRemoveMember(s) },
+                                    ),
+                                ),
                             )
                         }
                     },

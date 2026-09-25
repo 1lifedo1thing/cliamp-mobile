@@ -87,9 +87,8 @@ import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
-import stream.kleeamp.mobile.chrome.OverflowButton
 import stream.kleeamp.mobile.chrome.OverflowItem
-import stream.kleeamp.mobile.chrome.OverflowMenu
+import stream.kleeamp.mobile.chrome.StationMenu
 import stream.kleeamp.mobile.chrome.ScreenHeader
 import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.scrollToTop
@@ -583,24 +582,26 @@ private fun SmartPlaylistDetail(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            // ⋮ menu 12dp left of the star, like episode rows:
-                            // only on the on-device lists, favourites and
-                            // recently-played are read-only views.
-                            if (local) {
-                                OverflowMenu(
-                                    trigger = { open -> OverflowButton(open, size = 16) },
-                                    items = listOf(
-                                        OverflowItem("add to playlist", color = p.ink, action = { onAddToPlaylist(s) }),
-                                        OverflowItem("info", color = p.ink, action = { onInfo(s) }),
-                                        OverflowItem("remove", color = p.destructiveInk, action = { onRemove(s) }),
-                                    ),
-                                )
-                            }
-                            Icon(
-                                if (s.url in favorites) KleeampIcons.StarFilled else KleeampIcons.Star,
-                                "favourite",
-                                Modifier.size(15.dp).microPress { onToggleFavorite(s) },
-                                tint = if (s.url in favorites) p.accent else p.inkFaint,
+                            StationMenu(
+                                favorite = s.url in favorites,
+                                onToggleFavorite = { onToggleFavorite(s) },
+                                onAddToPlaylist = { onAddToPlaylist(s) },
+                                onAddToQueue = { onAddToQueue(s) },
+                                onInfo = { onInfo(s) },
+                                // Only the on-device lists are writable;
+                                // favourites and recently-played are
+                                // read-only views, like episode rows.
+                                extra = if (local) {
+                                    listOf(
+                                        OverflowItem(
+                                            "remove",
+                                            color = p.destructiveInk,
+                                            action = { onRemove(s) },
+                                        ),
+                                    )
+                                } else {
+                                    emptyList()
+                                },
                             )
                         }
                     },

@@ -42,9 +42,8 @@ import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
 import stream.kleeamp.mobile.chrome.microPress
-import stream.kleeamp.mobile.chrome.OverflowButton
 import stream.kleeamp.mobile.chrome.OverflowItem
-import stream.kleeamp.mobile.chrome.OverflowMenu
+import stream.kleeamp.mobile.chrome.StationMenu
 import stream.kleeamp.mobile.chrome.MainLayout
 import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.scrollToTop
@@ -74,6 +73,7 @@ fun PodcastShowScreen(
     onPlay: (Station, List<Station>) -> Unit,
     onAddToUpNext: (Station) -> Unit = {},
     onPlayNext: (Station) -> Unit = {},
+    onAddToPlaylist: (Station) -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
 ) {
@@ -172,11 +172,16 @@ fun PodcastShowScreen(
                         progress = progress[station.url],
                         active = current?.url == station.url,
                         playing = playing && current?.url == station.url,
+                        favorite = station.url in ui.favorites,
                         dlState = dl,
                         downloadedBytes = fetched?.bytes ?: 0L,
                         onPlay = { onPlay(station, queue) },
                         onPlayNext = { onPlayNext(station) },
                         onAddToUpNext = { onAddToUpNext(station) },
+                        onToggleFavorite = {
+                            vm.onEvent(PodcastShowViewModel.Event.ToggleFavorite(station))
+                        },
+                        onAddToPlaylist = { onAddToPlaylist(station) },
                         onMarkPlayed = { vm.onEvent(PodcastShowViewModel.Event.MarkCompleted(station)) },
                         onForget = { vm.onEvent(PodcastShowViewModel.Event.ClearProgress(station)) },
                         onDownload = { vm.onEvent(PodcastShowViewModel.Event.Download(station)) },
@@ -254,9 +259,12 @@ private fun EpisodeRow(
     progress: EpisodeProgress?,
     active: Boolean,
     playing: Boolean,
+    favorite: Boolean,
     onPlay: () -> Unit,
     onPlayNext: () -> Unit,
     onAddToUpNext: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onAddToPlaylist: () -> Unit,
     onMarkPlayed: () -> Unit,
     onForget: () -> Unit,
     dlState: DownloadState = DownloadState.Idle,
@@ -344,11 +352,16 @@ private fun EpisodeRow(
                             Modifier.size(15.dp).microPress { onDownload() }, tint = p.inkTertiary,
                         )
                 }
-                OverflowMenu(
-                    trigger = { open -> OverflowButton(open) },
-                    items = buildList {
+                StationMenu(
+                    favorite = favorite,
+                    onToggleFavorite = onToggleFavorite,
+                    onAddToPlaylist = onAddToPlaylist,
+                    onAddToQueue = onAddToUpNext,
+                    // Episodes are not resolvable by the info pane, so no
+                    // info entry: favourites, playlists and queue only.
+                    onInfo = null,
+                    extra = buildList {
                         add(OverflowItem("play next", onPlayNext))
-                        add(OverflowItem("add to Up Next", onAddToUpNext))
                         when {
                             fetched -> add(
                                 OverflowItem("remove download", color = p.destructiveInk, action = onRemoveDownload)
