@@ -191,6 +191,28 @@ data class PlayStatEntity(
 )
 
 /**
+ * One unsent ListenBrainz listen. Surrogate id because the same track can
+ * count twice (replays) - identity is the row, not the URL. [attempts] and
+ * [nextAttemptAt] drive the resend backoff; rows older than a week are
+ * pruned instead of retried forever.
+ */
+@Entity(
+    tableName = "scrobble_outbox",
+    indices = [androidx.room.Index("nextAttemptAt")],
+)
+data class ScrobbleEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val url: String,
+    val artist: String,
+    val title: String,
+    val album: String = "",
+    val listenedAtSec: Long = 0,
+    val attempts: Int = 0,
+    val nextAttemptAt: Long = 0,
+    val createdAt: Long = 0,
+)
+
+/**
  * One audio file on an SSH host, as the last scan of that account saw it.
  *
  * Keyed by path rather than by an id the server assigns, because SFTP assigns

@@ -3,9 +3,15 @@ package stream.kleeamp.mobile.settings
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import stream.kleeamp.mobile.db.KleeampDatabase
 import stream.kleeamp.mobile.db.PlayStatEntity
+import stream.kleeamp.mobile.db.ScrobbleEntity
 import stream.kleeamp.mobile.net.Http
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
@@ -15,16 +21,23 @@ import stream.kleeamp.mobile.prefs.Prefs
      * lengths cannot do halves, so they take the full four minutes. */
 private const val FOUR_MIN = 4 * 60 * 1000L
 
+/** Outbox rows older than this are pruned instead of retried forever. */
+private const val MAX_ROW_AGE_MS = 7L * 24 * 60 * 60 * 1000
+
 /**
  * Local play counts plus ListenBrainz scrobbling, on the CLI's 50%-rule: a
  * music track counts once it has been heard for half its length or four
- * minutes, whichever comes first. Radio has no ends and episodes have resume
- * instead, so only local and provider tracks ever count.
+ * minutes, whichever comes first.
  *
- * Counts live in Room (one row per URL) and feed the song info pane; the
- * scrobble itself is fire-and-forget with no retry queue - a dead network
- * drops that listen the way a missed analytics ping does. Last.fm needs an
- * API account plus a browser auth flow the app does not have yet, so
+ * Counts live in Room (one row per URL) and feed the song info pane;
+ * scrobbles go through a persisted outbox instead of fire-and-forget, so a
+ * dead network delays a listen instead of dropping it. The drain runs at
+ * startup and after every count, with backoff per row.
+ *
+ * Radio has no ends, so it scrobbles per stream title - and only when the
+ * user opts in (`scrobbleRadio`, off by default): every title change would
+ * otherwise spam listens the listener never chose. Last.fm needs an API
+ * account plus a browser auth flow the app does not have yet, so
  * ListenBrainz (one pasted user token) is the only transport.
  */
 class Scrobbler(
@@ -33,26 +46,49 @@ class Scrobbler(
     private val scope: CoroutineScope,
 ) {
     private val dao = KleeampDatabase.get(context).stats()
+    private val outbox = KleeampDatabase.get(context).scrobbles()
 
-    private var trackedUrl: String? = null
+    private var trackedKey: String? = null
     private var heardMs: Long = 0L
     private var lastTickMs: Long = 0L
     private var counted = false
+
+    /** Cached off the prefs flow; the UI thread never waits on DataStore. */
+    private var radioOn = false
+
+    private val _lastError = MutableStateFlow<String?>(null)
+    val lastError: StateFlow<String?> = _lastError.asStateFlow()
+
+    /** Unsent listens, for the Settings status line. */
+    val pendingCount: Flow<Int> = outbox.count()
+
+    private val drainMutex = Mutex()
+
+    init {
+        scope.launch { prefs.scrobbleRadio.collect { radioOn = it } }
+        scope.launch { drain() }
+    }
 
     fun statsFor(url: String): Flow<PlayStatEntity?> = dao.stat(url)
 
     /**
      * Called from the player's poll with its clock. Accumulates heard time
-     * while the same track keeps playing and counts it once the rule trips.
+     * while the same track (or the same radio title) keeps playing and
+     * counts it once the rule trips.
      */
-    fun onTick(station: Station?, playing: Boolean, durationMs: Long) {
+    fun onTick(station: Station?, playing: Boolean, durationMs: Long, streamTitle: String = "") {
         val now = System.currentTimeMillis()
-        if (!playing || station == null || !scrobblable(station)) {
+        if (!playing || station == null) {
             lastTickMs = now
             return
         }
-        if (trackedUrl != station.url) {
-            trackedUrl = station.url
+        val key = trackKey(station, streamTitle)
+        if (key == null) {
+            lastTickMs = now
+            return
+        }
+        if (trackedKey != key) {
+            trackedKey = key
             heardMs = 0L
             counted = false
         }
@@ -61,26 +97,100 @@ class Scrobbler(
             val need = if (durationMs > 0) minOf(durationMs / 2, FOUR_MIN) else FOUR_MIN
             if (heardMs >= need) {
                 counted = true
-                count(station)
+                count(station, streamTitle, now)
             }
         }
         lastTickMs = now
     }
 
-    private fun scrobblable(s: Station): Boolean =
-        s.source == StationSource.Local || s.source == StationSource.Provider
-
-    private fun count(station: Station) {
-        scope.launch {
-            val now = System.currentTimeMillis()
-            runCatching { dao.record(station.url, now) }
-            val token = runCatching { prefs.listenBrainzTokenSync() }.getOrNull().orEmpty()
-            if (token.isBlank()) return@launch
-            runCatching { postListen(token, station, now / 1000L) }
+    /**
+     * What the rule watches: the track URL for library tracks, the stream
+     * title for opted-in radio (a title change is a new song). Null means
+     * nothing countable is audible.
+     */
+    private fun trackKey(station: Station?, streamTitle: String): String? {
+        if (station == null) return null
+        return when {
+            station.source == StationSource.Local || station.source == StationSource.Provider ->
+                station.url
+            radioOn && station.isRadio && streamTitle.isNotBlank() ->
+                "${station.url}\n$streamTitle"
+            else -> null
         }
     }
 
-    private suspend fun postListen(token: String, s: Station, listenedAt: Long) {
+    private fun count(station: Station, streamTitle: String, nowMs: Long) {
+        scope.launch {
+            if (station.source == StationSource.Local || station.source == StationSource.Provider) {
+                runCatching { dao.record(station.url, nowMs) }
+            }
+            val (artist, title, album) = payloadOf(station, streamTitle)
+            outbox.enqueue(
+                ScrobbleEntity(
+                    url = station.url,
+                    artist = artist,
+                    title = title,
+                    album = album,
+                    listenedAtSec = nowMs / 1000L,
+                    createdAt = nowMs,
+                )
+            )
+            drain()
+        }
+    }
+
+    private fun payloadOf(station: Station, streamTitle: String): Triple<String, String, String> =
+        when {
+            station.source == StationSource.Local || station.source == StationSource.Provider ->
+                Triple(
+                    station.artist.ifBlank { "unknown artist" },
+                    station.name.ifBlank { "untitled" },
+                    station.album,
+                )
+            else -> {
+                val (artist, title) = splitStreamTitle(streamTitle)
+                Triple(
+                    artist.ifBlank { "unknown artist" },
+                    title.ifBlank { "untitled" },
+                    "",
+                )
+            }
+        }
+
+    /** Resend everything due, with backoff; one drain at a time. */
+    fun requestDrain() {
+        scope.launch { drain() }
+    }
+
+    private suspend fun drain() {
+        drainMutex.withLock {
+            val now = System.currentTimeMillis()
+            runCatching { outbox.prune(now - MAX_ROW_AGE_MS) }
+            val token = runCatching { prefs.listenBrainzTokenSync() }.getOrNull().orEmpty()
+            if (token.isBlank()) return
+            for (row in runCatching { outbox.due(now) }.getOrNull().orEmpty()) {
+                val failure = runCatching {
+                    postListen(token, row.artist, row.title, row.album, row.listenedAtSec)
+                }.exceptionOrNull()
+                if (failure == null) {
+                    runCatching { outbox.remove(row.id) }
+                    _lastError.value = null
+                } else {
+                    val attempts = row.attempts + 1
+                    runCatching { outbox.defer(row.id, attempts, now + retryDelayMs(row.attempts)) }
+                    _lastError.value = failure.message?.take(120) ?: "could not reach listenbrainz"
+                }
+            }
+        }
+    }
+
+    private suspend fun postListen(
+        token: String,
+        artist: String,
+        title: String,
+        album: String,
+        listenedAt: Long,
+    ) {
         val body = Http.json.encodeToString(
             ListenPayload.serializer(),
             ListenPayload(
@@ -89,9 +199,9 @@ class Scrobbler(
                     Listen(
                         listenedAt = listenedAt,
                         trackMetadata = TrackMetadata(
-                            artistName = s.artist.ifBlank { "unknown artist" },
-                            trackName = s.name.ifBlank { "untitled" },
-                            releaseName = s.album.takeIf { it.isNotBlank() },
+                            artistName = artist,
+                            trackName = title,
+                            releaseName = album.takeIf { it.isNotBlank() },
                         ),
                     ),
                 ),
@@ -104,6 +214,24 @@ class Scrobbler(
         )
     }
 }
+
+/** Radio stream titles name `Artist - Title`; anything else is title-only. */
+internal fun splitStreamTitle(title: String): Pair<String, String> {
+    val i = title.indexOf(" - ")
+    return if (i < 0) "" to title.trim()
+    else title.substring(0, i).trim() to title.substring(i + 3).trim()
+}
+
+/** Resend backoff by attempt: 1m, 5m, 15m, 1h, 6h, then daily. */
+internal fun retryDelayMs(attempts: Int): Long {
+    val steps = longArrayOf(60_000L, 300_000L, 900_000L, 3_600_000L, 21_600_000L, 86_400_000L)
+    return steps[attempts.coerceIn(0, steps.lastIndex)]
+}
+
+/** True for live radio (everything that is not a finite track). */
+private val Station.isRadio: Boolean
+    get() = source != StationSource.Local && source != StationSource.Provider &&
+        source != StationSource.Podcast
 
 @kotlinx.serialization.Serializable
 private data class ListenPayload(

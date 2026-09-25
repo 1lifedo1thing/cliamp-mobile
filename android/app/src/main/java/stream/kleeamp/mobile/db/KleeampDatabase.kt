@@ -24,8 +24,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         KvCacheEntity::class,
         PodcastFeedCacheEntity::class,
         PlayStatEntity::class,
+        ScrobbleEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class KleeampDatabase : RoomDatabase() {
@@ -40,6 +41,7 @@ abstract class KleeampDatabase : RoomDatabase() {
     abstract fun sftp(): SftpDao
     abstract fun cache(): CacheDao
     abstract fun stats(): StatsDao
+    abstract fun scrobbles(): ScrobbleDao
 
     companion object {
         @Volatile private var instance: KleeampDatabase? = null
@@ -163,6 +165,28 @@ abstract class KleeampDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Unsent ListenBrainz listens. One new table and nothing touched,
+         * additive like the ones before it - the outbox drains itself, and
+         * anything still in it is Retryable work, never user data that a
+         * destructive fallback may drop.
+         */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `scrobble_outbox` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `url` TEXT NOT NULL, " +
+                        "`artist` TEXT NOT NULL, `title` TEXT NOT NULL, `album` TEXT NOT NULL, " +
+                        "`listenedAtSec` INTEGER NOT NULL, `attempts` INTEGER NOT NULL, " +
+                        "`nextAttemptAt` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_scrobble_outbox_nextAttemptAt` " +
+                        "ON `scrobble_outbox` (`nextAttemptAt`)"
+                )
+            }
+        }
+
         fun get(context: Context): KleeampDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
@@ -172,7 +196,7 @@ abstract class KleeampDatabase : RoomDatabase() {
                 // playlist_members cascades from playlists, which only works
                 // with foreign keys actually switched on
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
                 .also { instance = it }
         }
