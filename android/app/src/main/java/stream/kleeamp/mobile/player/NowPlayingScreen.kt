@@ -150,7 +150,7 @@ internal data class PlayerActions(
     val onBack: () -> Unit,
     val onOpenUpNext: () -> Unit,
     val onToggleShuffle: () -> Unit,
-    val onCycleSpeed: () -> Unit,
+    val onOpenSpeed: () -> Unit,
     val onOpenScope: () -> Unit,
     val onToggleFav: () -> Unit,
     val onSeek: (Float) -> Unit,
@@ -172,6 +172,7 @@ fun NowPlayingScreen(
 ) {
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     var sleepOpen by rememberSaveable { mutableStateOf(false) }
+    var speedOpen by rememberSaveable { mutableStateOf(false) }
     val uiState by vm.state.collectAsState()
     // The meters read the live analyser straight off the bus in their frame
     // loops: routing spectrum through VM state would recompose this whole
@@ -207,7 +208,7 @@ fun NowPlayingScreen(
         onBack = onBack,
         onOpenUpNext = onOpenUpNext,
         onToggleShuffle = { vm.player.toggleShuffle() },
-        onCycleSpeed = { vm.onEvent(NowPlayingViewModel.Event.CycleSpeed) },
+        onOpenSpeed = { speedOpen = true },
         onOpenScope = onOpenScope,
         onToggleFav = { vm.onEvent(NowPlayingViewModel.Event.ToggleFavorite) },
         onSeek = { vm.player.seekTo(it) },
@@ -252,6 +253,14 @@ fun NowPlayingScreen(
                 sleepAtMs = uiState.playerState.sleepAtMs,
                 onPick = { vm.player.setSleepTimer(it) },
                 onDismiss = { sleepOpen = false },
+            )
+        }
+
+        if (speedOpen) {
+            SpeedDialog(
+                current = uiState.playerState.speed,
+                onPick = { vm.onEvent(NowPlayingViewModel.Event.SetSpeed(it)) },
+                onDismiss = { speedOpen = false },
             )
         }
     }

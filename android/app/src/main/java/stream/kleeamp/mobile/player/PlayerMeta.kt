@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -166,7 +167,7 @@ internal fun PlayerStatusRow(
             if (model.shuffled) "stop shuffling" else "shuffle",
             tint = if (model.shuffled) p.accent else p.inkSecondary,
         ) { actions.onToggleShuffle() }
-        SpeedAction(speed = model.state.speed) { actions.onCycleSpeed() }
+        SpeedAction(speed = model.state.speed) { actions.onOpenSpeed() }
         SmallAction(KleeampIcons.MeterSmall, "scope and equaliser", onClick = actions.onOpenScope)
         SmallAction(
             if (model.isFav) KleeampIcons.StarFilled else KleeampIcons.Star,
@@ -291,12 +292,14 @@ internal fun speedLabel(v: Float): String {
     return "${s}×"
 }
 
-/** Playback speed as a terse mono key: taps step through the ladder. */
+/** Playback speed as a terse mono key: opens the speed sheet. */
 @Composable
 internal fun SpeedAction(speed: Float, onClick: () -> Unit) {    val p = LocalPalette.current
+    // Sized to the label (5 glyphs at 0.25x) with a 28dp minimum tap
+    // target: a fixed box ellipsized the slow speeds to "0.2…".
     Box(
         Modifier
-            .size(28.dp)
+            .sizeIn(minWidth = 28.dp, minHeight = 28.dp)
             .clip(RoundedCornerShape(KleeampShape.small))
             .microPress(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -305,6 +308,7 @@ internal fun SpeedAction(speed: Float, onClick: () -> Unit) {    val p = LocalPa
             speedLabel(speed),
             KleeampType.meta,
             if (speed != 1f) p.accent else p.inkSecondary,
+            Modifier.padding(horizontal = 3.dp),
             maxLines = 1,
         )
     }
