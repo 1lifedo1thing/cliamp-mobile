@@ -189,7 +189,7 @@ internal fun PortraitPlayer(
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(horizontal = Gutter),
-            verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
+            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
         ) {
             // The art plate and the text block below it share a flexed block
             // that absorbs however tall a long station name or stream title
@@ -201,9 +201,9 @@ internal fun PortraitPlayer(
                 Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Top),
+                verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Top),
             ) {
-                // One fixed plate: a perfect 1:1 square at 80% of the
+                // One fixed plate: a perfect 1:1 square at 87% of the
                 // screen width, centred with even margins both sides.
                 // minOf with maxHeight keeps it square, never squeezed,
                 // on short frames. Switching stations never moves the
@@ -214,7 +214,7 @@ internal fun PortraitPlayer(
                         .fillMaxWidth(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    val side = minOf((maxWidth + Gutter * 2) * 0.8f, maxHeight)
+                    val side = minOf((maxWidth + Gutter * 2) * 0.87f, maxHeight)
                     StationArt(
                         station = model.shownStation,
                         modifier = Modifier.size(side),
@@ -235,7 +235,7 @@ internal fun PortraitPlayer(
                 }
             }
 
-            PlayerTransport(model, actions, meterHeight = 84.dp)
+            PlayerTransport(model, actions, meterHeight = 72.dp)
 
             TransportKeys(model, actions)
         }

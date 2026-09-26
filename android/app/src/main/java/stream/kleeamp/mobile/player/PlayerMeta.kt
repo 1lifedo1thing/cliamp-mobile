@@ -307,7 +307,7 @@ internal fun PlayerMeta(
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
         MarqueeLabel(
             model.shownStation?.name ?: "pick a station",
             KleeampType.trackTitle,
@@ -361,7 +361,7 @@ internal fun SmallAction(
     val p = LocalPalette.current
     Box(
         Modifier
-            .size(44.dp)
+            .size(40.dp)
             .clip(RoundedCornerShape(KleeampShape.small))
             .microPress(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -379,12 +379,12 @@ internal fun speedLabel(v: Float): String {
 @Composable
 internal fun SpeedAction(speed: Float, onClick: () -> Unit) {
     val p = LocalPalette.current
-    // Sized to the label (5 glyphs at 0.25x) with a 44dp minimum tap
+    // Sized to the label (5 glyphs at 0.25x) with a 40dp minimum tap
     // target like the icon keys: a fixed box ellipsized the slow speeds
     // to "0.2…".
     Box(
         Modifier
-            .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
+            .sizeIn(minWidth = 40.dp, minHeight = 40.dp)
             .clip(RoundedCornerShape(KleeampShape.small))
             .microPress(onClick = onClick),
         contentAlignment = Alignment.Center,
