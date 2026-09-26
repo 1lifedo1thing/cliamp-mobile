@@ -315,7 +315,7 @@ internal fun PlaylistGlyph(icon: ImageVector, contentDescription: String?) {
 private fun smartKindIcon(kind: SmartKind): ImageVector = when (kind) {
     SmartKind.LocalSongs -> KleeampIcons.MusicNote
     SmartKind.Downloads -> KleeampIcons.Download
-    SmartKind.Favorites -> KleeampIcons.HeartFilled
+    SmartKind.Favorites -> KleeampIcons.Heart
     SmartKind.RecentlyPlayed -> KleeampIcons.Clock
 }
 
