@@ -44,7 +44,10 @@ object StationArtSource {
     // that is already past us.
     private const val MAX_HTML = 24 * 1024
     private const val MAX_IMAGE = 4 * 1024 * 1024
-    private const val TARGET = 512
+    // Full art feeds the ~900px hero plate: a 512px decode upscaled that
+    // far reads soft, so full decodes target 1024 instead. Disk keeps the
+    // original bytes, so this takes effect without re-downloading.
+    private const val TARGET = 1024
 
     /** Thumbnails (row icons, the mini player) never need full detail. */
     private const val TARGET_SMALL = 96
@@ -61,8 +64,8 @@ object StationArtSource {
     private val undecodable = setOf("image/svg+xml")
 
     private val resolved = LruCache<String, String>(128)
-    // Bitmap caches are byte-budgeted, not count-bounded: a 512px bitmap is a
-    // megabyte, so the old 128-count cap could hold ~128 MB. Size is in KB.
+    // Bitmap caches are byte-budgeted, not count-bounded: a 1024px bitmap is
+    // four megabytes, so the old 128-count cap could hold ~512 MB. Size is in KB.
     private val bitmaps = object : android.util.LruCache<String, Bitmap>(32 * 1024) {
         override fun sizeOf(key: String, value: Bitmap) = (value.byteCount / 1024).coerceAtLeast(1)
     }

@@ -49,6 +49,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
@@ -200,21 +202,18 @@ internal fun PortraitPlayer(
                     .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.Top),
             ) {
-                // Yesterday's full-screen player always resolved the plate to
-                // the 340.dp cap; inside the sheet the leftover height is
-                // smaller, so including maxHeight here shrank it. Pin the
-                // plate to that size: width still concedes on narrow frames,
-                // height never shrinks it.
+                // One fixed plate: full available width, square, whatever the
+                // cover is - like Samsung Music / Spotify / YouTube Music.
+                // Switching stations never moves the text, meter or keys.
                 BoxWithConstraints(
                     Modifier
                         .weight(1f, fill = false)
                         .fillMaxWidth(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    val side = minOf(maxWidth, 340.dp)
                     StationArt(
                         station = model.shownStation,
-                        modifier = Modifier.size(side),
+                        modifier = Modifier.size(maxWidth),
                     )
                 }
 
@@ -242,9 +241,11 @@ internal fun PortraitPlayer(
 
 /**
  * The landscape player: art plate on the left, everything else on the right.
- * The transport keeps its full height of keys instead of conceding them to a
- * short portrait column, and the meter/queue/now-tuned rows pin to the bottom
- * of the right pane while the title block flexes above them.
+ * Short frames cannot fit the portrait stack, so the right pane runs a
+ * compact meter with tighter gaps and both panes scroll instead of pushing
+ * the transport keys off the bottom: every control stays reachable on any
+ * height, and the keys ride directly under the transport with any slack
+ * pooling below them.
  */
 @Composable
 internal fun LandscapePlayer(
@@ -259,12 +260,16 @@ internal fun LandscapePlayer(
         modifier
             .fillMaxSize()
             .background(p.ground)
+            .navigationBarsPadding()
             .padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val side = minOf(frameHeight - 76.dp, (frameWidth - Gutter * 2) * 0.44f).coerceIn(96.dp, 340.dp)
+        val side = minOf(frameHeight - 76.dp, (frameWidth - Gutter * 2) * 0.44f).coerceIn(96.dp, 360.dp)
         Column(
-            Modifier.weight(0.95f).fillMaxHeight(),
+            Modifier
+                .weight(0.95f)
+                .fillMaxHeight()
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
         ) {
@@ -285,8 +290,9 @@ internal fun LandscapePlayer(
         Column(
             Modifier
                 .weight(1.05f)
-                .fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .fillMaxHeight()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Row(
                 Modifier.fillMaxWidth().height(48.dp),
@@ -298,7 +304,7 @@ internal fun LandscapePlayer(
             }
             PlayerMeta(model)
             Spacer(Modifier.weight(1f))
-            PlayerTransport(model, actions)
+            PlayerTransport(model, actions, meterHeight = 56.dp)
             TransportKeys(model, actions)
         }
     }
@@ -371,72 +377,59 @@ internal fun StationArt(
         label = "artBreathScale",
     )
     Box(modifier, contentAlignment = Alignment.Center) {
+        val bmp = art ?: preview
+        // The caption names the plate only while it stands in for missing
+        // art; a real cover or its thumbnail preview speaks for itself.
+        val plateCaption =
+            if (bmp == null && (seedKey.isEmpty() || station == null)) caption else null
         ArtGlow(Modifier.fillMaxSize())
-    ArtPlate(
-        modifier = Modifier
-            .fillMaxSize()
-            // Soft drop shadow so the plate floats over the page - the
-            // premium read, same large radius as the plate itself. A touch
-            // lighter on light grounds, where the same elevation reads
-            // stronger against the pale ground.
-            .shadow(if (p.dark) 26.dp else 20.dp, RoundedCornerShape(KleeampShape.large))
-            .graphicsLayer {
-                scaleX = breath
-                scaleY = breath
-            },
-        radius = KleeampShape.large,
-        caption = if (art == null && preview == null && (seedKey.isEmpty() || station == null)) caption else null,
-    ) {
-        (art ?: preview)?.let { bmp ->
-            // Real album art is square and fills the plate edge to edge. Radio
-            // art does not have to be: og:images are typically 1200x630
-            // wordmarks, and cropping one to a square cuts it in half, so
-            // those stay inset and contained - unless the bitmap itself is
-            // square enough (a station logo rather than a wordmark) and big
-            // enough not to turn to mush, in which case it fills like album
-            // art instead of floating small in the middle of the plate.
-            // Podcast artwork is square by Apple's own requirement, so it
-            // belongs with the album art that fills the plate, not with the
-            // 1200x630 radio wordmarks that have to stay inset.
-            val albumArt = station?.source == StationSource.Local ||
-                station?.source == StationSource.Provider ||
-                station?.source == StationSource.Podcast
-            val squarish = run {
-                val w = bmp.width.coerceAtLeast(1)
-                val h = bmp.height.coerceAtLeast(1)
-                val aspect = w.toFloat() / h
-                aspect in 0.85f..1.18f && minOf(w, h) >= 96
-            }
-            val fills = albumArt || squarish
-            Image(
-                bitmap = bmp,
-                contentDescription = station?.name,
-                modifier =
-                    if (fills) Modifier.fillMaxSize()
-                    else Modifier.fillMaxSize().padding(14.dp),
-                contentScale = if (fills) ContentScale.Crop else ContentScale.Fit,
-            )
-        }
-        // No cover at all: the seeded plate, wearing the caption line so
-        // the hero still names what is playing.
-        if (art == null && preview == null) {
-            if (station != null && seedKey.isNotEmpty()) {
-                SeedPlate(
-                    key = seedKey,
-                    name = station.name,
+        ArtPlate(
+            modifier = Modifier
+                .fillMaxSize()
+                // Soft drop shadow so the plate floats over the page - the
+                // premium read, same large radius as the plate itself. A touch
+                // lighter on light grounds, where the same elevation reads
+                // stronger against the pale ground.
+                .shadow(if (p.dark) 26.dp else 20.dp, RoundedCornerShape(KleeampShape.large))
+                .graphicsLayer {
+                    scaleX = breath
+                    scaleY = breath
+                },
+            radius = KleeampShape.large,
+            caption = plateCaption,
+        ) {
+            bmp?.let {
+                // Like every other music player: the square is always
+                // filled edge to edge (centre-cropped). Square art is
+                // untouched; wider or taller art loses its edges instead
+                // of letterboxing.
+                Image(
+                    bitmap = it,
+                    contentDescription = station?.name,
                     modifier = Modifier.fillMaxSize(),
-                    caption = caption,
-                    radius = KleeampShape.large,
+                    contentScale = ContentScale.Crop,
                 )
-            } else station?.let {
-                Icon(
-                    KleeampIcons.MusicNote,
-                    it.name,
-                    Modifier.align(Alignment.Center).size(64.dp),
-                    tint = p.accent,
-                )
+            }
+            // No cover at all: the seeded plate, wearing the caption line so
+            // the hero still names what is playing.
+            if (bmp == null) {
+                if (station != null && seedKey.isNotEmpty()) {
+                    SeedPlate(
+                        key = seedKey,
+                        name = station.name,
+                        modifier = Modifier.fillMaxSize(),
+                        caption = caption,
+                        radius = KleeampShape.large,
+                    )
+                } else station?.let {
+                    Icon(
+                        KleeampIcons.MusicNote,
+                        it.name,
+                        Modifier.align(Alignment.Center).size(64.dp),
+                        tint = p.accent,
+                    )
+                }
             }
         }
     }
-}
 }

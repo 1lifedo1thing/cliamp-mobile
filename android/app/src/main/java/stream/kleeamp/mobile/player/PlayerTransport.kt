@@ -105,6 +105,9 @@ internal fun PlayerTransport(
     model: PlayerModel,
     actions: PlayerActions,
     modifier: Modifier = Modifier,
+    // Landscape passes a shorter meter: the short frame cannot fit the
+    // full portrait height above the transport keys.
+    meterHeight: androidx.compose.ui.unit.Dp = MeterSize.NowPlaying.height,
 ) {
     val p = LocalPalette.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(11.dp)) {
@@ -122,7 +125,7 @@ internal fun PlayerTransport(
                 gap = MeterSize.NowPlaying.gap,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(MeterSize.NowPlaying.height)
+                    .height(meterHeight)
                     .doubleTapToFullscreen(actions.onToggleFullscreen),
             )
         }

@@ -21,7 +21,8 @@ import stream.kleeamp.mobile.model.Station
  */
 object LocalArt {
 
-    private const val TARGET = 512
+    // Full decodes feed the ~900px hero plate; see StationArtSource.TARGET.
+    private const val TARGET = 1024
     private const val TARGET_SMALL = 96
     // Byte-budgeted like StationArtSource's caches (sizes in KB): count caps
     // alone could hold ~96 MB of full-size bitmaps here.
