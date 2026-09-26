@@ -60,6 +60,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import stream.kleeamp.mobile.art.LocalArt
+import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.radio.RadioRepository
@@ -119,8 +120,11 @@ fun LibrarySongInfoPane(
     val recent = ui.recent
     val cliamp by repository.cliamp.collectAsState(initial = emptyList())
     val directory by repository.directory.collectAsState(initial = DirectoryState())
-    val station = remember(stationUrl, songs, favorites, recent, cliamp, directory) {
-        (songs + favorites + recent + cliamp + directory.stations)
+    // Playlist snapshots last, like the add-to-playlist picker: a member
+    // that was never favourited or played still resolves.
+    val snapshot = ui.snapshot
+    val station = remember(stationUrl, songs, favorites, recent, cliamp, directory, snapshot) {
+        (songs + favorites + recent + cliamp + directory.stations + listOfNotNull(snapshot))
             .distinctBy { it.url }
             .firstOrNull { it.url == stationUrl }
     }
@@ -196,6 +200,9 @@ private fun SongInfoView(
     BackHandler(enabled = systemBack) { onDismiss() }
 
     val path = s.url.removePrefix("file://").let(Uri::decode)
+    // File rows only read when there is a real file: streams would show a
+    // zero size and a URL for a location.
+    val isFile = s.url.startsWith("file://")
     val sizeLabel = remember(s.url) {
         val f = File(path)
         val mb = f.length() / 1_048_576f
@@ -233,7 +240,12 @@ private fun SongInfoView(
                         if (art != null) {
                             Image(art!!, s.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                         } else {
-                            Icon(KleeampIcons.MusicNote, null, Modifier.size(40.dp), tint = p.inkTertiary)
+                            SeedPlate(
+                                key = s.id.ifBlank { s.url },
+                                name = s.name,
+                                modifier = Modifier.fillMaxSize(),
+                                radius = KleeampShape.large,
+                            )
                         }
                         if (favorite) {
                             Mono(
@@ -261,25 +273,30 @@ private fun SongInfoView(
                     verticalArrangement = Arrangement.spacedBy(1.dp),
                 ) {
                     SongInfoRow("duration", durationLabel(s.durationMs))
-                    SongInfoRow("added", added)
+                    if (isFile) {
+                        SongInfoRow("added", added)
+                    }
                     SongInfoRow("plays", if (plays > 0) "$plays" else "—")
                     SongInfoRow(
                         "last played",
                         if (lastPlayedAt > 0) SimpleDateFormat("dd MMM yyyy", Locale.US)
                             .format(Date(lastPlayedAt)) else "—",
                     )
-                    SongInfoRow("size", sizeLabel)
-                    SongInfoRow("format", File(path).extension.uppercase().ifBlank { "—" })
-                    SongInfoRow("location", File(path).parent.orEmpty())
+                    if (isFile) {
+                        SongInfoRow("size", sizeLabel)
+                        SongInfoRow("format", File(path).extension.uppercase().ifBlank { "—" })
+                        SongInfoRow("location", File(path).parent.orEmpty())
+                    }
                 }
 
                 Spacer(Modifier.height(20.dp))
 
-                // Actions: favourite toggle and destructive remove, side by side.
+                // Actions: favourite toggle, plus the destructive remove for
+                // on-device files only - streams have nothing to delete.
                 Row(Modifier.fillMaxWidth().padding(Gutter)) {
                     Row(
                         Modifier
-                            .padding(end = 4.dp)
+                            .padding(end = if (isFile) 4.dp else 0.dp)
                             .weight(1f)
                             .clip(RoundedCornerShape(KleeampShape.small))
                             .background(p.panel)
@@ -289,21 +306,23 @@ private fun SongInfoView(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
-                            if (favorite) KleeampIcons.StarFilled else KleeampIcons.Star,
+                            if (favorite) KleeampIcons.HeartFilled else KleeampIcons.Heart,
                             "favourite",
                             Modifier.size(15.dp).padding(end = 6.dp),
                             tint = if (favorite) p.accent else p.inkTertiary,
                         )
                         Mono(if (favorite) "favourited" else "favourite", KleeampType.chip, p.ink)
                     }
-                    Row(
-                        Modifier.weight(1f).clip(RoundedCornerShape(KleeampShape.small)).background(p.panel)
-                            .microPress { onRemove() }
-                            .padding(vertical = 12.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Mono("remove from device", KleeampType.chip, p.destructiveInk)
+                    if (isFile) {
+                        Row(
+                            Modifier.weight(1f).clip(RoundedCornerShape(KleeampShape.small)).background(p.panel)
+                                .microPress { onRemove() }
+                                .padding(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Mono("remove from device", KleeampType.chip, p.destructiveInk)
+                        }
                     }
                 }
 

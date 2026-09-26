@@ -26,6 +26,7 @@ class StationsViewModel(
     sealed interface Event {
         data object NextPage : Event
         data object RefreshCliamp : Event
+        data object RefreshStats : Event
         data class LoadDirectory(val query: DirectoryQuery, val reset: Boolean = true) : Event
         data class AddCustom(val station: Station) : Event
         data class RemoveCustom(val station: Station) : Event
@@ -82,10 +83,13 @@ class StationsViewModel(
         ),
     )
 
+    val cliampStats: StateFlow<CliampStats?> = repository.cliampStats
+
     fun onEvent(e: Event) {
         when (e) {
             is Event.NextPage -> repository.nextPage()
             is Event.RefreshCliamp -> repository.refreshCliamp()
+            is Event.RefreshStats -> repository.refreshCliampStats()
             is Event.LoadDirectory -> repository.loadDirectory(e.query, e.reset)
             is Event.AddCustom -> viewModelScope.launch {
                 prefs.addCustom(e.station)

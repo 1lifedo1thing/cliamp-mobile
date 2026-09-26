@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.chrome.ArtKind
@@ -69,6 +71,7 @@ fun MiniPlayer(
             Modifier
                 .fillMaxWidth()
                 .microPress(onClick = onOpen)
+                .dragUpToOpen(onOpen)
                 .padding(horizontal = Gutter, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -140,8 +143,24 @@ fun MiniPlayer(
     }
 }
 
-/** A small prev/next key for the mini bar transport cluster. */
-@Composable
+/**
+ * Dragging the bar upward opens the player, mirroring the sheet's own
+ * swipe-down to close. Taps are untouched (no movement, no claim) and
+ * drags starting on the keys still belong to them: the tap detectors
+ * own the press, this only watches the travel.
+ */
+private fun Modifier.dragUpToOpen(onOpen: () -> Unit): Modifier = pointerInput(onOpen) {
+    val threshold = 64.dp.toPx()
+    var travel = 0f
+    detectVerticalDragGestures(
+        onDragStart = { travel = 0f },
+        onVerticalDrag = { _, amount -> travel += amount },
+        onDragEnd = { if (travel < -threshold) onOpen() },
+        onDragCancel = { travel = 0f },
+    )
+}
+
+/** A small prev/next key for the mini bar transport cluster. */@Composable
 private fun MiniKey(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,

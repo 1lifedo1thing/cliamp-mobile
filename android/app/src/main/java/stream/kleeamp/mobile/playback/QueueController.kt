@@ -11,7 +11,9 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.KleeampApp
@@ -22,6 +24,8 @@ import stream.kleeamp.mobile.play.QueuePolicy
 import stream.kleeamp.mobile.widget.WidgetRenderer
 
 private const val NAV_DEBOUNCE_MS = 180L
+/** Caps the undo stack: walking back fifty edits is plenty, and old sources stay small. */
+private const val MAX_UNDO_DEPTH = 50
 
 /**
  * The queue half of playback: the source lists, the bounded Up Next window,
@@ -220,6 +224,7 @@ internal class QueueController(
         sourceIndex: Int? = null,
     ) {
         cancelPendingPlayback()
+        clearUndo()
         if (from.isNotEmpty()) {
             model.playFromList(station, from, preserveOrder, sourceIndex)
         } else {
@@ -257,6 +262,65 @@ internal class QueueController(
         _navTimerJob = null
         _navPending = null
         bridge.cancelMedia()
+    }
+
+    /**
+     * Multi-step undo for queue edits (remove / reorder / clear / insert).
+     * Each snapshot captures the whole walking order plus the window, taken
+     * before the edit mutates anything; each undo pops one step, so the user
+     * can walk every edit back to the start state, where the UNDO key hides
+     * itself. A fresh play starts a new history and drops the stack.
+     * Restoring rebuilds the Media3 window around the same audible item,
+     * keeping its position when it survives the undo. The stack is capped so
+     * a long editing session cannot pin old sources in memory.
+     */
+    private data class QueueSnapshot(
+        val source: List<Station>,
+        val baseSource: List<Station>,
+        val windowBase: Int,
+        val window: List<Station>,
+        val index: Int,
+    )
+
+    private val undoStack = ArrayDeque<QueueSnapshot>()
+    private val _canUndo = MutableStateFlow(false)
+    val canUndo: StateFlow<Boolean> get() = _canUndo.asStateFlow()
+
+    private fun snapshotForUndo() {
+        // Captures the fully pre-edit model. Call at the top of every public
+        // edit op, before ANY setWindow/source mutation - never from
+        // applyUpNextToPlayer, which runs after callers have mutated.
+        undoStack.addLast(
+            QueueSnapshot(
+                source = model.source,
+                baseSource = model.baseSource,
+                windowBase = model.windowBase,
+                window = model.currentUpNext,
+                index = model.currentIndex,
+            ),
+        )
+        if (undoStack.size > MAX_UNDO_DEPTH) undoStack.removeFirst()
+        _canUndo.value = true
+    }
+
+    private fun clearUndo() {
+        undoStack.clear()
+        _canUndo.value = false
+    }
+
+    /** Restores the queue as it was before the last edit; hides at the start state. */
+    fun undo() {
+        val snap = undoStack.removeLastOrNull() ?: return
+        _canUndo.value = undoStack.isNotEmpty()
+        cancelPendingPlayback()
+        model.source = snap.source
+        model.baseSource = snap.baseSource
+        model.windowBase = snap.windowBase
+        model.setWindow(snap.window, snap.index)
+        model.ringFallback = false
+        PlaybackBus.publishSource(model.source)
+        PlaybackBus.station.value?.let(::persistWidgetWindow)
+        bridge.rebuildWindow(snap.window, snap.index)
     }
 
     /**
@@ -522,6 +586,7 @@ internal class QueueController(
 
     /** Insert without changing the originating list. Append means the full tail, not just its window. */
     fun addToUpNext(station: Station, at: Int = Int.MAX_VALUE) {
+        snapshotForUndo()
         val previous = model.currentUpNext
         if (at == Int.MAX_VALUE && model.windowBase + previous.size < model.source.size) {
             bridge.cancelExtend()
@@ -550,6 +615,7 @@ internal class QueueController(
     fun removeFromUpNext(index: Int) {
         val q = model.currentUpNext
         if (index !in q.indices) return
+        snapshotForUndo()
         val (newQ, newIdx) = QueuePolicy.remove(q, index, model.currentIndex)
         model.setWindow(newQ, newIdx)
         applyUpNextToPlayer(previousUpNext = q, edit = { it.removeMediaItem(index) })
@@ -559,6 +625,7 @@ internal class QueueController(
     fun reorderUpNext(from: Int, to: Int) {
         val q = model.currentUpNext
         if (from !in q.indices || to !in q.indices || from == to) return
+        snapshotForUndo()
         val qi = model.currentIndex
         val item = q[from]
         val moved = q.toMutableList().apply {
@@ -575,6 +642,7 @@ internal class QueueController(
 
     /** Clear only pending playback; keep the audible item and its source identity. */
     fun clearUpNext() {
+        snapshotForUndo()
         val previous = model.currentUpNext
         val currentIndex = model.currentIndex
         val (kept, keptIdx) = QueuePolicy.clearPending(previous, currentIndex)

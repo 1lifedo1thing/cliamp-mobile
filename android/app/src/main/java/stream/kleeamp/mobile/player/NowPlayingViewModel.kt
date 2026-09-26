@@ -14,14 +14,6 @@ import stream.kleeamp.mobile.playback.PlayerConnection
 import stream.kleeamp.mobile.playback.upNextIndices
 import stream.kleeamp.mobile.playback.PlayerState
 
-/** Tap-steps through the speed ladder, wrapping back to normal. */
-private val SpeedSteps = listOf(1f, 1.25f, 1.5f, 1.75f, 2f, 0.5f, 0.75f)
-
-private fun nextSpeed(now: Float): Float {
-    val i = SpeedSteps.indexOfFirst { kotlin.math.abs(it - now) < 0.01f }
-    return if (i < 0) 1f else SpeedSteps[(i + 1) % SpeedSteps.size]
-}
-
 @UnstableApi
 class NowPlayingViewModel(
     val player: PlayerConnection,
@@ -42,7 +34,7 @@ class NowPlayingViewModel(
 
     sealed interface Event {
         data object ToggleFavorite : Event
-        data object CycleSpeed : Event
+        data class SetSpeed(val value: Float) : Event
         data class SetOutputDevice(val id: Int) : Event
     }
 
@@ -121,9 +113,9 @@ class NowPlayingViewModel(
                 state.value.shownStation?.let { prefs.toggleFavorite(it) }
             }
             // Pure player writes with no logic (seek/prev/next/shuffle/play-pause)
-            // stay as direct vm.player.* calls in the composable; only the speed
-            // ladder, which derives the next step, is routed here.
-            Event.CycleSpeed -> player.setSpeed(nextSpeed(player.speed.value))
+            // stay as direct vm.player.* calls in the composable; only writes
+            // that go through prefs or need an event are routed here.
+            is Event.SetSpeed -> player.setSpeed(e.value)
             is Event.SetOutputDevice -> viewModelScope.launch { prefs.setOutputDevice(e.id) }
         }
     }

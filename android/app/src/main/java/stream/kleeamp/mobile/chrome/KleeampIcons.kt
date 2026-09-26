@@ -93,8 +93,13 @@ object KleeampIcons {
         "M1 11h4l8-8h3",
         "M14.5 2.5l1.5 1.5-1.5 1.5",
     )
-    val Star = stroked(16f, 16f, 1.8f, "M8 1.5l1.9 4.2 4.6.5-3.4 3.1.9 4.5L8 11.6 4 13.8l.9-4.5L1.5 6.2l4.6-.5z")
-    val StarFilled = solid(16f, 16f, "M8 1.5l1.9 4.2 4.6.5-3.4 3.1.9 4.5L8 11.6 4 13.8l.9-4.5L1.5 6.2l4.6-.5z")
+    /**
+     * A geometric heart: two straight lobes, a notched top, one bottom
+     * point. No curves, like the rest of the set - the favourite mark.
+     */
+    private const val HeartPath = "M8 14.2L1.8 8V4.6L4.4 2H7.2L8 2.9L8.8 2H11.6L14.2 4.6V8z"
+    val Heart = stroked(16f, 16f, 1.8f, HeartPath)
+    val HeartFilled = solid(16f, 16f, HeartPath)
 
     /** Headphones: band over two ear cups, for wired and hearing-aid routes. */
     val Headphones = stroked(
@@ -201,6 +206,37 @@ object KleeampIcons {
     val Down = stroked(16f, 10f, 1.8f, "M1 1l7 8 7-8")
     val Left = stroked(16f, 16f, 1.8f, "M8 1L1 8l7 7")
     val Download = stroked(16f, 16f, 1.6f, "M8 1v9", "M4.5 6.5L8 10l3.5-3.5", "M1.5 13.5h13")
+    /** A lowercase i from two bars: the info / details mark. */
+    val Info = solid(16f, 16f, rect(7f, 1.5f, 2f, 2.2f), rect(7f, 5f, 2f, 9f))
+    /**
+     * Three list rails with a plus badge: add the row to a playlist. Rails
+     * are stroked like the other line glyphs, the badge is solid so it
+     * reads at row size.
+     */
+    val PlaylistAdd = ImageVector.Builder(
+        defaultWidth = 18.dp, defaultHeight = 18.dp, viewportWidth = 18f, viewportHeight = 18f,
+    ).apply {
+        listOf("M1 3.5h10", "M1 8h10", "M1 12.5h6").forEach {
+            addPath(
+                addPathNodes(it),
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = 1.7f,
+                strokeLineCap = StrokeCap.Butt,
+                strokeLineJoin = StrokeJoin.Miter,
+            )
+        }
+        listOf(rect(11.5f, 12f, 5f, 2f), rect(13f, 10.25f, 2f, 5.5f)).forEach {
+            addPath(addPathNodes(it), fill = SolidColor(Color.White))
+        }
+    }.build()
+    /** A lidded bin with two inner rails: delete / remove download. */
+    val Trash = stroked(
+        16f, 16f, 1.7f,
+        "M1.5 3.5h13",
+        "M6 3.5V1.5h4v2",
+        "M3.5 3.5L4.6 14.5h6.8L12.5 3.5",
+        "M7 6.5v5.5M10 6.5v5.5",
+    )
     /** Vertical ellipsis: row overflow menu. */
     val More = solid(16f, 16f, circle(8f, 3f, 2.2f), circle(8f, 8f, 2.2f), circle(8f, 13f, 2.2f))
     val Lines = solid(16f, 14f, rect(0f, 0f, 16f, 2f), rect(0f, 6f, 16f, 2f), rect(0f, 12f, 16f, 2f))
@@ -254,6 +290,31 @@ object KleeampIcons {
             "M4.2 2.8L15.8 2.8L10 9.3z",
             "M10 10.7L15.8 17.2L4.2 17.2z",
         ).forEach { addPath(addPathNodes(it), fill = SolidColor(Color.White)) }
+    }.build()
+    /**
+     * A wristwatch: square face, strap loops, two hands, crown nub. The
+     * sleep timer key wears this instead of the hourglass, so "sleep" reads
+     * as a watch at a glance. Straight edges only, like the rest of the set.
+     */
+    val Watch = ImageVector.Builder(
+        defaultWidth = 20.dp, defaultHeight = 20.dp, viewportWidth = 20f, viewportHeight = 20f,
+    ).apply {
+        listOf(
+            rect(5f, 5f, 10f, 10f),
+            "M7.6 5V1.6h4.8V5",
+            "M7.6 15v3.4h4.8V15",
+            "M10 10V6.8",
+            "M10 10l2.6 1.7",
+        ).forEach {
+            addPath(
+                addPathNodes(it),
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = 1.7f,
+                strokeLineCap = StrokeCap.Butt,
+                strokeLineJoin = StrokeJoin.Miter,
+            )
+        }
+        addPath(addPathNodes(rect(15f, 9.1f, 1.8f, 1.8f)), fill = SolidColor(Color.White))
     }.build()
     /**
      * Two stacked rack units with a status light and a vent line each.

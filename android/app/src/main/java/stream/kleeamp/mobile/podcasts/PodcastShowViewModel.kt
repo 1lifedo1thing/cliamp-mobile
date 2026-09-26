@@ -21,10 +21,12 @@ class PodcastShowViewModel(
         val showState: ShowState,
         val progress: Map<String, EpisodeProgress>,
         val subscriptions: List<PodcastShow>,
+        val favorites: Set<String>,
     )
 
     sealed interface Event {
         data class ToggleSubscription(val show: PodcastShow) : Event
+        data class ToggleFavorite(val station: Station) : Event
         data object RefreshShow : Event
         data class MarkCompleted(val station: Station) : Event
         data class ClearProgress(val station: Station) : Event
@@ -34,21 +36,35 @@ class PodcastShowViewModel(
         data object AutoDownload : Event
     }
 
+    /** Show feed plus the sets rows read: subscriptions and favourited episode urls. */
+    private data class ShowBits(
+        val show: ShowState,
+        val progress: Map<String, EpisodeProgress>,
+        val subscriptions: List<PodcastShow>,
+        val favorites: Set<String>,
+    )
+
     val state: StateFlow<UiState> = combine(
         combine(downloads.states, downloads.entries, prefs.autoDownload) { a, b, c ->
             Triple(a, b, c)
         },
-        combine(podcasts.show, podcasts.progress, podcasts.subscriptions) { d, e, f ->
-            Triple(d, e, f)
+        combine(
+            podcasts.show,
+            podcasts.progress,
+            podcasts.subscriptions,
+            prefs.favorites,
+        ) { show, progress, subscriptions, favorites ->
+            ShowBits(show, progress, subscriptions, favorites.mapTo(HashSet()) { it.url })
         },
     ) { x, y ->
         UiState(
             dlStates = x.first,
             dlEntries = x.second,
             autoDownload = x.third,
-            showState = y.first,
-            progress = y.second,
-            subscriptions = y.third,
+            showState = y.show,
+            progress = y.progress,
+            subscriptions = y.subscriptions,
+            favorites = y.favorites,
         )
     }.stateInUi(
         viewModelScope,
@@ -59,6 +75,7 @@ class PodcastShowViewModel(
             showState = podcasts.show.value,
             progress = emptyMap(),
             subscriptions = emptyList(),
+            favorites = emptySet(),
         ),
     )
 
@@ -67,6 +84,7 @@ class PodcastShowViewModel(
             is Event.ToggleSubscription -> viewModelScope.launch {
                 podcasts.toggleSubscription(e.show)
             }
+            is Event.ToggleFavorite -> viewModelScope.launch { prefs.toggleFavorite(e.station) }
             is Event.RefreshShow -> podcasts.refreshShow()
             is Event.MarkCompleted -> viewModelScope.launch {
                 podcasts.markCompleted(e.station)

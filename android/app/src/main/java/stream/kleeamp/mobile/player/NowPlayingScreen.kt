@@ -50,8 +50,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
@@ -82,7 +80,6 @@ import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.MechKey
 import stream.kleeamp.mobile.chrome.MeterSize
 import stream.kleeamp.mobile.chrome.MarqueeLabel
-import stream.kleeamp.mobile.chrome.OutputMenu
 import stream.kleeamp.mobile.chrome.Scrubber
 import stream.kleeamp.mobile.chrome.StreamingRule
 import stream.kleeamp.mobile.chrome.ArtGlow
@@ -96,36 +93,6 @@ import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.Mono
 import stream.kleeamp.mobile.art.LocalArt
 import stream.kleeamp.mobile.model.NowPlaying
-
-// Swallows taps, drags and swipes entirely so a gesture landing on the cover
-// art or the inert strip around it can never fall through to advance or
-// restart playback.
-//
-// Whole gestures are claimed, never individual events. A press nothing else
-// wanted becomes ours and everything up to the release is eaten; a press a
-// child already took is left alone from start to finish. That distinction is
-// the whole point: consuming this node's MOVE events unconditionally cancels
-// a child's pending tap the instant a finger drifts, because clickable drops
-// a press as soon as it sees a consumed change. Fingers always drift, so
-// play / pause did nothing at all while still taps worked.
-//
-// The Main pass is the one to do this on. A parent sees Main after its own
-// children, so the transport keys and the back button claim their presses
-// first and are never robbed. The screen stacked under this overlay also
-// reads Main, and this one is above it, so a press that no child here wanted
-// dies at this node instead of reaching the list underneath. The Final pass
-// cannot do that job: every node in the tree gets Main before any node gets
-// Final, so by then the screen behind has already taken the press.
-internal fun Modifier.consumeAllGestures(): Modifier = this.pointerInput(Unit) {
-    awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = true)
-        down.consume()
-        do {
-            val event = awaitPointerEvent()
-            event.changes.forEach { it.consume() }
-        } while (event.changes.any { it.pressed })
-    }
-}
 
 /** Everything the player screen needs to draw, read once per frame. */
 internal data class PlayerModel(
@@ -150,13 +117,14 @@ internal data class PlayerActions(
     val onBack: () -> Unit,
     val onOpenUpNext: () -> Unit,
     val onToggleShuffle: () -> Unit,
-    val onCycleSpeed: () -> Unit,
+    val onOpenSpeed: () -> Unit,
     val onOpenScope: () -> Unit,
     val onToggleFav: () -> Unit,
     val onSeek: (Float) -> Unit,
     val onPrev: () -> Unit,
     val onPlayPause: () -> Unit,
     val onNext: () -> Unit,
+    val onOpenSleep: () -> Unit,
     val onSelectOutput: (Int) -> Unit,
     val onToggleFullscreen: () -> Unit,
 )
@@ -170,7 +138,8 @@ fun NowPlayingScreen(
     onBack: () -> Unit,
 ) {
     var fullscreen by rememberSaveable { mutableStateOf(false) }
-
+    var sleepOpen by rememberSaveable { mutableStateOf(false) }
+    var speedOpen by rememberSaveable { mutableStateOf(false) }
     val uiState by vm.state.collectAsState()
     // The meters read the live analyser straight off the bus in their frame
     // loops: routing spectrum through VM state would recompose this whole
@@ -206,27 +175,19 @@ fun NowPlayingScreen(
         onBack = onBack,
         onOpenUpNext = onOpenUpNext,
         onToggleShuffle = { vm.player.toggleShuffle() },
-        onCycleSpeed = { vm.onEvent(NowPlayingViewModel.Event.CycleSpeed) },
+        onOpenSpeed = { speedOpen = true },
         onOpenScope = onOpenScope,
         onToggleFav = { vm.onEvent(NowPlayingViewModel.Event.ToggleFavorite) },
         onSeek = { vm.player.seekTo(it) },
         onPrev = { vm.player.prev() },
         onPlayPause = { vm.player.toggle(uiState.shownStation) },
         onNext = { vm.player.next() },
+        onOpenSleep = { sleepOpen = true },
         onSelectOutput = { vm.onEvent(NowPlayingViewModel.Event.SetOutputDevice(it)) },
         onToggleFullscreen = { fullscreen = true },
     )
 
     Box(Modifier.fillMaxSize()) {
-        // Whole-overlay blocker, drawn FIRST (bottom-most) so every interactive
-        // control above it - the back key, transport, scrubber - hit-tests and
-        // claims its own press before this ever sees it. Anything a control did
-        // not take (the cover art, the inert text, the gaps between blocks) is
-        // eaten here, so it can never fall through to the library list that
-        // stays composed behind this overlay. Being a sibling (not an ancestor)
-        // of the scrubber means it never swallows drag-to-seek.
-        Box(Modifier.fillMaxSize().consumeAllGestures())
-
         BoxWithConstraints(Modifier.fillMaxSize()) {
             // Wide frames (landscape phones, tablets on their side) split the
             // player across the frame: art on the left, transport on the right.
@@ -243,6 +204,22 @@ fun NowPlayingScreen(
 
         if (fullscreen) {
             FullscreenVisualizer(model) { fullscreen = false }
+        }
+
+        if (sleepOpen) {
+            SleepDialog(
+                sleepAtMs = uiState.playerState.sleepAtMs,
+                onPick = { vm.player.setSleepTimer(it) },
+                onDismiss = { sleepOpen = false },
+            )
+        }
+
+        if (speedOpen) {
+            SpeedDialog(
+                current = uiState.playerState.speed,
+                onPick = { vm.onEvent(NowPlayingViewModel.Event.SetSpeed(it)) },
+                onDismiss = { speedOpen = false },
+            )
         }
     }
 }

@@ -68,6 +68,17 @@ class RadioRepository(
     private val _cliampError = MutableStateFlow<String?>(null)
     val cliampError: StateFlow<String?> = _cliampError.asStateFlow()
 
+    /** Live listener figures for the cliamp channels; null until fetched. */
+    private val _cliampStats = MutableStateFlow<CliampStats?>(null)
+    val cliampStats: StateFlow<CliampStats?> = _cliampStats.asStateFlow()
+
+    /** Refreshes the listener figures; failures keep the last good value. */
+    fun refreshCliampStats() {
+        scope.launch {
+            fetchCliampStats()?.let { _cliampStats.value = it }
+        }
+    }
+
     private val _directory = MutableStateFlow(DirectoryState())
     val directory: StateFlow<DirectoryState> = _directory.asStateFlow()
 
@@ -147,6 +158,7 @@ class RadioRepository(
 
     fun refreshCliamp() {
         scope.launch {
+            refreshCliampStats()
             // cliamp is its own service; a silent drop used to abort this
             // coroutine uncaught (the loop crashed the app) or fell back to
             // builtins with no explanation. Keep the last good list on screen

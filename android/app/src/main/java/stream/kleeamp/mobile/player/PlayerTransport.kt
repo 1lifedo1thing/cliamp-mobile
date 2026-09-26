@@ -12,6 +12,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
@@ -82,7 +83,6 @@ import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.MechKey
 import stream.kleeamp.mobile.chrome.MeterSize
 import stream.kleeamp.mobile.chrome.MarqueeLabel
-import stream.kleeamp.mobile.chrome.OutputMenu
 import stream.kleeamp.mobile.chrome.Scrubber
 import stream.kleeamp.mobile.chrome.StreamingRule
 import stream.kleeamp.mobile.chrome.ArtGlow
@@ -136,37 +136,64 @@ internal fun PlayerTransport(
                 onSeek = actions.onSeek,
             )
             Row(
-                Modifier.fillMaxWidth().padding(bottom = 6.dp).consumeAllGestures(),
+                Modifier.fillMaxWidth().padding(bottom = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                Mono(clock(model.state.positionMs), KleeampType.time, p.inkSecondary)
+                // The elapsed clock opens the sleep timer; the remaining
+                // clock shows its countdown while one runs.
                 Mono(
-                    "-" + clock((model.state.durationMs - model.state.positionMs).coerceAtLeast(0)),
+                    clock(model.state.positionMs),
                     KleeampType.time,
                     p.inkSecondary,
+                    Modifier.microPress(onClick = actions.onOpenSleep),
+                )
+                Mono(
+                    sleepRemaining(model) ?: "-" + clock(
+                        (model.state.durationMs - model.state.positionMs).coerceAtLeast(0),
+                    ),
+                    KleeampType.time,
+                    if (model.state.sleepAtMs != null) p.accent else p.inkSecondary,
                 )
             }
         } else {
             StreamingRule(
                 label = transportLabel(model),
-                modifier = Modifier.consumeAllGestures(),
                 color = statusColor(model),
                 dim = !model.state.playing && model.reconnect == 0,
             )
             Row(
-                Modifier.fillMaxWidth().padding(bottom = 6.dp).consumeAllGestures(),
+                Modifier.fillMaxWidth().padding(bottom = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                Mono(clock(model.state.positionMs), KleeampType.time, p.inkSecondary)
                 Mono(
-                    if (model.state.playing) "${model.state.bufferedMs / 1000}s buffered"
-                    else "tap the meter for scope · eq",
-                    KleeampType.timeSmall,
-                    p.inkFaint,
-                    maxLines = 1,
+                    clock(model.state.positionMs),
+                    KleeampType.time,
+                    p.inkSecondary,
+                    Modifier.microPress(onClick = actions.onOpenSleep),
                 )
+                // The station status always lives here: a live dot plus the
+                // label (ON AIR, BUFFERING, PAUSED, …). The tap-the-meter
+                // hint is gone.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    StatusDot(model)
+                    Mono(
+                        statusLabel(model),
+                        KleeampType.timeSmall,
+                        if (model.state.playing || model.state.buffering ||
+                            model.reconnect > 0 || model.error != null
+                        ) {
+                            statusColor(model)
+                        } else {
+                            p.inkFaint
+                        },
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }
@@ -205,6 +232,12 @@ internal fun TransportKeys(
         ) { Icon(KleeampIcons.Next, "next station", Modifier.size(width = 21.dp, height = 17.dp)) }
     }
 }
+/** "SLEEP m:ss" countdown while a timer runs, else null. */
+internal fun sleepRemaining(model: PlayerModel): String? =
+    model.state.sleepAtMs?.let { at ->
+        "SLEEP " + clock((at - System.currentTimeMillis()).coerceAtLeast(0))
+    }
+
 internal fun statusLabel(model: PlayerModel): String = when {
     model.reconnect > 0 -> "RECONNECTING · ${model.reconnect}"
     model.error != null -> "STREAM ERROR"
@@ -220,7 +253,36 @@ internal fun statusColor(model: PlayerModel): androidx.compose.ui.graphics.Color
     return when {
         model.reconnect > 0 -> p.amber
         model.error != null -> p.destructiveInk
+        model.state.buffering -> p.amber
         else -> p.accent
+    }
+}
+
+/**
+ * The live dot in front of the station status: breathes in accent while on
+ * air, holds amber while buffering or reconnecting, red on stream error,
+ * faint otherwise.
+ */
+@Composable
+private fun StatusDot(model: PlayerModel, modifier: Modifier = Modifier) {
+    val p = LocalPalette.current
+    val live = model.state.playing && model.reconnect == 0 &&
+        model.error == null && !model.state.buffering
+    val pulseTransition = rememberInfiniteTransition(label = "statusDot")
+    val pulse by pulseTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(650, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "statusDotAlpha",
+    )
+    val color = when {
+        model.reconnect > 0 || model.state.buffering -> p.amber
+        model.error != null -> p.destructiveInk
+        model.state.playing -> p.accent
+        else -> p.inkFaint
+    }
+    Canvas(modifier.size(7.dp)) {
+        drawCircle(color.copy(alpha = if (live) pulse else 1f))
     }
 }
 

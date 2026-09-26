@@ -62,8 +62,12 @@ import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.ListRow
 import stream.kleeamp.mobile.chrome.OverflowButton
-import stream.kleeamp.mobile.chrome.OverflowItem
-import stream.kleeamp.mobile.chrome.OverflowMenu
+import stream.kleeamp.mobile.chrome.ContextMenuSheet
+import stream.kleeamp.mobile.chrome.DestructiveAction
+import stream.kleeamp.mobile.chrome.MenuKind
+import stream.kleeamp.mobile.chrome.MenuSubject
+import stream.kleeamp.mobile.chrome.StationMenuArt
+import stream.kleeamp.mobile.chrome.menuActions
 import stream.kleeamp.mobile.chrome.microPress
 import stream.kleeamp.mobile.chrome.RetryNote
 
@@ -87,6 +91,7 @@ fun StationsScreen(
     favorites: List<Station>,
     onPlay: (Station, List<Station>) -> Unit,
     onAddToQueue: (Station) -> Unit = {},
+    onAddToPlaylist: (Station) -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     focusDirectory: Boolean = false,
@@ -114,6 +119,9 @@ fun StationsScreen(
     }
 
     val listState = rememberLazyListState()
+    // The row menu's subject: set by the ⋮ trigger, cleared on dismiss.
+    // The sheet itself is emitted after the list below.
+    var menuFor by remember { mutableStateOf<Station?>(null) }
     // NOTE: no scroll reset on query/source change. A filter keeps its
     // scroll position while the repository swaps content underneath
     // (stale rows stay until the live page lands), and returning from
@@ -196,7 +204,9 @@ fun StationsScreen(
 
             if (source == Source.All || source == Source.Cliamp) {
                 item {
-                    SectionLabel("cliamp radio — ${cliamp.size}", gutter = 8.dp)
+                    SectionLabel("cliamp radio — ${cliamp.size}", gutter = 8.dp) {
+                        CliampStatsText(vm)
+                    }
                 }
                 if (cliampError != null) {
                     item {
@@ -214,10 +224,9 @@ fun StationsScreen(
                             station = s,
                             active = current?.url == s.url,
                             playing = playing && current?.url == s.url,
-                            favorite = favorites.any { it.url == s.url },
                             onPlay = { onPlay(s, cliamp) },
-                            onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                             onQueue = { onAddToQueue(s) },
+                            onOpenMenu = { menuFor = s },
                         )
                     }
                 }
@@ -266,11 +275,9 @@ fun StationsScreen(
                         station = s,
                         active = current?.url == s.url,
                         playing = playing && current?.url == s.url,
-                        favorite = favorites.any { it.url == s.url },
                         onPlay = { onPlay(s, custom) },
-                        onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
-                        onRemove = { vm.onEvent(StationsViewModel.Event.RemoveCustom(s)) },
                         onQueue = { onAddToQueue(s) },
+                        onOpenMenu = { menuFor = s },
                     )
                 }
             }
@@ -347,10 +354,9 @@ fun StationsScreen(
                         station = s,
                         active = current?.url == s.url,
                         playing = playing && current?.url == s.url,
-                        favorite = favorites.any { it.url == s.url },
                         onPlay = { onPlay(s, directory.stations) },
-                        onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                         onQueue = { onAddToQueue(s) },
+                        onOpenMenu = { menuFor = s },
                     )
                 }
                 item {
@@ -373,7 +379,50 @@ fun StationsScreen(
 
             item { Spacer(Modifier.height(20.dp)) }
         }
+
+        // The row menu as a bottom sheet: one reusable component fed by the
+        // subject below, so stations never hardcode their own action list.
+        // No info entry: radio needs none.
+        menuFor?.let { s ->
+            val fav = favorites.any { it.url == s.url }
+            val isCustom = custom.any { it.url == s.url }
+            ContextMenuSheet(
+                title = s.name,
+                subtitle = stationMenuSubtitle(s),
+                art = { StationMenuArt(s) },
+                actions = menuActions(
+                    MenuSubject(
+                        kind = MenuKind.STATION,
+                        favorite = fav,
+                        infoAvailable = false,
+                        destructive = if (isCustom) {
+                            DestructiveAction(
+                                "remove station",
+                                "delete this station",
+                                { vm.onEvent(StationsViewModel.Event.RemoveCustom(s)) },
+                            )
+                        } else {
+                            null
+                        },
+                        onQueue = { onAddToQueue(s) },
+                        onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
+                        onAddToPlaylist = { onAddToPlaylist(s) },
+                    ),
+                ),
+                onDismiss = { menuFor = null },
+            )
+        }
     }
+}
+
+/** The sheet header line under the title: same words the row itself wears. */
+private fun stationMenuSubtitle(s: Station): String {
+    if (s.source == StationSource.Custom) return "custom station"
+    return buildList {
+        if (s.source == StationSource.Cliamp) add("cliamp radio")
+        s.meta.takeIf { it.isNotBlank() }?.let { add(it) }
+        s.tagList.take(2).forEach { add(it) }
+    }.joinToString(" · ")
 }
 
 @Composable
@@ -381,10 +430,9 @@ private fun StationRow(
     station: Station,
     active: Boolean,
     playing: Boolean,
-    favorite: Boolean,
     onPlay: () -> Unit,
-    onToggleFavorite: () -> Unit,
     onQueue: () -> Unit,
+    onOpenMenu: () -> Unit,
 ) {
     val p = LocalPalette.current
     ListRow(
@@ -400,12 +448,7 @@ private fun StationRow(
                 if (station.votes > 0) {
                     Mono(compact(station.votes), KleeampType.meta, p.inkFaint)
                 }
-                Icon(
-                    if (favorite) KleeampIcons.StarFilled else KleeampIcons.Star,
-                    "favourite",
-                    Modifier.size(15.dp).microPress(onClick = onToggleFavorite),
-                    tint = if (favorite) p.accent else p.inkFaint,
-                )
+                OverflowButton(onOpenMenu, size = 16)
             }
         },
     ) {
@@ -482,9 +525,31 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
     }
 }
 
+/**
+ * Live "who's listening" line at the right end of the cliamp header, from
+ * the same statistics document cliamp.stream renders. Fetches once per
+ * screen lifetime; tapping refreshes. Hidden until the first fetch lands.
+ */
+@Composable
+private fun CliampStatsText(vm: StationsViewModel) {
+    val p = LocalPalette.current
+    val stats by vm.cliampStats.collectAsState()
+    LaunchedEffect(Unit) {
+        if (stats == null) vm.onEvent(StationsViewModel.Event.RefreshStats)
+    }
+    stats?.let {
+        Mono(
+            "${it.activeNow} listening now · peak ${it.peak}",
+            KleeampType.meta,
+            p.inkFaint,
+            Modifier.microPress { vm.onEvent(StationsViewModel.Event.RefreshStats) },
+            maxLines = 1,
+        )
+    }
+}
+
 /** A hand-added station: name plus stream URL, playable like anything else. */
-fun customStation(name: String, rawUrl: String): Station? {
-    val url = rawUrl.trim()
+fun customStation(name: String, rawUrl: String): Station? {    val url = rawUrl.trim()
     if (url.isBlank()) return null
     val fixed = if ("://" in url) url else "https://$url"
     if (!fixed.startsWith("http://") && !fixed.startsWith("https://")) return null
@@ -590,19 +655,15 @@ private fun CustomField(
     }
 }
 
-/** A custom station row: plays and favourites like a directory row, plus remove. */
+/** A custom station row: plays like a directory row, plus remove. */
 @Composable
-// Screen signature: state in, callbacks out; bundling would hide the data flow.
-@Suppress("LongParameterList")
 private fun CustomStationRow(
     station: Station,
     active: Boolean,
     playing: Boolean,
-    favorite: Boolean,
     onPlay: () -> Unit,
-    onToggleFavorite: () -> Unit,
-    onRemove: () -> Unit,
     onQueue: () -> Unit,
+    onOpenMenu: () -> Unit,
 ) {
     val p = LocalPalette.current
     ListRow(
@@ -615,22 +676,7 @@ private fun CustomStationRow(
         onQueue = onQueue,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(
-                    if (favorite) KleeampIcons.StarFilled else KleeampIcons.Star,
-                    "favourite",
-                    Modifier.size(15.dp).microPress(onClick = onToggleFavorite),
-                    tint = if (favorite) p.accent else p.inkFaint,
-                )
-                OverflowMenu(
-                    trigger = { open -> OverflowButton(open, size = 16) },
-                    items = listOf(
-                        OverflowItem(
-                            "remove station",
-                            color = p.destructiveInk,
-                            action = onRemove,
-                        ),
-                    ),
-                )
+                OverflowButton(onOpenMenu, size = 16)
             }
         },
     ) {

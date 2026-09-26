@@ -91,6 +91,7 @@ fun UpNextScreen(
 ) {
     val upNext by player.upNext.collectAsStateWithLifecycle()
     val upNextIndex by player.upNextIndex.collectAsStateWithLifecycle()
+    val canUndo by player.canUndo.collectAsStateWithLifecycle()
     // The card meter follows the applied visualizer like every other meter;
     // read the setting here so only this screen recomposes when it changes.
     val app = LocalContext.current.applicationContext as KleeampApp
@@ -103,6 +104,8 @@ fun UpNextScreen(
         visualizer = visualizer,
         onPlay = { if (player.upNext.value == upNext) onPlay(it) },
         onClear = player::clearUpNext,
+        canUndo = canUndo,
+        onUndo = player::undo,
         onMove = { from, to ->
             if (player.upNext.value == upNext) player.reorderUpNext(from, to)
         },
@@ -126,6 +129,8 @@ internal fun UpNextContent(
     onRemove: (Int) -> Unit,
     onBack: () -> Unit,
     onClear: () -> Unit = {},
+    canUndo: Boolean = false,
+    onUndo: () -> Unit = {},
     visualizer: String = "spectrum",
 ) {
     val p = LocalPalette.current
@@ -168,6 +173,10 @@ internal fun UpNextContent(
                 BackChevron(onBack, Modifier.offset(y = 2.dp))
                 Mono("Up Next", KleeampType.screenTitle, p.ink, maxLines = 1)
                 Spacer(Modifier.weight(1f))
+                if (canUndo) {
+                    Mono("UNDO", KleeampType.sectionLabel, p.accent,
+                        Modifier.microPress(onClick = onUndo).padding(12.dp))
+                }
                 if (upNextEntries(upNext, activeIndex).isNotEmpty()) {
                     Mono("CLEAR", KleeampType.sectionLabel, p.inkTertiary,
                         Modifier.microPress(onClick = onClear).padding(12.dp))
