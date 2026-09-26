@@ -21,6 +21,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,12 +54,13 @@ data class DestructiveAction(
     val onClick: () -> Unit,
 )
 
-/** One rendered row: label, optional subtitle, icon, handler. No Share exists yet. */
+/** One rendered row: label, optional subtitle, icon or icon text, handler. No Share exists yet. */
 data class MenuAction(
     val id: String,
     val label: String,
     val subtitle: String?,
-    val icon: ImageVector,
+    val icon: ImageVector? = null,
+    val iconText: String? = null,
     val filledIcon: ImageVector? = null,
     val active: Boolean = false,
     val tint: Color? = null,
@@ -358,6 +363,21 @@ fun SheetDragHandle() {
 }
 
 /**
+ * Dialog windows do not inherit the activity's status-bar icon contrast,
+ * so sheets would draw dark icons onto the dark scrim. Follows the
+ * palette exactly like MainActivity does.
+ */
+@Composable
+internal fun SheetStatusBarIcons() {
+    val view = LocalView.current
+    val dark = LocalPalette.current.dark
+    SideEffect {
+        val window = (view.context as? DialogWindowProvider)?.window ?: return@SideEffect
+        WindowInsetsControllerCompat(window, view).isAppearanceLightStatusBars = !dark
+    }
+}
+
+/**
  * The sheet chrome both menus and pickers share: rounded top, dimmed
  * scrim, drag handle, fixed header, scrolling body. One component, so a
  * timer or speed sheet can never drift from the menu look.
@@ -370,6 +390,7 @@ fun MenuSheetShell(
     content: @Composable () -> Unit,
 ) {
     val p = LocalPalette.current
+    SheetStatusBarIcons()
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -401,6 +422,7 @@ fun SheetOptionRow(
     selected: Boolean,
     onClick: () -> Unit,
     subtitle: String? = null,
+    icon: ImageVector? = null,
 ) {
     val p = LocalPalette.current
     Row(
@@ -412,6 +434,9 @@ fun SheetOptionRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        if (icon != null) {
+            Icon(icon, null, Modifier.size(20.dp), tint = if (selected) p.accent else p.inkSecondary)
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Mono(label, KleeampType.rowPrimary, if (selected) p.accent else p.ink, maxLines = 1)
             subtitle?.let { Mono(it, KleeampType.rowSecondary, p.inkTertiary, maxLines = 2) }
@@ -441,16 +466,35 @@ private fun MenuActionRow(action: MenuAction, onDismiss: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Icon(
-            if (action.active && action.filledIcon != null) action.filledIcon else action.icon,
-            null,
-            Modifier.size(20.dp),
-            tint = when {
-                action.destructive -> p.destructiveInk
-                action.tint != null -> action.tint
-                else -> p.inkSecondary
-            },
-        )
+        if (action.icon != null) {
+            Icon(
+                if (action.active && action.filledIcon != null) action.filledIcon else action.icon,
+                null,
+                Modifier.size(20.dp),
+                tint = when {
+                    action.destructive -> p.destructiveInk
+                    action.tint != null -> action.tint
+                    else -> p.inkSecondary
+                },
+            )
+        } else if (action.iconText != null) {
+            Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+                Mono(
+                    action.iconText,
+                    KleeampType.meta,
+                    when {
+                        action.destructive -> p.destructiveInk
+                        action.tint != null -> action.tint
+                        else -> p.inkSecondary
+                    },
+                    maxLines = 1,
+                )
+            }
+        } else {
+            // Iconless rows (the speed value lives in the subtitle) keep a
+            // blank slot so every label starts on the same edge.
+            Spacer(Modifier.size(20.dp))
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Mono(action.label, KleeampType.rowPrimary, color, maxLines = 1)
             action.subtitle?.let { Mono(it, KleeampType.rowSecondary, p.inkTertiary, maxLines = 2) }

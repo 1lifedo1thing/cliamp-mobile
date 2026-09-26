@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -83,7 +82,12 @@ import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.MechKey
 import stream.kleeamp.mobile.chrome.MeterSize
 import stream.kleeamp.mobile.chrome.MarqueeLabel
-import stream.kleeamp.mobile.chrome.OutputMenu
+import stream.kleeamp.mobile.chrome.MenuAction
+import stream.kleeamp.mobile.chrome.MenuSheetShell
+import stream.kleeamp.mobile.chrome.OverflowButton
+import stream.kleeamp.mobile.chrome.ContextMenuSheet
+import stream.kleeamp.mobile.chrome.SheetOptionRow
+import stream.kleeamp.mobile.chrome.StationMenuArt
 import stream.kleeamp.mobile.chrome.Scrubber
 import stream.kleeamp.mobile.chrome.StreamingRule
 import stream.kleeamp.mobile.chrome.ArtGlow
@@ -129,7 +133,7 @@ internal fun UpNextButton(
     }
 }
 
-/** One centered secondary toolbar: sound, speed, timer, shuffle, scope, favourite. */
+/** The favourite key, speed key and its ⋮ menu, right-aligned. */
 @Composable
 internal fun PlayerStatusRow(
     model: PlayerModel,
@@ -137,68 +141,161 @@ internal fun PlayerStatusRow(
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
-    // Armed the sleep key wears the accent, otherwise it rests quiet with
-    // the secondary keys.
-    val sleepArmed = model.state.sleepAtMs != null
+    var menuOpen by remember { mutableStateOf(false) }
+    var outputOpen by remember { mutableStateOf(false) }
     Row(
         modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
     ) {
-        OutputAction(
-            current = model.currentOutput,
-            outputs = model.outputs,
-            selectedId = model.outputDevice,
-            onSelect = actions.onSelectOutput,
-        )
-        SpeedAction(speed = model.state.speed) { actions.onOpenSpeed() }
         SmallAction(
-            KleeampIcons.Watch,
-            if (sleepArmed) "sleep timer armed" else "sleep timer",
-            tint = if (sleepArmed) p.accent else p.inkSecondary,
-        ) { actions.onOpenSleep() }
+            if (model.isFav) KleeampIcons.HeartFilled else KleeampIcons.Heart,
+            if (model.isFav) "remove favourite" else "favourite",
+            tint = if (model.isFav) p.accent else p.inkTertiary,
+        ) { actions.onToggleFav() }
         SmallAction(
             KleeampIcons.Shuffle,
             if (model.shuffled) "stop shuffling" else "shuffle",
             tint = if (model.shuffled) p.accent else p.inkSecondary,
         ) { actions.onToggleShuffle() }
         SmallAction(KleeampIcons.MeterSmall, "scope and equaliser", onClick = actions.onOpenScope)
-        SmallAction(
-            if (model.isFav) KleeampIcons.HeartFilled else KleeampIcons.Heart,
-            if (model.isFav) "remove favourite" else "favourite",
-            tint = if (model.isFav) p.accent else p.inkTertiary,
-        ) { actions.onToggleFav() }
+        OverflowButton({ menuOpen = true }, size = 16)
+    }
+
+    if (menuOpen) {
+        val station = model.shownStation
+        ContextMenuSheet(
+            title = station?.name ?: "pick a station",
+            subtitle = station?.let { artistOrTagLine(it).ifBlank { sourceLine(it) } }.orEmpty(),
+            art = {
+                if (station != null) StationMenuArt(station)
+                else Spacer(Modifier.size(52.dp))
+            },
+            actions = playerMenuActions(model, actions) { outputOpen = true },
+            onDismiss = { menuOpen = false },
+        )
+    }
+
+    if (outputOpen) {
+        OutputSheet(
+            current = model.currentOutput,
+            outputs = model.outputs,
+            selectedId = model.outputDevice,
+            onSelect = {
+                actions.onSelectOutput(it)
+                outputOpen = false
+            },
+            onDismiss = { outputOpen = false },
+        )
     }
 }
 
 /**
- * The output key: one tap names the sink the stream is on and offers the other
- * connected ones. The icon tells the route at a glance, and it picks up the
- * accent when audio is not on the phone's own speaker.
+ * The player controls as menu rows: output and speed open their sheets,
+ * sleep opens its own. Shuffle and scope stay out on the toolbar beside
+ * the heart. [onOpenOutput] lifts the output sheet above this menu.
  */
 @Composable
-internal fun OutputAction(
+private fun playerMenuActions(
+    model: PlayerModel,
+    actions: PlayerActions,
+    onOpenOutput: () -> Unit,
+): List<MenuAction> {
+    val p = LocalPalette.current
+    val sleepArmed = model.state.sleepAtMs != null
+    return listOf(
+        MenuAction(
+            id = "output",
+            label = "Sound Output",
+            subtitle = model.currentOutput?.name ?: "system default",
+            icon = outputIcon(model.currentOutput?.kind),
+            tint = if (model.currentOutput?.kind?.let { it != OutputKind.Speaker } == true) {
+                p.accent
+            } else {
+                null
+            },
+            onClick = onOpenOutput,
+        ),
+        MenuAction(
+            id = "speed",
+            label = "Playback Speed",
+            subtitle = "currently ${speedLabel(model.state.speed)}",
+            iconText = "1×",
+            onClick = actions.onOpenSpeed,
+        ),
+        MenuAction(
+            id = "sleep",
+            label = "Sleep Timer",
+            subtitle = model.state.sleepAtMs?.let { at ->
+                "pauses in " + clock((at - System.currentTimeMillis()).coerceAtLeast(0))
+            } ?: "pause playback after",
+            icon = KleeampIcons.Watch,
+            tint = if (sleepArmed) p.accent else null,
+            onClick = actions.onOpenSleep,
+        ),
+    )
+}
+
+/**
+ * The output picker as a bottom sheet, like every other menu: the
+ * current sink checked, one tap moves the stream and returns to the
+ * player menu. Replaces the old popup.
+ */
+@Composable
+private fun OutputSheet(
     current: AudioOutput?,
     outputs: List<AudioOutput>,
     selectedId: Int,
     onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit,
 ) {
     val p = LocalPalette.current
-    val external = current != null && current.kind != OutputKind.Speaker
-    OutputMenu(
-        trigger = { onOpen ->
-            SmallAction(
-                outputIcon(current?.kind),
-                "audio output · ${current?.name ?: "system default"}",
-                tint = if (external) p.accent else p.inkSecondary,
-                onClick = onOpen,
-            )
+    MenuSheetShell(
+        onDismiss = onDismiss,
+        header = {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+                    Icon(
+                        outputIcon(current?.kind),
+                        null,
+                        Modifier.size(26.dp),
+                        tint = p.inkSecondary,
+                    )
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Mono("Sound Output", KleeampType.trackTitleCompact, p.ink, maxLines = 1)
+                    Mono(
+                        current?.name ?: "system default",
+                        KleeampType.rowSecondary,
+                        p.inkTertiary,
+                        maxLines = 1,
+                    )
+                }
+            }
         },
-        currentName = current?.name,
-        outputs = outputs,
-        selectedId = selectedId,
-        onSelect = onSelect,
-    )
+    ) {
+        if (outputs.isEmpty()) {
+            Mono(
+                "system default",
+                KleeampType.rowSecondary,
+                p.inkTertiary,
+                Modifier.padding(vertical = 12.dp),
+                maxLines = 1,
+            )
+        }
+        outputs.forEach { output ->
+            SheetOptionRow(
+                label = output.name,
+                selected = output.id == selectedId,
+                onClick = { onSelect(output.id) },
+                icon = outputIcon(output.kind),
+            )
+        }
+    }
 }
 
 internal fun outputIcon(kind: OutputKind?): androidx.compose.ui.graphics.vector.ImageVector = when (kind) {
@@ -281,29 +378,6 @@ internal fun SmallAction(
 internal fun speedLabel(v: Float): String {
     val s = if (v % 1f == 0f) v.toInt().toString() else v.toString().trimEnd('0')
     return "${s}×"
-}
-
-/** Playback speed as a terse mono key: opens the speed sheet. */
-@Composable
-internal fun SpeedAction(speed: Float, onClick: () -> Unit) {    val p = LocalPalette.current
-    // Sized to the label (5 glyphs at 0.25x) with a 44dp minimum tap
-    // target like the icon keys: a fixed box ellipsized the slow speeds
-    // to "0.2…".
-    Box(
-        Modifier
-            .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
-            .clip(RoundedCornerShape(KleeampShape.small))
-            .microPress(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Mono(
-            speedLabel(speed),
-            KleeampType.meta,
-            if (speed != 1f) p.accent else p.inkSecondary,
-            Modifier.padding(horizontal = 3.dp),
-            maxLines = 1,
-        )
-    }
 }
 
 /**
