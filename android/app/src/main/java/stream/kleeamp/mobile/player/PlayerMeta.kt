@@ -220,19 +220,16 @@ internal fun PlayerMeta(
             model.shownStation?.name ?: "pick a station",
             KleeampType.trackTitle,
             p.ink,
-            modifier = Modifier.consumeAllGestures(),
         )
         MarqueeLabel(
             model.streamTitle.ifBlank { model.error ?: artistOrTagLine(model.shownStation) },
             KleeampType.rowPrimary,
             if (model.error != null && model.streamTitle.isBlank()) p.destructiveInk else p.inkSecondary,
-            modifier = Modifier.consumeAllGestures(),
         )
         Mono(
             sourceLine(model.shownStation),
             KleeampType.body,
             p.inkTertiary,
-            modifier = Modifier.consumeAllGestures(),
             maxLines = 1,
         )
     }

@@ -137,7 +137,7 @@ internal fun PlayerTransport(
                 onSeek = actions.onSeek,
             )
             Row(
-                Modifier.fillMaxWidth().padding(bottom = 6.dp).consumeAllGestures(),
+                Modifier.fillMaxWidth().padding(bottom = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
@@ -160,12 +160,11 @@ internal fun PlayerTransport(
         } else {
             StreamingRule(
                 label = transportLabel(model),
-                modifier = Modifier.consumeAllGestures(),
                 color = statusColor(model),
                 dim = !model.state.playing && model.reconnect == 0,
             )
             Row(
-                Modifier.fillMaxWidth().padding(bottom = 6.dp).consumeAllGestures(),
+                Modifier.fillMaxWidth().padding(bottom = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {

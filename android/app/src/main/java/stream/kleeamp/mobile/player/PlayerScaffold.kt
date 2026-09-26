@@ -382,8 +382,7 @@ internal fun StationArt(
             .graphicsLayer {
                 scaleX = breath
                 scaleY = breath
-            }
-            .consumeAllGestures(),
+            },
         radius = KleeampShape.large,
         caption = if (art == null && preview == null && (seedKey.isEmpty() || station == null)) caption else null,
     ) {

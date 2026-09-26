@@ -342,6 +342,22 @@ fun ContextMenuSheet(
 }
 
 /**
+ * The small centered bar every bottom sheet wears: menus and the player
+ * share it so the drag affordance reads as one language.
+ */
+@Composable
+fun SheetDragHandle() {
+    val p = LocalPalette.current
+    Box(
+        Modifier
+            .padding(top = 10.dp, bottom = 2.dp)
+            .size(width = 36.dp, height = 4.dp)
+            .clip(RoundedCornerShape(KleeampShape.tiny))
+            .background(p.chipBorder),
+    )
+}
+
+/**
  * The sheet chrome both menus and pickers share: rounded top, dimmed
  * scrim, drag handle, fixed header, scrolling body. One component, so a
  * timer or speed sheet can never drift from the menu look.
@@ -361,15 +377,7 @@ fun MenuSheetShell(
         containerColor = p.panelRaised,
         contentColor = p.ink,
         scrimColor = Color.Black.copy(alpha = 0.55f),
-        dragHandle = {
-            Box(
-                Modifier
-                    .padding(top = 10.dp, bottom = 2.dp)
-                    .size(width = 36.dp, height = 4.dp)
-                    .clip(RoundedCornerShape(KleeampShape.tiny))
-                    .background(p.chipBorder),
-            )
-        },
+        dragHandle = { SheetDragHandle() },
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = Gutter)) {
             header()

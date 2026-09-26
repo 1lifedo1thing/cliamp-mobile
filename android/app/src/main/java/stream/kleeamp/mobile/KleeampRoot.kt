@@ -58,6 +58,7 @@ import stream.kleeamp.mobile.playback.PlayerConnection
 import stream.kleeamp.mobile.chrome.KleeampTabBar
 import stream.kleeamp.mobile.chrome.KleeampTabRail
 import stream.kleeamp.mobile.player.MiniPlayer
+import stream.kleeamp.mobile.player.NowPlayingSheet
 import stream.kleeamp.mobile.chrome.Tab
 import stream.kleeamp.mobile.search.SearchScreen
 import stream.kleeamp.mobile.library.FavScope
@@ -67,7 +68,6 @@ import stream.kleeamp.mobile.servers.LibraryProvidersPane
 import stream.kleeamp.mobile.library.LibrarySmartPlaylistPane
 import stream.kleeamp.mobile.library.LibrarySongInfoPane
 import stream.kleeamp.mobile.library.LibraryScreen
-import stream.kleeamp.mobile.player.NowPlayingScreen
 import stream.kleeamp.mobile.podcasts.PodcastShowScreen
 import stream.kleeamp.mobile.podcasts.PodcastsScreen
 import stream.kleeamp.mobile.player.UpNextScreen
@@ -157,6 +157,12 @@ fun KleeampRoot(
     // The favourites type filter, shared by the library list and the
     // favourites smart detail pane so both agree.
     var favScope by rememberSaveable { mutableStateOf(FavScope.All) }
+    // The expanded player is a bottom sheet driven by this flag, not a
+    // backstack entry: the list stays composed underneath, so it shows
+    // through the scrim instead of an empty page. playerReturn reopens
+    // the sheet when back returns from Up Next or Scope opened inside it.
+    var playerOpen by rememberSaveable { mutableStateOf(false) }
+    var playerReturn by remember { mutableStateOf(false) }
 
     // Playback-global state stays at the root: the chrome and every screen
     // read current/playing. Prefs, provider and progress flows are collected
@@ -302,7 +308,7 @@ fun KleeampRoot(
                 hasPrev = playerState.hasPrev,
                 hasNext = playerState.hasNext,
                 onOpenUpNext = chromeNav.openUpNext,
-                onOpen = chromeNav.openPlayer,
+                onOpen = { playerOpen = true },
             )
 
             if (!rail) {
@@ -570,16 +576,6 @@ fun KleeampRoot(
             }
 
             // -- Full overlay destinations (cover the chrome) --
-            composable<Player> {
-                OverlayCover {
-                NowPlayingScreen(
-                    vm = appViewModel { app -> NowPlayingViewModel(app.player, app.prefs) },
-                    onOpenScope = { navController.navigate(Scope) },
-                    onOpenUpNext = rememberGuardedNav(navController).openUpNext,
-                    onBack = { navController.popBackStack() },
-                )
-                }
-            }
             composable<UpNext> {
                 OverlayCover {
                 UpNextScreen(
@@ -590,7 +586,14 @@ fun KleeampRoot(
                         player.currentUpNext.getOrNull(index)?.let(repository::reportPlay)
                         player.playUpNextEntry(index)
                     },
-                    onBack = { navController.popBackStack() },
+                    // Back from a sheet detour reopens the sheet over the list.
+                    onBack = {
+                        navController.popBackStack()
+                        if (playerReturn) {
+                            playerReturn = false
+                            playerOpen = true
+                        }
+                    },
                 )
                 }
             }
@@ -601,7 +604,13 @@ fun KleeampRoot(
                     station = station,
                     streamTitle = streamTitle,
                     playing = playerState.playing,
-                    onBack = { navController.popBackStack() },
+                    onBack = {
+                        navController.popBackStack()
+                        if (playerReturn) {
+                            playerReturn = false
+                            playerOpen = true
+                        }
+                    },
                 )
                 }
             }
@@ -715,6 +724,26 @@ fun KleeampRoot(
             }
         }
 
+        // The expanded player lives here as a bottom sheet over the
+        // composed list: the menu's exact slide, scrim, corners, handle,
+        // swipe-down and back-dismiss carry the whole screen, and the
+        // previous page shows through instead of an empty page.
+        if (playerOpen) {
+            NowPlayingSheet(
+                vm = appViewModel { app -> NowPlayingViewModel(app.player, app.prefs) },
+                onOpenScope = {
+                    playerReturn = true
+                    playerOpen = false
+                    navController.navigate(Scope)
+                },
+                onOpenUpNext = {
+                    playerReturn = true
+                    playerOpen = false
+                    chromeNav.openUpNext()
+                },
+                onDismiss = { playerOpen = false },
+            )
+        }
     }
 }
 
@@ -746,7 +775,6 @@ private fun OverlayCover(content: @Composable () -> Unit) {    val p = LocalPale
  * asked - never the root.
  */
 private class GuardedNav(
-    val openPlayer: () -> Unit,
     val openUpNext: () -> Unit,
 )
 
@@ -755,11 +783,6 @@ private fun rememberGuardedNav(navController: NavHostController): GuardedNav {
     val route = navController.currentBackStackEntryAsState().value?.destination?.route
     return remember(route) {
         GuardedNav(
-            openPlayer = {
-                if (route?.startsWith(Player::class.qualifiedName!!) != true) {
-                    navController.navigate(Player)
-                }
-            },
             openUpNext = {
                 if (route?.startsWith(UpNext::class.qualifiedName!!) != true) {
                     navController.navigate(UpNext)
