@@ -307,7 +307,7 @@ internal fun PlayerMeta(
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         MarqueeLabel(
             model.shownStation?.name ?: "pick a station",
             KleeampType.trackTitle,

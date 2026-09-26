@@ -110,7 +110,7 @@ internal fun PlayerTransport(
     meterHeight: androidx.compose.ui.unit.Dp = MeterSize.NowPlaying.height,
 ) {
     val p = LocalPalette.current
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(11.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // The meter is the visualizer: when the setting is off it is
         // removed entirely, not just fed idle data - so neither the
         // frame loop nor a static brick grid exists in the player.
@@ -139,7 +139,7 @@ internal fun PlayerTransport(
                 onSeek = actions.onSeek,
             )
             Row(
-                Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                Modifier.fillMaxWidth().padding(bottom = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
@@ -166,7 +166,7 @@ internal fun PlayerTransport(
                 dim = !model.state.playing && model.reconnect == 0,
             )
             Row(
-                Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                Modifier.fillMaxWidth().padding(bottom = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {

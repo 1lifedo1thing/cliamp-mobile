@@ -178,7 +178,7 @@ internal fun PortraitPlayer(
             Spacer(Modifier.weight(1f))
             UpNextButton(model.upNextCount, actions.onOpenUpNext)
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
         // it is the first thing to give way. Compose has no shrink factor, so
         // the plate is given whatever height is left once the text block below
@@ -189,7 +189,7 @@ internal fun PortraitPlayer(
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(horizontal = Gutter),
-            verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterVertically),
+            verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
         ) {
             // The art plate and the text block below it share a flexed block
             // that absorbs however tall a long station name or stream title
@@ -201,19 +201,20 @@ internal fun PortraitPlayer(
                 Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.Top),
+                verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Top),
             ) {
-                // One fixed plate: the largest square that fits both ways,
-                // so it is full width on tall frames and still square (never
-                // squeezed) on short ones. Switching stations never moves
-                // the text, meter or keys.
+                // One fixed plate: a perfect 1:1 square at 80% of the
+                // screen width, centred with even margins both sides.
+                // minOf with maxHeight keeps it square, never squeezed,
+                // on short frames. Switching stations never moves the
+                // text, meter or keys.
                 BoxWithConstraints(
                     Modifier
                         .weight(1f, fill = false)
                         .fillMaxWidth(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    val side = minOf(maxWidth, maxHeight)
+                    val side = minOf((maxWidth + Gutter * 2) * 0.8f, maxHeight)
                     StationArt(
                         station = model.shownStation,
                         modifier = Modifier.size(side),
@@ -234,11 +235,11 @@ internal fun PortraitPlayer(
                 }
             }
 
-            PlayerTransport(model, actions)
+            PlayerTransport(model, actions, meterHeight = 84.dp)
 
             TransportKeys(model, actions)
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(6.dp))
     }
 }
 
