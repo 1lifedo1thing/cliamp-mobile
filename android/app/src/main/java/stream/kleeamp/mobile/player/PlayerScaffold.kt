@@ -45,6 +45,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -202,18 +203,20 @@ internal fun PortraitPlayer(
                     .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.Top),
             ) {
-                // One fixed plate: full available width, square, whatever the
-                // cover is - like Samsung Music / Spotify / YouTube Music.
-                // Switching stations never moves the text, meter or keys.
+                // One fixed plate: the largest square that fits both ways,
+                // so it is full width on tall frames and still square (never
+                // squeezed) on short ones. Switching stations never moves
+                // the text, meter or keys.
                 BoxWithConstraints(
                     Modifier
                         .weight(1f, fill = false)
                         .fillMaxWidth(),
                     contentAlignment = Alignment.Center,
                 ) {
+                    val side = minOf(maxWidth, maxHeight)
                     StationArt(
                         station = model.shownStation,
-                        modifier = Modifier.size(maxWidth),
+                        modifier = Modifier.size(side),
                     )
                 }
 
@@ -399,16 +402,37 @@ internal fun StationArt(
             caption = plateCaption,
         ) {
             bmp?.let {
-                // Like every other music player: the square is always
-                // filled edge to edge (centre-cropped). Square art is
-                // untouched; wider or taller art loses its edges instead
-                // of letterboxing.
-                Image(
-                    bitmap = it,
-                    contentDescription = station?.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
+                // Fixed square, always filled, art never cut: square covers
+                // draw straight through; anything wider or taller keeps the
+                // whole image centred on a blurred, cropped copy of itself
+                // that fills the bands, so no dead space and no lost edges.
+                val w = it.width.coerceAtLeast(1)
+                val h = it.height.coerceAtLeast(1)
+                val aspect = w.toFloat() / h
+                if (aspect in 0.9f..1.12f) {
+                    Image(
+                        bitmap = it,
+                        contentDescription = station?.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Box(Modifier.fillMaxSize()) {
+                        Image(
+                            bitmap = it,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize().blur(28.dp),
+                            contentScale = ContentScale.Crop,
+                        )
+                        Box(Modifier.fillMaxSize().background(p.ground.copy(alpha = 0.25f)))
+                        Image(
+                            bitmap = it,
+                            contentDescription = station?.name,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit,
+                        )
+                    }
+                }
             }
             // No cover at all: the seeded plate, wearing the caption line so
             // the hero still names what is playing.
