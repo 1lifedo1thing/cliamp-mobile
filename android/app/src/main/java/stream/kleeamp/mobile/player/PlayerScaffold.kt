@@ -34,15 +34,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
@@ -166,11 +171,29 @@ internal fun PortraitPlayer(
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
+    // The rows below the plate indent to the plate's own edges. The plate
+    // is centred and height-bound, so its size is only known after layout:
+    // measure it once placed, then inset the text, meter and keys by the
+    // plate's frame margin minus the Gutter the column already applies.
+    // The plate size never depends on sibling padding (height-bound off
+    // the flex remainder, width-bound off the frame), so the inset is
+    // stable and cannot feed back into the plate size.
+    val density = LocalDensity.current
+    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+    var plateWidthPx by remember { mutableIntStateOf(0) }
+    val edge = if (plateWidthPx > 0) {
+        // Shaved a little: the rows sit just outside the plate edges so
+        // the sides don't read as empty.
+        (((screenWidth - with(density) { plateWidthPx.toDp() }) / 2 - Gutter - 4.dp))
+            .coerceAtLeast(0.dp)
+    } else {
+        0.dp
+    }
     // No status-bars padding here: the sheet's handle zone already sits
     // below the status bar, and padding twice shrinks the art plate.
     Column(modifier.fillMaxSize().background(p.ground).navigationBarsPadding()) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = Gutter).height(48.dp),
+            Modifier.fillMaxWidth().padding(horizontal = Gutter + edge).height(48.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -203,7 +226,7 @@ internal fun PortraitPlayer(
                     .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Top),
             ) {
-                // One fixed plate: a perfect 1:1 square at 87% of the
+                // One fixed plate: a perfect 1:1 square at 90% of the
                 // screen width, centred with even margins both sides.
                 // minOf with maxHeight keeps it square, never squeezed,
                 // on short frames. Switching stations never moves the
@@ -214,10 +237,11 @@ internal fun PortraitPlayer(
                         .fillMaxWidth(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    val side = minOf((maxWidth + Gutter * 2) * 0.9f, maxHeight)
+                    // Height-bound: leave a small breather above and below the plate.
+                    val side = minOf((maxWidth + Gutter * 2) * 0.9f, maxHeight - 12.dp)
                     StationArt(
                         station = model.shownStation,
-                        modifier = Modifier.size(side),
+                        modifier = Modifier.size(side).onSizeChanged { plateWidthPx = it.width },
                     )
                 }
 
@@ -226,7 +250,10 @@ internal fun PortraitPlayer(
                 // anywhere around the centre of the expanded player) can
                 // never advance or restart the song. Only the small action
                 // icons in the strip above stay live.
-                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Column(
+                    Modifier.padding(horizontal = edge),
+                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
                     PlayerStatusRow(
                         model = model,
                         actions = actions,
@@ -235,9 +262,9 @@ internal fun PortraitPlayer(
                 }
             }
 
-            PlayerTransport(model, actions, meterHeight = 90.dp)
+            PlayerTransport(model, actions, Modifier.padding(horizontal = edge), meterHeight = 90.dp)
 
-            TransportKeys(model, actions)
+            TransportKeys(model, actions, Modifier.padding(horizontal = edge))
         }
         Spacer(Modifier.height(4.dp))
     }
