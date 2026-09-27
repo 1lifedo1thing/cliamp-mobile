@@ -485,10 +485,11 @@ private fun Modifier.offsetRightBorder(color: Color) = drawBehind {
  */
 @Composable
 fun ArtGlow(modifier: Modifier = Modifier) {
+    // One wash, dark and light alike - the halo behind the plate reads the
+    // same on either ground, never a coloured shadow in light theme.
+    val coreAlpha = 0.16f
+    val midAlpha = 0.05f
     val p = LocalPalette.current
-    // A light ground washes the wash out, so the halo runs stronger there.
-    val coreAlpha = if (p.dark) 0.16f else 0.30f
-    val midAlpha = if (p.dark) 0.05f else 0.10f
     Box(
         modifier
             .graphicsLayer {

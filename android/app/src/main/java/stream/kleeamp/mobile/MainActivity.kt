@@ -24,6 +24,7 @@ import androidx.media3.common.util.UnstableApi
 import stream.kleeamp.mobile.theme.KleeampTheme
 import stream.kleeamp.mobile.theme.decodeCustomThemeOrNull
 import stream.kleeamp.mobile.theme.paletteFor
+import stream.kleeamp.mobile.playback.StationArtwork
 
 class MainActivity : ComponentActivity() {
 
@@ -112,6 +113,12 @@ class MainActivity : ComponentActivity() {
                 android.content.res.Configuration.UI_MODE_NIGHT_YES
             val customJson by app.prefs.customTheme.collectAsState(initial = "")
             val palette = paletteFor(preference, systemDark, decodeCustomThemeOrNull(customJson))
+            // The notification's seeded plate wears the theme's colours, but
+            // the render path is synchronous and the store is not - so the
+            // resolved palette is pushed in here on every change.
+            LaunchedEffect(palette) {
+                StationArtwork.setPlateColors(palette.accent, palette.ground)
+            }
             val haptics by app.prefs.haptics.collectAsState(initial = true)
             val dark = palette.dark
 
