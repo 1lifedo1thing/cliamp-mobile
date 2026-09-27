@@ -34,8 +34,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -45,6 +47,7 @@ import androidx.navigation.toRoute
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import stream.kleeamp.mobile.art.ArtResolve
 import stream.kleeamp.mobile.radio.DirectoryQuery
 import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.podcasts.PodcastRepository
@@ -181,6 +184,9 @@ fun KleeampRoot(
     LaunchedEffect(Unit) {
         prefs.history.collect { player.setFallbackSource(it) }
     }
+    // Covers around the playing station stay warm, so a skip paints from
+    // memory instead of cold-loading art mid-transition.
+    QueueCoverWarmer(player = player, station = station)
 
     // Search-widget deep link while running: any OPEN_SEARCH tick opens the
     // Search overlay, unless it is already on top. launchSingleTop keeps
@@ -749,6 +755,34 @@ private fun OverlayCover(content: @Composable () -> Unit) {    val p = LocalPale
             )
     ) {
         content()
+    }
+}
+
+/**
+ * Skip-ahead cover warming: the hero and the mini bar paint from memory on
+ * the first frame when the art is already cached, so the previous, current
+ * and next queue covers are resolved ahead of any skip press. Without this
+ * a skip cold-loads the full art (disk, homepage scrape, 1024px decode)
+ * and the hero fades through plate, thumbnail preview and full art in slow
+ * steps instead of one quick dissolve. No UI of its own; it only warms
+ * caches. Bounded to three stations, on the pools the art path confines.
+ */
+@Composable
+private fun QueueCoverWarmer(
+    player: PlayerConnection,
+    station: Station?,
+) {
+    val upNext by player.upNext.collectAsStateWithLifecycle()
+    val upNextIndex by player.upNextIndex.collectAsStateWithLifecycle()
+    val resolver = LocalContext.current.contentResolver
+    // Same anchor the Up Next screen uses: the queue slot actually playing.
+    val anchorIdx = upNextIndex.takeIf { upNext.getOrNull(it)?.url == station?.url } ?: -1
+    val prev = upNext.getOrNull(anchorIdx - 1)
+    val next = upNext.getOrNull(anchorIdx + 1)
+    LaunchedEffect(station?.id, prev?.id, next?.id) {
+        val warm = listOfNotNull(prev, station, next)
+        ArtResolve.prefetchSmall(warm, resolver, limit = 3)
+        ArtResolve.prefetchFull(warm, resolver, limit = 3)
     }
 }
 

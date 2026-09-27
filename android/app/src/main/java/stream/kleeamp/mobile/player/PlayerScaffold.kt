@@ -6,7 +6,6 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -359,14 +358,6 @@ internal fun peekArt(station: Station?): ImageBitmap? {
 }
 
 /**
- * Crossfade identity for the hero art. The bitmap is compared referentially -
- * the resolvers hand back stable references per lookup, so a new object means
- * new pixels (next track, preview upgrading to full art) and the same object
- * never re-triggers the fade.
- */
-private data class HeroArt(val key: String, val bmp: ImageBitmap?)
-
-/**
  * Art is never invented, but it is not always absent either. Directory stations
  * usually publish an og:image on their homepage, and that is the station's own
  * branding rather than something we made up, so it is shown when it exists and
@@ -438,68 +429,61 @@ internal fun StationArt(
             radius = KleeampShape.large,
             caption = plateCaption,
         ) {
-            // The art swaps identity between tracks - and between the
-            // thumbnail preview and the full cover, and between the
-            // full-bleed and letterboxed branches - so the content dissolves
-            // instead of cutting: a hard cut between a filling cover and a
-            // floating wordmark reads as the whole page shifting.
-            Crossfade(
-                targetState = HeroArt(seedKey, bmp),
-                animationSpec = tween(220, easing = FastOutSlowInEasing),
-                label = "heroArt",
-            ) { state ->
-                state.bmp?.let {
-                    // Fixed square, always filled, art never cut: square covers
-                    // draw straight through; anything wider or taller keeps the
-                    // whole image centred on a blurred, cropped copy of itself
-                    // that fills the bands, so no dead space and no lost edges.
-                    val w = it.width.coerceAtLeast(1)
-                    val h = it.height.coerceAtLeast(1)
-                    val aspect = w.toFloat() / h
-                    if (aspect in 0.9f..1.12f) {
+            // The art swaps instantly between tracks: the warmer keeps the
+            // covers in memory, so the new pixels are already there and no
+            // dissolve is needed. A cold cover still pops in when it lands -
+            // one hard cut instead of a slow fade staircase.
+            bmp?.let {
+                // Fixed square, always filled, art never cut: square covers
+                // draw straight through; anything wider or taller keeps the
+                // whole image centred on a blurred, cropped copy of itself
+                // that fills the bands, so no dead space and no lost edges.
+                val w = it.width.coerceAtLeast(1)
+                val h = it.height.coerceAtLeast(1)
+                val aspect = w.toFloat() / h
+                if (aspect in 0.9f..1.12f) {
+                    Image(
+                        bitmap = it,
+                        contentDescription = station?.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Box(Modifier.fillMaxSize()) {
+                        Image(
+                            bitmap = it,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize().blur(28.dp),
+                            contentScale = ContentScale.Crop,
+                        )
+                        Box(Modifier.fillMaxSize().background(p.ground.copy(alpha = 0.25f)))
                         Image(
                             bitmap = it,
                             contentDescription = station?.name,
                             modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
+                            contentScale = ContentScale.Fit,
                         )
-                    } else {
-                        Box(Modifier.fillMaxSize()) {
-                            Image(
-                                bitmap = it,
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize().blur(28.dp),
-                                contentScale = ContentScale.Crop,
-                            )
-                            Box(Modifier.fillMaxSize().background(p.ground.copy(alpha = 0.25f)))
-                            Image(
-                                bitmap = it,
-                                contentDescription = station?.name,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Fit,
-                            )
-                        }
                     }
                 }
-                // No cover at all: the seeded plate, wearing the caption line so
-                // the hero still names what is playing.
-                if (state.bmp == null) {
-                    if (station != null && state.key.isNotEmpty()) {
-                        SeedPlate(
-                            key = state.key,
-                            name = station.name,
-                            modifier = Modifier.fillMaxSize(),
-                            caption = caption,
-                            radius = KleeampShape.large,
-                        )
-                    } else station?.let {
-                        Icon(
-                            KleeampIcons.MusicNote,
-                            it.name,
-                            Modifier.align(Alignment.Center).size(64.dp),
-                            tint = p.accent,
-                        )
-                    }
+            }
+            // No cover at all: the seeded plate, wearing the caption line so
+            // the hero still names what is playing.
+            if (bmp == null) {
+                if (station != null && seedKey.isNotEmpty()) {
+                    SeedPlate(
+                        key = seedKey,
+                        name = station.name,
+                        modifier = Modifier.fillMaxSize(),
+                        caption = caption,
+                        radius = KleeampShape.large,
+                    )
+                } else station?.let {
+                    Icon(
+                        KleeampIcons.MusicNote,
+                        it.name,
+                        Modifier.align(Alignment.Center).size(64.dp),
+                        tint = p.accent,
+                    )
                 }
             }
         }
