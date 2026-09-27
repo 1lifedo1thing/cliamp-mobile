@@ -41,6 +41,54 @@ enum class Visualizer(val id: String, val label: String, val columns: Int) {
 
     Kleeamp("kleeamp", "kleeamp", 24),
 
+    Rain("rain", "rain", 24),
+
+    BarsDot("barsdot", "bars dot", 24),
+
+    BarsOutline("barsoutline", "bars outline", 24),
+
+    Bricks("bricks", "bricks", 24),
+
+    Columns("columns", "columns", 24),
+
+    Pulse("pulse", "pulse", 24),
+
+    Retro("retro", "retro", 24),
+
+    Mirror("mirror", "mirror", 24),
+
+    Scatter("scatter", "scatter", 32),
+
+    Flame("flame", "flame", 24),
+
+    Sakura("sakura", "sakura", 24),
+
+    Firework("firework", "firework", 24),
+
+    Bubbles("bubbles", "bubbles", 24),
+
+    Sand("sand", "sand", 24),
+
+    Geyser("geyser", "geyser", 24),
+
+    Firefly("firefly", "firefly", 24),
+
+    Binary("binary", "binary", 24),
+
+    Logo("logo", "logo", 24),
+
+    Terrain("terrain", "terrain", 32),
+
+    Scope("scope", "scope", 24),
+
+    Heartbeat("heartbeat", "heartbeat", 24),
+
+    Ascii("ascii", "ascii", 28),
+
+    Mosaic("mosaic", "mosaic", 24),
+
+    RedSector("redsector", "red sector", 24),
+
     /**
      * The widget's brick meter. Glance renders to RemoteViews, which hard-cap
      * every Row at 10 direct children, so the full 24-column meter cannot
