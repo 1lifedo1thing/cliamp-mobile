@@ -485,10 +485,11 @@ private fun Modifier.offsetRightBorder(color: Color) = drawBehind {
  */
 @Composable
 fun ArtGlow(modifier: Modifier = Modifier) {
+    // One wash, dark and light alike - the halo behind the plate reads the
+    // same on either ground, never a coloured shadow in light theme.
+    val coreAlpha = 0.16f
+    val midAlpha = 0.05f
     val p = LocalPalette.current
-    // A light ground washes the wash out, so the halo runs stronger there.
-    val coreAlpha = if (p.dark) 0.16f else 0.30f
-    val midAlpha = if (p.dark) 0.05f else 0.10f
     Box(
         modifier
             .graphicsLayer {
@@ -598,8 +599,8 @@ fun GlyphPlate(
  * for "this is the row that is playing right now". [gutter] is the horizontal
  * inset: rows hosted in a padded grid pass a smaller one so grid padding plus
  * row gutter lands exactly on [Gutter]. [railOffset] shifts the rail left by
- * the same outer inset, so it still starts at the true screen edge. [onQueue]
- * turns on the right swipe that adds the row to Up Next. */
+ * the same outer inset, so it still starts at the true screen edge. Queueing
+ * lives in the row ⋮ menu now; the swipe-to-queue gesture is gone. */
 @Composable
 fun ListRow(
     modifier: Modifier = Modifier,
@@ -611,7 +612,6 @@ fun ListRow(
     gutter: Dp = Gutter,
     rail: Boolean = false,
     railOffset: Dp = 0.dp,
-    onQueue: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val p = LocalPalette.current
@@ -641,11 +641,7 @@ fun ListRow(
             if (divider) Box(Modifier.padding(start = gutter)) { HairlineDivider() }
         }
     }
-    if (onQueue != null) {
-        SwipeToQueue(onQueue = onQueue, modifier = modifier.fillMaxWidth()) { row(Modifier) }
-    } else {
-        row(modifier)
-    }
+    row(modifier)
 }
 
 /** A full-width muted note + divider, used for empty states and transient notices. */

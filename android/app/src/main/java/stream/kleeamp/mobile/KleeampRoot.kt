@@ -40,7 +40,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.coroutines.Job
@@ -57,6 +56,7 @@ import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection
 import stream.kleeamp.mobile.chrome.KleeampTabBar
 import stream.kleeamp.mobile.chrome.KleeampTabRail
+import stream.kleeamp.mobile.chrome.QueueConfirmHost
 import stream.kleeamp.mobile.player.MiniPlayer
 import stream.kleeamp.mobile.player.NowPlayingSheet
 import stream.kleeamp.mobile.chrome.Tab
@@ -70,8 +70,8 @@ import stream.kleeamp.mobile.library.LibrarySongInfoPane
 import stream.kleeamp.mobile.library.LibraryScreen
 import stream.kleeamp.mobile.podcasts.PodcastShowScreen
 import stream.kleeamp.mobile.podcasts.PodcastsScreen
-import stream.kleeamp.mobile.player.UpNextScreen
-import stream.kleeamp.mobile.player.ScopeScreen
+import stream.kleeamp.mobile.player.UpNextSheet
+import stream.kleeamp.mobile.player.ScopeSheet
 import stream.kleeamp.mobile.settings.ScrobbleWizard as ScrobbleWizardScreen
 import stream.kleeamp.mobile.servers.ProviderCatalog
 import stream.kleeamp.mobile.servers.ProviderStore
@@ -159,10 +159,13 @@ fun KleeampRoot(
     var favScope by rememberSaveable { mutableStateOf(FavScope.All) }
     // The expanded player is a bottom sheet driven by this flag, not a
     // backstack entry: the list stays composed underneath, so it shows
-    // through the scrim instead of an empty page. playerReturn reopens
-    // the sheet when back returns from Up Next or Scope opened inside it.
+    // through the scrim instead of an empty page.
     var playerOpen by rememberSaveable { mutableStateOf(false) }
-    var playerReturn by remember { mutableStateOf(false) }
+    // Up Next and Scope stack over whatever opened them and peel back
+    // to exactly that: sheets underneath stay open in place, never close
+    // to reopen.
+    var upNextOpen by rememberSaveable { mutableStateOf(false) }
+    var scopeOpen by rememberSaveable { mutableStateOf(false) }
 
     // Playback-global state stays at the root: the chrome and every screen
     // read current/playing. Prefs, provider and progress flows are collected
@@ -237,12 +240,6 @@ fun KleeampRoot(
     }
     val switchTab: (Tab) -> Unit = { newTab -> goToTab(newTab, true) }
 
-    // Route-guarded navigation, read here in the chrome (and once per
-    // destination that needs it) so the root never subscribes to the back
-    // stack. Guarded opens: tapping the mini player while already on that
-    // page is a no-op instead of stacking a duplicate destination.
-    val chromeNav = rememberGuardedNav(navController)
-
     // Cold-start reveal: the first frames rearrange as resident data lands
     // (chrome measures, lists fill), so the whole frame fades and rises in
     // once instead of flashing each change. Saved across rotation so it
@@ -307,7 +304,7 @@ fun KleeampRoot(
                 reconnecting = reconnect,
                 hasPrev = playerState.hasPrev,
                 hasNext = playerState.hasNext,
-                onOpenUpNext = chromeNav.openUpNext,
+                onOpenUpNext = { upNextOpen = true },
                 onOpen = { playerOpen = true },
             )
 
@@ -576,44 +573,6 @@ fun KleeampRoot(
             }
 
             // -- Full overlay destinations (cover the chrome) --
-            composable<UpNext> {
-                OverlayCover {
-                UpNextScreen(
-                    player = player,
-                    current = station,
-                    playing = playerState.playing,
-                    onPlay = { index ->
-                        player.currentUpNext.getOrNull(index)?.let(repository::reportPlay)
-                        player.playUpNextEntry(index)
-                    },
-                    // Back from a sheet detour reopens the sheet over the list.
-                    onBack = {
-                        navController.popBackStack()
-                        if (playerReturn) {
-                            playerReturn = false
-                            playerOpen = true
-                        }
-                    },
-                )
-                }
-            }
-            composable<Scope> {
-                OverlayCover {
-                ScopeScreen(
-                    prefs = prefs,
-                    station = station,
-                    streamTitle = streamTitle,
-                    playing = playerState.playing,
-                    onBack = {
-                        navController.popBackStack()
-                        if (playerReturn) {
-                            playerReturn = false
-                            playerOpen = true
-                        }
-                    },
-                )
-                }
-            }
             composable<Settings> {
                 Box(contentModifier) {
                     SettingsScreen(
@@ -731,18 +690,42 @@ fun KleeampRoot(
         if (playerOpen) {
             NowPlayingSheet(
                 vm = appViewModel { app -> NowPlayingViewModel(app.player, app.prefs) },
-                onOpenScope = {
-                    playerReturn = true
-                    playerOpen = false
-                    navController.navigate(Scope)
-                },
-                onOpenUpNext = {
-                    playerReturn = true
-                    playerOpen = false
-                    chromeNav.openUpNext()
-                },
+                onOpenScope = { scopeOpen = true },
+                onOpenUpNext = { upNextOpen = true },
                 onDismiss = { playerOpen = false },
             )
+        }
+        if (upNextOpen) {
+            UpNextSheet(
+                player = player,
+                current = station,
+                playing = playerState.playing,
+                onPlay = { index ->
+                    player.currentUpNext.getOrNull(index)?.let(repository::reportPlay)
+                    player.playUpNextEntry(index)
+                },
+                onDismiss = { upNextOpen = false },
+            )
+        }
+        if (scopeOpen) {
+            ScopeSheet(
+                prefs = prefs,
+                station = station,
+                streamTitle = streamTitle,
+                playing = playerState.playing,
+                onDismiss = { scopeOpen = false },
+            )
+        }
+
+        // The queue-add confirmation, topmost and centered above the chrome:
+        // every menu "Add to Up Next" lands here since the swipe pill died
+        // with the swipe gesture. After the NavHost so opaque pages never
+        // cover it.
+        Box(
+            Modifier.align(Alignment.BottomCenter).padding(bottom = chromeBottom + 14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            QueueConfirmHost()
         }
     }
 }
@@ -766,29 +749,6 @@ private fun OverlayCover(content: @Composable () -> Unit) {    val p = LocalPale
             )
     ) {
         content()
-    }
-}
-
-/**
- * Route-guarded opens, scoped to the caller: the back-stack entry is read
- * here, so a navigation only recomposes the chrome or the destination that
- * asked - never the root.
- */
-private class GuardedNav(
-    val openUpNext: () -> Unit,
-)
-
-@Composable
-private fun rememberGuardedNav(navController: NavHostController): GuardedNav {
-    val route = navController.currentBackStackEntryAsState().value?.destination?.route
-    return remember(route) {
-        GuardedNav(
-            openUpNext = {
-                if (route?.startsWith(UpNext::class.qualifiedName!!) != true) {
-                    navController.navigate(UpNext)
-                }
-            },
-        )
     }
 }
 

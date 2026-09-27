@@ -4,25 +4,32 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Shader
 import android.graphics.Typeface
 import androidx.core.content.res.ResourcesCompat
+import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.graphics.toArgb
 import stream.kleeamp.mobile.R
+import stream.kleeamp.mobile.art.initialOf
+import stream.kleeamp.mobile.art.seedVariant
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
 import java.io.ByteArrayOutputStream
 
 /**
  * Radio has no cover art, and the directory's favicons are 32px JPEGs of wildly
- * varying quality. Rather than ship a blank square, we draw the same striped
- * plate the player screen shows.
+ * varying quality. Rather than ship a blank square, we draw the same seeded
+ * plate the app shows for a coverless item: a jewel-tone gradient, the seeded
+ * geometric motif and the item's monogram.
  *
  * This matters more than it looks: Android's media player derives the whole
  * chip's background and accent colours from the artwork, so with no artwork the
  * notification is grey system chrome, and with this it picks up the plate's.
- * Which is why the plate is drawn in oxide and not in the palette the user
- * happens to have chosen - a station with no art of its own is the app seen
- * from outside, so it matches the launcher icon rather than the theme. Setting
+ * The gradient is anchored on the theme's accent, pushed in from the UI layer
+ * so the shade wears the exact colours the in-app plate does - a station with
+ * no art of its own still reads as the app seen from outside. Setting
  * a colour on the notification is not enough on its own: One UI reads the
  * artwork and ignores it.
  *
@@ -50,6 +57,32 @@ object StationArtwork {
      * lookup. Rendered lazily on first use, off the read path.
      */
     private var genericTrackPlate: ByteArray? = null
+
+    /**
+     * The plate's hue anchor and ground whisper, pushed in from the UI layer
+     * whenever the palette resolves: the render path is synchronous (and the
+     * preference store is not), so the activity hands the current palette's
+     * accent and ground over instead. Defaults are oxide, the pre-theme
+     * behaviour. A change clears the caches - rendered bytes bake the colours
+     * in, so last theme's plates must not survive a switch.
+     */
+    @Volatile
+    private var plateAccent: Int = Color.parseColor(ACCENT)
+
+    @Volatile
+    private var plateGround: Int = Color.parseColor(GROUND)
+
+    fun setPlateColors(accent: ComposeColor, ground: ComposeColor) {
+        val a = accent.toArgb()
+        val g = ground.toArgb()
+        if (a == plateAccent && g == plateGround) return
+        synchronized(cache) {
+            plateAccent = a
+            plateGround = g
+            cache.clear()
+            genericTrackPlate = null
+        }
+    }
 
     /** Fast path: no network, drawn locally, safe to call before playback starts. */
     fun forStation(context: Context, station: Station): ByteArray? = synchronized(cache) {
@@ -93,24 +126,26 @@ object StationArtwork {
         val c = Canvas(bmp)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-        // ground
-        paint.color = Color.parseColor(GROUND)
-        c.drawRect(0f, 0f, SIZE.toFloat(), SIZE.toFloat(), paint)
-
-        // 135-degree stripes, same geometry as the in-app plate
-        c.save()
-        c.rotate(-45f, SIZE / 2f, SIZE / 2f)
-        val stripe = 22f
-        val diag = SIZE * 1.5f
-        var x = SIZE / 2f - diag
-        var i = 0
-        while (x < SIZE / 2f + diag) {
-            paint.color = Color.parseColor(if (i % 2 == 0) STRIPE_A else STRIPE_B)
-            c.drawRect(x, SIZE / 2f - diag, x + stripe, SIZE / 2f + diag, paint)
-            x += stripe
-            i++
+        // Seeded jewel-tone ground, the same look the in-app plate wears:
+        // the hue steps around the fixed oxide accent, then deepens so the
+        // monogram always reads. Same seed key as the in-app plate, so the
+        // motif variant, angle and monogram match it.
+        val seedKey = station.id.ifBlank { station.url }
+        val hueShift = (seedVariant(seedKey, 5) - 2) * 24f
+        val deep = darken(shiftHue(plateAccent, hueShift), 0.52f)
+        val deeper = darken(shiftHue(plateAccent, hueShift + 18f), 0.68f)
+        val end = lerpColor(deeper, plateGround, 0.18f)
+        val angle = seedVariant(seedKey, 4)
+        val f = SIZE.toFloat()
+        val gx = when (angle) {
+            0 -> floatArrayOf(0f, 0f, f, f)
+            1 -> floatArrayOf(f, 0f, 0f, f)
+            2 -> floatArrayOf(f / 2f, 0f, f / 2f, f)
+            else -> floatArrayOf(0f, f / 2f, f, f / 2f)
         }
-        c.restore()
+        paint.shader = LinearGradient(gx[0], gx[1], gx[2], gx[3], deep, end, Shader.TileMode.CLAMP)
+        c.drawRect(0f, 0f, f, f, paint)
+        paint.shader = null
 
         if (art != null) {
             if (station.hasSquareCover()) {
@@ -151,23 +186,20 @@ object StationArtwork {
             }
         }
 
-        // Icon 103h's six bands, envelope "h", the same geometry the launcher
-        // icon and KleeampIcons.Mark are drawn from.
-        paint.color = Color.parseColor(MARK)
-        // The media player crops this square to a wide chip and keeps the
-        // middle band, so the mark is sized to survive that crop whole rather
-        // than to fill the square.
-        val scale = MARK_WIDTH / MARK_BOX_W
-        val offX = (SIZE - MARK_BOX_W * scale) / 2f - MARK_BOX_X * scale
-        val offY = (SIZE - MARK_BOX_H * scale) / 2f - MARK_BOX_Y * scale
-        BANDS.forEach { b ->
-            c.drawRect(
-                offX + b.x * scale,
-                offY + b.y * scale,
-                offX + (b.x + b.w) * scale,
-                offY + (b.y + b.h) * scale,
-                paint,
-            )
+        // Seeded motif + monogram, the same geometry the in-app plate
+        // draws. The media player crops this square to a wide chip, so the
+        // monogram sits centred to survive that crop whole.
+        drawMotif(c, seedVariant(seedKey + "#motif", 4), seedKey.hashCode().toLong())
+        initialOf(station.name)?.let { glyph ->
+            val font = runCatching { ResourcesCompat.getFont(context, R.font.poppins_regular) }
+                .getOrNull() ?: Typeface.DEFAULT
+            paint.typeface = font
+            paint.textSize = SIZE * 0.44f
+            paint.textAlign = Paint.Align.CENTER
+            paint.color = Color.argb(235, 255, 255, 255)
+            val fm = paint.fontMetrics
+            c.drawText(glyph, f / 2f, f / 2f - (fm.ascent + fm.descent) / 2f, paint)
+            paint.textAlign = Paint.Align.LEFT
         }
 
         // caption, matching the player's "[ slug - cliamp radio ]"
@@ -196,33 +228,95 @@ object StationArtwork {
         }
     }
 
-    /** One band of the mark, on Icon 103h's 48 grid. */
-    private class Band(val x: Float, val y: Float, val w: Float, val h: Float)
+    /**
+     * The seeded motif, ported from the in-app plate's drawMotif: rings off
+     * the top-right corner, diagonal beams, a fading dot grid, or sweeping
+     * arcs. White at the same 0.16 alpha the plate uses.
+     */
+    private fun drawMotif(c: Canvas, variant: Int, seed: Long) {
+        val f = SIZE.toFloat()
+        val ink = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            color = Color.argb(41, 255, 255, 255)
+        }
+        when (variant) {
+            0 -> {
+                val dx = 0.72f + 0.04f * ((seed ushr 3) % 3)
+                val cx = f * dx
+                val cy = f * 0.22f
+                for (i in 1..3) {
+                    ink.strokeWidth = f * 0.05f
+                    c.drawCircle(cx, cy, f * (0.16f + 0.20f * i), ink)
+                }
+            }
+            1 -> {
+                val tilt = -0.42f + 0.06f * ((seed ushr 5) % 5)
+                for (i in 0..2) {
+                    val y = f * (0.30f + 0.20f * i)
+                    ink.strokeWidth = f * (0.07f + 0.03f * ((seed ushr (7 + i)) % 2))
+                    c.drawLine(-f * 0.2f, y - f * tilt * 0.2f, f * 1.2f, y + f * tilt * 1.2f, ink)
+                }
+            }
+            2 -> {
+                ink.style = Paint.Style.FILL
+                val step = f / 4.6f
+                for (i in 0..4) {
+                    for (j in 0..4) {
+                        if (i + j > 5) continue
+                        val a = (0.05f + 0.05f * ((i * 7 + j * 13 + (seed and 7)) % 3))
+                            .coerceIn(0.03f, 0.2f)
+                        ink.color = Color.argb((a * 255).toInt(), 255, 255, 255)
+                        c.drawCircle(f * 0.10f + i * step, f * 0.92f - j * step, f * 0.032f, ink)
+                    }
+                }
+            }
+            else -> {
+                val start = (seed % 360).toFloat()
+                ink.strokeWidth = f * 0.055f
+                c.drawArc(
+                    android.graphics.RectF(-f * 0.55f, -f * 0.55f, f * 1.15f, f * 1.15f),
+                    start, 130f, false, ink,
+                )
+                ink.strokeWidth = f * 0.04f
+                ink.color = Color.argb(26, 255, 255, 255)
+                c.drawArc(
+                    android.graphics.RectF(f - f * 1.15f, f - f * 1.15f, f + f * 0.55f, f + f * 0.55f),
+                    start + 180f, 100f, false, ink,
+                )
+            }
+        }
+    }
 
-    private val BANDS = listOf(
-        Band(5f, 20f, 5f, 8f),
-        Band(12f, 12f, 5f, 24f),
-        Band(19f, 4f, 5f, 40f),
-        Band(26f, 14f, 5f, 20f),
-        Band(33f, 18f, 5f, 12f),
-        Band(40f, 22f, 3f, 4f),
-    )
+    /** Hue rotation in HSV space; saturation and value survive the trip. */
+    private fun shiftHue(color: Int, degrees: Float): Int {
+        val hsv = FloatArray(3)
+        Color.colorToHSV(color, hsv)
+        hsv[0] = ((hsv[0] + degrees) % 360f + 360f) % 360f
+        return Color.HSVToColor(hsv)
+    }
 
-    // The mark's own bounding box inside the 48 grid: it is inset, so centring
-    // the grid would not centre the mark.
-    private const val MARK_BOX_X = 5f
-    private const val MARK_BOX_Y = 4f
-    private const val MARK_BOX_W = 38f
-    private const val MARK_BOX_H = 40f
+    /** Scales the HSV value channel: 1 keeps the color, 0 is black. */
+    private fun darken(color: Int, keep: Float): Int {
+        val hsv = FloatArray(3)
+        Color.colorToHSV(color, hsv)
+        hsv[2] = (hsv[2] * keep).coerceIn(0f, 1f)
+        return Color.HSVToColor(Color.alpha(color), hsv)
+    }
 
-    /** Drawn width in the 512 plate, kept from the mark this replaces. */
-    private const val MARK_WIDTH = 200f
+    /** Straight ARGB lerp; [t] weights [b]. */
+    private fun lerpColor(a: Int, b: Int, t: Float): Int {
+        val u = 1f - t
+        return Color.argb(
+            (Color.alpha(a) * u + Color.alpha(b) * t).toInt(),
+            (Color.red(a) * u + Color.red(b) * t).toInt(),
+            (Color.green(a) * u + Color.green(b) * t).toInt(),
+            (Color.blue(a) * u + Color.blue(b) * t).toInt(),
+        )
+    }
 
-    // OxidePalette, fixed. See the note on the object.
+    // Pre-theme defaults, oxide. See setPlateColors.
     private const val GROUND = "#120A08"
-    private const val STRIPE_A = "#291A17"
-    private const val STRIPE_B = "#1E1412"
-    private const val MARK = "#D15D4D"
+    private const val ACCENT = "#D15D4D"
     private const val CAPTION = "#867E79"
     private const val FRAME = "#3A2A27"
 }

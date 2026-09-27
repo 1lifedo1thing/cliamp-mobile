@@ -170,6 +170,117 @@ class WaveFrame(columns: Int) : VisFrame(columns, WAVE_TICK_NS) {
     }
 }
 
+/**
+ * Bands-snapshot holders for the field families: rain, dot/outline/brick
+ * bars, columns, pulse, retro and mirror all draw the latest spectrum plus
+ * the frame counter, so one shape serves them all and each renderer owns
+ * the look.
+ */
+open class BandsSnapshotFrame(columns: Int, tickNs: Long = 0L) : VisFrame(columns, tickNs) {
+    var bands: FloatArray = FloatArray(columns)
+        private set
+
+    override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
+        this.bands = (bands ?: VisMath.idleBands(columns, t)).copyOf()
+    }
+
+    override fun settle() {
+        bands = FloatArray(columns)
+    }
+}
+
+class RainFrame(columns: Int) : BandsSnapshotFrame(columns)
+class BarsDotFrame(columns: Int) : BandsSnapshotFrame(columns)
+class BarsOutlineFrame(columns: Int) : BandsSnapshotFrame(columns)
+class BricksFrame(columns: Int) : BandsSnapshotFrame(columns)
+class ColumnsFrame(columns: Int) : BandsSnapshotFrame(columns)
+class PulseFrame(columns: Int) : BandsSnapshotFrame(columns)
+class RetroFrame(columns: Int) : BandsSnapshotFrame(columns)
+class MirrorFrame(columns: Int) : BandsSnapshotFrame(columns)
+class ScatterFrame(columns: Int) : BandsSnapshotFrame(columns)
+class SakuraFrame(columns: Int) : BandsSnapshotFrame(columns)
+class FireworkFrame(columns: Int) : BandsSnapshotFrame(columns)
+class BubblesFrame(columns: Int) : BandsSnapshotFrame(columns)
+class FireflyFrame(columns: Int) : BandsSnapshotFrame(columns)
+class BinaryFrame(columns: Int) : BandsSnapshotFrame(columns)
+
+class FlameFrame(columns: Int) : VisFrame(columns, 0L) {
+    val core = FlameCore(48, 28)
+
+    override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
+        core.push(bands ?: VisMath.idleBands(columns, t))
+    }
+
+    override fun settle() = core.settle()
+}
+
+class SandFrame(columns: Int) : VisFrame(columns, 0L) {
+    val core = SandCore(40, 24)
+
+    override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
+        core.push(bands ?: VisMath.idleBands(columns, t))
+    }
+
+    override fun settle() = core.settle()
+}
+
+class GeyserFrame(columns: Int) : VisFrame(columns, 0L) {
+    val core = GeyserCore()
+
+    override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
+        core.push(bands ?: VisMath.idleBands(columns, t))
+    }
+
+    override fun settle() = core.settle()
+}
+
+class LogoFrame(columns: Int) : BandsSnapshotFrame(columns)
+class AsciiFrame(columns: Int) : BandsSnapshotFrame(columns)
+
+class TerrainFrame(columns: Int) : VisFrame(columns, 0L) {
+    val core = TerrainCore(64)
+
+    override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
+        val src = bands ?: VisMath.idleBands(columns, t)
+        var env = 0f
+        for (b in src) env += b
+        core.push(if (src.isEmpty()) 0f else env / src.size)
+    }
+
+    override fun settle() = core.settle()
+}
+
+class MosaicFrame(columns: Int) : VisFrame(columns, 0L) {
+    val core = MosaicCore(10, 18)
+
+    override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
+        core.push(bands ?: VisMath.idleBands(columns, t))
+    }
+
+    override fun settle() = core.settle()
+}
+
+/**
+ * Time-domain sample holders for the trace families: scope draws Lissajous
+ * figures and heartbeat an ECG from the same waveform tap wave uses.
+ */
+open class SamplesFrame(columns: Int) : VisFrame(columns, 0L) {
+    var samples: FloatArray = FloatArray(0)
+        private set
+
+    override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
+        samples = PlaybackBus.waveform.value
+    }
+
+    override fun settle() {
+        samples = FloatArray(0)
+    }
+}
+
+class ScopeFrame(columns: Int) : SamplesFrame(columns)
+class HeartbeatFrame(columns: Int) : SamplesFrame(columns)
+class RedSectorFrame(columns: Int) : BandsSnapshotFrame(columns)
+
 @Composable
 fun rememberVisFrame(
     mode: Visualizer,
@@ -210,18 +321,45 @@ fun rememberVisFrame(
     return frame
 }
 
-private fun newVisFrame(mode: Visualizer, columns: Int): VisFrame = when (mode) {
-    Visualizer.Bars -> BarsFrame(columns)
-    Visualizer.ClassicPeak -> ClassicPeakFrame(columns)
-    Visualizer.Matrix -> MatrixFrame(columns)
-    Visualizer.Butterfly -> ButterflyFrame(columns)
-    Visualizer.ClassicLed -> ClassicLedFrame(columns)
-    Visualizer.Stereo -> StereoFrame(columns)
-    Visualizer.Omarchy -> OmarchyFrame(columns)
-    Visualizer.Kleeamp -> KleeampFrame(columns)
-    Visualizer.Wave -> WaveFrame(columns)
-    Visualizer.Brick, Visualizer.Widget -> error("brick renders through rememberMeter")
-}
+private val visFrameFactories: Map<Visualizer, (Int) -> VisFrame> = mapOf(
+    Visualizer.Bars to ::BarsFrame,
+    Visualizer.ClassicPeak to ::ClassicPeakFrame,
+    Visualizer.Matrix to ::MatrixFrame,
+    Visualizer.Butterfly to ::ButterflyFrame,
+    Visualizer.ClassicLed to ::ClassicLedFrame,
+    Visualizer.Stereo to ::StereoFrame,
+    Visualizer.Omarchy to ::OmarchyFrame,
+    Visualizer.Kleeamp to ::KleeampFrame,
+    Visualizer.Wave to ::WaveFrame,
+    Visualizer.Rain to ::RainFrame,
+    Visualizer.BarsDot to ::BarsDotFrame,
+    Visualizer.BarsOutline to ::BarsOutlineFrame,
+    Visualizer.Bricks to ::BricksFrame,
+    Visualizer.Columns to ::ColumnsFrame,
+    Visualizer.Pulse to ::PulseFrame,
+    Visualizer.Retro to ::RetroFrame,
+    Visualizer.Mirror to ::MirrorFrame,
+    Visualizer.Scatter to ::ScatterFrame,
+    Visualizer.Flame to ::FlameFrame,
+    Visualizer.Sakura to ::SakuraFrame,
+    Visualizer.Firework to ::FireworkFrame,
+    Visualizer.Bubbles to ::BubblesFrame,
+    Visualizer.Sand to ::SandFrame,
+    Visualizer.Geyser to ::GeyserFrame,
+    Visualizer.Firefly to ::FireflyFrame,
+    Visualizer.Binary to ::BinaryFrame,
+    Visualizer.Logo to ::LogoFrame,
+    Visualizer.Terrain to ::TerrainFrame,
+    Visualizer.Scope to ::ScopeFrame,
+    Visualizer.Heartbeat to ::HeartbeatFrame,
+    Visualizer.Ascii to ::AsciiFrame,
+    Visualizer.Mosaic to ::MosaicFrame,
+    Visualizer.RedSector to ::RedSectorFrame,
+)
+
+private fun newVisFrame(mode: Visualizer, columns: Int): VisFrame =
+    visFrameFactories[mode]?.invoke(columns)
+        ?: error("brick renders through rememberMeter")
 
 @Composable
 fun VisualizerMeter(
@@ -257,5 +395,31 @@ fun VisualizerView(frame: VisFrame, modifier: Modifier = Modifier) {
         is OmarchyFrame -> VisOmarchy(frame, modifier)
         is KleeampFrame -> VisKleeamp(frame, modifier)
         is WaveFrame -> VisWave(frame, modifier)
+        is RainFrame -> VisRain(frame, modifier)
+        is BarsDotFrame -> VisBarsDot(frame, modifier)
+        is BarsOutlineFrame -> VisBarsOutline(frame, modifier)
+        is BricksFrame -> VisBricks(frame, modifier)
+        is ColumnsFrame -> VisColumns(frame, modifier)
+        is PulseFrame -> VisPulse(frame, modifier)
+        is RetroFrame -> VisRetro(frame, modifier)
+        is MirrorFrame -> VisMirror(frame, modifier)
+        is ScatterFrame -> VisScatter(frame, modifier)
+        is FlameFrame -> VisFlame(frame, modifier)
+        is SakuraFrame -> VisSakura(frame, modifier)
+        is FireworkFrame -> VisFirework(frame, modifier)
+        is BubblesFrame -> VisBubbles(frame, modifier)
+        is SandFrame -> VisSand(frame, modifier)
+        is GeyserFrame -> VisGeyser(frame, modifier)
+        is FireflyFrame -> VisFirefly(frame, modifier)
+        is BinaryFrame -> VisBinary(frame, modifier)
+        is LogoFrame -> VisLogo(frame, modifier)
+        is TerrainFrame -> VisTerrain(frame, modifier)
+        is ScopeFrame -> VisScope(frame, modifier)
+        is HeartbeatFrame -> VisHeartbeat(frame, modifier)
+        is AsciiFrame -> VisAscii(frame, modifier)
+        is MosaicFrame -> VisMosaic(frame, modifier)
+        is RedSectorFrame -> VisRedSector(frame, modifier)
+        is SamplesFrame -> error("trace frames dispatch by leaf")
+        is BandsSnapshotFrame -> error("field frames dispatch by leaf")
     }
 }

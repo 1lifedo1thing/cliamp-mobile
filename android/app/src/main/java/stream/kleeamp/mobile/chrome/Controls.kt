@@ -537,8 +537,10 @@ fun MarqueeLabel(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
-    var boxWidth by remember { mutableFloatStateOf(0f) }
-    var textWidth by remember { mutableFloatStateOf(0f) }
+    // Measured widths belong to this text: a track change must not inherit
+    // the old title's width for a frame and flash the wrong scroll offset.
+    var boxWidth by remember(text) { mutableFloatStateOf(0f) }
+    var textWidth by remember(text) { mutableFloatStateOf(0f) }
     // Overflow means the text is wider than the space it sits in.
     val overflow = textWidth > boxWidth && boxWidth > 0f
 
