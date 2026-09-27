@@ -127,6 +127,7 @@ internal data class PlayerActions(
     val onOpenSleep: () -> Unit,
     val onSelectOutput: (Int) -> Unit,
     val onToggleFullscreen: () -> Unit,
+    val onSelectVisualizer: (String) -> Unit,
 )
 
 @UnstableApi
@@ -185,6 +186,7 @@ fun NowPlayingScreen(
         onOpenSleep = { sleepOpen = true },
         onSelectOutput = { vm.onEvent(NowPlayingViewModel.Event.SetOutputDevice(it)) },
         onToggleFullscreen = { fullscreen = true },
+        onSelectVisualizer = { vm.onEvent(NowPlayingViewModel.Event.SetVisualizer(it)) },
     )
 
     Box(Modifier.fillMaxSize()) {

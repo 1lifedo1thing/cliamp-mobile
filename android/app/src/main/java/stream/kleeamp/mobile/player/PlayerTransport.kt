@@ -6,7 +6,13 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -16,6 +22,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
@@ -37,6 +44,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -114,20 +122,60 @@ internal fun PlayerTransport(
         // The meter is the visualizer: when the setting is off it is
         // removed entirely, not just fed idle data - so neither the
         // frame loop nor a static brick grid exists in the player.
+        // A horizontal swipe pages through the visualizer list: left for
+        // the next one, right for the previous, wrapping at the ends. The
+        // write goes to the global setting, so every meter everywhere -
+        // player, scope sheet, fullscreen - follows the swipe.
         if (model.visualizer != "off") {
-            VisualizerMeter(
-                mode = Visualizer.byId(model.visualizer),
-                columns = MeterSize.NowPlaying.columns,
-                live = model.state.playing,
-                spectrumProvider = model.spectrumProvider,
-                stereoProvider = model.stereoProvider,
-                brick = MeterSize.NowPlaying.brick,
-                gap = MeterSize.NowPlaying.gap,
-                modifier = Modifier
+            val order = remember { Visualizer.selectable }
+            val mode = Visualizer.byId(model.visualizer)
+            // Slide direction of the last swipe; survives the mode change
+            // so the incoming transition knows which way to come from.
+            var incomingDir by remember { mutableIntStateOf(0) }
+            Box(
+                Modifier
                     .fillMaxWidth()
                     .height(meterHeight)
-                    .doubleTapToFullscreen(actions.onToggleFullscreen),
-            )
+                    .visualizerSwipe(
+                        onSwipeLeft = {
+                            incomingDir = -1
+                            actions.onSelectVisualizer(order.nextAfter(mode).id)
+                        },
+                        onSwipeRight = {
+                            incomingDir = 1
+                            actions.onSelectVisualizer(order.prevBefore(mode).id)
+                        },
+                    ),
+            ) {
+                AnimatedContent(
+                    targetState = mode,
+                    transitionSpec = {
+                        val dir = incomingDir
+                        (slideInHorizontally(
+                            animationSpec = tween(220, easing = FastOutSlowInEasing),
+                            initialOffsetX = { w -> dir * w },
+                        ) + fadeIn(tween(220))) togetherWith
+                            (slideOutHorizontally(
+                                animationSpec = tween(220, easing = FastOutSlowInEasing),
+                                targetOffsetX = { w -> dir * w },
+                            ) + fadeOut(tween(220)))
+                    },
+                    label = "visSwipe",
+                ) { current ->
+                    VisualizerMeter(
+                        mode = current,
+                        columns = MeterSize.NowPlaying.columns,
+                        live = model.state.playing,
+                        spectrumProvider = model.spectrumProvider,
+                        stereoProvider = model.stereoProvider,
+                        brick = MeterSize.NowPlaying.brick,
+                        gap = MeterSize.NowPlaying.gap,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .doubleTapToFullscreen(actions.onToggleFullscreen),
+                    )
+                }
+            }
         }
 
         // What the transport shows follows what the player says the
@@ -240,6 +288,44 @@ internal fun sleepRemaining(model: PlayerModel): String? =
     model.state.sleepAtMs?.let { at ->
         "SLEEP " + clock((at - System.currentTimeMillis()).coerceAtLeast(0))
     }
+
+/**
+ * Paging gesture for the meter: a horizontal drag past a fifth of the width
+ * pages the visualizer, shorter drags snap back to nothing. Vertical
+ * scrolling (the landscape panes) and double-tap fullscreen keep working -
+ * the drag detector only claims the gesture once it is clearly horizontal.
+ */
+internal fun Modifier.visualizerSwipe(
+    onSwipeLeft: () -> Unit,
+    onSwipeRight: () -> Unit,
+): Modifier = pointerInput(onSwipeLeft, onSwipeRight) {
+    var totalX = 0f
+    detectHorizontalDragGestures(
+        onDragStart = { totalX = 0f },
+        onHorizontalDrag = { _, dx -> totalX += dx },
+        onDragEnd = {
+            val threshold = size.width * 0.2f
+            when {
+                totalX <= -threshold -> onSwipeLeft()
+                totalX >= threshold -> onSwipeRight()
+            }
+        },
+    )
+}
+
+/** Next entry in the swipe order, wrapping past the end. */
+internal fun List<Visualizer>.nextAfter(mode: Visualizer): Visualizer {
+    if (isEmpty()) return mode
+    val i = indexOf(mode).takeIf { it >= 0 } ?: 0
+    return this[(i + 1) % size]
+}
+
+/** Previous entry in the swipe order, wrapping past the start. */
+internal fun List<Visualizer>.prevBefore(mode: Visualizer): Visualizer {
+    if (isEmpty()) return mode
+    val i = indexOf(mode).takeIf { it >= 0 } ?: 0
+    return this[(i - 1 + size) % size]
+}
 
 internal fun statusLabel(model: PlayerModel): String = when {
     model.reconnect > 0 -> "RECONNECTING · ${model.reconnect}"

@@ -36,6 +36,7 @@ class NowPlayingViewModel(
         data object ToggleFavorite : Event
         data class SetSpeed(val value: Float) : Event
         data class SetOutputDevice(val id: Int) : Event
+        data class SetVisualizer(val id: String) : Event
     }
 
     /** Live transport and tune state: what is playing and what it says. */
@@ -117,6 +118,7 @@ class NowPlayingViewModel(
             // that go through prefs or need an event are routed here.
             is Event.SetSpeed -> player.setSpeed(e.value)
             is Event.SetOutputDevice -> viewModelScope.launch { prefs.setOutputDevice(e.id) }
+            is Event.SetVisualizer -> viewModelScope.launch { prefs.setVisualizer(e.id) }
         }
     }
 }
