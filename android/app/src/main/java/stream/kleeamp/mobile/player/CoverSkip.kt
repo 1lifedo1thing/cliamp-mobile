@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,6 +30,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.theme.KleeampShape
 
 /** Gap between pager pages, so neighbours never read as one wide cover. */
 internal val CoverSkipPageGap = 14.dp
@@ -302,10 +304,19 @@ internal fun CoverSkip(
                     translationX = offsetX - shiftPx
                     scaleX = prevScale
                     scaleY = prevScale
+                    // Clipped to the plate shape: an unclipped swipe layer
+                    // composites square and leaks gray corners mid-swipe.
+                    clip = true
+                    shape = RoundedCornerShape(KleeampShape.large)
                 },
         ) {
             if (previous != null) {
-                StationArt(station = previous, modifier = Modifier.fillMaxSize())
+                StationArt(
+                    station = previous,
+                    modifier = Modifier.fillMaxSize(),
+                    glow = false,
+                    breathe = false,
+                )
             }
         }
         Box(
@@ -315,9 +326,16 @@ internal fun CoverSkip(
                     translationX = offsetX
                     scaleX = centerScale
                     scaleY = centerScale
+                    clip = true
+                    shape = RoundedCornerShape(KleeampShape.large)
                 },
         ) {
-            StationArt(station = centerStation, modifier = Modifier.fillMaxSize())
+            StationArt(
+                station = centerStation,
+                modifier = Modifier.fillMaxSize(),
+                glow = false,
+                breathe = false,
+            )
         }
         Box(
             Modifier
@@ -326,10 +344,17 @@ internal fun CoverSkip(
                     translationX = offsetX + shiftPx
                     scaleX = nextScale
                     scaleY = nextScale
+                    clip = true
+                    shape = RoundedCornerShape(KleeampShape.large)
                 },
         ) {
             if (next != null) {
-                StationArt(station = next, modifier = Modifier.fillMaxSize())
+                StationArt(
+                    station = next,
+                    modifier = Modifier.fillMaxSize(),
+                    glow = false,
+                    breathe = false,
+                )
             }
         }
     }

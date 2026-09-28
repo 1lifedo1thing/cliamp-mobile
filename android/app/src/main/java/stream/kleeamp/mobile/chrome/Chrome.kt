@@ -526,9 +526,11 @@ fun ArtPlate(
     val p = LocalPalette.current
     Box(
         modifier
+            // Clip first: no square fill may composite outside the
+            // rounded plate, even wrapped in swipe/breath layers.
             .clip(RoundedCornerShape(radius))
+            .background(p.artA, RoundedCornerShape(radius))
             .border(1.dp, p.artBorder, RoundedCornerShape(radius))
-            .background(p.artA)
     ) {
         overlay?.invoke(this)
         if (initial != null) {

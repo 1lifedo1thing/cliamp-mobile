@@ -51,7 +51,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -382,6 +381,10 @@ internal fun peekArt(station: Station?): ImageBitmap? {
 internal fun StationArt(
     station: Station?,
     modifier: Modifier = Modifier,
+    /** The halo wash - the cover pager disables it. */
+    glow: Boolean = true,
+    /** The slow swell - the cover pager disables it so pages match. */
+    breathe: Boolean = true,
 ) {
     val p = LocalPalette.current
     // Paint what memory already holds synchronously, so a song change shows
@@ -425,37 +428,39 @@ internal fun StationArt(
         // art; a real cover or its thumbnail preview speaks for itself.
         val plateCaption =
             if (bmp == null && (seedKey.isEmpty() || station == null)) caption else null
-        ArtGlow(Modifier.fillMaxSize())
-        ArtPlate(
-            modifier = Modifier
-                .fillMaxSize()
-                // Soft drop shadow so the plate floats over the page - the
-                // premium read, same large radius as the plate itself. A touch
-                // lighter on light grounds, where the same elevation reads
-                // stronger against the pale ground.
-                .shadow(if (p.dark) 26.dp else 20.dp, RoundedCornerShape(KleeampShape.large))
-                .graphicsLayer {
-                    scaleX = breath
-                    scaleY = breath
-                },
-            radius = KleeampShape.large,
-            caption = plateCaption,
-        ) {
-            // The art swaps instantly between tracks: the warmer keeps the
-            // covers in memory, so the new pixels are already there and no
-            // dissolve is needed. A cold cover still pops in when it lands -
-            // one hard cut instead of a slow fade staircase.
-            bmp?.let {
+        if (glow) ArtGlow(Modifier.fillMaxSize())
+        // One plate per branch, all on the same clipped layer: a coverless
+        // track swaps pixels, never structure or scale.
+        val plateModifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                val swell = if (breathe) breath else 1f
+                scaleX = swell
+                scaleY = swell
+                // Clip the layer itself to the plate shape: without this
+                // the layer composites square and gray corners leak.
+                clip = true
+                shape = RoundedCornerShape(KleeampShape.large)
+            }
+        if (bmp != null) {
+            ArtPlate(
+                modifier = plateModifier,
+                radius = KleeampShape.large,
+            ) {
+                // The art swaps instantly between tracks: the warmer keeps the
+                // covers in memory, so the new pixels are already there and no
+                // dissolve is needed. A cold cover still pops in when it lands -
+                // one hard cut instead of a slow fade staircase.
                 // Fixed square, always filled, art never cut: square covers
                 // draw straight through; anything wider or taller keeps the
                 // whole image centred on a blurred, cropped copy of itself
                 // that fills the bands, so no dead space and no lost edges.
-                val w = it.width.coerceAtLeast(1)
-                val h = it.height.coerceAtLeast(1)
+                val w = bmp.width.coerceAtLeast(1)
+                val h = bmp.height.coerceAtLeast(1)
                 val aspect = w.toFloat() / h
                 if (aspect in 0.9f..1.12f) {
                     Image(
-                        bitmap = it,
+                        bitmap = bmp,
                         contentDescription = station?.name,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
@@ -463,14 +468,14 @@ internal fun StationArt(
                 } else {
                     Box(Modifier.fillMaxSize()) {
                         Image(
-                            bitmap = it,
+                            bitmap = bmp,
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize().blur(28.dp),
                             contentScale = ContentScale.Crop,
                         )
                         Box(Modifier.fillMaxSize().background(p.ground.copy(alpha = 0.25f)))
                         Image(
-                            bitmap = it,
+                            bitmap = bmp,
                             contentDescription = station?.name,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Fit,
@@ -478,18 +483,23 @@ internal fun StationArt(
                     }
                 }
             }
+        } else if (station != null && seedKey.isNotEmpty()) {
             // No cover at all: the seeded plate, wearing the caption line so
             // the hero still names what is playing.
-            if (bmp == null) {
-                if (station != null && seedKey.isNotEmpty()) {
-                    SeedPlate(
-                        key = seedKey,
-                        name = station.name,
-                        modifier = Modifier.fillMaxSize(),
-                        caption = caption,
-                        radius = KleeampShape.large,
-                    )
-                } else station?.let {
+            SeedPlate(
+                key = seedKey,
+                name = station.name,
+                modifier = plateModifier,
+                caption = caption,
+                radius = KleeampShape.large,
+            )
+        } else {
+            ArtPlate(
+                modifier = plateModifier,
+                radius = KleeampShape.large,
+                caption = plateCaption,
+            ) {
+                station?.let {
                     Icon(
                         KleeampIcons.MusicNote,
                         it.name,

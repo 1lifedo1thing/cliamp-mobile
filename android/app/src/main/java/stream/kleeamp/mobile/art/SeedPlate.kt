@@ -59,7 +59,7 @@ fun SeedPlate(
             .border(1.dp, p.artBorder, RoundedCornerShape(radius)),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.fillMaxSize()) {
+        Canvas(Modifier.matchParentSize()) {
             drawRect(look.gradient)
             drawMotif(look.variant, look.motifSeed, look.motifInk)
         }
@@ -71,7 +71,9 @@ fun SeedPlate(
                 tint = Color.White.copy(alpha = 0.92f),
             )
         } else if (glyph != null) {
-            BoxWithConstraints(Modifier.fillMaxSize()) {
+            // Sized to the parent plate, never measuring it: swapping
+            // between seed and art must not move the plate.
+            BoxWithConstraints(Modifier.matchParentSize()) {
                 val size = maxWidth.coerceAtMost(maxHeight) * 0.44f
                 with(LocalDensity.current) {
                     Mono(
