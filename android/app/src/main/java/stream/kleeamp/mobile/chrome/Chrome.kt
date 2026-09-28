@@ -526,9 +526,13 @@ fun ArtPlate(
     val p = LocalPalette.current
     Box(
         modifier
+            // Shape first: with graphics layers above (shadow, breath),
+            // a plain background after clip paints square corners past
+            // the plate. The shaped background draws its own rounded
+            // rect, so no square artA can peek out at the corners.
+            .background(p.artA, RoundedCornerShape(radius))
             .clip(RoundedCornerShape(radius))
             .border(1.dp, p.artBorder, RoundedCornerShape(radius))
-            .background(p.artA)
     ) {
         overlay?.invoke(this)
         if (initial != null) {

@@ -48,10 +48,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -382,6 +380,8 @@ internal fun peekArt(station: Station?): ImageBitmap? {
 internal fun StationArt(
     station: Station?,
     modifier: Modifier = Modifier,
+    /** Opt out of the halo wash - the cover pager disables it. */
+    glow: Boolean = true,
 ) {
     val p = LocalPalette.current
     // Paint what memory already holds synchronously, so a song change shows
@@ -425,15 +425,12 @@ internal fun StationArt(
         // art; a real cover or its thumbnail preview speaks for itself.
         val plateCaption =
             if (bmp == null && (seedKey.isEmpty() || station == null)) caption else null
-        ArtGlow(Modifier.fillMaxSize())
+        if (glow) ArtGlow(Modifier.fillMaxSize())
         ArtPlate(
             modifier = Modifier
                 .fillMaxSize()
-                // Soft drop shadow so the plate floats over the page - the
-                // premium read, same large radius as the plate itself. A touch
-                // lighter on light grounds, where the same elevation reads
-                // stronger against the pale ground.
-                .shadow(if (p.dark) 26.dp else 20.dp, RoundedCornerShape(KleeampShape.large))
+                // No shadow here: the pager carries no decoration at
+                // all, since anything around the plates smears mid-swipe.
                 .graphicsLayer {
                     scaleX = breath
                     scaleY = breath
