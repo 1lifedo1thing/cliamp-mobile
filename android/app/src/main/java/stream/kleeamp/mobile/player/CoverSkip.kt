@@ -33,7 +33,7 @@ import stream.kleeamp.mobile.model.Station
 /** Gap between pager pages, so neighbours never read as one wide cover. */
 internal val CoverSkipPageGap = 14.dp
 
-/** Side pages sit slightly smaller, so the centered cover owns the plate. */
+/** Side pages rest slightly smaller, so the centered cover owns the plate. */
 internal const val CoverSkipSideScale = 0.92f
 
 /**
@@ -114,6 +114,17 @@ internal fun CoverSkip(
     val latestOnNext by rememberUpdatedState(onSkipNext)
     val latestCanPrev by rememberUpdatedState(canSkipPrevious)
     val latestCanNext by rememberUpdatedState(canSkipNext)
+    val latestPrevious by rememberUpdatedState(previous)
+    val latestNext by rememberUpdatedState(next)
+    val latestCurrentId by rememberUpdatedState(current?.id)
+
+    // Commit handoff: once the page-off lands the incoming cover centered at
+    // full scale, the center takes it over in the same frame as the snap, so
+    // the snap is invisible. Cleared once the bus confirms the new station
+    // (or lands anywhere else, e.g. a transport key mid-settle).
+    var swapTo by remember { mutableStateOf<Station?>(null) }
+    var swapFromId by remember { mutableStateOf<String?>(null) }
+    val centerStation = swapTo ?: current
 
     // A new cover always starts centered: after a commit we snap to 0, and an
     // external prev/next key lands here with the offset already at 0.
@@ -122,6 +133,10 @@ internal fun CoverSkip(
         if (!settling && offsetX != 0f) {
             animation.snapTo(0f)
             offsetX = 0f
+        }
+        if (swapTo != null && currentId != swapFromId) {
+            swapTo = null
+            swapFromId = null
         }
     }
 
@@ -138,6 +153,10 @@ internal fun CoverSkip(
                         ) {
                             offsetX = value
                         }
+                        // The incoming page now sits centered at full scale:
+                        // hand it to the center under the snap.
+                        swapTo = latestNext
+                        swapFromId = latestCurrentId
                         latestOnNext()
                         animation.snapTo(0f)
                         offsetX = 0f
@@ -149,6 +168,8 @@ internal fun CoverSkip(
                         ) {
                             offsetX = value
                         }
+                        swapTo = latestPrevious
+                        swapFromId = latestCurrentId
                         latestOnPrev()
                         animation.snapTo(0f)
                         offsetX = 0f
@@ -264,6 +285,13 @@ internal fun CoverSkip(
     ) {
         val density = LocalDensity.current
         val shiftPx = with(density) { maxWidth.toPx() + CoverSkipPageGap.toPx() }
+        // Landing transition: the incoming card grows to full scale as it
+        // reaches the center while the outgoing shrinks away — all driven by
+        // the same finger/animation progress, so cancels glide back too.
+        val progress = (offsetX / shiftPx).coerceIn(-1f, 1f)
+        val centerScale = 1f - (1f - CoverSkipSideScale) * abs(progress)
+        val prevScale = CoverSkipSideScale + (1f - CoverSkipSideScale) * progress.coerceIn(0f, 1f)
+        val nextScale = CoverSkipSideScale + (1f - CoverSkipSideScale) * (-progress).coerceIn(0f, 1f)
         // A missing neighbour is empty ground, never an error caption: with
         // the walk as the source a null page only ever peeks out on a
         // rubber-banded (blocked) edge.
@@ -272,29 +300,37 @@ internal fun CoverSkip(
                 .fillMaxSize()
                 .graphicsLayer {
                     translationX = offsetX - shiftPx
-                    scaleX = CoverSkipSideScale
-                    scaleY = CoverSkipSideScale
+                    scaleX = prevScale
+                    scaleY = prevScale
                 },
         ) {
-            previous?.let { StationArt(station = it, modifier = Modifier.fillMaxSize()) }
+            if (previous != null) {
+                StationArt(station = previous, modifier = Modifier.fillMaxSize())
+            }
         }
         Box(
             Modifier
                 .fillMaxSize()
-                .graphicsLayer { translationX = offsetX },
+                .graphicsLayer {
+                    translationX = offsetX
+                    scaleX = centerScale
+                    scaleY = centerScale
+                },
         ) {
-            StationArt(station = current, modifier = Modifier.fillMaxSize())
+            StationArt(station = centerStation, modifier = Modifier.fillMaxSize())
         }
         Box(
             Modifier
                 .fillMaxSize()
                 .graphicsLayer {
                     translationX = offsetX + shiftPx
-                    scaleX = CoverSkipSideScale
-                    scaleY = CoverSkipSideScale
+                    scaleX = nextScale
+                    scaleY = nextScale
                 },
         ) {
-            next?.let { StationArt(station = it, modifier = Modifier.fillMaxSize()) }
+            if (next != null) {
+                StationArt(station = next, modifier = Modifier.fillMaxSize())
+            }
         }
     }
 }
