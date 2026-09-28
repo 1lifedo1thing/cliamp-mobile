@@ -21,20 +21,19 @@ cliamp layout that matters: `main.go`, `ui/`, `ui/model/`.
 
 ## Skills
 
-Two local skills own product work. Everything else is generic language guidance.
+One local skill owns product work. Everything else is generic language guidance.
 
 **Local** (`.opencode/skills/`)
 
-| Skill                      | Use when                                                          |
-| -------------------------- | ----------------------------------------------------------------- |
-| `android-kotlin-modernize` | Cleaning `android/`. Same behavior. No Terminal mode.             |
-| `android-tui-parity`       | Settings toggle **Terminal mode**. Must show the real cliamp TUI. |
+| Skill                      | Use when                            |
+| -------------------------- | ----------------------------------- |
+| `android-kotlin-modernize` | Cleaning `android/`. Same behavior. |
 
 **Kotlin / Compose** (`.agents/skills/`) — this app is Kotlin 2.3, AGP 9, Compose:
 
 `using-chrisbanes-skills`, `compose-state-and-effects`, `compose-component-design`, `compose-performance`, `compose-animations`, `compose-focus-navigation`, `compose-ui-testing-patterns`, `kotlin-api-design`, `kotlin-concurrency-and-flow`, `kotlin-control-flow`, `gradle-run`
 
-**Go** — cliamp is Go. Load only when reading or changing that source, or embedding the binary:
+**Go** — cliamp is Go. Load only when reading that source:
 
 `go-skills-router`, `go-coding-standards`, `go-cli`, `go-architecture-review`, `go-concurrency-review`
 
@@ -44,13 +43,6 @@ Do not add git plugin entries to `opencode.jsonc`.
 
 **Android cleanup**  
 Load `android-kotlin-modernize` plus the Kotlin/Compose set. Do not edit cliamp.
-
-**Terminal mode**  
-Load `android-tui-parity`, the Go set, and Compose skills for the Android _host_ only.
-
-Terminal mode ON means a full-screen PTY running the real `cliamp` binary. Same frames, colors, visualizers, and keys as desktop cliamp.
-
-Do not rebuild the Winamp TUI in Compose. Material UI exists only when Terminal mode is OFF.
 
 ## Commits
 
