@@ -194,9 +194,6 @@ internal fun CoverSkip(
         }
     }
 
-    // Bare pager: no shadow, no background - just the plates sliding
-    // on the page ground. Any decoration on this container smears
-    // mid-swipe, so there is none.
     BoxWithConstraints(
         modifier
             .clipToBounds()
@@ -308,9 +305,7 @@ internal fun CoverSkip(
                 },
         ) {
             if (previous != null) {
-                // No halo anywhere in the pager: it is a background wash
-                // that smears mid-swipe, and the pager carries none.
-                StationArt(station = previous, modifier = Modifier.fillMaxSize(), glow = false)
+                StationArt(station = previous, modifier = Modifier.fillMaxSize())
             }
         }
         Box(
@@ -322,7 +317,7 @@ internal fun CoverSkip(
                     scaleY = centerScale
                 },
         ) {
-            StationArt(station = centerStation, modifier = Modifier.fillMaxSize(), glow = false)
+            StationArt(station = centerStation, modifier = Modifier.fillMaxSize())
         }
         Box(
             Modifier
@@ -334,7 +329,7 @@ internal fun CoverSkip(
                 },
         ) {
             if (next != null) {
-                StationArt(station = next, modifier = Modifier.fillMaxSize(), glow = false)
+                StationArt(station = next, modifier = Modifier.fillMaxSize())
             }
         }
     }
