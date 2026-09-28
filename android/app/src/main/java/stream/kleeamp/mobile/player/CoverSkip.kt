@@ -23,11 +23,18 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.max
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.model.Station
+
+/** Gap between pager pages, so neighbours never read as one wide cover. */
+internal val CoverSkipPageGap = 14.dp
+
+/** Side pages sit slightly smaller, so the centered cover owns the plate. */
+internal const val CoverSkipSideScale = 0.92f
 
 /**
  * Settle decision for a cover swipe. Pure so it can be unit-tested on the JVM.
@@ -118,7 +125,7 @@ internal fun CoverSkip(
         }
     }
 
-    fun settle(decision: CoverSkipDecision, widthPx: Float) {
+    fun settle(decision: CoverSkipDecision, pagePx: Float) {
         settling = true
         scope.launch {
             try {
@@ -126,7 +133,7 @@ internal fun CoverSkip(
                 when (decision) {
                     CoverSkipDecision.Next -> {
                         animation.animateTo(
-                            -widthPx,
+                            -pagePx,
                             spring(dampingRatio = 0.9f, stiffness = 500f),
                         ) {
                             offsetX = value
@@ -137,7 +144,7 @@ internal fun CoverSkip(
                     }
                     CoverSkipDecision.Previous -> {
                         animation.animateTo(
-                            widthPx,
+                            pagePx,
                             spring(dampingRatio = 0.9f, stiffness = 500f),
                         ) {
                             offsetX = value
@@ -179,7 +186,6 @@ internal fun CoverSkip(
                     var lockedHorizontal: Boolean? = null
                     var released = false
                     var widthPx = size.width.toFloat()
-                    var finalDx = 0f
                     val tracker = VelocityTracker()
                     try {
                         while (true) {
@@ -219,7 +225,6 @@ internal fun CoverSkip(
                             }
                             if (lockedHorizontal == true) {
                                 change.consume()
-                                finalDx = dx
                                 offsetX = coverSkipRubberBand(
                                     dx,
                                     widthPx,
@@ -249,27 +254,29 @@ internal fun CoverSkip(
                             } else {
                                 CoverSkipDecision.None
                             }
-                            settle(decision, widthPx)
+                            settle(decision, widthPx + CoverSkipPageGap.toPx())
                         } else {
                             offsetX = 0f
                         }
-                        // Keep the compiler honest about the drag distance even
-                        // when the gesture is handed back to the sheet.
-                        @Suppress("UNUSED_EXPRESSION")
-                        finalDx
                     }
                 }
             },
     ) {
-        val widthPx = maxWidth
+        val density = LocalDensity.current
+        val shiftPx = with(density) { maxWidth.toPx() + CoverSkipPageGap.toPx() }
+        // A missing neighbour is empty ground, never an error caption: with
+        // the walk as the source a null page only ever peeks out on a
+        // rubber-banded (blocked) edge.
         Box(
             Modifier
                 .fillMaxSize()
                 .graphicsLayer {
-                    translationX = offsetX - with(density) { widthPx.toPx() }
+                    translationX = offsetX - shiftPx
+                    scaleX = CoverSkipSideScale
+                    scaleY = CoverSkipSideScale
                 },
         ) {
-            StationArt(station = previous, modifier = Modifier.fillMaxSize())
+            previous?.let { StationArt(station = it, modifier = Modifier.fillMaxSize()) }
         }
         Box(
             Modifier
@@ -282,10 +289,12 @@ internal fun CoverSkip(
             Modifier
                 .fillMaxSize()
                 .graphicsLayer {
-                    translationX = offsetX + with(density) { widthPx.toPx() }
+                    translationX = offsetX + shiftPx
+                    scaleX = CoverSkipSideScale
+                    scaleY = CoverSkipSideScale
                 },
         ) {
-            StationArt(station = next, modifier = Modifier.fillMaxSize())
+            next?.let { StationArt(station = it, modifier = Modifier.fillMaxSize()) }
         }
     }
 }

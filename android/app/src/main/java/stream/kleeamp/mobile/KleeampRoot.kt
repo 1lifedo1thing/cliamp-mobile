@@ -772,13 +772,10 @@ private fun QueueCoverWarmer(
     player: PlayerConnection,
     station: Station?,
 ) {
-    val upNext by player.upNext.collectAsStateWithLifecycle()
-    val upNextIndex by player.upNextIndex.collectAsStateWithLifecycle()
     val resolver = LocalContext.current.contentResolver
-    // Same anchor the Up Next screen uses: the queue slot actually playing.
-    val anchorIdx = upNextIndex.takeIf { upNext.getOrNull(it)?.url == station?.url } ?: -1
-    val prev = upNext.getOrNull(anchorIdx - 1)
-    val next = upNext.getOrNull(anchorIdx + 1)
+    // Same targets the keys (and the cover pager) will land on: the full
+    // walk, not the bounded window, so a skip never cold-loads its cover.
+    val (prev, next) = player.peekAdjacent()
     LaunchedEffect(station?.id, prev?.id, next?.id) {
         val warm = listOfNotNull(prev, station, next)
         ArtResolve.prefetchSmall(warm, resolver, limit = 3)

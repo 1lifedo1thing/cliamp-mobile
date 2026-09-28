@@ -673,6 +673,57 @@ internal class QueueController(
     }
 
     /**
+     * Read-only preview of what prev/next would land on: the same list, the
+     * same anchor and the same walk [step] uses, without stepping, debouncing
+     * or publishing. Null per side exactly when that key would be a no-op.
+     * Cover previews read this, never the bounded Up Next window: the window
+     * holds one item for lone plays and a capped run for huge lists, while
+     * navigation walks the whole source, the launch fallback ring and the
+     * heard trail.
+     */
+    internal fun peekAdjacent(): Pair<Station?, Station?> {
+        if (model.source.isNotEmpty()) {
+            val src = model.source
+            val busUrl = PlaybackBus.station.value?.url
+            val liveHere = controller()?.let { c ->
+                if (c.mediaItemCount > 1) model.windowBase + c.currentMediaItemIndex else null
+            }
+            val here = QueuePolicy.resolveHere(
+                null,
+                QueuePolicy.modelHereIndex(model.windowBase, model.currentIndex, src, busUrl),
+                liveHere,
+                QueuePolicy.busHereIndex(src, busUrl),
+            )
+            val mode = QueuePolicy.stepMode(
+                sourceEmpty = false,
+                hasPending = false,
+                ringFallback = model.ringFallback,
+                shown = -1,
+            )
+            val (prevIdx, nextIdx) = QueuePolicy.peekTargets(src.size, here, mode, sourceNonEmpty = true)
+            // Same settle applyNavigation applies, so the preview is the
+            // landed index even where the mode and the settle disagree.
+            fun settle(i: Int?): Station? = i?.let {
+                if (model.ringFallback && src.size > 1) ((it % src.size) + src.size) % src.size
+                else it.coerceIn(0, src.lastIndex)
+            }?.let(src::get)
+            return settle(prevIdx) to settle(nextIdx)
+        }
+        // Cold: the keys try the heard trail first, then the fallback ring.
+        val histPrev = history.peek(-1)
+        val histNext = history.peek(1)
+        val src = model.fallback
+        if (src.isEmpty()) return histPrev to histNext
+        val shown = (PlaybackBus.station.value ?: src.firstOrNull())?.let { s ->
+            src.indexOfFirst { it.url == s.url }
+        } ?: -1
+        val (prevIdx, nextIdx) = QueuePolicy.peekTargets(
+            src.size, here = 0, QueuePolicy.StepMode.Cold(shown), sourceNonEmpty = false,
+        )
+        return (histPrev ?: prevIdx?.let(src::get)) to (histNext ?: nextIdx?.let(src::get))
+    }
+
+    /**
      * Reconciles the Up Next window against what Media3 is actually holding,
      * publishing when the audible item genuinely changed. Called from sync.
      * Resolution is by id, never by stored index: a stored index is what

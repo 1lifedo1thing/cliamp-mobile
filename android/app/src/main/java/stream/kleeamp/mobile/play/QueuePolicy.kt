@@ -193,6 +193,28 @@ object QueuePolicy {
     fun resolveHere(pending: Int?, modelHere: Int?, liveHere: Int?, busHere: Int?): Int =
         pending ?: modelHere ?: liveHere ?: busHere ?: 0
 
+    /**
+     * Preview indices for one prev/next step, without stepping: absolute
+     * indices into the walked list, or null per side when that key would be
+     * a no-op (Linear clamp at an end, single-item ring). Mirrors
+     * [stepTarget] plus the no-op guard in the navigation step, so cover
+     * previews show exactly what the keys would land on. Cold mode ignores
+     * [here] and walks from the shown item, like the real step.
+     */
+    fun peekTargets(
+        srcSize: Int,
+        here: Int,
+        mode: StepMode,
+        sourceNonEmpty: Boolean,
+    ): Pair<Int?, Int?> {
+        if (srcSize == 0) return null to null
+        val prev = stepTarget(mode, srcSize, here, -1)
+            .takeUnless { sourceNonEmpty && it == here }
+        val next = stepTarget(mode, srcSize, here, +1)
+            .takeUnless { sourceNonEmpty && it == here }
+        return prev to next
+    }
+
     /** Index of [busUrl] in [src], or -1 when absent. */
     fun busHereIndex(src: List<Station>, busUrl: String?): Int? =
         busUrl?.let { url -> src.indexOfFirst { it.url == url }.takeIf { it >= 0 } }
