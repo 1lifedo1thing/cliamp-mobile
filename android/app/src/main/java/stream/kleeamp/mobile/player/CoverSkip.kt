@@ -7,6 +7,8 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -18,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
@@ -34,9 +37,6 @@ import stream.kleeamp.mobile.theme.KleeampShape
 
 /** Gap between pager pages, so neighbours never read as one wide cover. */
 internal val CoverSkipPageGap = 14.dp
-
-/** Side pages rest slightly smaller, so the centered cover owns the plate. */
-internal const val CoverSkipSideScale = 0.92f
 
 /**
  * Settle decision for a cover swipe. Pure so it can be unit-tested on the JVM.
@@ -287,23 +287,23 @@ internal fun CoverSkip(
     ) {
         val density = LocalDensity.current
         val shiftPx = with(density) { maxWidth.toPx() + CoverSkipPageGap.toPx() }
-        // Landing transition: the incoming card grows to full scale as it
-        // reaches the center while the outgoing shrinks away — all driven by
-        // the same finger/animation progress, so cancels glide back too.
-        val progress = (offsetX / shiftPx).coerceIn(-1f, 1f)
-        val centerScale = 1f - (1f - CoverSkipSideScale) * abs(progress)
-        val prevScale = CoverSkipSideScale + (1f - CoverSkipSideScale) * progress.coerceIn(0f, 1f)
-        val nextScale = CoverSkipSideScale + (1f - CoverSkipSideScale) * (-progress).coerceIn(0f, 1f)
+        // Pure slide, no resize: every page holds full scale through the
+        // whole travel. Pages are plate-sized squares centred in a
+        // full-width viewport, so they glide over ground and are cut at
+        // the screen edge instead of diving under background mid-screen.
         // A missing neighbour is empty ground, never an error caption: with
         // the walk as the source a null page only ever peeks out on a
         // rubber-banded (blocked) edge.
+        // Commit physics reads the plate width, not the viewport: the
+        // viewport is edge to edge while plates keep inline margins.
+        val platePx = with(density) { maxHeight.toPx() }
         Box(
             Modifier
-                .fillMaxSize()
+                .fillMaxHeight()
+                .aspectRatio(1f, matchHeightConstraintsFirst = true)
+                .align(Alignment.Center)
                 .graphicsLayer {
                     translationX = offsetX - shiftPx
-                    scaleX = prevScale
-                    scaleY = prevScale
                     // Clipped to the plate shape: an unclipped swipe layer
                     // composites square and leaks gray corners mid-swipe.
                     clip = true
@@ -321,11 +321,11 @@ internal fun CoverSkip(
         }
         Box(
             Modifier
-                .fillMaxSize()
+                .fillMaxHeight()
+                .aspectRatio(1f, matchHeightConstraintsFirst = true)
+                .align(Alignment.Center)
                 .graphicsLayer {
                     translationX = offsetX
-                    scaleX = centerScale
-                    scaleY = centerScale
                     clip = true
                     shape = RoundedCornerShape(KleeampShape.large)
                 },
@@ -339,11 +339,11 @@ internal fun CoverSkip(
         }
         Box(
             Modifier
-                .fillMaxSize()
+                .fillMaxHeight()
+                .aspectRatio(1f, matchHeightConstraintsFirst = true)
+                .align(Alignment.Center)
                 .graphicsLayer {
                     translationX = offsetX + shiftPx
-                    scaleX = nextScale
-                    scaleY = nextScale
                     clip = true
                     shape = RoundedCornerShape(KleeampShape.large)
                 },

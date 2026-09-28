@@ -543,6 +543,10 @@ fun MarqueeLabel(
     var textWidth by remember(text) { mutableFloatStateOf(0f) }
     // Overflow means the text is wider than the space it sits in.
     val overflow = textWidth > boxWidth && boxWidth > 0f
+    // An empty string measures shorter than a text line (a few px), which
+    // the flex layout above the player would feed into the plate size -
+    // radio metadata clears between tracks, so the plate would breathe on
+    // every switch. A lone space holds exactly one line height instead.
 
     val transition = rememberInfiniteTransition(label = "marquee")
     val travel = (textWidth + 24f).coerceAtLeast(1f)
@@ -572,7 +576,7 @@ fun MarqueeLabel(
             .clipToBounds(),
     ) {
         Text(
-            text = text,
+            text = text.ifEmpty { " " },
             style = style,
             color = color,
             maxLines = 1,

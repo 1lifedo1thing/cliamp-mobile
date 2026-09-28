@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -44,7 +45,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -171,9 +171,11 @@ internal fun PortraitPlayer(
 ) {
     val p = LocalPalette.current
     // The rows below the plate indent to the plate's own edges. The plate
-    // is centred and height-bound, so its size is only known after layout:
-    // measure it once placed, then inset the text, meter and keys by the
-    // plate's frame margin minus the Gutter the column already applies.
+    // is centred and height-bound; the pager viewport runs edge to edge
+    // so sliding plates are cut at the screen edge, never mid-screen.
+    // Plate size is known after layout: SideEffect below publishes it
+    // once placed, then the text, meter and keys inset by the plate's
+    // frame margin. Each row carries its own Gutter explicitly.
     // The plate size never depends on sibling padding (height-bound off
     // the flex remainder, width-bound off the frame), so the inset is
     // stable and cannot feed back into the plate size.
@@ -209,8 +211,7 @@ internal fun PortraitPlayer(
         Column(
             Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = Gutter),
+                .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
         ) {
             // The art plate and the text block below it share a flexed block
@@ -225,7 +226,7 @@ internal fun PortraitPlayer(
                     .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Top),
             ) {
-                // One fixed plate: a perfect 1:1 square at 90% of the
+                // One fixed plate: a perfect 1:1 square at 84% of the
                 // screen width, centred with even margins both sides.
                 // minOf with maxHeight keeps it square, never squeezed,
                 // on short frames. Switching stations never moves the
@@ -236,8 +237,17 @@ internal fun PortraitPlayer(
                         .fillMaxWidth(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    // Height-bound: leave a small breather above and below the plate.
-                    val side = minOf((maxWidth + Gutter * 2) * 0.9f, maxHeight - 12.dp)
+                    // Height-bound: leave a breather above and below the plate
+                    // so swiping plates stay inside their own viewport.
+                    // The viewport itself is edge to edge (maxWidth is the
+                    // screen now); the plate keeps its inline margins by
+                    // staying 84% wide and centred, so plates glide over
+                    // ground and are cut at the screen edge instead of
+                    // diving under background mid-screen.
+                    val side = minOf(maxWidth * 0.84f, maxHeight - 20.dp)
+                    SideEffect {
+                        plateWidthPx = with(density) { side.roundToPx() }
+                    }
                     CoverSkip(
                         current = model.shownStation,
                         previous = model.previousStation,
@@ -246,7 +256,7 @@ internal fun PortraitPlayer(
                         canSkipNext = model.state.hasNext,
                         onSkipPrevious = actions.onPrev,
                         onSkipNext = actions.onNext,
-                        modifier = Modifier.size(side).onSizeChanged { plateWidthPx = it.width },
+                        modifier = Modifier.fillMaxWidth().height(side),
                     )
                 }
 
@@ -256,7 +266,7 @@ internal fun PortraitPlayer(
                 // never advance or restart the song. Only the small action
                 // icons in the strip above stay live.
                 Column(
-                    Modifier.padding(horizontal = edge),
+                    Modifier.padding(horizontal = Gutter + edge),
                     verticalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
                     PlayerStatusRow(
@@ -267,9 +277,18 @@ internal fun PortraitPlayer(
                 }
             }
 
-            PlayerTransport(model, actions, Modifier.padding(horizontal = edge), meterHeight = 90.dp)
+            PlayerTransport(
+                model,
+                actions,
+                Modifier.padding(horizontal = Gutter + edge),
+                meterHeight = 90.dp,
+            )
 
-            TransportKeys(model, actions, Modifier.padding(horizontal = edge))
+            TransportKeys(
+                model,
+                actions,
+                Modifier.padding(horizontal = Gutter + edge),
+            )
         }
         Spacer(Modifier.height(4.dp))
     }
@@ -300,7 +319,7 @@ internal fun LandscapePlayer(
             .padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val side = minOf(frameHeight - 76.dp, (frameWidth - Gutter * 2) * 0.44f).coerceIn(96.dp, 360.dp)
+        val side = minOf(frameHeight - 88.dp, (frameWidth - Gutter * 2) * 0.40f).coerceIn(96.dp, 360.dp)
         Column(
             Modifier
                 .weight(0.95f)
