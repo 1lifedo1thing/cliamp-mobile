@@ -372,8 +372,11 @@ internal fun SheetStatusBarIcons() {
     val view = LocalView.current
     val dark = LocalPalette.current.dark
     SideEffect {
-        val window = (view.context as? DialogWindowProvider)?.window ?: return@SideEffect
-        WindowInsetsControllerCompat(window, view).isAppearanceLightStatusBars = !dark
+        val window = (view.parent as? DialogWindowProvider)?.window ?: return@SideEffect
+        WindowInsetsControllerCompat(window, view).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
+        }
     }
 }
 
@@ -390,7 +393,6 @@ fun MenuSheetShell(
     content: @Composable () -> Unit,
 ) {
     val p = LocalPalette.current
-    SheetStatusBarIcons()
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -398,8 +400,12 @@ fun MenuSheetShell(
         containerColor = p.panelRaised,
         contentColor = p.ink,
         scrimColor = Color.Black.copy(alpha = 0.55f),
-        dragHandle = { SheetDragHandle() },
+        dragHandle = {
+            SheetStatusBarIcons()
+            SheetDragHandle()
+        },
     ) {
+        SheetStatusBarIcons()
         Column(Modifier.fillMaxWidth().padding(horizontal = Gutter)) {
             header()
             HairlineDivider(region = true)

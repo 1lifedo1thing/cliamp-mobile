@@ -43,7 +43,6 @@ fun NowPlayingSheet(
     onDismiss: () -> Unit,
 ) {
     val p = LocalPalette.current
-    SheetStatusBarIcons()
     // Dismiss only past half the height: a shorter pull always settles
     // back, however fast the finger was moving on release.
     val travel = rememberSwipeTravel()
@@ -65,6 +64,7 @@ fun NowPlayingSheet(
         // Padded below the status bar: the handle must never sit under
         // the time and notification icons.
         dragHandle = {
+            SheetStatusBarIcons()
             Box(
                 Modifier
                     .statusBarsPadding()
@@ -77,6 +77,7 @@ fun NowPlayingSheet(
         // sheet must not pad twice.
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
+        SheetStatusBarIcons()
         // Travel observer only: consumes nothing, the sheet keeps its own
         // finger follow.
         Box(Modifier.fillMaxSize().trackSwipeTravel(travel)) {
