@@ -81,6 +81,8 @@ class PlayerConnection(
     fun setFallbackSource(list: List<Station>) = queue.setFallbackSource(list)
     fun stationForMediaId(id: String): Station? = queue.stationForMediaId(id)
     internal fun upcomingStations(count: Int = 4): List<Station> = queue.upcomingStations(count)
+    /** Read-only preview of what prev/next would land on; null where a key would no-op. */
+    internal fun peekAdjacent(): Pair<Station?, Station?> = queue.peekAdjacent()
     fun playUpNextEntry(index: Int) = queue.playUpNextEntry(index)
     fun play(station: Station, from: List<Station> = emptyList()) = queue.play(station, from)
     fun toggleShuffle() = queue.toggleShuffle()

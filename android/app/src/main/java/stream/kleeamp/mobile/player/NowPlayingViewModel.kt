@@ -22,6 +22,8 @@ class NowPlayingViewModel(
     data class UiState(
         val playerState: PlayerState = PlayerState(),
         val shownStation: Station? = null,
+        val previousStation: Station? = null,
+        val nextStation: Station? = null,
         val streamTitle: String = "",
         val upNextCount: Int = 0,
         val reconnect: Int = 0,
@@ -94,9 +96,16 @@ class NowPlayingViewModel(
         val activeIndex = upNextIndex
             .takeIf { bus.station != null && upNext.getOrNull(it)?.url == bus.station.url }
             ?: -1
+        // Cover previews follow the keys, not the bounded Up Next window: the
+        // window holds one item for lone plays and a capped run for huge
+        // lists, while prev/next walk the whole source, the launch fallback
+        // ring and the heard trail. peekAdjacent mirrors that walk read-only.
+        val (peekPrev, peekNext) = player.peekAdjacent()
         UiState(
             playerState = bus.playerState,
             shownStation = shownStation,
+            previousStation = peekPrev,
+            nextStation = peekNext,
             streamTitle = bus.streamTitle,
             upNextCount = upNextIndices(upNext.size, activeIndex).count(),
             reconnect = bus.reconnect,

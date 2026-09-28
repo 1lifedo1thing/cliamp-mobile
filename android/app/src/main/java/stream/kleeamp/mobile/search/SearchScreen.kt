@@ -131,6 +131,7 @@ fun SearchScreen(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     placeholder = "Search",
                     imeAction = ImeAction.Go,
+                    autoFocus = true,
                     onAction = { vm.onEvent(SearchViewModel.Event.Submitted(query)) },
                 )
             }

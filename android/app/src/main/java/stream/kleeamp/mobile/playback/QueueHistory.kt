@@ -47,6 +47,15 @@ internal class QueueHistory {
     }
 
     /**
+     * Read-only look at the trail [delta] steps from the tip: what [back]
+     * (-1) or [forward] (+1) would land on, without stepping. Null when out
+     * of range. Lets cover previews show the history walk without moving it.
+     */
+    fun peek(delta: Int): Station? = synchronized(past) {
+        past.getOrNull(pastIndex + delta)
+    }
+
+    /**
      * Jump target for a history item without recording (the caller pre-stepped,
      * so the record is a duplicate by construction). Returns the absolute
      * index when the item lives in the current context, else null to start it

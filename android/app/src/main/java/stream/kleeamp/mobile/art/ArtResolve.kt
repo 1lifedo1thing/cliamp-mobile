@@ -113,6 +113,27 @@ object ArtResolve {
     }
 
     /**
+     * Full-size twin of [prefetchSmall] for the skip path: the hero paints
+     * from memory on the first frame when the cover is already cached, so
+     * warming the stations around the playing one turns a skip into one
+     * quick dissolve instead of plate, thumbnail preview and full art
+     * arriving in slow steps. Kept tiny - full decodes are heavy.
+     */
+    suspend fun prefetchFull(
+        stations: List<Station>,
+        resolver: ContentResolver,
+        limit: Int = 6,
+    ): Unit = supervisorScope {
+        stations.asSequence()
+            .filter { it.source != StationSource.Cliamp }
+            .take(limit)
+            .map { s -> async { full(s, resolver) } }
+            .toList()
+            .awaitAll()
+        Unit
+    }
+
+    /**
      * Full-size twin for large tiles: warms the bytes on disk, which the
      * small path then decodes without the network. Kept to the first screen
      * of tiles - full decodes are heavy.

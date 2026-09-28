@@ -333,4 +333,31 @@ class QueuePolicyTest {
         assertFalse(extend(oneToOne = true, base = 0, size = 60, source = 60, index = 58))
         assertFalse(extend(oneToOne = false, base = 0, size = 60, source = 200, index = 58))
     }
+
+    @Test
+    fun peekTargetsLinearNullsClampedEnds() {
+        val linear = QueuePolicy.StepMode.Linear
+        assertEquals(2 to 4, QueuePolicy.peekTargets(10, here = 3, linear, sourceNonEmpty = true))
+        // At either end the clamped side is a key no-op, so no cover there.
+        assertEquals(null to 1, QueuePolicy.peekTargets(10, here = 0, linear, sourceNonEmpty = true))
+        assertEquals(8 to null, QueuePolicy.peekTargets(10, here = 9, linear, sourceNonEmpty = true))
+        // A lone item has nowhere to go in either direction.
+        assertEquals(null to null, QueuePolicy.peekTargets(1, here = 0, linear, sourceNonEmpty = true))
+    }
+
+    @Test
+    fun peekTargetsRingWrapsUnlessLone() {
+        val ring = QueuePolicy.StepMode.Ring
+        assertEquals(5 to 1, QueuePolicy.peekTargets(6, here = 0, ring, sourceNonEmpty = true))
+        assertEquals(4 to 0, QueuePolicy.peekTargets(6, here = 5, ring, sourceNonEmpty = true))
+        assertEquals(null to null, QueuePolicy.peekTargets(1, here = 0, ring, sourceNonEmpty = true))
+    }
+
+    @Test
+    fun peekTargetsColdWalksFromShown() {
+        assertEquals(2 to 4, QueuePolicy.peekTargets(10, here = 0, QueuePolicy.StepMode.Cold(3), sourceNonEmpty = false))
+        // Unknown shown item previews the head walk, like the keys.
+        assertEquals(0 to 1, QueuePolicy.peekTargets(10, here = 0, QueuePolicy.StepMode.Cold(-1), sourceNonEmpty = false))
+        assertEquals(null to null, QueuePolicy.peekTargets(0, here = 0, QueuePolicy.StepMode.Cold(-1), sourceNonEmpty = false))
+    }
 }

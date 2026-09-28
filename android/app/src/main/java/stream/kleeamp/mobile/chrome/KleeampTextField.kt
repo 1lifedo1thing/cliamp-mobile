@@ -6,16 +6,21 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import kotlinx.coroutines.delay
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Mono
@@ -52,8 +57,18 @@ fun KleeampTextField(
 ) {
     val p = LocalPalette.current
     val requester = remember { FocusRequester() }
+    var focused by remember { mutableStateOf(false) }
 
-    LaunchedEffect(autoFocus) { if (autoFocus) runCatching { requester.requestFocus() } }
+    // A fresh destination can take a beat before it accepts focus, so a
+    // single entry request can die silently: retry until focus is observed.
+    LaunchedEffect(autoFocus) {
+        if (!autoFocus) return@LaunchedEffect
+        repeat(20) {
+            if (focused) return@LaunchedEffect
+            runCatching { requester.requestFocus() }
+            delay(100)
+        }
+    }
 
     val multiline = lines > 1
 
@@ -81,7 +96,7 @@ fun KleeampTextField(
             onSend = { onAction() },
             onNext = { onAction() },
         ),
-        modifier = modifier.focusRequester(requester),
+        modifier = modifier.focusRequester(requester).onFocusChanged { focused = it.isFocused },
         decorationBox = { inner ->
             Box {
                 if (value.isEmpty() && placeholder.isNotEmpty()) {
