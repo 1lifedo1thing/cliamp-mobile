@@ -1,0 +1,291 @@
+package stream.kleeamp.mobile.player
+
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.unit.dp
+import kotlin.math.abs
+import kotlin.math.max
+import kotlinx.coroutines.launch
+import stream.kleeamp.mobile.model.Station
+
+/**
+ * Settle decision for a cover swipe. Pure so it can be unit-tested on the JVM.
+ */
+internal enum class CoverSkipDecision {
+    None,
+    Next,
+    Previous,
+}
+
+/**
+ * Settle math for [CoverSkip].
+ *
+ * @param dx finger displacement in px (negative = swipe left = next).
+ * @param vx release velocity in px/s (negative = moving left).
+ * @param width cover width in px.
+ * @param floor minimum commit distance in px (80.dp).
+ * @param fling fling commit velocity in px/s (900.dp/s).
+ */
+internal fun coverSkipCommit(
+    dx: Float,
+    vx: Float,
+    width: Float,
+    floor: Float,
+    fling: Float,
+    canNext: Boolean,
+    canPrev: Boolean,
+    lockedHorizontal: Boolean,
+): CoverSkipDecision {
+    if (!lockedHorizontal) return CoverSkipDecision.None
+    if (width <= 0f) return CoverSkipDecision.None
+    if (dx == 0f) return CoverSkipDecision.None
+    val threshold = max(floor, 0.28f * width)
+    return if (dx < 0f) {
+        if (!canNext) return CoverSkipDecision.None
+        if (-dx >= threshold || -vx >= fling) CoverSkipDecision.Next else CoverSkipDecision.None
+    } else {
+        if (!canPrev) return CoverSkipDecision.None
+        if (dx >= threshold || vx >= fling) CoverSkipDecision.Previous else CoverSkipDecision.None
+    }
+}
+
+/** Blocked directions never travel past ~18% of the width. */
+internal fun coverSkipRubberBand(
+    dx: Float,
+    width: Float,
+    canNext: Boolean,
+    canPrev: Boolean,
+): Float {
+    if (width <= 0f) return 0f
+    val edge = 0.18f * width
+    return when {
+        dx < 0f && !canNext -> (dx * 0.35f).coerceIn(-edge, 0f)
+        dx > 0f && !canPrev -> (dx * 0.35f).coerceIn(0f, edge)
+        else -> dx.coerceIn(-width, width)
+    }
+}
+
+// Single gesture recognizer; splitting risks touch behavior.
+@Suppress("CyclomaticComplexMethod", "LoopWithTooManyJumpStatements")
+@Composable
+internal fun CoverSkip(
+    current: Station?,
+    previous: Station?,
+    next: Station?,
+    canSkipPrevious: Boolean,
+    canSkipNext: Boolean,
+    onSkipPrevious: () -> Unit,
+    onSkipNext: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    var settling by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val animation = remember { Animatable(0f) }
+    val latestOnPrev by rememberUpdatedState(onSkipPrevious)
+    val latestOnNext by rememberUpdatedState(onSkipNext)
+    val latestCanPrev by rememberUpdatedState(canSkipPrevious)
+    val latestCanNext by rememberUpdatedState(canSkipNext)
+
+    // A new cover always starts centered: after a commit we snap to 0, and an
+    // external prev/next key lands here with the offset already at 0.
+    val currentId = current?.id
+    LaunchedEffect(currentId) {
+        if (!settling && offsetX != 0f) {
+            animation.snapTo(0f)
+            offsetX = 0f
+        }
+    }
+
+    fun settle(decision: CoverSkipDecision, widthPx: Float) {
+        settling = true
+        scope.launch {
+            try {
+                animation.snapTo(offsetX)
+                when (decision) {
+                    CoverSkipDecision.Next -> {
+                        animation.animateTo(
+                            -widthPx,
+                            spring(dampingRatio = 0.9f, stiffness = 500f),
+                        ) {
+                            offsetX = value
+                        }
+                        latestOnNext()
+                        animation.snapTo(0f)
+                        offsetX = 0f
+                    }
+                    CoverSkipDecision.Previous -> {
+                        animation.animateTo(
+                            widthPx,
+                            spring(dampingRatio = 0.9f, stiffness = 500f),
+                        ) {
+                            offsetX = value
+                        }
+                        latestOnPrev()
+                        animation.snapTo(0f)
+                        offsetX = 0f
+                    }
+                    CoverSkipDecision.None -> {
+                        animation.animateTo(
+                            0f,
+                            spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMediumLow,
+                            ),
+                        ) {
+                            offsetX = value
+                        }
+                        offsetX = 0f
+                    }
+                }
+            } finally {
+                offsetX = 0f
+                settling = false
+            }
+        }
+    }
+
+    BoxWithConstraints(
+        modifier
+            .clipToBounds()
+            .pointerInput(Unit) {
+                val axisLockPx = 16.dp.toPx()
+                val floorPx = 80.dp.toPx()
+                val flingPx = 900.dp.toPx()
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    if (settling) return@awaitEachGesture
+                    var lockedHorizontal: Boolean? = null
+                    var released = false
+                    var widthPx = size.width.toFloat()
+                    var finalDx = 0f
+                    val tracker = VelocityTracker()
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change =
+                                event.changes.find { it.id == down.id } ?: break
+                            if (change.isConsumed ||
+                                event.changes.count { it.pressed } > 1
+                            ) {
+                                break
+                            }
+                            if (!change.pressed) {
+                                released = true
+                                if (lockedHorizontal == true) change.consume()
+                                break
+                            }
+                            val dx = change.position.x - down.position.x
+                            val dy = change.position.y - down.position.y
+                            tracker.addPosition(change.uptimeMillis, change.position)
+                            widthPx = size.width.toFloat()
+                            if (lockedHorizontal == null) {
+                                val slop = viewConfiguration.touchSlop
+                                val lockDist = max(slop, axisLockPx)
+                                if (abs(dx) < lockDist && abs(dy) < lockDist) {
+                                    // A long press or the sheet can win while we wait.
+                                    val finalEvent =
+                                        awaitPointerEvent(PointerEventPass.Final)
+                                    if (finalEvent.changes.any { it.isConsumed }) break
+                                    continue
+                                }
+                                lockedHorizontal = abs(dx) > abs(dy)
+                                if (lockedHorizontal == false) {
+                                    // Vertical lock: consume nothing so the
+                                    // sheet dismiss keeps its sequence.
+                                    break
+                                }
+                            }
+                            if (lockedHorizontal == true) {
+                                change.consume()
+                                finalDx = dx
+                                offsetX = coverSkipRubberBand(
+                                    dx,
+                                    widthPx,
+                                    latestCanNext,
+                                    latestCanPrev,
+                                )
+                            }
+                        }
+                    } finally {
+                        if (lockedHorizontal == true && (released || offsetX != 0f)) {
+                            val vx = try {
+                                tracker.calculateVelocity().x
+                            } catch (_: Exception) {
+                                0f
+                            }
+                            val decision = if (released) {
+                                coverSkipCommit(
+                                    dx = offsetX,
+                                    vx = vx,
+                                    width = widthPx,
+                                    floor = floorPx,
+                                    fling = flingPx,
+                                    canNext = latestCanNext,
+                                    canPrev = latestCanPrev,
+                                    lockedHorizontal = true,
+                                )
+                            } else {
+                                CoverSkipDecision.None
+                            }
+                            settle(decision, widthPx)
+                        } else {
+                            offsetX = 0f
+                        }
+                        // Keep the compiler honest about the drag distance even
+                        // when the gesture is handed back to the sheet.
+                        @Suppress("UNUSED_EXPRESSION")
+                        finalDx
+                    }
+                }
+            },
+    ) {
+        val widthPx = maxWidth
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = offsetX - with(density) { widthPx.toPx() }
+                },
+        ) {
+            StationArt(station = previous, modifier = Modifier.fillMaxSize())
+        }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer { translationX = offsetX },
+        ) {
+            StationArt(station = current, modifier = Modifier.fillMaxSize())
+        }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = offsetX + with(density) { widthPx.toPx() }
+                },
+        ) {
+            StationArt(station = next, modifier = Modifier.fillMaxSize())
+        }
+    }
+}

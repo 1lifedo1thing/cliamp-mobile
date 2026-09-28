@@ -239,8 +239,14 @@ internal fun PortraitPlayer(
                 ) {
                     // Height-bound: leave a small breather above and below the plate.
                     val side = minOf((maxWidth + Gutter * 2) * 0.9f, maxHeight - 12.dp)
-                    StationArt(
-                        station = model.shownStation,
+                    CoverSkip(
+                        current = model.shownStation,
+                        previous = model.previousStation,
+                        next = model.nextStation,
+                        canSkipPrevious = model.state.hasPrev,
+                        canSkipNext = model.state.hasNext,
+                        onSkipPrevious = actions.onPrev,
+                        onSkipNext = actions.onNext,
                         modifier = Modifier.size(side).onSizeChanged { plateWidthPx = it.width },
                     )
                 }
@@ -310,8 +316,14 @@ internal fun LandscapePlayer(
                 Modifier.width(side),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                StationArt(
-                    station = model.shownStation,
+                CoverSkip(
+                    current = model.shownStation,
+                    previous = model.previousStation,
+                    next = model.nextStation,
+                    canSkipPrevious = model.state.hasPrev,
+                    canSkipNext = model.state.hasNext,
+                    onSkipPrevious = actions.onPrev,
+                    onSkipNext = actions.onNext,
                     modifier = Modifier.size(side),
                 )
                 PlayerStatusRow(model, actions)

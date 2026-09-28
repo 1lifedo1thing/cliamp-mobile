@@ -98,6 +98,8 @@ import stream.kleeamp.mobile.model.NowPlaying
 internal data class PlayerModel(
     val state: PlayerState,
     val shownStation: Station?,
+    val previousStation: Station?,
+    val nextStation: Station?,
     val streamTitle: String,
     val upNextCount: Int,
     val reconnect: Int,
@@ -159,6 +161,8 @@ fun NowPlayingScreen(
     val model = PlayerModel(
         state = uiState.playerState,
         shownStation = uiState.shownStation,
+        previousStation = uiState.previousStation,
+        nextStation = uiState.nextStation,
         streamTitle = uiState.streamTitle,
         upNextCount = uiState.upNextCount,
         reconnect = uiState.reconnect,

@@ -22,6 +22,8 @@ class NowPlayingViewModel(
     data class UiState(
         val playerState: PlayerState = PlayerState(),
         val shownStation: Station? = null,
+        val previousStation: Station? = null,
+        val nextStation: Station? = null,
         val streamTitle: String = "",
         val upNextCount: Int = 0,
         val reconnect: Int = 0,
@@ -97,6 +99,8 @@ class NowPlayingViewModel(
         UiState(
             playerState = bus.playerState,
             shownStation = shownStation,
+            previousStation = upNext.getOrNull(activeIndex - 1),
+            nextStation = upNext.getOrNull(activeIndex + 1),
             streamTitle = bus.streamTitle,
             upNextCount = upNextIndices(upNext.size, activeIndex).count(),
             reconnect = bus.reconnect,
