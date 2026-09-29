@@ -1,15 +1,14 @@
 package stream.kleeamp.mobile.chrome
 
+import android.text.TextDirectionHeuristics
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.StartOffset
-import androidx.compose.animation.core.StartOffsetType
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -45,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -528,6 +528,14 @@ fun StreamingRule(
  * unbounded - or Compose breaks it at the parent's edge to honour maxLines and
  * reports back a width that can never exceed the box, so nothing ever looks
  * like it overflows and the scroll never starts.
+ *
+ * Direction-aware: an RTL title (first strong char) starts from its own
+ * start and reads forward, mirroring the LTR trip. Short titles of either
+ * direction sit at the start, so switching never moves resting text.
+ *
+ * Seamless loop, Samsung-style: the title is laid out twice with a gap and
+ * the strip slides exactly one copy per cycle, so the Restart snap lands
+ * on identical pixels instead of flinging back across the box.
  */
 @Composable
 fun MarqueeLabel(
@@ -537,37 +545,61 @@ fun MarqueeLabel(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
-    // Measured widths belong to this text: a track change must not inherit
-    // the old title's width for a frame and flash the wrong scroll offset.
-    var boxWidth by remember(text) { mutableFloatStateOf(0f) }
+    // The box belongs to the layout, not the text: it keeps its measured
+    // width across track changes (a track change must still not inherit
+    // the old title's *text* width, so that one stays keyed below).
+    // Keying the box on text was the stations bug: the box never
+    // remeasures on a text swap, so the reset width stuck at 0 and every
+    // marquee after the first title stayed pinned.
+    var boxWidth by remember { mutableFloatStateOf(0f) }
     var textWidth by remember(text) { mutableFloatStateOf(0f) }
     // Overflow means the text is wider than the space it sits in.
     val overflow = textWidth > boxWidth && boxWidth > 0f
+    // First-strong direction: neutrals and digits defer to the first real
+    // letter, blanks stay LTR.
+    val rtl = remember(text) {
+        TextDirectionHeuristics.FIRSTSTRONG_LTR.isRtl(text, 0, text.length)
+    }
     // An empty string measures shorter than a text line (a few px), which
     // the flex layout above the player would feed into the plate size -
     // radio metadata clears between tracks, so the plate would breathe on
     // every switch. A lone space holds exactly one line height instead.
 
-    val transition = rememberInfiniteTransition(label = "marquee")
-    val travel = (textWidth + 24f).coerceAtLeast(1f)
+    // Keyed on the text only: every song restarts from its own beginning.
+    // Never key on overflow: it flips during initial measure and the
+    // restart pins the scroll at zero (observed frozen on-device).
+    val transition = key(text) { rememberInfiniteTransition(label = "marquee") }
+    val gapPx = with(density) { MarqueeGap.toPx() }
+    // One full loop slides exactly one copy past: the strip holds the title
+    // twice, so the snap lands on identical pixels. Keyed on overflow too,
+    // so the scroll always enters from a fresh hold, never mid-flight.
+    val loop = (textWidth + gapPx).coerceAtLeast(1f)
+    // Keyed on the text (see above): every song starts its scroll from its
+    // own beginning, never continuing the previous title's offset.
+    val scrollMs = (loop * MARQUEE_MS_PER_PX).toInt().coerceAtLeast(1)
     val offsetX by transition.animateFloat(
         initialValue = 0f,
-        targetValue = -travel,
+        targetValue = -loop,
         animationSpec = infiniteRepeatable(
-            // A reading pace, not a ticker: about 55px a second, and it sits
-            // still for a moment first so the start of the name is readable
-            // before anything moves.
-            animation = tween(
-                durationMillis = (travel * MARQUEE_MS_PER_PX).toInt().coerceAtLeast(4000),
-                easing = LinearEasing,
-            ),
+            // Hold, read, hold: the start sits still so the beginning is
+            // readable, the text glides through at ~55px/s, the end rests
+            // before the loop repeats from the identical copy.
+            animation = keyframes {
+                durationMillis = MARQUEE_HOLD_MS + scrollMs + MARQUEE_END_HOLD_MS
+                0f at 0
+                0f at MARQUEE_HOLD_MS with LinearEasing
+                -loop at MARQUEE_HOLD_MS + scrollMs
+                -loop at durationMillis
+            },
             repeatMode = RepeatMode.Restart,
-            initialStartOffset = StartOffset(MARQUEE_HOLD_MS, StartOffsetType.Delay),
         ),
         label = "marqueeScroll",
     )
     // Only run the animation when the text actually overflows; otherwise pin to 0.
-    val x = if (overflow) offsetX else 0f
+    // RTL starts one copy-width in and rides the mirrored trip, so its own
+    // start shows first and reads forward.
+    val base = if (rtl && overflow) boxWidth - textWidth else 0f
+    val x = if (!overflow) 0f else if (rtl) base - offsetX else base + offsetX
 
     Box(
         modifier
@@ -575,20 +607,44 @@ fun MarqueeLabel(
             .onSizeChanged { boxWidth = it.width.toFloat() }
             .clipToBounds(),
     ) {
-        Text(
-            text = text.ifEmpty { " " },
-            style = style,
-            color = color,
-            maxLines = 1,
-            softWrap = false,
-            onTextLayout = { r: TextLayoutResult ->
-                textWidth = r.size.width.toFloat()
-            },
-            modifier = Modifier
-                .wrapContentWidth(Alignment.Start, unbounded = true)
-                .offset(x = with(density) { x.toDp() }),
-        )
+        // Fitting titles render once and sit still; only overflow loops.
+        if (overflow) {
+            Row(
+                modifier = Modifier
+                    .wrapContentWidth(Alignment.Start, unbounded = true)
+                    .offset(x = with(density) { x.toDp() }),
+                horizontalArrangement = Arrangement.spacedBy(MarqueeGap),
+            ) {
+                MarqueeText(text, style, color, onWidth = { textWidth = it })
+                MarqueeText(text, style, color, onWidth = {})
+            }
+        } else {
+            MarqueeText(text, style, color, onWidth = { textWidth = it })
+        }
     }
+}
+
+/** One copy of the looping strip: reports its unbounded width so overflow engages. */
+@Composable
+private fun MarqueeText(
+    text: String,
+    style: TextStyle,
+    color: Color,
+    onWidth: (Float) -> Unit,
+) {
+    Text(
+        text = text.ifEmpty { " " },
+        style = style,
+        color = color,
+        maxLines = 1,
+        softWrap = false,
+        onTextLayout = { r: TextLayoutResult ->
+            onWidth(r.size.width.toFloat())
+        },
+        // Unbounded: the copy must report its full width, never the box's,
+        // or overflow stays false and the loop never starts.
+        modifier = Modifier.wrapContentWidth(Alignment.Start, unbounded = true),
+    )
 }
 
 /** Milliseconds per pixel of travel - roughly 55px a second. */
@@ -596,6 +652,12 @@ private const val MARQUEE_MS_PER_PX = 18f
 
 /** How long the label sits still before each pass. */
 private const val MARQUEE_HOLD_MS = 1200
+
+/** How long the label rests on the end before the loop repeats. */
+private const val MARQUEE_END_HOLD_MS = 1500
+
+/** Breathing room between the looping copies. */
+private val MarqueeGap = 48.dp
 
 /**
  * The filter box: narrows whatever list sits below it by name, client-side.

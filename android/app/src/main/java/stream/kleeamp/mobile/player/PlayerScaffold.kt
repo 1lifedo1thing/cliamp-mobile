@@ -202,7 +202,8 @@ internal fun PortraitPlayer(
             Spacer(Modifier.weight(1f))
             UpNextButton(model.upNextCount, actions.onOpenUpNext)
         }
-        Spacer(Modifier.height(4.dp))
+        // Tight: buys room back for the plate (see pinned text lines).
+        Spacer(Modifier.height(2.dp))
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
         // it is the first thing to give way. Compose has no shrink factor, so
         // the plate is given whatever height is left once the text block below
@@ -212,7 +213,7 @@ internal fun PortraitPlayer(
             Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
+            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
         ) {
             // The art plate and the text block below it share a flexed block
             // that absorbs however tall a long station name or stream title
@@ -224,10 +225,10 @@ internal fun PortraitPlayer(
                 Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Top),
+                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Top),
             ) {
-                // One fixed plate: a perfect 1:1 square at 84% of the
-                // screen width, centred with even margins both sides.
+                // One fixed plate: the full column width capped at 340dp,
+                // centred with even margins both sides - the v0.4.0 recipe.
                 // minOf with maxHeight keeps it square, never squeezed,
                 // on short frames. Switching stations never moves the
                 // text, meter or keys.
@@ -237,14 +238,12 @@ internal fun PortraitPlayer(
                         .fillMaxWidth(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    // Height-bound: leave a breather above and below the plate
-                    // so swiping plates stay inside their own viewport.
+                    // Height-bound: leave a small breather above and below the plate.
                     // The viewport itself is edge to edge (maxWidth is the
-                    // screen now); the plate keeps its inline margins by
-                    // staying 84% wide and centred, so plates glide over
-                    // ground and are cut at the screen edge instead of
-                    // diving under background mid-screen.
-                    val side = minOf(maxWidth * 0.84f, maxHeight - 20.dp)
+                    // screen now); plates glide over ground and are cut at
+                    // the screen edge instead of diving under background
+                    // mid-screen.
+                    val side = minOf(maxWidth, maxHeight - 12.dp, 340.dp)
                     SideEffect {
                         plateWidthPx = with(density) { side.roundToPx() }
                     }
@@ -267,7 +266,7 @@ internal fun PortraitPlayer(
                 // icons in the strip above stay live.
                 Column(
                     Modifier.padding(horizontal = Gutter + edge),
-                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
                     PlayerStatusRow(
                         model = model,
@@ -290,7 +289,7 @@ internal fun PortraitPlayer(
                 Modifier.padding(horizontal = Gutter + edge),
             )
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
     }
 }
 
@@ -319,7 +318,7 @@ internal fun LandscapePlayer(
             .padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val side = minOf(frameHeight - 88.dp, (frameWidth - Gutter * 2) * 0.40f).coerceIn(96.dp, 360.dp)
+        val side = minOf(frameHeight - 76.dp, (frameWidth - Gutter * 2) * 0.44f).coerceIn(96.dp, 360.dp)
         Column(
             Modifier
                 .weight(0.95f)
