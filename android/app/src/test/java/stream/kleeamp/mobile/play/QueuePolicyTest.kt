@@ -360,4 +360,42 @@ class QueuePolicyTest {
         assertEquals(0 to 1, QueuePolicy.peekTargets(10, here = 0, QueuePolicy.StepMode.Cold(-1), sourceNonEmpty = false))
         assertEquals(null to null, QueuePolicy.peekTargets(0, here = 0, QueuePolicy.StepMode.Cold(-1), sourceNonEmpty = false))
     }
+
+    @Test
+    fun repeatCyclesOffAllOne() {
+        assertEquals(RepeatMode.All, RepeatMode.Off.next())
+        assertEquals(RepeatMode.One, RepeatMode.All.next())
+        assertEquals(RepeatMode.Off, RepeatMode.One.next())
+    }
+
+    @Test
+    fun repeatParsesPersistedKeys() {
+        assertEquals(RepeatMode.Off, RepeatMode.of("off"))
+        assertEquals(RepeatMode.All, RepeatMode.of("all"))
+        assertEquals(RepeatMode.One, RepeatMode.of("one"))
+        assertEquals(RepeatMode.Off, RepeatMode.of(null))
+        assertEquals(RepeatMode.Off, RepeatMode.of("loud"))
+    }
+
+    @Test
+    fun repeatAllTargetWrapsClampedSteps() {
+        // Next past the tail lands on the head, prev before the head on tail.
+        assertEquals(0, repeatAllTarget(srcSize = 5, here = 4, delta = 1))
+        assertEquals(4, repeatAllTarget(srcSize = 5, here = 0, delta = -1))
+        // Mid-list steps pass through untouched.
+        assertEquals(3, repeatAllTarget(srcSize = 5, here = 2, delta = 1))
+        // Degenerate inputs stay put.
+        assertEquals(0, repeatAllTarget(srcSize = 1, here = 0, delta = 1))
+        assertEquals(2, repeatAllTarget(srcSize = 5, here = 2, delta = 0))
+    }
+
+    @Test
+    fun stepTargetWrapsLinearEndsUnderRepeatAll() {
+        val linear = QueuePolicy.StepMode.Linear
+        assertEquals(0, QueuePolicy.stepTarget(linear, 5, 4, 1, RepeatMode.All))
+        assertEquals(4, QueuePolicy.stepTarget(linear, 5, 0, -1, RepeatMode.All))
+        // Off keeps the clamp.
+        assertEquals(4, QueuePolicy.stepTarget(linear, 5, 4, 1, RepeatMode.Off))
+        assertEquals(0, QueuePolicy.stepTarget(linear, 5, 0, -1, RepeatMode.Off))
+    }
 }

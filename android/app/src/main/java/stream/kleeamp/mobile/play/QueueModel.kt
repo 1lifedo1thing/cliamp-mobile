@@ -58,13 +58,20 @@ class QueueModel {
     val upNextIndex: StateFlow<Int> = _upNextIndex.asStateFlow()
     private val _shuffle = MutableStateFlow(false)
     val shuffle: StateFlow<Boolean> = _shuffle.asStateFlow()
+    private val _repeat = MutableStateFlow(RepeatMode.Off)
+    val repeat: StateFlow<RepeatMode> = _repeat.asStateFlow()
 
     val currentUpNext: List<Station> get() = _upNext.value
     val currentIndex: Int get() = _upNextIndex.value
     val shuffleOn: Boolean get() = _shuffle.value
+    val repeatMode: RepeatMode get() = _repeat.value
 
     fun setShuffled(on: Boolean) {
         _shuffle.value = on
+    }
+
+    fun setRepeatMode(mode: RepeatMode) {
+        _repeat.value = mode
     }
 
     fun setFallbackSource(list: List<Station>) {
