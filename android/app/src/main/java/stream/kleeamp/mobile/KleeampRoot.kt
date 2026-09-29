@@ -138,6 +138,7 @@ fun KleeampRoot(
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
     val navController = rememberNavController()
+    val app = LocalContext.current.applicationContext as? KleeampApp
 
     // The three tabs are pages of one pager, so two of them are only ever a
     // drag apart. The pager's page is the single source of truth for which tab
@@ -681,7 +682,12 @@ fun KleeampRoot(
                         vm = appViewModel { _ -> ScrobbleWizardViewModel(token) },
                         onCancel = { navController.popBackStack() },
                         onSave = { t ->
-                            scope.launch { prefs.setListenBrainzToken(t) }
+                            scope.launch {
+                                prefs.setListenBrainzToken(t)
+                                // Flush anything counted while untokened: no
+                                // other trigger runs until the next count.
+                                app?.scrobbler?.requestDrain()
+                            }
                             navController.popBackStack()
                         },
                     )

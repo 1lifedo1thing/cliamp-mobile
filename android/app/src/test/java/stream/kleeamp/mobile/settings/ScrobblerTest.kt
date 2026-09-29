@@ -14,6 +14,27 @@ class ScrobblerTest {
     }
 
     @Test
+    fun listenBodySpeaksSnakeCase() {
+        val body = listenBody("Kleeamp Test", "Emulator Check One", "Debug Tunes", 1700000000L)
+        assertTrue(body.contains("\"listen_type\":\"single\""))
+        assertTrue(body.contains("\"listened_at\":1700000000"))
+        assertTrue(body.contains("\"track_metadata\""))
+        assertTrue(body.contains("\"artist_name\":\"Kleeamp Test\""))
+        assertTrue(body.contains("\"track_name\":\"Emulator Check One\""))
+        assertTrue(body.contains("\"release_name\":\"Debug Tunes\""))
+        assertTrue(!body.contains("listenType"))
+        assertTrue(!body.contains("listenedAt"))
+        assertTrue(!body.contains("trackMetadata"))
+        assertTrue(!body.contains("artistName"))
+    }
+
+    @Test
+    fun listenBodyOmitsBlankAlbum() {
+        val body = listenBody("A", "T", "", 1700000000L)
+        assertTrue(!body.contains("release_name"))
+    }
+
+    @Test
     fun retryBacksOffThenCapsAtDaily() {
         assertEquals(60_000L, retryDelayMs(0))
         assertEquals(300_000L, retryDelayMs(1))

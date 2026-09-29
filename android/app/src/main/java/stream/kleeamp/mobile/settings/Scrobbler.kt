@@ -191,29 +191,33 @@ class Scrobbler(
         album: String,
         listenedAt: Long,
     ) {
-        val body = Http.json.encodeToString(
-            ListenPayload.serializer(),
-            ListenPayload(
-                listenType = "single",
-                payload = listOf(
-                    Listen(
-                        listenedAt = listenedAt,
-                        trackMetadata = TrackMetadata(
-                            artistName = artist,
-                            trackName = title,
-                            releaseName = album.takeIf { it.isNotBlank() },
-                        ),
-                    ),
-                ),
-            ),
-        )
         Http.postJson(
             "https://api.listenbrainz.org/1/submit-listens",
-            body,
+            listenBody(artist, title, album, listenedAt),
             mapOf("Authorization" to "Token $token"),
         )
     }
 }
+
+/** Submit body for one listen. Internal for unit tests: the API speaks
+ * snake_case, so the field names are the contract (HTTP 400 otherwise). */
+internal fun listenBody(artist: String, title: String, album: String, listenedAt: Long): String =
+    Http.json.encodeToString(
+        ListenPayload.serializer(),
+        ListenPayload(
+            listenType = "single",
+            payload = listOf(
+                Listen(
+                    listenedAt = listenedAt,
+                    trackMetadata = TrackMetadata(
+                        artistName = artist,
+                        trackName = title,
+                        releaseName = album.takeIf { it.isNotBlank() },
+                    ),
+                ),
+            ),
+        ),
+    )
 
 /** Radio stream titles name `Artist - Title`; anything else is title-only. */
 internal fun splitStreamTitle(title: String): Pair<String, String> {
@@ -235,27 +239,27 @@ private val Station.isRadio: Boolean
 
 @kotlinx.serialization.Serializable
 private data class ListenPayload(
-    val listenType: String,
+    @kotlinx.serialization.SerialName("listen_type") val listenType: String,
     val payload: List<Listen>,
 )
 
 @kotlinx.serialization.Serializable
 private data class Listen(
-    val listenedAt: Long,
-    val trackMetadata: TrackMetadata,
+    @kotlinx.serialization.SerialName("listened_at") val listenedAt: Long,
+    @kotlinx.serialization.SerialName("track_metadata") val trackMetadata: TrackMetadata,
 )
 
 @kotlinx.serialization.Serializable
 private data class TrackMetadata(
-    val artistName: String,
-    val trackName: String,
-    val releaseName: String? = null,
+    @kotlinx.serialization.SerialName("artist_name") val artistName: String,
+    @kotlinx.serialization.SerialName("track_name") val trackName: String,
+    @kotlinx.serialization.SerialName("release_name") val releaseName: String? = null,
 )
 
 @kotlinx.serialization.Serializable
 private data class TokenCheck(
     val valid: Boolean = false,
-    val userName: String? = null,
+    @kotlinx.serialization.SerialName("user_name") val userName: String? = null,
 )
 
 /**
