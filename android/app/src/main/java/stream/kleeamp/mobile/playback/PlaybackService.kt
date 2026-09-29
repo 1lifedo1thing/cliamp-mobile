@@ -307,7 +307,10 @@ class PlaybackService : MediaSessionService() {
             if (isFavourite) CommandButton.ICON_STAR_FILLED else CommandButton.ICON_STAR_UNFILLED
         )
             .setDisplayName(if (isFavourite) "Remove favourite" else "Favourite")
-            .setIconUri(iconUri(if (isFavourite) R.drawable.ic_w_star_filled else R.drawable.ic_w_star))
+            // Belt and braces: the provider resolves the resource id while
+            // controllers that load artwork-style URIs take the content URI.
+            .setIconResId(if (isFavourite) R.drawable.ic_w_heart_filled else R.drawable.ic_w_heart)
+            .setIconUri(iconUri(if (isFavourite) R.drawable.ic_w_heart_filled else R.drawable.ic_w_heart))
             .setSessionCommand(SessionCommand(CMD_FAVOURITE, Bundle.EMPTY))
             .build(),
         CommandButton.Builder(CommandButton.ICON_SHUFFLE_ON)
@@ -379,16 +382,25 @@ class PlaybackService : MediaSessionService() {
     private fun loadArtwork(station: Station) {
         artworkJob?.cancel()
         artworkJob = scope.launch {
-            val art = station.cover.takeIf { it.startsWith("http") }
-                ?.let { StationArtSource.bitmapForUrl(it) }
-                ?: StationArtSource.bitmapFor(station)
-                ?: return@launch
+            // Bounded retries: a transient miss on the track change used to
+            // leave the lockscreen artless for the whole episode. The job is
+            // cancelled on the next change, so retries never leak across
+            // tracks.
+            var art: android.graphics.Bitmap? = null
+            for (attempt in 0 until 3) {
+                art = station.cover.takeIf { it.startsWith("http") }
+                    ?.let { StationArtSource.bitmapForUrl(it) }
+                    ?: StationArtSource.bitmapFor(station)
+                if (art != null) break
+                if (attempt < 2) kotlinx.coroutines.delay(2_000)
+            }
+            val cover = art ?: return@launch
             // The bus may still name the previous track this early, so the
             // freshness check below reads the player, not the bus: only stamp
             // art onto the item it was decoded for.
             val item = player.currentMediaItem ?: return@launch
             if (item.mediaId != station.id) return@launch
-            val bytes = StationArtwork.withArt(this@PlaybackService, station, art)
+            val bytes = StationArtwork.withArt(this@PlaybackService, station, cover)
             val fresh = player.currentMediaItem
                 ?.takeIf { it.mediaId == station.id } ?: return@launch
             if (fresh.mediaMetadata.artworkData?.contentEquals(bytes) == true) return@launch
