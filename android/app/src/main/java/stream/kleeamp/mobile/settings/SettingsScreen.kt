@@ -91,6 +91,9 @@ fun SettingsScreen(
     val autoDownload = uiState.autoDownload
     val resumeLocal = uiState.resumeLocal
     val listenBrainzOn = uiState.listenBrainzOn
+    val scrobbleRadio = uiState.scrobbleRadio
+    val scrobblePending = uiState.scrobblePending
+    val scrobbleError = uiState.scrobbleError
     val dirStats = uiState.directoryStats
     val themeImporter = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -178,6 +181,25 @@ fun SettingsScreen(
                 Icon(KleeampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary)
             }
         }
+        // Unsent listens and the last send failure, so a dead network reads
+        // as queued rather than lost.
+        if (listenBrainzOn && (scrobblePending > 0 || scrobbleError != null)) {
+            Mono(
+                listOfNotNull(
+                    if (scrobblePending > 0) "$scrobblePending pending" else null,
+                    scrobbleError?.let { "last failed: $it" },
+                ).joinToString(" · "),
+                KleeampType.meta,
+                if (scrobbleError != null) p.destructiveInk else p.inkFaint,
+                modifier = Modifier.padding(horizontal = Gutter).padding(bottom = 10.dp),
+                maxLines = 2,
+            )
+        }
+        ToggleRow(
+            title = "Scrobble radio",
+            checked = scrobbleRadio,
+            onChange = { vm.onEvent(SettingsViewModel.Event.SetScrobbleRadio(it)) },
+        )
         HairlineDivider()
 
         SectionLabel("feel")
@@ -324,8 +346,13 @@ fun SettingsScreen(
 private fun ToggleRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     val p = LocalPalette.current
     Column {
+        // The whole row toggles, not just the 44dp pill: tapping the
+        // label must work too, or users "enable" it with no effect and
+        // find it off on return. The pill consumes its own taps, so the
+        // row handler never double-fires.
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 12.dp),
+            Modifier.fillMaxWidth().microPress { onChange(!checked) }
+                .padding(horizontal = Gutter, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {

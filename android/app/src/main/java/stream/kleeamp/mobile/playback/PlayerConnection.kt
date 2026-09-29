@@ -56,8 +56,8 @@ class PlayerConnection(
     private val resumeLookup: (suspend (Station) -> Long)? = null,
     /** Receives (station, position, duration) for episodes as they play. */
     private val progressSink: (suspend (Station, Long, Long) -> Unit)? = null,
-    /** Receives (station, playing, duration) twice a second for scrobbling. */
-    private val scrobbleTick: ((Station?, Boolean, Long) -> Unit)? = null,
+    /** Receives (station, playing, duration, stream title) twice a second for scrobbling. */
+    private val scrobbleTick: ((Station?, Boolean, Long, String) -> Unit)? = null,
 ) {
     private var controller: MediaController? = null
 
@@ -285,6 +285,7 @@ class PlayerConnection(
             playingNow,
             c.isPlaying,
             c.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: playingNow?.durationMs ?: 0L,
+            PlaybackBus.streamTitle.value,
         )
 
         queue.advanceOnEnded(changingPlayback, c.playbackState == Player.STATE_ENDED)

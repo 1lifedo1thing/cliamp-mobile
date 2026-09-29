@@ -67,8 +67,8 @@ class KleeampApp : Application() {
             progressSink = { station, position, duration ->
                 podcasts.saveProgress(station, position, duration)
             },
-            scrobbleTick = { station, playing, durationMs ->
-                scrobbler.onTick(station, playing, durationMs)
+            scrobbleTick = { station, playing, durationMs, streamTitle ->
+                scrobbler.onTick(station, playing, durationMs, streamTitle)
             },
         )
     val downloads: DownloadStore by lazy { DownloadStore(this, prefs, appScope) }

@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -44,14 +45,12 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -172,9 +171,11 @@ internal fun PortraitPlayer(
 ) {
     val p = LocalPalette.current
     // The rows below the plate indent to the plate's own edges. The plate
-    // is centred and height-bound, so its size is only known after layout:
-    // measure it once placed, then inset the text, meter and keys by the
-    // plate's frame margin minus the Gutter the column already applies.
+    // is centred and height-bound; the pager viewport runs edge to edge
+    // so sliding plates are cut at the screen edge, never mid-screen.
+    // Plate size is known after layout: SideEffect below publishes it
+    // once placed, then the text, meter and keys inset by the plate's
+    // frame margin. Each row carries its own Gutter explicitly.
     // The plate size never depends on sibling padding (height-bound off
     // the flex remainder, width-bound off the frame), so the inset is
     // stable and cannot feed back into the plate size.
@@ -201,7 +202,8 @@ internal fun PortraitPlayer(
             Spacer(Modifier.weight(1f))
             UpNextButton(model.upNextCount, actions.onOpenUpNext)
         }
-        Spacer(Modifier.height(4.dp))
+        // Tight: buys room back for the plate (see pinned text lines).
+        Spacer(Modifier.height(2.dp))
         // The concept's art plate is `flex: 0 1 auto; max-height: 284px`, i.e.
         // it is the first thing to give way. Compose has no shrink factor, so
         // the plate is given whatever height is left once the text block below
@@ -210,9 +212,8 @@ internal fun PortraitPlayer(
         Column(
             Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = Gutter),
-            verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
         ) {
             // The art plate and the text block below it share a flexed block
             // that absorbs however tall a long station name or stream title
@@ -224,10 +225,10 @@ internal fun PortraitPlayer(
                 Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Top),
+                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Top),
             ) {
-                // One fixed plate: a perfect 1:1 square at 90% of the
-                // screen width, centred with even margins both sides.
+                // One fixed plate: the full column width capped at 340dp,
+                // centred with even margins both sides - the v0.4.0 recipe.
                 // minOf with maxHeight keeps it square, never squeezed,
                 // on short frames. Switching stations never moves the
                 // text, meter or keys.
@@ -238,7 +239,14 @@ internal fun PortraitPlayer(
                     contentAlignment = Alignment.Center,
                 ) {
                     // Height-bound: leave a small breather above and below the plate.
-                    val side = minOf((maxWidth + Gutter * 2) * 0.9f, maxHeight - 12.dp)
+                    // The viewport itself is edge to edge (maxWidth is the
+                    // screen now); plates glide over ground and are cut at
+                    // the screen edge instead of diving under background
+                    // mid-screen.
+                    val side = minOf(maxWidth, maxHeight - 12.dp, 340.dp)
+                    SideEffect {
+                        plateWidthPx = with(density) { side.roundToPx() }
+                    }
                     CoverSkip(
                         current = model.shownStation,
                         previous = model.previousStation,
@@ -247,7 +255,7 @@ internal fun PortraitPlayer(
                         canSkipNext = model.state.hasNext,
                         onSkipPrevious = actions.onPrev,
                         onSkipNext = actions.onNext,
-                        modifier = Modifier.size(side).onSizeChanged { plateWidthPx = it.width },
+                        modifier = Modifier.fillMaxWidth().height(side),
                     )
                 }
 
@@ -257,8 +265,8 @@ internal fun PortraitPlayer(
                 // never advance or restart the song. Only the small action
                 // icons in the strip above stay live.
                 Column(
-                    Modifier.padding(horizontal = edge),
-                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                    Modifier.padding(horizontal = Gutter + edge),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
                     PlayerStatusRow(
                         model = model,
@@ -268,11 +276,20 @@ internal fun PortraitPlayer(
                 }
             }
 
-            PlayerTransport(model, actions, Modifier.padding(horizontal = edge), meterHeight = 90.dp)
+            PlayerTransport(
+                model,
+                actions,
+                Modifier.padding(horizontal = Gutter + edge),
+                meterHeight = 90.dp,
+            )
 
-            TransportKeys(model, actions, Modifier.padding(horizontal = edge))
+            TransportKeys(
+                model,
+                actions,
+                Modifier.padding(horizontal = Gutter + edge),
+            )
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
     }
 }
 
@@ -382,6 +399,10 @@ internal fun peekArt(station: Station?): ImageBitmap? {
 internal fun StationArt(
     station: Station?,
     modifier: Modifier = Modifier,
+    /** The halo wash - the cover pager disables it. */
+    glow: Boolean = true,
+    /** The slow swell - the cover pager disables it so pages match. */
+    breathe: Boolean = true,
 ) {
     val p = LocalPalette.current
     // Paint what memory already holds synchronously, so a song change shows
@@ -425,37 +446,39 @@ internal fun StationArt(
         // art; a real cover or its thumbnail preview speaks for itself.
         val plateCaption =
             if (bmp == null && (seedKey.isEmpty() || station == null)) caption else null
-        ArtGlow(Modifier.fillMaxSize())
-        ArtPlate(
-            modifier = Modifier
-                .fillMaxSize()
-                // Soft drop shadow so the plate floats over the page - the
-                // premium read, same large radius as the plate itself. A touch
-                // lighter on light grounds, where the same elevation reads
-                // stronger against the pale ground.
-                .shadow(if (p.dark) 26.dp else 20.dp, RoundedCornerShape(KleeampShape.large))
-                .graphicsLayer {
-                    scaleX = breath
-                    scaleY = breath
-                },
-            radius = KleeampShape.large,
-            caption = plateCaption,
-        ) {
-            // The art swaps instantly between tracks: the warmer keeps the
-            // covers in memory, so the new pixels are already there and no
-            // dissolve is needed. A cold cover still pops in when it lands -
-            // one hard cut instead of a slow fade staircase.
-            bmp?.let {
+        if (glow) ArtGlow(Modifier.fillMaxSize())
+        // One plate per branch, all on the same clipped layer: a coverless
+        // track swaps pixels, never structure or scale.
+        val plateModifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                val swell = if (breathe) breath else 1f
+                scaleX = swell
+                scaleY = swell
+                // Clip the layer itself to the plate shape: without this
+                // the layer composites square and gray corners leak.
+                clip = true
+                shape = RoundedCornerShape(KleeampShape.large)
+            }
+        if (bmp != null) {
+            ArtPlate(
+                modifier = plateModifier,
+                radius = KleeampShape.large,
+            ) {
+                // The art swaps instantly between tracks: the warmer keeps the
+                // covers in memory, so the new pixels are already there and no
+                // dissolve is needed. A cold cover still pops in when it lands -
+                // one hard cut instead of a slow fade staircase.
                 // Fixed square, always filled, art never cut: square covers
                 // draw straight through; anything wider or taller keeps the
                 // whole image centred on a blurred, cropped copy of itself
                 // that fills the bands, so no dead space and no lost edges.
-                val w = it.width.coerceAtLeast(1)
-                val h = it.height.coerceAtLeast(1)
+                val w = bmp.width.coerceAtLeast(1)
+                val h = bmp.height.coerceAtLeast(1)
                 val aspect = w.toFloat() / h
                 if (aspect in 0.9f..1.12f) {
                     Image(
-                        bitmap = it,
+                        bitmap = bmp,
                         contentDescription = station?.name,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
@@ -463,14 +486,14 @@ internal fun StationArt(
                 } else {
                     Box(Modifier.fillMaxSize()) {
                         Image(
-                            bitmap = it,
+                            bitmap = bmp,
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize().blur(28.dp),
                             contentScale = ContentScale.Crop,
                         )
                         Box(Modifier.fillMaxSize().background(p.ground.copy(alpha = 0.25f)))
                         Image(
-                            bitmap = it,
+                            bitmap = bmp,
                             contentDescription = station?.name,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Fit,
@@ -478,18 +501,23 @@ internal fun StationArt(
                     }
                 }
             }
+        } else if (station != null && seedKey.isNotEmpty()) {
             // No cover at all: the seeded plate, wearing the caption line so
             // the hero still names what is playing.
-            if (bmp == null) {
-                if (station != null && seedKey.isNotEmpty()) {
-                    SeedPlate(
-                        key = seedKey,
-                        name = station.name,
-                        modifier = Modifier.fillMaxSize(),
-                        caption = caption,
-                        radius = KleeampShape.large,
-                    )
-                } else station?.let {
+            SeedPlate(
+                key = seedKey,
+                name = station.name,
+                modifier = plateModifier,
+                caption = caption,
+                radius = KleeampShape.large,
+            )
+        } else {
+            ArtPlate(
+                modifier = plateModifier,
+                radius = KleeampShape.large,
+                caption = plateCaption,
+            ) {
+                station?.let {
                     Icon(
                         KleeampIcons.MusicNote,
                         it.name,

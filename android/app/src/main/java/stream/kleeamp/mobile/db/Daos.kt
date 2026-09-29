@@ -92,6 +92,27 @@ interface StatsDao {
 }
 
 @Dao
+interface ScrobbleDao {
+    @Query("SELECT * FROM scrobble_outbox WHERE nextAttemptAt <= :now ORDER BY createdAt LIMIT 50")
+    suspend fun due(now: Long): List<ScrobbleEntity>
+
+    @Query("SELECT COUNT(*) FROM scrobble_outbox")
+    fun count(): Flow<Int>
+
+    @Insert
+    suspend fun enqueue(row: ScrobbleEntity)
+
+    @Query("DELETE FROM scrobble_outbox WHERE id = :id")
+    suspend fun remove(id: Long)
+
+    @Query("UPDATE scrobble_outbox SET attempts = :attempts, nextAttemptAt = :next WHERE id = :id")
+    suspend fun defer(id: Long, attempts: Int, next: Long)
+
+    @Query("DELETE FROM scrobble_outbox WHERE createdAt < :before")
+    suspend fun prune(before: Long)
+}
+
+@Dao
 interface CustomStationDao {
     @Query("SELECT s.* FROM stations s JOIN custom_stations c ON c.url = s.url ORDER BY c.position")
     fun all(): Flow<List<StationEntity>>

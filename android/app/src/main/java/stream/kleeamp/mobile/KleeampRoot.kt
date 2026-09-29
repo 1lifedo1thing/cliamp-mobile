@@ -138,6 +138,7 @@ fun KleeampRoot(
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
     val navController = rememberNavController()
+    val app = LocalContext.current.applicationContext as? KleeampApp
 
     // The three tabs are pages of one pager, so two of them are only ever a
     // drag apart. The pager's page is the single source of truth for which tab
@@ -582,7 +583,7 @@ fun KleeampRoot(
             composable<Settings> {
                 Box(contentModifier) {
                     SettingsScreen(
-                        vm = appViewModel { app -> SettingsViewModel(app.prefs, app.radio) },
+                        vm = appViewModel { app -> SettingsViewModel(app.prefs, app.radio, app.scrobbler) },
                         onBack = { navController.popBackStack() },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenScrobble = { navController.navigate(ScrobbleWizard) },
@@ -678,10 +679,20 @@ fun KleeampRoot(
                 val token by prefs.listenBrainzToken.collectAsState(initial = "")
                 OverlayCover {
                     ScrobbleWizardScreen(
-                        vm = appViewModel { _ -> ScrobbleWizardViewModel(token) },
+                        // Keyed on the token: the VM seeds its field once at
+                        // creation, so a VM born on the initial "" would show
+                        // an empty field forever despite a saved token.
+                        vm = appViewModel(key = "scrobble:$token") { _ ->
+                            ScrobbleWizardViewModel(token)
+                        },
                         onCancel = { navController.popBackStack() },
                         onSave = { t ->
-                            scope.launch { prefs.setListenBrainzToken(t) }
+                            scope.launch {
+                                prefs.setListenBrainzToken(t)
+                                // Flush anything counted while untokened: no
+                                // other trigger runs until the next count.
+                                app?.scrobbler?.requestDrain()
+                            }
                             navController.popBackStack()
                         },
                     )

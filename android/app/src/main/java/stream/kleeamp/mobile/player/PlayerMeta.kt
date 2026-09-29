@@ -37,6 +37,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -300,27 +301,44 @@ internal fun outputIcon(kind: OutputKind?): androidx.compose.ui.graphics.vector.
     else -> KleeampIcons.Speaker
 }
 
-/** The station name, stream title and source meta line. All gesture-inert. */
+/** The station name, stream title and source meta line. All gesture-inert.
+ *
+ * The three lines wear pinned heights: explicit lineHeight is only a floor
+ * (max of explicit and natural), and fallback fonts for non-Latin scripts
+ * measure taller naturals - a Persian title added 20px/14px per line, and
+ * the flex remainder fed that straight into the plate size on every
+ * switch. These pins sit above every script's natural height (measured
+ * 1.68-1.75em on-device) with headroom for other fallbacks, so no title
+ * in any script can move the plate. The cost is airier text, paid once.
+ */
+private val NameLineHeight = (28 * 1.7).sp
+private val TitleLineHeight = (15 * 1.75).sp
+private val MetaLineHeight = (13 * 1.8).sp
+
 @Composable
 internal fun PlayerMeta(
     model: PlayerModel,
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        MarqueeLabel(
-            model.shownStation?.name ?: "pick a station",
-            KleeampType.trackTitle,
-            p.ink,
-        )
-        MarqueeLabel(
-            model.streamTitle.ifBlank { model.error ?: artistOrTagLine(model.shownStation) },
-            KleeampType.rowPrimary,
-            if (model.error != null && model.streamTitle.isBlank()) p.destructiveInk else p.inkSecondary,
-        )
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        // Restarted per station: a new song always starts its titles from
+        // their own beginning, never continuing the previous scroll.
+        key(model.shownStation?.id) {
+            MarqueeLabel(
+                model.shownStation?.name ?: "pick a station",
+                KleeampType.trackTitle.copy(lineHeight = NameLineHeight),
+                p.ink,
+            )
+            MarqueeLabel(
+                model.streamTitle.ifBlank { model.error ?: artistOrTagLine(model.shownStation) },
+                KleeampType.rowPrimary.copy(lineHeight = TitleLineHeight),
+                if (model.error != null && model.streamTitle.isBlank()) p.destructiveInk else p.inkSecondary,
+            )
+        }
         Mono(
             sourceLine(model.shownStation),
-            KleeampType.body,
+            KleeampType.body.copy(lineHeight = MetaLineHeight),
             p.inkTertiary,
             maxLines = 1,
         )
