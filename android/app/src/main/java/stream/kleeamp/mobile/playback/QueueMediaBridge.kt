@@ -118,7 +118,6 @@ internal class QueueMediaBridge(
         c.play()
         onSync()
     }
-    }
 
     /** Cancels shuffle/extend work; a new toggle supersedes both. */
     fun cancelShuffleWork() {
