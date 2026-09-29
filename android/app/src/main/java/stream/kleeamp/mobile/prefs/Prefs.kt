@@ -93,6 +93,7 @@ class Prefs(private val context: Context) {
         val autoResume = booleanPreferencesKey("auto_resume")
         val autoDownload = booleanPreferencesKey("auto_download")
         val resumeLocal = booleanPreferencesKey("resume_local")
+        val scrobbleRadio = booleanPreferencesKey("scrobble_radio")
         val wPlaying = booleanPreferencesKey("w_playing")
         val wTrack = stringPreferencesKey("w_track")
         val wSeekable = booleanPreferencesKey("w_seekable")
@@ -128,6 +129,8 @@ class Prefs(private val context: Context) {
     val autoDownload: Flow<Boolean> = context.settingsStore.data.map { it[K.autoDownload] ?: false }
     /** Local files reopen where they stopped. Off by default: songs restart. */
     val resumeLocal: Flow<Boolean> = context.settingsStore.data.map { it[K.resumeLocal] ?: false }
+    /** Scrobble radio stream titles too. Off by default: titles would spam. */
+    val scrobbleRadio: Flow<Boolean> = context.settingsStore.data.map { it[K.scrobbleRadio] ?: false }
     val volume: Flow<Float> = context.settingsStore.data.map { it[K.volume] ?: 1f }
     /** Playback speed multiplier, 0.25–2.0 like cliamp. Applied to every play. */
     val speed: Flow<Float> = context.settingsStore.data.map { (it[K.speed] ?: 1f).coerceIn(0.25f, 2f) }
@@ -286,6 +289,7 @@ class Prefs(private val context: Context) {
     suspend fun setAutoResume(v: Boolean) = put(K.autoResume, v)
     suspend fun setAutoDownload(v: Boolean) = put(K.autoDownload, v)
     suspend fun setResumeLocal(v: Boolean) = put(K.resumeLocal, v)
+    suspend fun setScrobbleRadio(v: Boolean) = put(K.scrobbleRadio, v)
     suspend fun setVolume(v: Float) = put(K.volume, v)
     suspend fun setSpeed(v: Float) = put(K.speed, v.coerceIn(0.25f, 2f))
     suspend fun setSubsGrid(v: Boolean) {

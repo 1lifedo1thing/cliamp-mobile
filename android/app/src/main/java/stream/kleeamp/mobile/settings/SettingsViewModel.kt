@@ -19,6 +19,7 @@ import stream.kleeamp.mobile.theme.parseCustomTheme
 class SettingsViewModel(
     private val prefs: Prefs,
     private val repository: RadioRepository,
+    private val scrobbler: Scrobbler,
 ) : ViewModel() {
     data class UiState(
         val palette: String = "dark",
@@ -34,6 +35,9 @@ class SettingsViewModel(
         val autoDownload: Boolean = false,
         val resumeLocal: Boolean = false,
         val listenBrainzOn: Boolean = false,
+        val scrobbleRadio: Boolean = false,
+        val scrobblePending: Int = 0,
+        val scrobbleError: String? = null,
         val favoritesCount: Int = 0,
         val historyCount: Int = 0,
         val directoryStats: DirectoryStats? = null,
@@ -52,6 +56,7 @@ class SettingsViewModel(
         data class ImportTheme(val raw: String?) : Event
         data object ClearCustomTheme : Event
         data object ClearHistory : Event
+        data class SetScrobbleRadio(val v: Boolean) : Event
     }
 
     private val importError = MutableStateFlow<String?>(null)
@@ -83,6 +88,13 @@ class SettingsViewModel(
         val directoryStats: DirectoryStats? = null,
     )
 
+    /** Radio opt-in, unsent scrobbles and the last send failure. */
+    private data class ScrobbleBox(
+        val radio: Boolean = false,
+        val pending: Int = 0,
+        val error: String? = null,
+    )
+
     val state: StateFlow<UiState> = combine(
         combine(
             prefs.palette,
@@ -108,7 +120,13 @@ class SettingsViewModel(
             repository.directoryStats,
             ::Library,
         ),
-    ) { appearance, playback, library ->
+        combine(
+            prefs.scrobbleRadio,
+            scrobbler.pendingCount,
+            scrobbler.lastError,
+            ::ScrobbleBox,
+        ),
+    ) { appearance, playback, library, scrobbleBox ->
         UiState(
             palette = appearance.palette,
             custom = decodeCustomThemeOrNull(appearance.customJson),
@@ -123,6 +141,9 @@ class SettingsViewModel(
             autoDownload = playback.autoDownload,
             resumeLocal = library.resumeLocal,
             listenBrainzOn = library.listenBrainzToken.isNotBlank(),
+            scrobbleRadio = scrobbleBox.radio,
+            scrobblePending = scrobbleBox.pending,
+            scrobbleError = scrobbleBox.error,
             favoritesCount = library.favorites.size,
             historyCount = library.history.size,
             directoryStats = library.directoryStats,
@@ -142,6 +163,7 @@ class SettingsViewModel(
             is Event.SetBuffer -> viewModelScope.launch { prefs.setBufferSeconds(e.seconds) }
             is Event.SetHaptics -> viewModelScope.launch { prefs.setHaptics(e.v) }
             is Event.SetVisualizer -> viewModelScope.launch { prefs.setVisualizer(e.v) }
+            is Event.SetScrobbleRadio -> viewModelScope.launch { prefs.setScrobbleRadio(e.v) }
             is Event.ImportTheme -> viewModelScope.launch {
                 val raw = e.raw
                 if (raw.isNullOrBlank()) {

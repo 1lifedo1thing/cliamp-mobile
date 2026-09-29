@@ -582,7 +582,7 @@ fun KleeampRoot(
             composable<Settings> {
                 Box(contentModifier) {
                     SettingsScreen(
-                        vm = appViewModel { app -> SettingsViewModel(app.prefs, app.radio) },
+                        vm = appViewModel { app -> SettingsViewModel(app.prefs, app.radio, app.scrobbler) },
                         onBack = { navController.popBackStack() },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenScrobble = { navController.navigate(ScrobbleWizard) },
