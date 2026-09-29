@@ -2,11 +2,13 @@ package stream.kleeamp.mobile.art
 
 import android.content.ContentResolver
 import android.graphics.Bitmap
+import android.net.Uri
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.supervisorScope
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
+import java.io.File
 
 /**
  * One choke point for cover resolution: the same source branches every art
@@ -19,11 +21,17 @@ object ArtResolve {
     /**
      * Small art for rows and the mini player: the same branches
      * [chrome.StationArtwork] and the mini bar resolve, in the same order.
+     *
+     * Local order is correctness-ordered: the embedded picture is
+     * authoritative per file, the MediaStore album art is album-level and
+     * goes stale on real devices, and the folder companion is the curated
+     * fallback. Scan stays cursor-only; every step below decodes lazily.
      */
     suspend fun small(station: Station, resolver: ContentResolver): Bitmap? = when {
         station.source == StationSource.Local ->
-            LocalArt.bitmapForSmall(station.cover, resolver)
-                ?: StationArtSource.bitmapForSmall(station)
+            StationArtSource.bitmapForSmall(station)
+                ?: LocalArt.bitmapForSmall(station.cover, resolver)
+                ?: station.localDir()?.let { LocalArt.folderSmall(it, resolver) }
         station.cover.startsWith("http") -> StationArtSource.bitmapForKnownSmall(station)
         else -> StationArtSource.bitmapForSmall(station)
     }
@@ -31,20 +39,35 @@ object ArtResolve {
     /** Full art for the player screen, same branches as [small] at full size. */
     suspend fun full(station: Station, resolver: ContentResolver): Bitmap? = when {
         station.source == StationSource.Local ->
-            LocalArt.bitmapFor(station.cover, resolver)
-                ?: StationArtSource.bitmapFor(station)
+            StationArtSource.bitmapFor(station)
+                ?: LocalArt.bitmapFor(station.cover, resolver)
+                ?: station.localDir()?.let { LocalArt.folder(it, resolver) }
         station.cover.startsWith("http") -> StationArtSource.bitmapForUrl(station.cover)
         else -> StationArtSource.bitmapFor(station)
     }
 
+    /** Containing folder of a file-backed local track, or null for content rows. Pure string math. */
+    private fun Station.localDir(): String? {
+        if (!url.startsWith("file://")) return null
+        return runCatching { File(Uri.parse(url).path).parent }.getOrNull()
+    }
+
     /** Memory-only small peek, safe on Main, for first-frame row paints. */
     fun cachedSmall(station: Station): Bitmap? =
-        LocalArt.cachedSmall(station.cover) ?: StationArtSource.cachedSmall(station)
+        if (station.source == StationSource.Local) {
+            StationArtSource.cachedSmall(station)
+                ?: LocalArt.cachedSmall(station.cover)
+                ?: station.localDir()?.let { LocalArt.cachedFolderSmall(it) }
+        } else {
+            LocalArt.cachedSmall(station.cover) ?: StationArtSource.cachedSmall(station)
+        }
 
     /** Memory-only full peek, safe on Main, mirroring [full]'s branches. */
     fun cachedFull(station: Station): Bitmap? = when {
         station.source == StationSource.Local ->
-            LocalArt.cached(station.cover) ?: StationArtSource.cached(station)
+            StationArtSource.cached(station)
+                ?: LocalArt.cached(station.cover)
+                ?: station.localDir()?.let { LocalArt.cachedFolder(it) }
         station.cover.startsWith("http") ->
             StationArtSource.cachedUrl(station.cover) ?: StationArtSource.cached(station)
         else -> StationArtSource.cached(station)

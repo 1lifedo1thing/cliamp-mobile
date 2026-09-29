@@ -5,24 +5,26 @@ import android.app.PendingIntent
 import android.content.ContentUris
 import android.content.Context
 import android.content.pm.PackageManager
+import android.database.ContentObserver
 import android.database.Cursor
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.db.KleeampDatabase
 import stream.kleeamp.mobile.db.LocalSongEntity
-import java.io.File
-import stream.kleeamp.mobile.art.LocalArt
-import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
+import java.io.File
 
 /**
  * A song picked out of the device. The [station] form is what the rest of the
@@ -67,6 +69,15 @@ fun durationLabel(ms: Long): String {
 }
 
 /**
+ * MediaStore album-art uri for an album, or null when the row names no album.
+ * Pure string math, so it stays unit-testable without the framework: the OS
+ * serves `content://media/external/audio/albumart/{id}` and rows read it
+ * through the cover pipeline like any other cover string.
+ */
+internal fun albumArtUri(albumId: Long): String? =
+    if (albumId > 0) "content://media/external/audio/albumart/$albumId" else null
+
+/**
  * The local library: every audio file on the device. This is enumerated via
  * MediaStore, exactly the way Samsung Music and friends do it — a fast,
  * OS-maintained index of every track in internal storage, an SD card, folders
@@ -82,6 +93,13 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
     private val resolver = context.contentResolver
     private val dao = KleeampDatabase.get(context).localSongs()
 
+    /** The queried collection: the external volume on Q+, the legacy uri below. */
+    private val collection: Uri = if (Build.VERSION.SDK_INT >= 29) {
+        MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+    } else {
+        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+    }
+
     private val _songs = MutableStateFlow<List<Station>>(emptyList())
     val songs: StateFlow<List<Station>> = _songs.asStateFlow()
 
@@ -93,8 +111,13 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
 
     private val scanLock = Any()
     private var scanJob: Job? = null
+    private var watching = false
+    private var watchDebounce: Job? = null
 
     fun refresh() {
+        // The observer starts here, so both the launch path (KleeampApp) and
+        // the grant path (Library screen) watch without a rescan button.
+        watch()
         // Serve whatever we already have now. On a warm launch that is the disk
         // cache, so the list paints instantly and never flashes a scan message;
         // on a cold install the cache is empty and the UI shows "scanning…"
@@ -111,133 +134,153 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
         }
     }
 
+    /**
+     * Live updates without a rescan button: a ContentObserver on the queried
+     * collection refreshes (debounced) when tracks are copied in or deleted,
+     * e.g. USB copies and Downloads. Registered once; the observer lives as
+     * long as this process-wide singleton.
+     */
+    private fun watch() {
+        synchronized(scanLock) {
+            if (watching) return
+            watching = true
+        }
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                watchDebounce?.cancel()
+                watchDebounce = scope.launch {
+                    delay(400)
+                    refresh()
+                }
+            }
+        }
+        runCatching { resolver.registerContentObserver(collection, true, observer) }
+            .onFailure { synchronized(scanLock) { watching = false } }
+    }
+
     private suspend fun scan() {
-        val t0 = System.currentTimeMillis()
-        // Cache read and MediaStore scan both live on this background
-        // context, and neither stats the filesystem on the way to first
-        // paint: the cache publishes as-is and missing files are pruned
-        // quietly below, so opening the Library never waits on disk.
+        // Warm launch: Room rows paint first, the cursor refreshes behind
+        // them. Cold launch: the spinner runs only until the cursor closes.
         val cached = readCache()
         if (_songs.value.isEmpty() && !cached.isNullOrEmpty()) {
             _songs.value = cached
+            _loading.value = false
+        } else if (_songs.value.isEmpty()) {
+            _loading.value = true
         }
-        _loading.value = _songs.value.isEmpty()
+
+        val tQuery = System.currentTimeMillis()
         val found = runCatching { querySongs() }.getOrElse { e ->
             if (_songs.value.isEmpty()) _error.value = e.message ?: "could not read the library"
             _songs.value
         }
-        // The library barely changes between launches; rewriting the whole
-        // table (clear + thousands of inserts) every time was pure overhead.
-        if (found.isNotEmpty() && found != _songs.value) {
-            _songs.value = found
-            writeCache(found)
-        }
-        _loading.value = false
         android.util.Log.d(
             "kleeamp/library",
-            "scan took ${System.currentTimeMillis() - t0}ms for ${_songs.value.size} songs",
+            "query ${found.size} songs in ${System.currentTimeMillis() - tQuery}ms",
         )
-        pruneMissing()
+
+        // The list (and the spinner going away) always wins over the cache
+        // write: rows are up the moment the cursor closes, however slow the
+        // write below is. An empty cursor clears a stale list the same way —
+        // the cursor is the prune, never a File.exists sweep.
+        _songs.value = found
+        _loading.value = false
+
+        if (found != cached.orEmpty()) {
+            val tCache = System.currentTimeMillis()
+            writeCache(found)
+            android.util.Log.d(
+                "kleeamp/library",
+                "cache write ${found.size} songs in ${System.currentTimeMillis() - tCache}ms",
+            )
+        }
     }
 
     /**
-     * Drops songs whose files vanished since the scan, without ever blocking
-     * first paint. Existence is checked only here, after the list is already
-     * on screen, and the list is republished only when something actually
-     * disappeared - the common case changes nothing.
+     * Cursor columns only: no File(), no listFiles(), no exists(), no tag
+     * reads, no embedded-art extract. The OS already sorted TITLE for us, so
+     * Kotlin never sorts again. Covers are album-art uri strings here;
+     * bitmaps decode later, when a row binds.
      */
-    private suspend fun pruneMissing() {
-        val current = _songs.value
-        if (current.isEmpty()) return
-        val missing = current.filterNot { File(pathOf(it)).isFile }.map { it.id }.toSet()
-        if (missing.isEmpty()) return
-        _songs.value = current.filterNot { it.id in missing }
-        missing.forEach { id -> runCatching { dao.delete(id) } }
-    }
-
     private fun querySongs(): List<Station> {
         val out = ArrayList<LocalSong>(256)
-        // Cover art is looked up per song, but every track in a folder shares
-        // that folder's cover and calling listFiles() once per song is what
-        // makes a first scan crawl. Memoise the result per directory so a big
-        // library is one stat per song plus one directory listing per folder.
-        val coverByDir = HashMap<String, String?>()
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DATE_ADDED,
             MediaStore.Audio.Media.DATA,
         )
         resolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            collection,
             projection,
             MediaStore.Audio.Media.IS_MUSIC + " != 0",
             null,
             MediaStore.Audio.Media.TITLE + " COLLATE NOCASE",
         )?.use { c ->
             val cols = SongColumns(
+                id = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID),
                 title = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE),
                 artist = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST),
                 album = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM),
+                albumId = runCatching { c.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID) }.getOrDefault(-1),
                 dur = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION),
                 added = runCatching { c.getColumnIndex(MediaStore.Audio.Media.DATE_ADDED) }.getOrDefault(-1),
-                // DATA is deprecated but still populated on current devices, and it
-                // is what lets us play via a readable file path and pull on-disk
-                // cover art. When it is absent a track is simply skipped.
+                // DATA is deprecated but still populated on current devices.
+                // Blank rows stay in the list on a content:// item uri; only
+                // the id/path form changes, never membership.
                 data = runCatching { c.getColumnIndex(MediaStore.Audio.Media.DATA) }.getOrNull() ?: -1,
             )
             while (c.moveToNext()) {
-                mapRow(c, cols, coverByDir)?.let {
-                    out += it
-                }
+                out += mapRow(c, cols)
             }
         }
-        return out.map { it.station }.sortedBy { it.name.lowercase() }
+        return out.map { it.station }
     }
 
     /** MediaStore column indices for one scan. */
     private data class SongColumns(
+        val id: Int,
         val title: Int,
         val artist: Int,
         val album: Int,
+        val albumId: Int,
         val dur: Int,
         val added: Int,
         val data: Int,
     )
 
-    /** One cursor row as a song, or null for rows without a playable file. */
-    private fun mapRow(
-        c: Cursor,
-        cols: SongColumns,
-        coverByDir: MutableMap<String, String?>,
-    ): LocalSong? {
+    /** One cursor row as a song, strings only. Playlist ids stay local:$path. */
+    private fun mapRow(c: Cursor, cols: SongColumns): LocalSong {
+        val rowId = c.getLong(cols.id)
         val data = if (cols.data >= 0) c.getString(cols.data) else null
-        if (data.isNullOrBlank()) return null
-        // No existence check here: MediaStore is the OS-maintained index and
-        // a stat per row is what made every scan crawl. Vanished files are
-        // pruned quietly by pruneMissing after first paint.
-        val file = File(data)
-        val artist = c.getString(cols.artist) ?: "unknown artist"
-        val album = c.getString(cols.album) ?: ""
-        val title = c.getString(cols.title)?.takeIf { it.isNotBlank() } ?: file.nameWithoutExtension
-        val dir = file.parentFile?.path.orEmpty()
-        val cover = coverByDir.getOrPut(dir) { nearestCover(file.parentFile) }.orEmpty()
+        val path = data?.takeIf { it.isNotBlank() } ?: "media:$rowId"
+        val uri = if (!data.isNullOrBlank()) {
+            // Uri building only, no disk I/O: keeps the exact encoded form
+            // playback and the cache already use.
+            Uri.fromFile(File(data))
+        } else {
+            ContentUris.withAppendedId(collection, rowId)
+        }
+        val title = c.getString(cols.title)?.takeIf { it.isNotBlank() }
+            ?: data?.substringAfterLast('/')?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
+            ?: "track"
         return LocalSong(
-            path = data,
+            path = path,
             title = title,
-            artist = artist,
-            album = album,
+            artist = c.getString(cols.artist) ?: "unknown artist",
+            album = c.getString(cols.album) ?: "",
             durationMs = c.getLong(cols.dur),
             dateAdded = if (cols.added >= 0) c.getLong(cols.added) else 0L,
-            uri = Uri.fromFile(file),
-            cover = cover,
+            uri = uri,
+            cover = if (cols.albumId >= 0) albumArtUri(c.getLong(cols.albumId)).orEmpty() else "",
         )
     }
 
-    /** Companion cover image in the track's own folder, if the user keeps one. */
+    /** Companion cover image in the track's own folder, if the user keeps one. Kept for a later optional miss path on a visible row — never on the scan path. */
     private fun nearestCover(dir: File?): String? {
         if (dir == null) return null
         val covers = listOf(
@@ -275,7 +318,10 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
                         album = row.album,
                         durationMs = row.durationMs,
                         dateAdded = row.dateAdded,
-                        uri = Uri.fromFile(File(row.path)),
+                        // Rows without DATA play by content uri; the stored
+                        // uri round-trips verbatim, file rows rebuild encoded.
+                        uri = if (row.uri.startsWith("content://")) Uri.parse(row.uri)
+                        else Uri.fromFile(File(row.path)),
                         cover = row.cover,
                     ).station
                 }
@@ -286,7 +332,9 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
         runCatching {
             dao.replaceAll(
                 songs.map { s ->
-                    val path = s.url.removePrefix("file://").let(Uri::decode)
+                    // The path is the id suffix, never re-derived from the
+                    // url: content rows have no file path at all.
+                    val path = s.id.removePrefix("local:")
                     LocalSongEntity(
                         songId = s.id,
                         path = path,
@@ -316,6 +364,8 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
      * system's delete sheet rejects id-less collection uris.
      */
     private fun mediaUri(s: Station): Uri? {
+        // Content rows already are their own item uri — deletable as-is.
+        if (s.url.startsWith("content://")) return Uri.parse(s.url)
         val path = pathOf(s)
         return runCatching {
             resolver.query(
