@@ -33,6 +33,17 @@ object LocalArt {
         override fun sizeOf(key: String, value: Bitmap) = (value.byteCount / 1024).coerceAtLeast(1)
     }
     private val misses = LruCache<String, Long>(128)
+    // Dirs whose companion cover already resolved ("file://…" or "" for
+    // none). Misses expire through [misses] instead so a cover.jpg dropped
+    // in later still appears.
+    private val folderHit = LruCache<String, String>(256)
+
+    /** Companion filenames in preference order, mirroring library rows. */
+    private val folderNames = listOf(
+        "cover.jpg", "cover.png", "folder.jpg", "folder.png",
+        "albumart.jpg", "albumart.png", "front.jpg", "front.png",
+    )
+    private val imageExts = setOf("jpg", "jpeg", "png")
 
     /** How long a failed cover is left alone before a transient failure gets retried. */
     private const val MISS_RETRY_MS = 60_000L
@@ -53,6 +64,66 @@ object LocalArt {
     /** Low-quality art for row thumbnails and the mini player. */
     suspend fun bitmapForSmall(cover: String?, resolver: ContentResolver): Bitmap? =
         bitmapForAt(cover, resolver, TARGET_SMALL, smallBitmaps)
+
+    /**
+     * Companion cover for a track's own folder (cover.jpg and friends),
+     * last resort before the generated plate. The scan never stats the
+     * filesystem, so this runs lazily on visible rows only, memoized per
+     * dir; misses expire like any other miss so a later drop-in appears.
+     */
+    suspend fun folderSmall(dirPath: String?, resolver: ContentResolver): Bitmap? =
+        folderAt(dirPath, resolver, TARGET_SMALL, smallBitmaps)
+
+    /** Full-size twin of [folderSmall] for the hero plate. */
+    suspend fun folder(dirPath: String?, resolver: ContentResolver): Bitmap? =
+        folderAt(dirPath, resolver, TARGET, bitmaps)
+
+    /** Memory-only peek at a folder cover, safe on Main. */
+    fun cachedFolderSmall(dirPath: String?): Bitmap? =
+        dirPath?.takeIf { it.isNotBlank() }?.let { folderHit.get(it) }
+            ?.let { smallBitmaps.get(it) }
+
+    /** Full-size twin of [cachedFolderSmall]. */
+    fun cachedFolder(dirPath: String?): Bitmap? =
+        dirPath?.takeIf { it.isNotBlank() }?.let { folderHit.get(it) }
+            ?.let { bitmaps.get(it) }
+
+    /**
+     * Companion cover path ("file://…") in [dirPath], or null. Blocking
+     * java.io: runs on CoverIo via [folderAt], never on Main. Pure enough
+     * for JVM unit tests (no framework calls).
+     */
+    internal fun findFolderCover(dirPath: String?): String? {
+        if (dirPath.isNullOrBlank()) return null
+        folderNames.firstNotNullOfOrNull { name ->
+            java.io.File(dirPath, name).takeIf { it.isFile }?.absolutePath
+        }?.let { return "file://$it" }
+        // Fall back to any image in the folder (some viewers drop a
+        // "folder.jpg"-style file under a different name).
+        return java.io.File(dirPath).listFiles()
+            ?.firstOrNull { it.isFile && it.extension.lowercase() in imageExts }
+            ?.absolutePath?.let { "file://$it" }
+    }
+
+    private suspend fun folderAt(
+        dirPath: String?,
+        resolver: ContentResolver,
+        target: Int,
+        cache: LruCache<String, Bitmap>,
+    ): Bitmap? {
+        if (dirPath.isNullOrBlank()) return null
+        folderHit.get(dirPath)?.let { path -> return bitmapForAt(path, resolver, target, cache) }
+        misses.get("folder:$dirPath")?.let { at ->
+            if (System.currentTimeMillis() - at < MISS_RETRY_MS) return null
+        }
+        val path = withContext(CoverIo) { findFolderCover(dirPath) }
+        if (path == null) {
+            misses.put("folder:$dirPath", System.currentTimeMillis())
+            return null
+        }
+        folderHit.put(dirPath, path)
+        return bitmapForAt(path, resolver, target, cache)
+    }
 
     /**
      * Memory-only peek for rows: a plain LRU get, safe on Main, so a
