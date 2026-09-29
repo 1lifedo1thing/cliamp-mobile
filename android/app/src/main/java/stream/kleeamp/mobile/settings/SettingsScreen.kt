@@ -346,8 +346,13 @@ fun SettingsScreen(
 private fun ToggleRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     val p = LocalPalette.current
     Column {
+        // The whole row toggles, not just the 44dp pill: tapping the
+        // label must work too, or users "enable" it with no effect and
+        // find it off on return. The pill consumes its own taps, so the
+        // row handler never double-fires.
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 12.dp),
+            Modifier.fillMaxWidth().microPress { onChange(!checked) }
+                .padding(horizontal = Gutter, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {

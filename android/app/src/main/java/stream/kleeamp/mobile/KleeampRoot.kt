@@ -679,7 +679,12 @@ fun KleeampRoot(
                 val token by prefs.listenBrainzToken.collectAsState(initial = "")
                 OverlayCover {
                     ScrobbleWizardScreen(
-                        vm = appViewModel { _ -> ScrobbleWizardViewModel(token) },
+                        // Keyed on the token: the VM seeds its field once at
+                        // creation, so a VM born on the initial "" would show
+                        // an empty field forever despite a saved token.
+                        vm = appViewModel(key = "scrobble:$token") { _ ->
+                            ScrobbleWizardViewModel(token)
+                        },
                         onCancel = { navController.popBackStack() },
                         onSave = { t ->
                             scope.launch {
