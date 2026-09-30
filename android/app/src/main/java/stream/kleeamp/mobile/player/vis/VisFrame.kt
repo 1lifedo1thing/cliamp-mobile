@@ -207,7 +207,16 @@ class SakuraFrame(columns: Int) : BandsSnapshotFrame(columns)
 class FireworkFrame(columns: Int) : BandsSnapshotFrame(columns)
 class BubblesFrame(columns: Int) : BandsSnapshotFrame(columns)
 class FireflyFrame(columns: Int) : BandsSnapshotFrame(columns)
-class BinaryFrame(columns: Int) : BandsSnapshotFrame(columns)
+class BinaryFrame(columns: Int) : BandsSnapshotFrame(columns, BINARY_TICK_NS) {
+
+    private companion object {
+        /**
+         * cliamp's binary is a render-only driver at TickFast (50 ms) while
+         * playing; the scroll speed is counted in ticks.
+         */
+        const val BINARY_TICK_NS = 50_000_000L
+    }
+}
 
 class FlameFrame(columns: Int) : VisFrame(columns, 0L) {
     val core = FlameCore(48, 28)
@@ -219,14 +228,22 @@ class FlameFrame(columns: Int) : VisFrame(columns, 0L) {
     override fun settle() = core.settle()
 }
 
-class SandFrame(columns: Int) : VisFrame(columns, 0L) {
-    val core = SandCore(40, 24)
+class SandFrame(columns: Int) : VisFrame(columns, SAND_TICK_NS) {
+    val core = SandCore()
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        core.push(bands ?: VisMath.silenceBands(columns))
+        core.push(bands ?: VisMath.silenceBands(columns), frame.toLong())
     }
 
     override fun settle() = core.settle()
+
+    private companion object {
+        /**
+         * cliamp ticks sand at TickFast (50 ms) while playing; the pour,
+         * fall and explosion rates are tuned to that cadence.
+         */
+        const val SAND_TICK_NS = 50_000_000L
+    }
 }
 
 class GeyserFrame(columns: Int) : VisFrame(columns, 0L) {

@@ -105,21 +105,29 @@ class FireflyCoreTest {
 class BinaryCoreTest {
 
     @Test
-    fun bitsAreBinary() {
-        repeat(64) { i ->
-            val bit = BinaryCore.bit(i % 8, i % 14, 14, i.toLong(), 0.7f)
-            assertTrue(bit == '0' || bit == '1')
-        }
-    }
-
-    @Test
     fun energyRaisesOnes() {
         var quiet = 0
         var loud = 0
         for (i in 0 until 200) {
-            if (BinaryCore.bit(i % 8, i % 14, 14, i.toLong(), 0f) == '1') quiet++
-            if (BinaryCore.bit(i % 8, i % 14, 14, i.toLong(), 1f) == '1') loud++
+            if (BinaryCore.bit(i % 8, i % 14, i % 10, i / 3, 0f)) quiet++
+            if (BinaryCore.bit(i % 8, i % 14, i % 10, i / 3, 1f)) loud++
         }
-        assertTrue(loud > quiet)
+        // oneProb is 0.15 quiet vs 0.75 loud.
+        assertTrue("loud=$loud quiet=$quiet", loud > quiet + 60)
+    }
+
+    @Test
+    fun hotOnesGlowBright() {
+        assertEquals(2, BinaryCore.tier(true, 0.9f))
+        assertEquals(1, BinaryCore.tier(true, 0.2f))
+        assertEquals(1, BinaryCore.tier(false, 0.5f))
+        assertEquals(0, BinaryCore.tier(false, 0.1f))
+    }
+
+    @Test
+    fun hotterBandsScrollFaster() {
+        assertTrue(BinaryCore.speed(1f) < BinaryCore.speed(0f))
+        assertEquals(1, BinaryCore.speed(1f))
+        assertEquals(4, BinaryCore.speed(0f))
     }
 }

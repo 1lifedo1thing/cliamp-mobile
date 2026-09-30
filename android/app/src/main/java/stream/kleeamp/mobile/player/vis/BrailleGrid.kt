@@ -50,12 +50,17 @@ internal class BrailleGrid(
     fun layoutOf(braille: Int): TextLayoutResult = measure(braille)
 }
 
+/**
+ * @param scale glyph oversize vs the tile grid. Traces use [GLYPH_SCALE] so
+ * dots grow into each other; particle fields like sand use 1.0 so isolated
+ * grains stay grain-sized while piles still merge.
+ */
 @Composable
-internal fun rememberBrailleGrid(): BrailleGrid {
+internal fun rememberBrailleGrid(scale: Float = GLYPH_SCALE): BrailleGrid {
     val measurer = rememberTextMeasurer(cacheSize = 256)
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
-    val drawStyle = brailleStyle(10.sp * GLYPH_SCALE)
+    val drawStyle = brailleStyle(10.sp * scale)
     val probe = remember(measurer, density, layoutDirection) {
         measurer.measure(
             BRAILLE_FULL,
