@@ -35,13 +35,17 @@ internal fun VisWave(frame: WaveFrame, modifier: Modifier) {
     val measurer = rememberTextMeasurer(cacheSize = 256)
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
-    // Fixed style for every glyph: the probe and all cached layouts share
-    // it, so tiling stays exact and the cache never invalidates on size.
-    val style = waveStyle(10.sp)
+    // Pure braille, exactly like cliamp: nothing but braille cells, no
+    // connecting lines. Phone monospace fonts draw small dots with wide
+    // pitch, so the tile grid is measured at 10 sp but glyphs are drawn
+    // larger and centered on their tile: dots grow into each other like on
+    // a terminal while positions stay on the cliamp grid.
+    val probeStyle = waveStyle(10.sp)
+    val drawStyle = waveStyle(10.sp * GLYPH_SCALE)
     val probe = remember(measurer, density, layoutDirection) {
         measurer.measure(
             BRAILLE_FULL,
-            style,
+            probeStyle,
             constraints = Constraints(),
             density = density,
             layoutDirection = layoutDirection,
@@ -90,7 +94,7 @@ internal fun VisWave(frame: WaveFrame, modifier: Modifier) {
                 val layout = glyphCache.getOrPut(braille) {
                     measurer.measure(
                         braille.toChar().toString(),
-                        style,
+                        drawStyle,
                         constraints = Constraints(),
                         density = density,
                         layoutDirection = layoutDirection,
@@ -111,6 +115,13 @@ internal fun VisWave(frame: WaveFrame, modifier: Modifier) {
 
 private const val BRAILLE_BASE = 0x2800
 private const val BRAILLE_FULL = "\u28FF"
+
+/**
+ * Glyph oversize vs the tile grid: dots grow into their neighbours until
+ * they nearly touch, like terminal braille. Positions stay on the probe
+ * grid, so geometry still matches cliamp exactly.
+ */
+private const val GLYPH_SCALE = 1.35f
 
 /** cliamp's brailleBit table: (row, col) in a 4x2 grid to its bit value. */
 private val BRAILLE_BIT = arrayOf(
