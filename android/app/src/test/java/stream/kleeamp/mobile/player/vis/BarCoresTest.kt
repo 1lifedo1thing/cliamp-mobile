@@ -6,16 +6,19 @@ import org.junit.Test
 class BarsDotCoreTest {
 
     @Test
-    fun fillScalesWithLevel() {
-        assertEquals(0, BarsDotCore.filled(36, 0f))
-        assertEquals(36, BarsDotCore.filled(36, 1f))
-        assertEquals(18, BarsDotCore.filled(36, 0.5f))
+    fun dotsFillBottomUp() {
+        // 8 dot rows: level 0.5 lights the bottom 4 (dotY 0/8..3/8 < 0.5).
+        assertEquals(false, BarsDotCore.dotLit(8, 0, 0.5f))
+        assertEquals(false, BarsDotCore.dotLit(8, 3, 0.5f))
+        assertEquals(true, BarsDotCore.dotLit(8, 4, 0.5f))
+        assertEquals(true, BarsDotCore.dotLit(8, 7, 0.5f))
     }
 
     @Test
-    fun fillClamps() {
-        assertEquals(0, BarsDotCore.filled(36, -1f))
-        assertEquals(36, BarsDotCore.filled(36, 2f))
+    fun silenceLightsNothingFullScaleLightsAll() {
+        for (row in 0 until 8) {
+            assertEquals(false, BarsDotCore.dotLit(8, row, 0f))
+        }
     }
 }
 
@@ -33,19 +36,19 @@ class BricksCoreTest {
 class BarsOutlineCoreTest {
 
     @Test
-    fun topsSpanTheWidth() {
-        val pts = BarsOutlineCore.tops(floatArrayOf(0f, 0.5f, 1f), 90f, 100f)
-        assertEquals(3, pts.size)
-        assertEquals(100f, pts[0].y, 1e-6f)
-        assertEquals(50f, pts[1].y, 1e-6f)
-        assertEquals(0f, pts[2].y, 1e-6f)
-        assertEquals(15f, pts[0].x, 1e-6f)
+    fun peakRowHoldsTheLevel() {
+        // 7 rows: level 0.5 lands in row 3, like the terminal original.
+        assertEquals(3, BarsOutlineCore.peakRow(0.5f, 7))
+        assertEquals(0, BarsOutlineCore.peakRow(0.99f, 7))
+        assertEquals(6, BarsOutlineCore.peakRow(0.01f, 7))
     }
 
     @Test
-    fun emptyOrFlatCanvasGivesNoPoints() {
-        assertEquals(0, BarsOutlineCore.tops(floatArrayOf(), 90f, 100f).size)
-        assertEquals(0, BarsOutlineCore.tops(floatArrayOf(0.5f), 0f, 100f).size)
+    fun silenceAndFullScaleDrawNothing() {
+        assertEquals(null, BarsOutlineCore.peakRow(0f, 7))
+        assertEquals(null, BarsOutlineCore.peakRow(-0.5f, 7))
+        assertEquals(null, BarsOutlineCore.peakRow(1f, 7))
+        assertEquals(null, BarsOutlineCore.peakRow(0.5f, 0))
     }
 }
 
