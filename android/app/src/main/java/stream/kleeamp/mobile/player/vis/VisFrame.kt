@@ -15,6 +15,16 @@ import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.chrome.BrickMeter
 import stream.kleeamp.mobile.chrome.rememberMeter
 
+/**
+ * cliamp's TickFast (50 ms): the render cadence of every render-only driver
+ * while playing. Simulation rates (fall speeds, scroll steps, gate rhythms)
+ * are tuned to it - running them at display rate plays everything ~3x fast.
+ */
+internal const val TICK_FAST_NS = 50_000_000L
+
+/** cliamp's classicLED frame rate: chunky 30 fps LEDs, not smooth bars. */
+internal const val LED_TICK_NS = 33_000_000L
+
 @Stable
 sealed class VisFrame(val columns: Int, val minTickNs: Long) {
     var frame by mutableIntStateOf(0)
@@ -57,7 +67,7 @@ class ClassicPeakFrame(columns: Int) : VisFrame(columns, 0L) {
     override fun settle() = core.settle()
 }
 
-class ClassicLedFrame(columns: Int) : VisFrame(columns, 0L) {
+class ClassicLedFrame(columns: Int) : VisFrame(columns, LED_TICK_NS) {
     private val core = ClassicLedCore(columns)
     val body get() = core.body
     val peaks get() = core.peak
@@ -94,7 +104,7 @@ class MatrixFrame(columns: Int) : VisFrame(columns, MATRIX_TICK_NS) {
     }
 
     private companion object {
-        const val MATRIX_TICK_NS = 66_000_000L
+        const val MATRIX_TICK_NS = TICK_FAST_NS
     }
 }
 
@@ -111,11 +121,12 @@ class ButterflyFrame(columns: Int) : VisFrame(columns, BUTTERFLY_TICK_NS) {
     }
 
     private companion object {
-        const val BUTTERFLY_TICK_NS = 66_000_000L
+        const val BUTTERFLY_TICK_NS = TICK_FAST_NS
     }
 }
 
-class OmarchyFrame(columns: Int) : VisFrame(columns, OMARCHY_TICK_NS) {
+// cliamp drives omarchy at TickAnim (16 ms); throttling it slows the drift.
+class OmarchyFrame(columns: Int) : VisFrame(columns, 0L) {
     var bands: FloatArray = FloatArray(columns)
         private set
 
@@ -125,10 +136,6 @@ class OmarchyFrame(columns: Int) : VisFrame(columns, OMARCHY_TICK_NS) {
 
     override fun settle() {
         bands = FloatArray(columns)
-    }
-
-    private companion object {
-        const val OMARCHY_TICK_NS = 50_000_000L
     }
 }
 
@@ -208,14 +215,18 @@ class BarsDotFrame(columns: Int) : BandsSnapshotFrame(columns)
 class BarsOutlineFrame(columns: Int) : BandsSnapshotFrame(columns)
 class BricksFrame(columns: Int) : BandsSnapshotFrame(columns)
 class ColumnsFrame(columns: Int) : BandsSnapshotFrame(columns)
-class PulseFrame(columns: Int) : BandsSnapshotFrame(columns)
-class RetroFrame(columns: Int) : BandsSnapshotFrame(columns)
+// TickFast modes (cliamp render-only drivers): throttled so sim speeds match.
+// Mirror stays unthrottled (TickAnim); Ascii likewise below.
+class PulseFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
+class RetroFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
 class MirrorFrame(columns: Int) : BandsSnapshotFrame(columns)
-class ScatterFrame(columns: Int) : BandsSnapshotFrame(columns)
-class SakuraFrame(columns: Int) : BandsSnapshotFrame(columns)
-class FireworkFrame(columns: Int) : BandsSnapshotFrame(columns)
-class BubblesFrame(columns: Int) : BandsSnapshotFrame(columns)
-class FireflyFrame(columns: Int) : BandsSnapshotFrame(columns)
+class ScatterFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
+class SakuraFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
+class FireworkFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
+class BubblesFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
+class FireflyFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
+class LogoFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
+class RedSectorFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
 class BinaryFrame(columns: Int) : BandsSnapshotFrame(columns, BINARY_TICK_NS) {
 
     private companion object {
@@ -227,7 +238,7 @@ class BinaryFrame(columns: Int) : BandsSnapshotFrame(columns, BINARY_TICK_NS) {
     }
 }
 
-class FlameFrame(columns: Int) : VisFrame(columns, 0L) {
+class FlameFrame(columns: Int) : VisFrame(columns, TICK_FAST_NS) {
     val core = FlameCore(48, 28)
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
@@ -255,7 +266,7 @@ class SandFrame(columns: Int) : VisFrame(columns, SAND_TICK_NS) {
     }
 }
 
-class GeyserFrame(columns: Int) : VisFrame(columns, 0L) {
+class GeyserFrame(columns: Int) : VisFrame(columns, TICK_FAST_NS) {
     val core = GeyserCore()
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
@@ -265,10 +276,10 @@ class GeyserFrame(columns: Int) : VisFrame(columns, 0L) {
     override fun settle() = core.settle()
 }
 
-class LogoFrame(columns: Int) : BandsSnapshotFrame(columns)
+// Ascii stays unthrottled (TickAnim); Logo is TickFast (moved above).
 class AsciiFrame(columns: Int) : BandsSnapshotFrame(columns)
 
-class TerrainFrame(columns: Int) : VisFrame(columns, 0L) {
+class TerrainFrame(columns: Int) : VisFrame(columns, TICK_FAST_NS) {
     val core = TerrainCore(64)
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
@@ -281,7 +292,7 @@ class TerrainFrame(columns: Int) : VisFrame(columns, 0L) {
     override fun settle() = core.settle()
 }
 
-class MosaicFrame(columns: Int) : VisFrame(columns, 0L) {
+class MosaicFrame(columns: Int) : VisFrame(columns, TICK_FAST_NS) {
     val core = MosaicCore(10, 18)
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
@@ -310,7 +321,6 @@ open class SamplesFrame(columns: Int) : VisFrame(columns, 0L) {
 
 class ScopeFrame(columns: Int) : SamplesFrame(columns)
 class HeartbeatFrame(columns: Int) : SamplesFrame(columns)
-class RedSectorFrame(columns: Int) : BandsSnapshotFrame(columns)
 
 @Composable
 fun rememberVisFrame(
