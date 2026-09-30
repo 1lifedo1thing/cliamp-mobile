@@ -5,6 +5,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 /**
@@ -24,9 +25,13 @@ class AppViewModelFactory(
 @Composable
 inline fun <reified VM : ViewModel> appViewModel(
     key: String? = null,
+    // Pass the activity to survive navigation: destination-scoped VMs are
+    // rebuilt with default state on every visit, flashing toggles off.
+    owner: ViewModelStoreOwner? = null,
     noinline create: (KleeampApp) -> VM,
 ): VM {
     val app = LocalContext.current.applicationContext as KleeampApp
     val factory = remember(app) { AppViewModelFactory({ create(app) }) }
-    return viewModel(key = key, factory = factory)
+    return if (owner != null) viewModel(viewModelStoreOwner = owner, key = key, factory = factory)
+    else viewModel(key = key, factory = factory)
 }

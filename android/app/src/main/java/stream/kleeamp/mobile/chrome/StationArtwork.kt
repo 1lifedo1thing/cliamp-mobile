@@ -18,6 +18,11 @@ import stream.kleeamp.mobile.model.Station
  * on the first frame, the async lookup only ever upgrades to real art. [url]
  * wins outright when set (catalogue art); otherwise the station branches.
  * [deferMs] delays the lookup so fast scrolls never fire it (search rows).
+ *
+ * The lookup retries twice a couple of seconds apart: a single transient
+ * failure (cold radio, offline moment, rested miss key) used to plate the
+ * surface for the rest of its composition, which is how a menu opened onto
+ * a listed episode could stay coverless while the row showed art.
  */
 @Composable
 fun rememberArt(
@@ -36,9 +41,15 @@ fun rememberArt(
     LaunchedEffect(key, kind) {
         if (cached != null) return@LaunchedEffect
         if (deferMs > 0) delay(deferMs)
-        val real = (if (kind == ArtKind.Thumb) ArtResolve.small(station, url, resolver)
-        else ArtResolve.full(station, url, resolver))?.asImageBitmap()
-        if (real != null) art = real
+        repeat(3) { attempt ->
+            val real = (if (kind == ArtKind.Thumb) ArtResolve.small(station, url, resolver)
+            else ArtResolve.full(station, url, resolver))?.asImageBitmap()
+            if (real != null) {
+                art = real
+                return@LaunchedEffect
+            }
+            if (attempt < 2) delay(2_000)
+        }
     }
     return art
 }

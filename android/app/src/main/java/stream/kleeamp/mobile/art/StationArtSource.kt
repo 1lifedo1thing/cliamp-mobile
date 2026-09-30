@@ -270,7 +270,13 @@ object StationArtSource {
      * later anyway. Known art and discovery share the station-id key; the
      * URL-keyed form is for callers that only ever held a URL.
      */
-    fun cachedSmall(station: Station): Bitmap? = smallBitmaps.get(station.id)
+    fun cachedSmall(station: Station): Bitmap? =
+        // Stable cover URLs are warmed under the URL key by rows and
+        // prefetch; check it before the id key so a fresh surface (menu,
+        // mini player) paints from memory on its first frame. Rotating
+        // signed URLs miss here and fall through to the id key as before.
+        station.cover.takeIf { it.startsWith("http") }?.let { smallBitmaps.get(it) }
+            ?: smallBitmaps.get(station.id)
 
     /** Memory-only peek for full-size art, the [bitmapFor] counterpart of
      * [cachedSmall]: a plain LRU get, safe on Main, so the player screen can
@@ -286,19 +292,51 @@ object StationArtSource {
         url.takeIf { it.isNotBlank() }?.let { smallBitmaps.get(it) }
 
     /**
+     * Test-only: seeds the small memory lane under [key], the way a warmed
+     * row or prefetch leaves it. Lets device tests prove one lane reads
+     * another's bytes without touching the network.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal fun seedSmallForTest(key: String, bmp: Bitmap) {
+        smallBitmaps.put(key, bmp)
+    }
+
+    /** Test-only: drops a seeded key so device tests never leak into each other. */
+    @androidx.annotation.VisibleForTesting
+    internal fun dropSmallForTest(key: String) {
+        smallBitmaps.remove(key)
+    }
+
+    /**
      * A known cover URL cached the stations way: keyed by the stable station
      * id rather than the URL. Provider artwork URLs are signed per request,
      * so keying by URL (as [bitmapForUrlSmall] does) never hits twice and
      * every list build re-downloads every cover. The bytes on disk are shared
      * with the discovery path, which files under the same id.
+     *
+     * The URL lane is consulted first from memory and disk: rows and prefetch
+     * warm exactly those keys, so a menu opening onto an already-listed
+     * episode paints instantly instead of firing a duplicate cold download
+     * under the id key. A URL hit is also filed under the id, so the
+     * id-keyed peek hits from then on. Rotating signed URLs simply miss both
+     * URL checks and fall through to the id lane as before.
      */
     suspend fun bitmapForKnownSmall(station: Station): Bitmap? {
         val url = station.cover.takeIf { it.startsWith("http") } ?: return bitmapForSmall(station)
+        smallBitmaps.get(url)?.let { return fileUnderId(station.id, it) }
+        val fromDisk = withContext(CoverIo) { disk(url, TARGET_SMALL) }
+        if (fromDisk != null) return fileUnderId(station.id, fromDisk)
         smallBitmaps.get(station.id)?.let { return it }
         if (isOut(station.id)) return null
         val bmp = withContext(CoverIo) { disk(station.id, TARGET_SMALL) }
             ?: download(url, save = station.id, target = TARGET_SMALL)
         if (bmp == null) noteMiss(station.id) else smallBitmaps.put(station.id, bmp)
+        return bmp
+    }
+
+    /** Files a URL-lane hit under the station id so id-keyed peeks hit too. */
+    private fun fileUnderId(id: String, bmp: Bitmap): Bitmap {
+        smallBitmaps.put(id, bmp)
         return bmp
     }
 

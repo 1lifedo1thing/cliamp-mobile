@@ -1,6 +1,7 @@
 package stream.kleeamp.mobile.settings
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -11,6 +12,26 @@ class ScrobblerTest {
         assertEquals("Singer" to "Song", splitStreamTitle("Singer - Song"))
         assertEquals("" to "Just words", splitStreamTitle("Just words"))
         assertEquals("A" to "B - C", splitStreamTitle("A - B - C"))
+    }
+
+    @Test
+    fun radioTitleNeedsBothHalves() {
+        assertTrue(radioTitleScrobblable("Singer - Song"))
+        assertFalse(radioTitleScrobblable("Radio Idle Name"))
+        assertFalse(radioTitleScrobblable("Singer - "))
+        assertFalse(radioTitleScrobblable(" - Song"))
+        assertFalse(radioTitleScrobblable(""))
+        assertFalse(radioTitleScrobblable("   "))
+    }
+
+    @Test
+    fun radioBanksHeardTitleOnChange() {
+        assertTrue(radioBankOnChange(RADIO_MIN_HEARD_MS, false, RADIO_MIN_HEARD_MS))
+        assertTrue(radioBankOnChange(RADIO_MIN_HEARD_MS + 1, false, RADIO_MIN_HEARD_MS))
+        assertFalse(radioBankOnChange(RADIO_MIN_HEARD_MS - 1, false, RADIO_MIN_HEARD_MS))
+        assertFalse(radioBankOnChange(0L, false, RADIO_MIN_HEARD_MS))
+        // an already-fired title is never banked twice
+        assertFalse(radioBankOnChange(RADIO_MIN_HEARD_MS * 10, true, RADIO_MIN_HEARD_MS))
     }
 
     @Test

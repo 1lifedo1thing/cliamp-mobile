@@ -1,5 +1,6 @@
 package stream.kleeamp.mobile
 
+import androidx.activity.ComponentActivity
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.animateDpAsState
@@ -581,9 +582,17 @@ fun KleeampRoot(
 
             // -- Full overlay destinations (cover the chrome) --
             composable<Settings> {
+                // Activity-retained: a destination-scoped VM rebuilds with
+                // all-false defaults on every visit, flashing toggles off
+                // before the flows emit (the knob animation stretches one
+                // stale frame into a visible sweep). Retained, reopening
+                // shows the live values instantly. Holds only app singletons.
+                val settingsOwner = LocalContext.current as? ComponentActivity
                 Box(contentModifier) {
                     SettingsScreen(
-                        vm = appViewModel { app -> SettingsViewModel(app.prefs, app.radio, app.scrobbler) },
+                        vm = appViewModel(owner = settingsOwner) { app ->
+                            SettingsViewModel(app.prefs, app.radio, app.scrobbler)
+                        },
                         onBack = { navController.popBackStack() },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenScrobble = { navController.navigate(ScrobbleWizard) },
