@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
 import stream.kleeamp.mobile.art.ArtResolve
+import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.model.Station
 
 /**
@@ -19,10 +20,10 @@ import stream.kleeamp.mobile.model.Station
  * wins outright when set (catalogue art); otherwise the station branches.
  * [deferMs] delays the lookup so fast scrolls never fire it (search rows).
  *
- * The lookup retries twice a couple of seconds apart: a single transient
- * failure (cold radio, offline moment, rested miss key) used to plate the
- * surface for the rest of its composition, which is how a menu opened onto
- * a listed episode could stay coverless while the row showed art.
+ * Thumbs resolve once: radio rows rely on the StationArtSource miss backoff
+ * plus disk/memory cache instead of hammering the network, so list
+ * prefetch + rows + scroll never stampede. Full player art keeps two short
+ * retries for transient failures.
  */
 @Composable
 fun rememberArt(
@@ -40,10 +41,16 @@ fun rememberArt(
     var art by remember(key, kind) { mutableStateOf(cached) }
     LaunchedEffect(key, kind) {
         if (cached != null) return@LaunchedEffect
+        if (station != null && kind == ArtKind.Thumb &&
+            StationArtSource.isMissOut(station.id)
+        ) return@LaunchedEffect
         if (deferMs > 0) delay(deferMs)
+        if (kind == ArtKind.Thumb) {
+            art = ArtResolve.small(station, url, resolver)?.asImageBitmap() ?: art
+            return@LaunchedEffect
+        }
         repeat(3) { attempt ->
-            val real = (if (kind == ArtKind.Thumb) ArtResolve.small(station, url, resolver)
-            else ArtResolve.full(station, url, resolver))?.asImageBitmap()
+            val real = ArtResolve.full(station, url, resolver)?.asImageBitmap()
             if (real != null) {
                 art = real
                 return@LaunchedEffect
