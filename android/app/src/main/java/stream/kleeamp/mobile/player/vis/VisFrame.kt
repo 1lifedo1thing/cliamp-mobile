@@ -239,7 +239,7 @@ class BinaryFrame(columns: Int) : BandsSnapshotFrame(columns, BINARY_TICK_NS) {
 }
 
 class FlameFrame(columns: Int) : VisFrame(columns, TICK_FAST_NS) {
-    val core = FlameCore(48, 28)
+    val core = FlameCore()
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
         core.push(bands ?: VisMath.silenceBands(columns))

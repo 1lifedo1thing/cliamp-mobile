@@ -1,53 +1,83 @@
 package stream.kleeamp.mobile.player.vis
 
-import kotlin.random.Random
-
 /**
- * Doom-fire propagation, mirroring cliamp's flameDriver: a heat field fed
- * at the bottom row from the spectrum, each cell inheriting its
- * neighbour-below's heat with lateral wind jitter and decay. Bass
- * thickens the source; quiet passages settle into coals.
+ * Doom-fire propagation, ported from cliamp's flameDriver
+ * (`ui/vis_flame.go`): a heat field fed at the bottom row from a smooth
+ * spectrum sample plus sparkle (so a bed of embers survives quiet input),
+ * then every cell inherits a wind-jittered neighbour below with tapered
+ * random decay - a continuous lapping flame, not independent columns.
  *
- * Fixed cell grid (independent of pixels); the renderer scales cells up.
+ * Buffer row 0 is the BOTTOM (the source), like the Go heat buffer; the
+ * renderer flips vertically. Grid tiers: heat >= 0.55 reads yellow-hot,
+ * lower heat red, wispy tips stochastically culled at draw time.
  */
-class FlameCore(
-    val cols: Int,
-    val rows: Int,
-    seed: Long = 0xF1A3C0DE0BADCAFEu.toLong(),
-) {
-    val heat = FloatArray(cols * rows)
+class FlameCore(seed: Long = 0xF1A3C0DE0BADCAFEu.toLong()) {
 
-    private val rng = Random(seed)
-    private var wind = 0
+    var dotRows: Int = 0
+        private set
+    var dotCols: Int = 0
+        private set
 
-    /** 0 = empty avanza; heat tiers mirror the green/yellow/red ramp. */
-    fun tierAt(col: Int, row: Int): Int {
-        val h = heat[row * cols + col]
-        return when {
-            h >= 0.62f -> 2
-            h >= 0.30f -> 1
-            h > 0.02f -> 0
-            else -> -1
-        }
+    /** Heat per cell, row 0 = bottom source row. Resized by [ensure]. */
+    var heat: FloatArray = FloatArray(0)
+        private set
+
+    private var rng = seed
+
+    fun ensure(rows: Int, cols: Int) {
+        if (rows == dotRows && cols == dotCols && heat.size == rows * cols) return
+        dotRows = rows
+        dotCols = cols
+        heat = FloatArray(rows * cols)
+    }
+
+    private fun rand100(): Int {
+        rng = rng * 6364136223846793005L + 1442695040888963407L
+        return ((rng ushr 33) % 100).toInt()
     }
 
     fun push(bands: FloatArray) {
-        // Feed the bottom row from the spectrum, bass-boosted.
-        for (x in 0 until cols) {
-            val band = VisMath.sampleLinear(bands, x.toFloat() / cols.coerceAtLeast(1) * (bands.size - 1))
-            val bass = VisMath.sampleLinear(bands, 0.5f)
-            heat[(rows - 1) * cols + x] = (band * 0.75f + bass * 0.45f).coerceIn(0f, 1f)
-        }
-        // Propagate upward with wind jitter and decay.
-        for (y in rows - 2 downTo 0) {
-            for (x in 0 until cols) {
-                wind = (wind + rng.nextInt(-1, 2)).coerceIn(-2, 2)
-                val below = (heat[(y + 1) * cols + x] +
-                    heat[(y + 1) * cols + ((x + wind).coerceIn(0, cols - 1))] +
-                    heat[(y + 1) * cols + ((x - wind).coerceIn(0, cols - 1))]) / 3f
-                heat[y * cols + x] = (below - 0.028f - rng.nextFloat() * 0.03f).coerceAtLeast(0f)
+        if (dotRows < 4 || dotCols < 4 || heat.size != dotRows * dotCols) return
+        // Source row: smooth spectrum sample + sparkle + ember floor.
+        if (bands.isNotEmpty()) {
+            val last = (bands.size - 1).toDouble()
+            for (x in 0 until dotCols) {
+                val pos = x.toDouble() / maxOf(1, dotCols - 1) * last
+                val src = VisMath.sampleLinear(bands, pos.toFloat())
+                val sparkle = rand100() / 100.0 * 0.18
+                var base = 0.30 + 0.70 * src + sparkle
+                if (base > 1.05) base = 1.05
+                heat[x] = base.toFloat()
+            }
+        } else {
+            for (x in 0 until dotCols) {
+                heat[x] = (0.30 + rand100() / 100.0 * 0.20).toFloat()
             }
         }
+        // Propagate upward (buffer grows downward from the source): top-down
+        // so each cell reads the row below before it is overwritten.
+        for (y in dotRows - 1 downTo 1) {
+            // Flames taper: decay grows with height.
+            val heightFrac = y.toDouble() / maxOf(1, dotRows - 1)
+            val decayBase = 0.010 + 0.028 * heightFrac
+            for (x in 0 until dotCols) {
+                // One LCG step feeds both the wind offset and the decay.
+                rng = rng * 6364136223846793005L + 1442695040888963407L
+                val r = rng ushr 33
+                val offset = (r % 3).toInt() - 1
+                val decayJitter = ((r shr 2) % 100).toInt() / 100.0 * 0.018
+                val sourceX = (x + offset).coerceIn(0, dotCols - 1)
+                var next = heat[(y - 1) * dotCols + sourceX] - decayBase - decayJitter
+                if (next < 0) next = 0.0
+                heat[y * dotCols + x] = next.toFloat()
+            }
+        }
+    }
+
+    /** Heat at buffer ([x], [y]) with y = 0 at the bottom, else 0. */
+    fun heatAt(x: Int, y: Int): Float {
+        if (x !in 0 until dotCols || y !in 0 until dotRows) return 0f
+        return heat[y * dotCols + x]
     }
 
     fun settle() {

@@ -8,22 +8,35 @@ class FlameCoreTest {
 
     private val bands = FloatArray(24) { 0.9f }
 
-    @Test
-    fun loudFeedHeatsTheTop() {
-        val core = FlameCore(12, 10)
-        assertEquals(-1, core.tierAt(5, 0))
-        repeat(40) { core.push(bands) }
-        assertTrue((0 until 12).any { x -> (0 until 10).any { y -> core.tierAt(x, y) >= 0 } })
+    private fun hotCore(): FlameCore = FlameCore().also {
+        it.ensure(10, 12)
+        repeat(40) { _ -> it.push(bands) }
     }
 
     @Test
-    fun silenceCoolsToEmpty() {
-        val core = FlameCore(12, 10)
-        repeat(40) { core.push(bands) }
-        repeat(200) { core.push(FloatArray(24)) }
-        assertTrue((0 until 12).all { x -> (0 until 10).all { y -> core.tierAt(x, y) < 0 } })
+    fun loudFeedHeatsFromTheSourceRow() {
+        val core = hotCore()
+        assertTrue(core.heat.any { it > 0f })
+        // Row 0 is the bottom source: hottest on average.
+        val bottom = (0 until 12).sumOf { core.heatAt(it, 0).toDouble() } / 12
+        val top = (0 until 12).sumOf { core.heatAt(it, 9).toDouble() } / 12
+        assertTrue("bottom=$bottom top=$top", bottom > top)
+    }
+
+    @Test
+    fun embersSurviveQuietInput() {
+        val core = FlameCore().also { it.ensure(10, 12) }
+        repeat(10) { core.push(FloatArray(0)) }
+        // Source row holds the ember floor; nothing goes negative.
+        for (x in 0 until 12) assertTrue(core.heatAt(x, 0) in 0.25f..0.55f)
+        assertTrue(core.heat.all { it >= 0f })
+    }
+
+    @Test
+    fun settleClears() {
+        val core = hotCore()
         core.settle()
-        assertTrue((0 until 12).all { x -> (0 until 10).all { y -> core.tierAt(x, y) < 0 } })
+        assertTrue(core.heat.all { it == 0f })
     }
 }
 

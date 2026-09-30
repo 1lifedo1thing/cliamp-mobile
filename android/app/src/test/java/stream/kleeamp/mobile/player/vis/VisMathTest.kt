@@ -66,6 +66,16 @@ class VisMathTest {
     }
 
     @Test
+    fun spreadSeedCoversTheGrid() {
+        // The cliamp petal stride (104729) is 1 mod 106: a raw mod would
+        // park 12 petals in 12 adjacent columns. The prime reduction must
+        // spread them across the whole grid instead.
+        val xs = (0 until 12).map { VisMath.spreadSeed(it * 104729L + 7919L, 106) }
+        assertTrue(xs.all { it in 0 until 106 })
+        assertTrue("petals bunched: $xs", xs.max() - xs.min() > 60)
+    }
+
+    @Test
     fun easeBandsSnapsOnResize() {
         val out = VisMath.easeBands(FloatArray(4), FloatArray(8) { 1f })
         assertEquals(8, out.size)

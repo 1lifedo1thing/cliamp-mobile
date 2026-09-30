@@ -71,6 +71,20 @@ object VisMath {
     fun silenceBands(columns: Int): FloatArray = FloatArray(columns)
 
     /**
+     * Spreads a seed stream uniformly onto `[0, n)`. A raw `seed % n` bunches
+     * when the seed step is ≡ ±1 (mod n) for the grid at hand - cliamp's
+     * petal step 104729 ≡ 1 (mod 106), parking every petal in adjacent
+     * columns on a 106-wide grid. Reducing modulo a prime first keeps the
+     * deterministic spread on every grid size.
+     */
+    fun spreadSeed(seed: Long, n: Int): Int {
+        if (n <= 0) return 0
+        return (((seed % PRIME) * n) / PRIME).toInt().coerceIn(0, n - 1)
+    }
+
+    private const val PRIME = 1009L
+
+    /**
      * Per-capture smoothing, mirroring cliamp Analyze's fast-attack /
      * slow-decay blend (0.6 new on rises, 0.25 new on falls). The render-side
      * cores ease again per frame, but without this stage every FFT callback
