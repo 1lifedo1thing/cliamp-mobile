@@ -106,6 +106,38 @@ class AudioAnalyzerTest {
     }
 
     @Test
+    fun waveWindowHoldsWithoutNewPcm() {
+        // Stall behavior: no new writes between ticks must not run the
+        // cursor past written or invent motion — the trace holds.
+        PcmRing.clear()
+        PcmRing.onFormat(44_100, 1)
+        val analyzer = AudioAnalyzer()
+        PcmRing.writeMono(FloatArray(2048) { 0.5f }, 2048)
+        analyzer.publishWave()
+        val first = PlaybackBus.waveform.value.copyOf()
+        analyzer.publishWave()
+        val second = PlaybackBus.waveform.value
+        assertTrue("wave moved with no new pcm", first.contentEquals(second))
+        PcmRing.clear()
+    }
+
+    @Test
+    fun waveWindowFollowsNewPcm() {
+        PcmRing.clear()
+        PcmRing.onFormat(44_100, 1)
+        val analyzer = AudioAnalyzer()
+        PcmRing.writeMono(FloatArray(2048), 2048)
+        analyzer.publishWave()
+        PcmRing.writeMono(FloatArray(2048) { 0.9f }, 2048)
+        // Let the wall-clock cursor slide a full window forward (>23 ms).
+        Thread.sleep(60)
+        analyzer.publishWave()
+        val wave = PlaybackBus.waveform.value
+        assertTrue("wave ignores fresh pcm, last=${wave.last()}", wave.last() > 0.5f)
+        PcmRing.clear()
+    }
+
+    @Test
     fun fftIsRealNotFaked() {
         // Two different inputs must peak in different bands; a fake
         // (timer/sine/random bar animator) would not track the input.

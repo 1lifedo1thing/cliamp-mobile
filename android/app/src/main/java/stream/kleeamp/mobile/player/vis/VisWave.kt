@@ -2,11 +2,15 @@ package stream.kleeamp.mobile.player.vis
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import stream.kleeamp.mobile.theme.LocalPalette
@@ -17,19 +21,39 @@ import stream.kleeamp.mobile.theme.LocalPalette
  * consecutive points connected, drawn as braille cells exactly like the
  * terminal original - each glyph covers a 2x4 dot grid. Silence (and pause)
  * is the flat dotted center line.
+ *
+ * Frame cost control: the cell probe is measured once per density (it only
+ * depends on font scale, never on canvas size), and each distinct braille
+ * glyph is shaped once and cached - a frame then only does integer grid
+ * math plus draws. Measuring + shaping hundreds of glyphs per frame is
+ * what used to drop the scope to a stutter, worst on slow music where
+ * every frame differs slightly and nothing ever settled.
  */
 @Composable
 internal fun VisWave(frame: WaveFrame, modifier: Modifier) {
     val p = LocalPalette.current
     val measurer = rememberTextMeasurer(cacheSize = 256)
+    val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
+    // Fixed style for every glyph: the probe and all cached layouts share
+    // it, so tiling stays exact and the cache never invalidates on size.
+    val style = waveStyle(10.sp)
+    val probe = remember(measurer, density, layoutDirection) {
+        measurer.measure(
+            BRAILLE_FULL,
+            style,
+            constraints = Constraints(),
+            density = density,
+            layoutDirection = layoutDirection,
+        )
+    }
+    val cellW = probe.size.width.toFloat().coerceAtLeast(1f)
+    val cellH = probe.size.height.toFloat().coerceAtLeast(1f)
+    // At most the 256 braille patterns this grid can emit, each shaped once.
+    val glyphCache = remember { HashMap<Int, androidx.compose.ui.text.TextLayoutResult>(256) }
     Canvas(modifier) {
         @Suppress("UNUSED_EXPRESSION") frame.frame
         if (size.width <= 0f || size.height <= 0f) return@Canvas
-        // Cell geometry from the measured glyph so braille cells tile the
-        // frame without gaps or overlap on any density.
-        val probe = measurer.measure(BRAILLE_FULL, waveStyle(10.sp))
-        val cellW = probe.size.width.toFloat().coerceAtLeast(1f)
-        val cellH = probe.size.height.toFloat().coerceAtLeast(1f)
         val charCols = (size.width / cellW).toInt().coerceAtLeast(1)
         val rows = (size.height / cellH).toInt().coerceAtLeast(1)
         val dotRows = rows * 4
@@ -41,7 +65,6 @@ internal fun VisWave(frame: WaveFrame, modifier: Modifier) {
             (trace[x] * (dotRows - 1)).toInt().coerceIn(0, dotRows - 1)
         }
 
-        val style = waveStyle(cellH.toSp() * 0.9f)
         for (row in 0 until rows) {
             val dotRowStart = row * 4
             for (ch in 0 until charCols) {
@@ -64,7 +87,15 @@ internal fun VisWave(frame: WaveFrame, modifier: Modifier) {
                     }
                 }
                 if (braille == BRAILLE_BASE) continue
-                val layout = measurer.measure(braille.toChar().toString(), style)
+                val layout = glyphCache.getOrPut(braille) {
+                    measurer.measure(
+                        braille.toChar().toString(),
+                        style,
+                        constraints = Constraints(),
+                        density = density,
+                        layoutDirection = layoutDirection,
+                    )
+                }
                 drawText(
                     textLayoutResult = layout,
                     color = p.accent,

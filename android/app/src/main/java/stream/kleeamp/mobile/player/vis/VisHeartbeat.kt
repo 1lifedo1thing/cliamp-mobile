@@ -7,6 +7,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import stream.kleeamp.mobile.theme.LocalPalette
 
+/** Points per trace draw; see the stride note in [VisHeartbeat]. */
+private const val MAX_POINTS = 512
+
 @Composable
 internal fun VisHeartbeat(frame: HeartbeatFrame, modifier: Modifier) {
     val p = LocalPalette.current
@@ -28,12 +31,19 @@ internal fun VisHeartbeat(frame: HeartbeatFrame, modifier: Modifier) {
             p.inkFaint.copy(alpha = 0.5f),
             style = androidx.compose.ui.graphics.drawscope.Stroke(1f),
         )
+        // Cap segments: the window holds 1024 samples but a phone screen
+        // cannot resolve them, and 2k path segments per frame at 60 fps is
+        // what made slow traces feel heavy. Striding keeps every pixel.
+        val stride = ((samples.size - 1) / MAX_POINTS).coerceAtLeast(1)
         val path = Path()
-        val n = samples.size
-        for (i in 0 until n) {
-            val x = size.width * i / (n - 1)
+        var drawn = 0
+        var i = 0
+        while (i < samples.size) {
+            val x = size.width * i / (samples.size - 1)
             val y = size.height * HeartbeatCore.yFrac(HeartbeatCore.shaped(samples[i]))
-            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            if (drawn == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            drawn++
+            i += stride
         }
         drawPath(
             path,

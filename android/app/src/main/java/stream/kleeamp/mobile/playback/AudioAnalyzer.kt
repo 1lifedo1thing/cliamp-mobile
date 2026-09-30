@@ -56,27 +56,41 @@ class AudioAnalyzer(
     private val waveScratch = FloatArray(WAVEFORM_SIZE)
 
     private var lastWritten = -1L
-    private var lastPublishMs = 0L
+    private var lastFftMs = 0L
+
+    /**
+     * Wall-clock wave cursor: absolute ring position the waveform window
+     * ends at. Advanced by elapsed time every wave tick (never past what
+     * was written), so raw modes slide continuously at 60 Hz exactly like
+     * cliamp's wall-clock-anchored WaveformSamplesInto — even when the
+     * decoder delivers PCM in bursts with quiet gaps between them.
+     */
+    private var waveEnd = -1L
+    private var lastWaveNs = 0L
 
     init {
         buildHann()
         buildLogEdges()
     }
 
-    /** Start the 30 Hz analysis loop. Idempotent. */
+    /**
+     * Start the analysis loop. Idempotent. Two cadences like cliamp:
+     * waveform at ~60 Hz (raw modes sample every TickWave tick) and the
+     * expensive FFT at ~30 Hz (TickAnalyze). Both publish without
+     * allocating beyond the copied output arrays.
+     */
     fun start(scope: CoroutineScope) {
         if (job?.isActive == true) return
         job = scope.launch(Dispatchers.Default) {
+            lastWaveNs = System.nanoTime()
             while (isActive) {
+                publishWave()
                 val now = System.currentTimeMillis()
-                var didWork = false
-                if (now - lastPublishMs >= ANALYZE_MS) {
-                    analyzeOnce()
-                    lastPublishMs = now
-                    didWork = true
+                if (now - lastFftMs >= ANALYZE_MS) {
+                    analyzeSpectrum()
+                    lastFftMs = now
                 }
-                // Sleep the remainder so the loop holds ~30 Hz without spin.
-                delay(if (didWork) ANALYZE_MS else 10L)
+                delay(WAVE_MS)
             }
         }
     }
@@ -96,7 +110,10 @@ class AudioAnalyzer(
         out.fill(0f)
         PcmRing.clear()
         lastWritten = -1L
+        waveEnd = -1L
+        lastWaveNs = System.nanoTime()
         PlaybackBus.publishSpectrum(FloatArray(bands))
+        PlaybackBus.publishWaveform(FloatArray(WAVEFORM_SIZE))
         PlaybackBus.publishGeneration(PlaybackBus.generation.value + 1)
     }
 
@@ -141,11 +158,35 @@ class AudioAnalyzer(
         return out
     }
 
-    private fun analyzeOnce() {
+    /**
+     * Wave tick (~60 Hz): slide the window forward by elapsed wall-clock
+     * time, clamped to what was actually written. Fresh PCM pulls the
+     * cursor along; a stall parks it — the trace holds instead of jumping.
+     */
+    fun publishWave() {
+        val written = PcmRing.written()
+        val now = System.nanoTime()
+        val sr = PcmRing.sampleRateHz.takeIf { it > 0 } ?: 44_100
+        if (waveEnd < 0) {
+            waveEnd = written
+            lastWaveNs = now
+        } else {
+            val dtSec = ((now - lastWaveNs).coerceAtLeast(0L)) / 1_000_000_000.0
+            lastWaveNs = now
+            if (dtSec > 0) {
+                waveEnd = minOf(written, waveEnd + (dtSec * sr).toLong())
+            }
+        }
+        PcmRing.readWindow(waveEnd, waveScratch, WAVEFORM_SIZE)
+        PlaybackBus.publishWaveform(waveScratch.copyOf())
+        if (written > 0 && !PlaybackBus.spectrumLive.value) {
+            PlaybackBus.publishSpectrumLive(true)
+        }
+    }
+
+    private fun analyzeSpectrum() {
         val written = PcmRing.written()
         val have = PcmRing.readLatest(sampleBuf, fftSize)
-        // Waveform always follows the freshest window for scope/heartbeat.
-        PcmRing.readLatest(waveScratch, WAVEFORM_SIZE)
         if (written == lastWritten && written >= 0) {
             // No new PCM (paused/buffering): decay toward silence so meters
             // settle naturally instead of freezing mid-peak.
@@ -157,7 +198,6 @@ class AudioAnalyzer(
         val sr = PcmRing.sampleRateHz.takeIf { it > 0 } ?: 44_100
         analyzeSamples(sampleBuf, have, sr)
         PlaybackBus.publishSpectrum(out.copyOf())
-        PlaybackBus.publishWaveform(waveScratch.copyOf())
         if (!PlaybackBus.spectrumLive.value) PlaybackBus.publishSpectrumLive(true)
     }
 
@@ -187,8 +227,11 @@ class AudioAnalyzer(
         /** ClassicPeak-grade FFT: 4096 like cliamp's classicPeakFFTSize. */
         const val FFT_SIZE = 4096
 
-        /** ~30 Hz analysis cadence (cliamp TickAnalyze = 33 ms). */
+        /** ~30 Hz FFT cadence (cliamp TickAnalyze = 33 ms). */
         const val ANALYZE_MS = 33L
+
+        /** ~60 Hz waveform cadence (cliamp TickWave = TickAnim = 16 ms). */
+        const val WAVE_MS = 16L
 
         const val WAVEFORM_SIZE = 1024
 

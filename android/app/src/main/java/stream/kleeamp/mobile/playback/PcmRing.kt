@@ -54,6 +54,41 @@ object PcmRing {
     fun written(): Long = writePos
 
     /**
+     * Copy [count] mono samples ending at absolute position [end]
+     * (exclusive) into [dst] (oldest-first). Anything before position 0 is
+     * zero-filled; [end] is clamped to [written]. This is the wall-clock
+     * window read: the analyzer advances [end] with elapsed time (like
+     * cliamp's WaveformSamplesInto anchoring to the audible position), so
+     * the waveform slides continuously every tick instead of freezing
+     * between decoder bursts and then jumping.
+     */
+    @Synchronized
+    fun readWindow(end: Long, dst: FloatArray, count: Int): Int {
+        val want = count.coerceAtMost(dst.size)
+        if (want <= 0) return 0
+        val clampedEnd = end.coerceIn(0L, writePos)
+        val start = clampedEnd - want
+        val zeros = (-start).coerceAtLeast(0L).toInt()
+        if (zeros > 0) dst.fill(0f, 0, zeros)
+        var copied = 0
+        var srcPos = maxOf(0L, start)
+        var dstPos = zeros
+        var remaining = want - zeros
+        while (remaining > 0 && srcPos < writePos) {
+            val idx = (srcPos % CAPACITY).toInt()
+            val chunk = minOf(remaining, CAPACITY - idx, (writePos - srcPos).toInt())
+            if (chunk <= 0) break
+            buf.copyInto(dst, dstPos, idx, idx + chunk)
+            dstPos += chunk
+            srcPos += chunk
+            remaining -= chunk
+            copied += chunk
+        }
+        if (remaining > 0) dst.fill(0f, dstPos, dstPos + remaining)
+        return copied
+    }
+
+    /**
      * Copy the latest [count] mono samples into [dst] (oldest-first).
      * Missing history is zero-filled. Returns samples actually copied from
      * the ring (rest are zeros).

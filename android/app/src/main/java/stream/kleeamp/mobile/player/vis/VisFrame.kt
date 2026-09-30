@@ -166,7 +166,12 @@ class WaveFrame(columns: Int) : VisFrame(columns, WAVE_TICK_NS) {
     }
 
     private companion object {
-        const val WAVE_TICK_NS = 33_000_000L
+        /**
+         * No throttle: cliamp samples + renders waveform modes every
+         * TickWave (16 ms, ~60 fps). Throttling to 30 fps here is what
+         * made the scope look a beat behind the music.
+         */
+        const val WAVE_TICK_NS = 0L
     }
 }
 
