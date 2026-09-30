@@ -194,7 +194,16 @@ open class BandsSnapshotFrame(columns: Int, tickNs: Long = 0L) : VisFrame(column
     }
 }
 
-class RainFrame(columns: Int) : BandsSnapshotFrame(columns)
+class RainFrame(columns: Int) : BandsSnapshotFrame(columns, RAIN_TICK_NS) {
+
+    private companion object {
+        /**
+         * cliamp's rain is a render-only driver at TickFast (50 ms) while
+         * playing; gate rhythm and fall speed are counted in ticks.
+         */
+        const val RAIN_TICK_NS = 50_000_000L
+    }
+}
 class BarsDotFrame(columns: Int) : BandsSnapshotFrame(columns)
 class BarsOutlineFrame(columns: Int) : BandsSnapshotFrame(columns)
 class BricksFrame(columns: Int) : BandsSnapshotFrame(columns)

@@ -37,8 +37,9 @@ internal fun VisBinary(frame: BinaryFrame, modifier: Modifier) {
     val measurer = rememberTextMeasurer(cacheSize = 8)
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
-    // "bit@pixel-height" entries; a resize retires old sizes via the cap.
-    val glyphs = remember { LinkedHashMap<String, TextLayoutResult>() }
+    // "bit@pixel-height" entries; a resize retires old sizes via the cap,
+    // density/dir keys rebuild them on font-scale change.
+    val glyphs = remember(density, layoutDirection) { LinkedHashMap<String, TextLayoutResult>() }
     Canvas(modifier) {
         @Suppress("UNUSED_EXPRESSION") frame.frame
         if (size.width <= 0f || size.height <= 0f) return@Canvas
