@@ -1,11 +1,9 @@
 package stream.kleeamp.mobile.player.vis
 
-import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sin
 import kotlin.math.sqrt
 
 data class StereoMetrics(
@@ -38,19 +36,11 @@ class StereoCore {
         hold.fill(0f)
     }
 
-    fun idle(t: Double) {
-        val l = (sin(2 * PI * t / 3.1) + 1.0) / 2.0 * 0.35 + 0.10
-        val r = (sin(2 * PI * t / 2.7 + 1.7) + 1.0) / 2.0 * 0.35 + 0.10
-        push(
-            StereoMetrics(
-                leftLevel = l.toFloat(),
-                rightLevel = r.toFloat(),
-                leftPeak = (l + 0.08).toFloat(),
-                rightPeak = (r + 0.08).toFloat(),
-            ),
-            1f / 60f,
-        )
-    }
+    /**
+     * No-signal input: ease toward true silence. Never synthesizes motion —
+     * a stereo meter with no PCM rests, it does not dance.
+     */
+    fun silence(dt: Float) = push(StereoMetrics.silent, dt)
 
     private fun stepChannel(channel: Int, targetLevel: Float, targetPeak: Float, dt: Float) {
         val rate = if (targetLevel > levels[channel]) RISE_RATE else FALL_RATE

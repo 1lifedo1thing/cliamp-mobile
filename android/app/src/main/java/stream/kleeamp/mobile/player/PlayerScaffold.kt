@@ -129,6 +129,7 @@ internal fun FullscreenVisualizer(model: PlayerModel, onExit: () -> Unit) {
             brick = 5.dp,
             gap = 4.dp,
             modifier = Modifier.fillMaxSize(),
+            generation = model.generation,
         )
         Mono(
             "double tap to exit",

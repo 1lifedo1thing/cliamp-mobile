@@ -94,9 +94,9 @@ enum class MeterSize(val columns: Int, val brick: Dp, val gap: Dp, val height: D
  * different `remember` trees - conditional remembers would drop and rebuild
  * the frame loop every time playback started or stopped.
  *
- * When a real spectrum is available it is used directly; otherwise the columns
- * fall back to a synthesised idle animation. Per-column variety comes from
- * staggered period and phase, never from randomised colour.
+ * A real spectrum from [AudioAnalyzer] is used directly; with no PCM yet the
+ * meter holds silence (zeros eased through the same attack/release), never a
+ * synthesised dance. Silence in, silence out.
  *
  * [spectrumProvider] lets small always-composed meters (mini player, Up Next)
  * read the live analyser without subscribing composition to it: a lambda read
@@ -109,29 +109,28 @@ fun rememberMeter(
     live: Boolean,
     spectrum: State<FloatArray>? = null,
     spectrumProvider: (() -> FloatArray?)? = null,
+    generation: Int = 0,
 ): MeterFrame {
     val frame = remember(columns) { MeterFrame(columns) }
     val src = spectrumProvider?.invoke() ?: spectrum?.value
     val useReal = live && src != null && src.isNotEmpty()
 
+    LaunchedEffect(columns, generation) { frame.settle() }
     LaunchedEffect(columns, live, useReal) {
         if (!live) {
             frame.settle()
             return@LaunchedEffect
         }
-        val start = withFrameNanos { it }
-        var last = start
+        var last = withFrameNanos { it }
+        // Reused silence frame: no per-tick allocation while PCM is absent.
+        val silence = FloatArray(columns)
         while (true) {
             withFrameNanos { now ->
                 val dt = ((now - last) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.1f)
                 last = now
                 val real = spectrumProvider?.invoke() ?: spectrum?.value
-                if (real != null && real.isNotEmpty()) {
-                    frame.push(real, dt)
-                } else {
-                    val t = (now - start) / 1_000_000_000.0
-                    frame.pushIdle(t)
-                }
+                // No PCM yet (tap priming): ease silence, never synthesize.
+                frame.push(if (real != null && real.isNotEmpty()) real else silence, dt)
             }
         }
     }
@@ -155,11 +154,6 @@ class MeterFrame(val columns: Int) {
 
     fun push(source: FloatArray, dt: Float) {
         core.push(source, dt)
-        frame++
-    }
-
-    fun pushIdle(t: Double) {
-        core.pushIdle(t)
         frame++
     }
 

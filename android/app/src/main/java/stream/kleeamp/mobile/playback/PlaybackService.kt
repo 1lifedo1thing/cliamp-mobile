@@ -82,6 +82,15 @@ class PlaybackService : MediaSessionService() {
     private val fx = AudioFx(bands = SPECTRUM_BANDS)
 
     /**
+     * Centralized PCM analysis: Tee tap → PcmRing → 4096-pt FFT → 64 bands.
+     * Source-agnostic (same decoded PCM that produces sound, any Media3
+     * source), duration-independent (live radio visualizes continuously),
+     * ~30 Hz analysis with animation reading the latest frame at display
+     * rate. Replaces the old Visualizer-API FFT path.
+     */
+    private val analyzer = AudioAnalyzer(bands = SPECTRUM_BANDS)
+
+    /**
      * Mono downmix through Media3's own channel mixer - no hand-rolled buffer
      * math. Stereo folds to dual mono (the average in both ears) so channel
      * counts never change and the AudioTrack never reconfigures; anything
@@ -266,23 +275,22 @@ class PlaybackService : MediaSessionService() {
         )
 
         val prefs = prefs0
+        // The analyzer runs off the tap regardless of the visualizer setting
+        // so mode switches are instant and no attach races the audio session.
+        // spectrumWanted only gates publishing liveness, never PCM flow.
+        analyzer.start(scope)
         scope.launch {
             combine(prefs.visualizer, prefs.eqEnabled, prefs.eqBands) { vis, eqOn, bands ->
                 Triple(vis, eqOn, bands)
             }.collect { (vis, eqOn, bands) ->
                 spectrumWanted = vis != "off"
-                fx.attach(
-                    player.audioSessionId,
-                    spectrumWanted,
-                    onSpectrum = ::handleSpectrum,
-                    onWaveform = PlaybackBus::publishWaveform,
-                    onLiveChanged = PlaybackBus::publishSpectrumLive,
-                )
+                fx.attach(player.audioSessionId, spectrumWanted)
                 fx.setEqEnabled(eqOn)
                 // Pretend-off: DSP stays engaged, OFF means flat (no pops
                 // from removing the effect; battery cost is negligible vs
                 // the visualizer). Stored bands are kept so ON restores them.
                 fx.applyEffectiveBands(eqOn, bands)
+                if (!spectrumWanted) PlaybackBus.publishSpectrumLive(false)
             }
         }
 
@@ -579,37 +587,23 @@ class PlaybackService : MediaSessionService() {
     }
 
     /**
-     * Self-healing analyser attach: a busy engine (or a session that was not
-     * ready) fails attach once and nothing retried it, leaving the meters
-     * simulated until the next pause/resume. Rechecked twice a second while
-     * playback is wanted; attach() early-returns when the live analyser
-     * already matches, and the cooldown keeps a persistently busy engine to
-     * one attempt plus one warning line every couple of seconds.
+     * Self-healing EQ attach: the audio session id only becomes valid once the
+     * renderer is up, so a session that was not ready fails attach once. The
+     * PCM tap needs no healing (it is in the sink chain from the start), but
+     * the EQ does — rechecked twice a second while playback is wanted.
      */
     private fun reattachAnalyserIfStalled() {
         val now = System.currentTimeMillis()
-        if (!player.isPlaying || !spectrumWanted || fx.spectrumLive ||
-            now - lastFxRetryMs <= FX_RETRY_MS
-        ) {
+        if (!player.isPlaying || now - lastFxRetryMs <= FX_RETRY_MS) {
             return
         }
         lastFxRetryMs = now
-        fx.attach(
-            player.audioSessionId,
-            spectrumWanted,
-            onSpectrum = ::handleSpectrum,
-            onWaveform = PlaybackBus::publishWaveform,
-            onLiveChanged = PlaybackBus::publishSpectrumLive,
-        )
-    }
-
-    /**
-     * Shared spectrum sink used by every fx.attach (onCreate and the playing
-     * re-attach). The in-app meter and the oscilloscope read it live.
-     */
-    private fun handleSpectrum(it: FloatArray) {
-        PlaybackBus.publishSpectrum(it)
-        Log.d("kleeamp/wid", "handleSpectrum playing=${player.isPlaying} sz=${it.size} live=${fx.spectrumLive}")
+        fx.attach(player.audioSessionId, spectrumWanted)
+        // The tap flows even while buffering/reconnecting; mark live once
+        // PCM has been seen so meters never freeze permanently after a stall.
+        if (spectrumWanted && PcmRing.written() > 0 && !PlaybackBus.spectrumLive.value) {
+            PlaybackBus.publishSpectrumLive(true)
+        }
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -621,6 +615,7 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         getSystemService(AudioManager::class.java)?.unregisterAudioDeviceCallback(outputCallback)
         reconnector?.detach()
+        analyzer.stop()
         fx.release()
         scope.cancel()
         // the session must go first; releasing the player under a live
@@ -700,19 +695,22 @@ class PlaybackService : MediaSessionService() {
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            if (isPlaying) PlaybackBus.publishError(null)
+            if (isPlaying) {
+                PlaybackBus.publishError(null)
+                if (spectrumWanted && PcmRing.written() > 0) {
+                    PlaybackBus.publishSpectrumLive(true)
+                }
+            } else {
+                // Pause: freeze gracefully — the analyzer decays to silence on
+                // its next tick and frames settle; liveness stays so resume is
+                // instant with no re-attach dance.
+            }
             publishWidgetState()
             syncProgressTicker()
             // the session id only becomes valid once the audio renderer is up,
             // so this is the attach that usually wins - it must still respect
             // the user's setting rather than force the visualizer back on
-            fx.attach(
-                player.audioSessionId,
-                spectrumWanted,
-                onSpectrum = ::handleSpectrum,
-                onWaveform = PlaybackBus::publishWaveform,
-                onLiveChanged = PlaybackBus::publishSpectrumLive,
-            )
+            fx.attach(player.audioSessionId, spectrumWanted)
         }
 
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
@@ -767,7 +765,14 @@ class PlaybackService : MediaSessionService() {
             if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) {
                 val refreshed = mediaItem?.mediaId?.let { it == icyRefreshId } == true
                 icyRefreshId = null
-                if (!refreshed) PlaybackBus.publishStreamTitle("")
+                if (!refreshed) {
+                    PlaybackBus.publishStreamTitle("")
+                    // Real source change: drop stale analyzer + peak state so
+                    // the new station never wears the old one's caps. ICY
+                    // title refreshes (refreshed==true) skip this — animation
+                    // continues across metadata updates.
+                    analyzer.reset()
+                }
             }
             publishWidgetState()
             syncProgressTicker()

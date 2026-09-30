@@ -173,6 +173,7 @@ internal fun PlayerTransport(
                         modifier = Modifier
                             .fillMaxSize()
                             .doubleTapToFullscreen(actions.onToggleFullscreen),
+                        generation = model.generation,
                     )
                 }
             }

@@ -49,12 +49,11 @@ class VisMathTest {
     }
 
     @Test
-    fun idleBandsAreBoundedAndStable() {
-        val first = VisMath.idleBands(24, 1.25)
-        val second = VisMath.idleBands(24, 1.25)
-        assertEquals(24, first.size)
-        assertTrue(first.contentEquals(second))
-        for (v in first) assertTrue(v in 0f..0.96f)
+    fun silenceBandsAreAllZero() {
+        // No-signal contract: silence in, silence out — never synthetic motion.
+        val bands = VisMath.silenceBands(24)
+        assertEquals(24, bands.size)
+        for (v in bands) assertEquals(0f, v, 0f)
     }
 
     @Test

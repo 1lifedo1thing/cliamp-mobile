@@ -39,7 +39,7 @@ class BarsFrame(columns: Int) : VisFrame(columns, 0L) {
     val peaks get() = core.peaks
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        if (bands != null) core.push(bands, dt) else core.pushIdle(t)
+        core.push(bands ?: VisMath.silenceBands(columns), dt)
     }
 
     override fun settle() = core.settle()
@@ -51,7 +51,7 @@ class ClassicPeakFrame(columns: Int) : VisFrame(columns, 0L) {
     val peaks get() = core.peakPos
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        core.push(bands ?: VisMath.idleBands(columns, t), dt)
+        core.push(bands ?: VisMath.silenceBands(columns), dt)
     }
 
     override fun settle() = core.settle()
@@ -63,7 +63,7 @@ class ClassicLedFrame(columns: Int) : VisFrame(columns, 0L) {
     val peaks get() = core.peak
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        core.push(bands ?: VisMath.idleBands(columns, t), dt)
+        core.push(bands ?: VisMath.silenceBands(columns), dt)
     }
 
     override fun settle() = core.settle()
@@ -75,7 +75,7 @@ class StereoFrame(columns: Int) : VisFrame(columns, 0L) {
     val peaks get() = core.peaks
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        if (bands != null) core.push(stereo, dt) else core.idle(t)
+        if (bands != null) core.push(stereo, dt) else core.silence(dt)
     }
 
     override fun settle() = core.settle()
@@ -85,7 +85,7 @@ class MatrixFrame(columns: Int) : VisFrame(columns, MATRIX_TICK_NS) {
     val energy = FloatArray(columns)
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        val src = bands ?: VisMath.idleBands(columns, t)
+        val src = bands ?: VisMath.silenceBands(columns)
         VisMath.resampleAverage(src, columns).copyInto(energy)
     }
 
@@ -103,7 +103,7 @@ class ButterflyFrame(columns: Int) : VisFrame(columns, BUTTERFLY_TICK_NS) {
         private set
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        this.bands = (bands ?: VisMath.idleBands(columns, t)).copyOf()
+        this.bands = (bands ?: VisMath.silenceBands(columns)).copyOf()
     }
 
     override fun settle() {
@@ -120,7 +120,7 @@ class OmarchyFrame(columns: Int) : VisFrame(columns, OMARCHY_TICK_NS) {
         private set
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        this.bands = (bands ?: VisMath.idleBands(columns, t)).copyOf()
+        this.bands = (bands ?: VisMath.silenceBands(columns)).copyOf()
     }
 
     override fun settle() {
@@ -136,7 +136,7 @@ class KleeampFrame(columns: Int) : VisFrame(columns, KLEEAMP_TICK_NS) {
     val core = KleeampCore(columns)
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        core.push(bands ?: VisMath.idleBands(columns, t), dt)
+        core.push(bands ?: VisMath.silenceBands(columns), dt)
     }
 
     override fun settle() = core.settle()
@@ -181,7 +181,7 @@ open class BandsSnapshotFrame(columns: Int, tickNs: Long = 0L) : VisFrame(column
         private set
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        this.bands = (bands ?: VisMath.idleBands(columns, t)).copyOf()
+        this.bands = (bands ?: VisMath.silenceBands(columns)).copyOf()
     }
 
     override fun settle() {
@@ -208,7 +208,7 @@ class FlameFrame(columns: Int) : VisFrame(columns, 0L) {
     val core = FlameCore(48, 28)
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        core.push(bands ?: VisMath.idleBands(columns, t))
+        core.push(bands ?: VisMath.silenceBands(columns))
     }
 
     override fun settle() = core.settle()
@@ -218,7 +218,7 @@ class SandFrame(columns: Int) : VisFrame(columns, 0L) {
     val core = SandCore(40, 24)
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        core.push(bands ?: VisMath.idleBands(columns, t))
+        core.push(bands ?: VisMath.silenceBands(columns))
     }
 
     override fun settle() = core.settle()
@@ -228,7 +228,7 @@ class GeyserFrame(columns: Int) : VisFrame(columns, 0L) {
     val core = GeyserCore()
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        core.push(bands ?: VisMath.idleBands(columns, t))
+        core.push(bands ?: VisMath.silenceBands(columns))
     }
 
     override fun settle() = core.settle()
@@ -241,7 +241,7 @@ class TerrainFrame(columns: Int) : VisFrame(columns, 0L) {
     val core = TerrainCore(64)
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        val src = bands ?: VisMath.idleBands(columns, t)
+        val src = bands ?: VisMath.silenceBands(columns)
         var env = 0f
         for (b in src) env += b
         core.push(if (src.isEmpty()) 0f else env / src.size)
@@ -254,7 +254,7 @@ class MosaicFrame(columns: Int) : VisFrame(columns, 0L) {
     val core = MosaicCore(10, 18)
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        core.push(bands ?: VisMath.idleBands(columns, t))
+        core.push(bands ?: VisMath.silenceBands(columns))
     }
 
     override fun settle() = core.settle()
@@ -290,12 +290,14 @@ fun rememberVisFrame(
     stereo: State<StereoMetrics>? = null,
     spectrumProvider: (() -> FloatArray?)? = null,
     stereoProvider: (() -> StereoMetrics?)? = null,
+    generation: Int = 0,
 ): VisFrame {
     val frame = remember(mode, columns) { newVisFrame(mode, columns) }
+    LaunchedEffect(frame, generation) { frame.settle(); frame.bump() }
     LaunchedEffect(frame, live) {
-        // Paused settles to the rest state and stops, like Brick: no idle
-        // dance when the music stops. Playing with no FFT yet (session
-        // attaching) still idles inside the loop until real bands land.
+        // Paused settles to the rest state and stops: nothing dances when the
+        // music stops. Playing with no PCM yet feeds silence until real bands
+        // land — silence in, silence out, never a synthetic dance.
         if (!live) {
             frame.settle()
             frame.bump()
@@ -373,12 +375,16 @@ fun VisualizerMeter(
     modifier: Modifier = Modifier,
     spectrumProvider: (() -> FloatArray?)? = null,
     stereoProvider: (() -> StereoMetrics?)? = null,
+    generation: Int = 0,
 ) {
     if (mode == Visualizer.Brick) {
-        val frame = rememberMeter(columns, live, spectrum, spectrumProvider)
+        val frame = rememberMeter(columns, live, spectrum, spectrumProvider, generation)
         BrickMeter(frame = frame, modifier = modifier, brick = brick, gap = gap)
     } else {
-        val frame = rememberVisFrame(mode, columns, live, spectrum, stereo, spectrumProvider, stereoProvider)
+        val frame = rememberVisFrame(
+            mode, columns, live, spectrum, stereo,
+            spectrumProvider, stereoProvider, generation,
+        )
         VisualizerView(frame, modifier)
     }
 }

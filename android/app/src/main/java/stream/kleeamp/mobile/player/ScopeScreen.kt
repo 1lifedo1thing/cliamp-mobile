@@ -76,6 +76,7 @@ fun ScopeScreen(
     val peakBands by sampledSpectrum.collectAsState(initial = FloatArray(0))
     val spectrumProvider: () -> FloatArray? = { PlaybackBus.spectrum.value }
     val stereoProvider: () -> StereoMetrics? = { PlaybackBus.stereo.value }
+    val generation by PlaybackBus.generation.collectAsState()
     val visualizer by prefs.visualizer.collectAsState(initial = "spectrum")
     val mode = Visualizer.byId(visualizer)
     val spectrumLive by PlaybackBus.spectrumLive.collectAsState()
@@ -100,7 +101,7 @@ fun ScopeScreen(
                 when {
                     visualizer == "off" -> "VISUALIZER OFF"
                     spectrumLive -> "${mode.label.uppercase()} · LIVE"
-                    playing -> "${mode.label.uppercase()} · SIMULATED"
+                    playing -> "${mode.label.uppercase()} · NO SIGNAL"
                     else -> "${mode.label.uppercase()} · IDLE"
                 },
                 KleeampType.sectionLabel,
@@ -171,6 +172,7 @@ fun ScopeScreen(
                     brick = MeterSize.Scope.brick,
                     gap = MeterSize.Scope.gap,
                     modifier = Modifier.fillMaxWidth().height(MeterSize.Scope.height),
+                    generation = generation,
                 )
             }
             Row(
@@ -256,8 +258,10 @@ fun ScopeScreen(
 
         Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp)) {
             Mono(
-                "eq and spectrum attach to the decoder output. they need the record-audio permission, " +
-                    "which android uses to gate the visualizer api even with no microphone involved. " +
+                "spectrum, waveform and stereo levels are measured from the decoded pcm " +
+                    "in the media3 audio chain (4096-pt fft, 64 bands, ~30 hz), so every " +
+                    "source — local, podcast, radio, provider, sftp, playlist — drives " +
+                    "the same analyzer with no microphone or record permission involved. " +
                     "eq off is flat with the dsp left on: same sound, no pop from removing the effect",
                 KleeampType.meta,
                 p.inkFaint,

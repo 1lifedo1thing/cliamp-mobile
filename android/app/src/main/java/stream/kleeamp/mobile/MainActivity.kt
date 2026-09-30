@@ -94,9 +94,9 @@ class MainActivity : ComponentActivity() {
         handleShare(intent)
 
         val wanted = buildList {
-            // the Visualizer taps the output mix, which the platform treats as
-            // a recording capability whether or not a mic is involved
-            add(Manifest.permission.RECORD_AUDIO)
+            // Visualization is measured in-process from the Media3 PCM tap
+            // (no Visualizer API, no microphone involvement), so no
+            // RECORD_AUDIO request is needed.
             if (Build.VERSION.SDK_INT >= 33) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
                 add(Manifest.permission.READ_MEDIA_AUDIO)
