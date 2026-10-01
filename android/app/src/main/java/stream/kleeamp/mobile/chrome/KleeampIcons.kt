@@ -102,6 +102,31 @@ object KleeampIcons {
         "M16.5 10.5H5.5",
         "M8 8.7L5.5 10.5L8 12.3",
     )
+
+    /**
+     * Repeat-one: the same loop with a single filled dot for the single
+     * item, clear of both shafts. One vector glyph, no text badge.
+     */
+    val RepeatOne: ImageVector = ImageVector.Builder(
+        defaultWidth = 18.dp, defaultHeight = 14.dp,
+        viewportWidth = 18f, viewportHeight = 14f,
+    ).apply {
+        for (d in arrayOf(
+            "M1.5 3.5H12.5",
+            "M10 1.7L12.5 3.5L10 5.3",
+            "M16.5 10.5H5.5",
+            "M8 8.7L5.5 10.5L8 12.3",
+        )) {
+            addPath(
+                addPathNodes(d),
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = StrokeCap.Butt,
+                strokeLineJoin = StrokeJoin.Miter,
+            )
+        }
+        addPath(addPathNodes(circle(9f, 7f, 1.7f)), fill = SolidColor(Color.White))
+    }.build()
     /**
      * A geometric heart: two straight lobes, a notched top, one bottom
      * point. No curves, like the rest of the set - the favourite mark.

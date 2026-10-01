@@ -424,35 +424,22 @@ internal fun SpeedAction(speed: Float, onClick: () -> Unit) {
     }
 }
 
-/**
- * Repeat mode as an icon key: taps cycle off/all/one like cliamp. The one
- * state wears a big corner badge - a numeral drawn inside the 15dp loop
- * stays illegible, so it sits beside the glyph instead.
- */
+/** Repeat mode as an icon key: taps cycle off/all/one like cliamp. */
 @Composable
 internal fun RepeatAction(repeat: Repeat, onClick: () -> Unit) {
     val p = LocalPalette.current
-    val tint = if (repeat != Repeat.Off) p.accent else p.inkSecondary
-    Box(contentAlignment = Alignment.Center) {
-        SmallAction(
-            KleeampIcons.Repeat,
-            when (repeat) {
-                Repeat.Off -> "repeat off"
-                Repeat.All -> "repeat all"
-                Repeat.One -> "repeat one"
-            },
-            tint = tint,
-        ) { onClick() }
-        if (repeat == Repeat.One) {
-            Mono(
-                "1",
-                KleeampType.rowPrimaryMedium,
-                tint,
-                Modifier.align(Alignment.BottomEnd).padding(end = 5.dp, bottom = 4.dp),
-                maxLines = 1,
-            )
-        }
-    }
+    SmallAction(
+        when (repeat) {
+            Repeat.One -> KleeampIcons.RepeatOne
+            else -> KleeampIcons.Repeat
+        },
+        when (repeat) {
+            Repeat.Off -> "repeat off"
+            Repeat.All -> "repeat all"
+            Repeat.One -> "repeat one"
+        },
+        tint = if (repeat != Repeat.Off) p.accent else p.inkSecondary,
+    ) { onClick() }
 }
 
 /**
