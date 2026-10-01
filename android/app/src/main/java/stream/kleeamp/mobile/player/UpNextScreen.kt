@@ -167,7 +167,10 @@ internal fun UpNextContent(
     }
 
     Column(Modifier.fillMaxSize().background(p.ground).navigationBarsPadding()) {
-        ScreenHeader {
+        // No status inset here: the sheet's handle zone already sits below
+        // the status bar, same as the Now Playing page - insetting twice is
+        // what left the empty space on top.
+        ScreenHeader(inset = false) {
             Row(
                 Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
