@@ -24,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -44,6 +45,7 @@ import stream.kleeamp.mobile.chrome.KleeampToggle
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.MechSliderVertical
+import stream.kleeamp.mobile.chrome.MarqueeLabel
 import stream.kleeamp.mobile.chrome.MeterSize
 import stream.kleeamp.mobile.chrome.ScreenHeader
 import stream.kleeamp.mobile.chrome.SectionLabel
@@ -97,19 +99,17 @@ fun ScopeScreen(
         ScreenHeader(inset = false) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 BackChevron(onBack)
+                // Static title with ellipsis: long titles cut with dots.
                 Mono(
-                    when {
-                        visualizer == "off" -> "VISUALIZER OFF"
-                        spectrumLive -> "${mode.label.uppercase()} · LIVE"
-                        playing -> "${mode.label.uppercase()} · NO SIGNAL"
-                        else -> "${mode.label.uppercase()} · IDLE"
-                    },
-                    KleeampType.sectionLabel,
-                    if (spectrumLive) p.accent else p.inkTertiary,
+                    streamTitle.ifBlank { station?.name ?: "nothing tuned" },
+                    KleeampType.trackTitleSmall,
+                    p.ink,
+                    Modifier.weight(1f),
+                    maxLines = 1,
                 )
             }
         }
@@ -192,21 +192,6 @@ fun ScopeScreen(
 
         HairlineDivider(region = true)
 
-        Column(
-            Modifier.padding(horizontal = Gutter, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Mono(station?.name ?: "nothing tuned", KleeampType.trackTitleSmall, p.ink, maxLines = 1)
-            Mono(
-                streamTitle.ifBlank { station?.meta ?: "" },
-                KleeampType.rowSecondary,
-                p.inkTertiary,
-                maxLines = 1,
-            )
-        }
-
-        HairlineDivider(region = true)
-
         SectionLabel("equalizer — 7 band") {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Mono(eqPreset, KleeampType.meta, p.inkSecondary)
@@ -263,17 +248,6 @@ fun ScopeScreen(
             })
         }
 
-        Box(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp)) {
-            Mono(
-                "spectrum, waveform and stereo levels are measured from the decoded pcm " +
-                    "in the media3 audio chain (4096-pt fft, 64 bands, ~30 hz), so every " +
-                    "source — local, podcast, radio, provider, sftp, playlist — drives " +
-                    "the same analyzer with no microphone or record permission involved. " +
-                    "eq off is flat with the dsp left on: same sound, no pop from removing the effect",
-                KleeampType.meta,
-                p.inkFaint,
-            )
-        }
         Spacer(Modifier.height(40.dp))
     }
     }
