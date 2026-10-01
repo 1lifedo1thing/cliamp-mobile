@@ -161,7 +161,12 @@ internal fun PlayerStatusRow(
             if (model.shuffled) "stop shuffling" else "shuffle",
             tint = if (model.shuffled) p.accent else p.inkSecondary,
         ) { actions.onToggleShuffle() }
-        RepeatAction(repeat = model.state.repeat) { actions.onCycleRepeat() }
+        // Repeat is a track-list concept like cliamp's: it governs list
+        // boundaries and track ends, which live streams don't have. Shown
+        // for tracks (local, podcast, provider) and hidden for stations.
+        if (model.shownStation?.isTrack == true) {
+            RepeatAction(repeat = model.state.repeat) { actions.onCycleRepeat() }
+        }
         SpeedAction(speed = model.state.speed) { actions.onOpenSpeed() }
         SmallAction(KleeampIcons.MeterSmall, "scope and equaliser", onClick = actions.onOpenScope)
         OverflowButton({ menuOpen = true }, size = 16)
@@ -419,27 +424,34 @@ internal fun SpeedAction(speed: Float, onClick: () -> Unit) {
     }
 }
 
-/** Repeat mode as a terse mono key: taps cycle off/all/one like cliamp. */
+/**
+ * Repeat mode as an icon key: taps cycle off/all/one like cliamp. The one
+ * state wears a big corner badge - a numeral drawn inside the 15dp loop
+ * stays illegible, so it sits beside the glyph instead.
+ */
 @Composable
 internal fun RepeatAction(repeat: Repeat, onClick: () -> Unit) {
     val p = LocalPalette.current
-    Box(
-        Modifier
-            .size(28.dp)
-            .clip(RoundedCornerShape(KleeampShape.small))
-            .microPress(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Mono(
+    val tint = if (repeat != Repeat.Off) p.accent else p.inkSecondary
+    Box(contentAlignment = Alignment.Center) {
+        SmallAction(
+            KleeampIcons.Repeat,
             when (repeat) {
-                Repeat.Off -> "RPT"
-                Repeat.All -> "ALL"
-                Repeat.One -> "ONE"
+                Repeat.Off -> "repeat off"
+                Repeat.All -> "repeat all"
+                Repeat.One -> "repeat one"
             },
-            KleeampType.meta,
-            if (repeat != Repeat.Off) p.accent else p.inkSecondary,
-            maxLines = 1,
-        )
+            tint = tint,
+        ) { onClick() }
+        if (repeat == Repeat.One) {
+            Mono(
+                "1",
+                KleeampType.rowPrimaryMedium,
+                tint,
+                Modifier.align(Alignment.BottomEnd).padding(end = 5.dp, bottom = 4.dp),
+                maxLines = 1,
+            )
+        }
     }
 }
 

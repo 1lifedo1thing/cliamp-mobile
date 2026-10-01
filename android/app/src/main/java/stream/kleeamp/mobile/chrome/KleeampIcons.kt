@@ -93,6 +93,15 @@ object KleeampIcons {
         "M1 11h4l8-8h3",
         "M14.5 2.5l1.5 1.5-1.5 1.5",
     )
+
+    /** Looped arrows: two straight shafts with wedge heads, Shuffle-style. */
+    val Repeat = stroked(
+        18f, 14f, 1.8f,
+        "M1.5 3.5H12.5",
+        "M10 1.7L12.5 3.5L10 5.3",
+        "M16.5 10.5H5.5",
+        "M8 8.7L5.5 10.5L8 12.3",
+    )
     /**
      * A geometric heart: two straight lobes, a notched top, one bottom
      * point. No curves, like the rest of the set - the favourite mark.

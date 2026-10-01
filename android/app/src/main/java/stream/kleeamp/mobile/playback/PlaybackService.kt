@@ -279,6 +279,18 @@ class PlaybackService : MediaSessionService() {
         // so mode switches are instant and no attach races the audio session.
         // spectrumWanted only gates publishing liveness, never PCM flow.
         analyzer.start(scope)
+        // Repeat-one rides the player's own repeat mode so the current item
+        // loops natively - including mid-queue, where no end event ever
+        // fires for our queue watcher to catch. Explicit next/prev still
+        // step, and anything else stays repeat-off. This follows the
+        // queue's live repeat flow (the same source the icon reads), never
+        // the persisted copy, so the two can never disagree the way a
+        // lost prefs write once made the icon lie.
+        scope.launch {
+            (application as KleeampApp).player.repeat.collect {
+                player.repeatMode = repeatPlayerMode(it)
+            }
+        }
         scope.launch {
             combine(prefs.visualizer, prefs.eqEnabled, prefs.eqBands) { vis, eqOn, bands ->
                 Triple(vis, eqOn, bands)
@@ -804,6 +816,11 @@ class PlaybackService : MediaSessionService() {
     }
 
     companion object {
+        /** Player repeat mode mirroring the live repeat setting. */
+        fun repeatPlayerMode(mode: stream.kleeamp.mobile.play.RepeatMode): Int =
+            if (mode == stream.kleeamp.mobile.play.RepeatMode.One) Player.REPEAT_MODE_ONE
+            else Player.REPEAT_MODE_OFF
+
         const val SPECTRUM_BANDS = 64
 
         /** Minimum gap between analyser re-attach attempts; see the ticker. */
