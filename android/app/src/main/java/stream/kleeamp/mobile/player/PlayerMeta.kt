@@ -107,6 +107,38 @@ import stream.kleeamp.mobile.art.LocalArt
 import stream.kleeamp.mobile.model.NowPlaying
 
 
+/**
+ * Minimal up-next key for the Now Playing page: the outlined chip with
+ * icon plus count, no text label. 40dp like the other page keys. The
+ * full Up Next chip stays in the Up Next sheet.
+ */
+@Composable
+internal fun UpNextBadge(
+    count: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    Box(
+        modifier
+            .height(40.dp)
+            .semantics { role = Role.Button }
+            .microPress(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            Modifier
+                .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small))
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(KleeampIcons.UpNextTabLines, "open up next", Modifier.size(14.dp), tint = p.accent)
+            Mono(count.toString(), KleeampType.chip, p.inkFaint, maxLines = 1)
+        }
+    }
+}
+
 /** Compact outlined header control, with a full-height touch target. */
 @Composable
 internal fun UpNextButton(

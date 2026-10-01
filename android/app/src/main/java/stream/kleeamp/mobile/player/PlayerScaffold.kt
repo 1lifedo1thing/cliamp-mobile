@@ -201,7 +201,7 @@ internal fun PortraitPlayer(
         ) {
             BackChevron(actions.onBack)
             Spacer(Modifier.weight(1f))
-            UpNextButton(model.upNextCount, actions.onOpenUpNext)
+            UpNextBadge(model.upNextCount, actions.onOpenUpNext)
         }
         // Tight: buys room back for the plate (see pinned text lines).
         Spacer(Modifier.height(2.dp))
@@ -365,7 +365,7 @@ internal fun LandscapePlayer(
                 Box(Modifier.weight(1f)) {
                     PlayerMeta(model)
                 }
-                UpNextButton(model.upNextCount, actions.onOpenUpNext)
+                UpNextBadge(model.upNextCount, actions.onOpenUpNext)
             }
             Spacer(Modifier.weight(1f))
             PlayerTransport(model, actions, meterHeight = 56.dp)
