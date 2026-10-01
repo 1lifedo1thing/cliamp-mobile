@@ -45,6 +45,7 @@ import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.MechSliderVertical
 import stream.kleeamp.mobile.chrome.MeterSize
+import stream.kleeamp.mobile.chrome.ScreenHeader
 import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.player.vis.VisualizerMeter
 import stream.kleeamp.mobile.theme.KleeampType
@@ -89,25 +90,31 @@ fun ScopeScreen(
             .fillMaxSize()
             .background(p.ground)
             .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
     ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BackChevron(onBack)
-            Mono(
-                when {
-                    visualizer == "off" -> "VISUALIZER OFF"
-                    spectrumLive -> "${mode.label.uppercase()} · LIVE"
-                    playing -> "${mode.label.uppercase()} · NO SIGNAL"
-                    else -> "${mode.label.uppercase()} · IDLE"
-                },
-                KleeampType.sectionLabel,
-                if (spectrumLive) p.accent else p.inkTertiary,
-            )
+        // Pinned header like the Up Next page: the chevron and status stay
+        // put while the controls scroll beneath. No status inset - the
+        // sheet's handle zone already sits below the status bar.
+        ScreenHeader(inset = false) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BackChevron(onBack)
+                Mono(
+                    when {
+                        visualizer == "off" -> "VISUALIZER OFF"
+                        spectrumLive -> "${mode.label.uppercase()} · LIVE"
+                        playing -> "${mode.label.uppercase()} · NO SIGNAL"
+                        else -> "${mode.label.uppercase()} · IDLE"
+                    },
+                    KleeampType.sectionLabel,
+                    if (spectrumLive) p.accent else p.inkTertiary,
+                )
+            }
         }
+
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
 
         // Explicit visualizer switch: every family, then off, on the same
         // setting the player and mini player read. Sits above the meter it
@@ -268,5 +275,6 @@ fun ScopeScreen(
             )
         }
         Spacer(Modifier.height(40.dp))
+    }
     }
 }
