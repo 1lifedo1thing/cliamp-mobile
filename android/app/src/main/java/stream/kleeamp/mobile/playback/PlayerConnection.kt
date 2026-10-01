@@ -29,6 +29,7 @@ import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.model.wrapNext
 import stream.kleeamp.mobile.play.QueuePolicy
+import stream.kleeamp.mobile.play.RepeatMode
 import stream.kleeamp.mobile.widget.WidgetRenderer
 import java.io.IOException
 
@@ -78,6 +79,7 @@ class PlayerConnection(
     val upNextIndex: StateFlow<Int> get() = queue.upNextIndex
     val currentUpNext: List<Station> get() = queue.currentUpNext
     val shuffle: StateFlow<Boolean> get() = queue.shuffle
+    val repeat: StateFlow<RepeatMode> get() = queue.repeat
     fun setFallbackSource(list: List<Station>) = queue.setFallbackSource(list)
     fun stationForMediaId(id: String): Station? = queue.stationForMediaId(id)
     internal fun upcomingStations(count: Int = 4): List<Station> = queue.upcomingStations(count)
@@ -86,6 +88,7 @@ class PlayerConnection(
     fun playUpNextEntry(index: Int) = queue.playUpNextEntry(index)
     fun play(station: Station, from: List<Station> = emptyList()) = queue.play(station, from)
     fun toggleShuffle() = queue.toggleShuffle()
+    fun toggleRepeat() = queue.toggleRepeat()
     fun next() = queue.next()
     fun prev() = queue.prev()
     fun addToUpNext(station: Station, at: Int = Int.MAX_VALUE) {
@@ -253,6 +256,7 @@ class PlayerConnection(
             live = c.isCurrentMediaItemLive,
             speed = c.playbackParameters.speed,
             sleepAtMs = _sleepAtMs.value,
+            repeat = queue.repeatMode,
             hasPrev = navAvailability.hasPrev,
             hasNext = navAvailability.hasNext,
         )
@@ -404,6 +408,7 @@ data class PlayerState(
     val speed: Float = 1f,
     /** Sleep timer deadline (epoch ms), null when off. */
     val sleepAtMs: Long? = null,
+    val repeat: RepeatMode = RepeatMode.Off,
 ) {
     /** A scrubber is only honest when there is a length to scrub through. */
     val scrubbable: Boolean get() = seekable && !live && durationMs > 0
