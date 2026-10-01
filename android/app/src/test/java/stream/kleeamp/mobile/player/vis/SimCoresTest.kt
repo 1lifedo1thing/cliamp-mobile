@@ -100,23 +100,40 @@ class SandCoreTest {
 
 class GeyserCoreTest {
 
+    private fun loudCore(): GeyserCore = GeyserCore().also {
+        it.ensure(80, 64)
+        repeat(60) { _ -> it.push(FloatArray(24) { 0.9f }) }
+    }
+
     @Test
     fun loudFeedSpraysAndSettles() {
-        val core = GeyserCore(seed = 7L)
-        repeat(60) { core.push(FloatArray(24) { 0.9f }) }
-        val drops = core.drops()
-        assertTrue(drops.isNotEmpty())
-        // Ballistics may carry drops above the frame; they never sink past it.
-        assertTrue(drops.all { it.y <= 180f })
-        assertTrue(drops.all { it.tier in 1..3 })
+        val core = loudCore()
+        assertTrue(core.particleCount() > 0)
+        assertTrue(core.grid.any { it > 0 })
+        // Tiers stay in the cliamp 1..3 range.
+        assertTrue(core.grid.all { it in 0..3 })
         core.settle()
-        assertTrue(core.drops().isEmpty())
+        assertEquals(0, core.particleCount())
+        assertTrue(core.grid.all { it == 0.toByte() })
     }
 
     @Test
     fun silenceStaysDry() {
-        val core = GeyserCore(seed = 7L)
-        repeat(10) { core.push(FloatArray(24)) }
-        assertEquals(0, core.drops().size)
+        val core = GeyserCore().also {
+            it.ensure(80, 64)
+            repeat(10) { _ -> it.push(FloatArray(24)) }
+        }
+        assertEquals(0, core.particleCount())
+        assertTrue(core.grid.all { it == 0.toByte() })
+    }
+
+    @Test
+    fun transientKickLaunchesABurst() {
+        val core = GeyserCore().also { it.ensure(80, 64) }
+        repeat(5) { core.push(FloatArray(24)) }
+        val before = core.particleCount()
+        // Sudden full-scale onset after quiet: burst must fire.
+        core.push(FloatArray(24) { 1f })
+        assertTrue("before=$before after=${core.particleCount()}", core.particleCount() > before + 20)
     }
 }

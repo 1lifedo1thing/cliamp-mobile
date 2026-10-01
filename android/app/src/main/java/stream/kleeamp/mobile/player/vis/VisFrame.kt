@@ -226,7 +226,16 @@ class FireworkFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
 class BubblesFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
 class FireflyFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
 class LogoFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
-class RedSectorFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
+class RedSectorFrame(columns: Int) : VisFrame(columns, TICK_FAST_NS) {
+    val core = RedSectorCore()
+
+    override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
+        val src = bands ?: VisMath.silenceBands(columns)
+        core.advance(if (src.size == 10) src else VisMath.resampleAverage(src, 10))
+    }
+
+    override fun settle() = core.settle()
+}
 class BinaryFrame(columns: Int) : BandsSnapshotFrame(columns, BINARY_TICK_NS) {
 
     private companion object {
@@ -293,10 +302,11 @@ class TerrainFrame(columns: Int) : VisFrame(columns, TICK_FAST_NS) {
 }
 
 class MosaicFrame(columns: Int) : VisFrame(columns, TICK_FAST_NS) {
-    val core = MosaicCore(10, 18)
+    val core = MosaicCore()
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        core.push(bands ?: VisMath.silenceBands(columns))
+        val src = bands ?: VisMath.silenceBands(columns)
+        core.push(if (src.size == 10) src else VisMath.resampleAverage(src, 10))
     }
 
     override fun settle() = core.settle()
