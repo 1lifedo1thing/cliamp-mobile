@@ -95,6 +95,9 @@ object Http {
      * half a minute while the rest of the list waits behind it - so this runs
      * much tighter timeouts than [client]. A miss just shows the plate and
      * retries later through the normal backoff.
+     *
+     * Station sites are random hosts; cap per-host connections so one dying
+     * homepage cannot soak the whole art lane.
      */
     val artClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -103,6 +106,12 @@ object Http {
             .readTimeout(8, TimeUnit.SECONDS)
             .callTimeout(12, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
+            .dispatcher(
+                okhttp3.Dispatcher().apply {
+                    maxRequests = 16
+                    maxRequestsPerHost = 2
+                },
+            )
             .build()
     }
 

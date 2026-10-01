@@ -15,6 +15,16 @@ import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.chrome.BrickMeter
 import stream.kleeamp.mobile.chrome.rememberMeter
 
+/**
+ * cliamp's TickFast (50 ms): the render cadence of every render-only driver
+ * while playing. Simulation rates (fall speeds, scroll steps, gate rhythms)
+ * are tuned to it - running them at display rate plays everything ~3x fast.
+ */
+internal const val TICK_FAST_NS = 50_000_000L
+
+/** cliamp's classicLED frame rate: chunky 30 fps LEDs, not smooth bars. */
+internal const val LED_TICK_NS = 33_000_000L
+
 @Stable
 sealed class VisFrame(val columns: Int, val minTickNs: Long) {
     var frame by mutableIntStateOf(0)
@@ -39,7 +49,7 @@ class BarsFrame(columns: Int) : VisFrame(columns, 0L) {
     val peaks get() = core.peaks
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        if (bands != null) core.push(bands, dt) else core.pushIdle(t)
+        core.push(bands ?: VisMath.silenceBands(columns), dt)
     }
 
     override fun settle() = core.settle()
@@ -51,19 +61,19 @@ class ClassicPeakFrame(columns: Int) : VisFrame(columns, 0L) {
     val peaks get() = core.peakPos
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        core.push(bands ?: VisMath.idleBands(columns, t), dt)
+        core.push(bands ?: VisMath.silenceBands(columns), dt)
     }
 
     override fun settle() = core.settle()
 }
 
-class ClassicLedFrame(columns: Int) : VisFrame(columns, 0L) {
+class ClassicLedFrame(columns: Int) : VisFrame(columns, LED_TICK_NS) {
     private val core = ClassicLedCore(columns)
     val body get() = core.body
     val peaks get() = core.peak
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        core.push(bands ?: VisMath.idleBands(columns, t), dt)
+        core.push(bands ?: VisMath.silenceBands(columns), dt)
     }
 
     override fun settle() = core.settle()
@@ -75,7 +85,7 @@ class StereoFrame(columns: Int) : VisFrame(columns, 0L) {
     val peaks get() = core.peaks
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        if (bands != null) core.push(stereo, dt) else core.idle(t)
+        if (bands != null) core.push(stereo, dt) else core.silence(dt)
     }
 
     override fun settle() = core.settle()
@@ -85,7 +95,7 @@ class MatrixFrame(columns: Int) : VisFrame(columns, MATRIX_TICK_NS) {
     val energy = FloatArray(columns)
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        val src = bands ?: VisMath.idleBands(columns, t)
+        val src = bands ?: VisMath.silenceBands(columns)
         VisMath.resampleAverage(src, columns).copyInto(energy)
     }
 
@@ -94,7 +104,7 @@ class MatrixFrame(columns: Int) : VisFrame(columns, MATRIX_TICK_NS) {
     }
 
     private companion object {
-        const val MATRIX_TICK_NS = 66_000_000L
+        const val MATRIX_TICK_NS = TICK_FAST_NS
     }
 }
 
@@ -103,7 +113,7 @@ class ButterflyFrame(columns: Int) : VisFrame(columns, BUTTERFLY_TICK_NS) {
         private set
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        this.bands = (bands ?: VisMath.idleBands(columns, t)).copyOf()
+        this.bands = (bands ?: VisMath.silenceBands(columns)).copyOf()
     }
 
     override fun settle() {
@@ -111,24 +121,21 @@ class ButterflyFrame(columns: Int) : VisFrame(columns, BUTTERFLY_TICK_NS) {
     }
 
     private companion object {
-        const val BUTTERFLY_TICK_NS = 66_000_000L
+        const val BUTTERFLY_TICK_NS = TICK_FAST_NS
     }
 }
 
-class OmarchyFrame(columns: Int) : VisFrame(columns, OMARCHY_TICK_NS) {
+// cliamp drives omarchy at TickAnim (16 ms); throttling it slows the drift.
+class OmarchyFrame(columns: Int) : VisFrame(columns, 0L) {
     var bands: FloatArray = FloatArray(columns)
         private set
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        this.bands = (bands ?: VisMath.idleBands(columns, t)).copyOf()
+        this.bands = (bands ?: VisMath.silenceBands(columns)).copyOf()
     }
 
     override fun settle() {
         bands = FloatArray(columns)
-    }
-
-    private companion object {
-        const val OMARCHY_TICK_NS = 50_000_000L
     }
 }
 
@@ -136,7 +143,7 @@ class KleeampFrame(columns: Int) : VisFrame(columns, KLEEAMP_TICK_NS) {
     val core = KleeampCore(columns)
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        core.push(bands ?: VisMath.idleBands(columns, t), dt)
+        core.push(bands ?: VisMath.silenceBands(columns), dt)
     }
 
     override fun settle() = core.settle()
@@ -166,7 +173,12 @@ class WaveFrame(columns: Int) : VisFrame(columns, WAVE_TICK_NS) {
     }
 
     private companion object {
-        const val WAVE_TICK_NS = 33_000_000L
+        /**
+         * No throttle: cliamp samples + renders waveform modes every
+         * TickWave (16 ms, ~60 fps). Throttling to 30 fps here is what
+         * made the scope look a beat behind the music.
+         */
+        const val WAVE_TICK_NS = 0L
     }
 }
 
@@ -181,7 +193,7 @@ open class BandsSnapshotFrame(columns: Int, tickNs: Long = 0L) : VisFrame(column
         private set
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        this.bands = (bands ?: VisMath.idleBands(columns, t)).copyOf()
+        this.bands = (bands ?: VisMath.silenceBands(columns)).copyOf()
     }
 
     override fun settle() {
@@ -189,59 +201,98 @@ open class BandsSnapshotFrame(columns: Int, tickNs: Long = 0L) : VisFrame(column
     }
 }
 
-class RainFrame(columns: Int) : BandsSnapshotFrame(columns)
+class RainFrame(columns: Int) : BandsSnapshotFrame(columns, RAIN_TICK_NS) {
+
+    private companion object {
+        /**
+         * cliamp's rain is a render-only driver at TickFast (50 ms) while
+         * playing; gate rhythm and fall speed are counted in ticks.
+         */
+        const val RAIN_TICK_NS = 50_000_000L
+    }
+}
 class BarsDotFrame(columns: Int) : BandsSnapshotFrame(columns)
 class BarsOutlineFrame(columns: Int) : BandsSnapshotFrame(columns)
 class BricksFrame(columns: Int) : BandsSnapshotFrame(columns)
 class ColumnsFrame(columns: Int) : BandsSnapshotFrame(columns)
-class PulseFrame(columns: Int) : BandsSnapshotFrame(columns)
-class RetroFrame(columns: Int) : BandsSnapshotFrame(columns)
+// TickFast modes (cliamp render-only drivers): throttled so sim speeds match.
+// Mirror stays unthrottled (TickAnim); Ascii likewise below.
+class PulseFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
+class RetroFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
 class MirrorFrame(columns: Int) : BandsSnapshotFrame(columns)
-class ScatterFrame(columns: Int) : BandsSnapshotFrame(columns)
-class SakuraFrame(columns: Int) : BandsSnapshotFrame(columns)
-class FireworkFrame(columns: Int) : BandsSnapshotFrame(columns)
-class BubblesFrame(columns: Int) : BandsSnapshotFrame(columns)
-class FireflyFrame(columns: Int) : BandsSnapshotFrame(columns)
-class BinaryFrame(columns: Int) : BandsSnapshotFrame(columns)
-
-class FlameFrame(columns: Int) : VisFrame(columns, 0L) {
-    val core = FlameCore(48, 28)
+class ScatterFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
+class SakuraFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
+class FireworkFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
+class BubblesFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
+class FireflyFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
+class LogoFrame(columns: Int) : BandsSnapshotFrame(columns, TICK_FAST_NS)
+class RedSectorFrame(columns: Int) : VisFrame(columns, TICK_FAST_NS) {
+    val core = RedSectorCore()
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        core.push(bands ?: VisMath.idleBands(columns, t))
+        val src = bands ?: VisMath.silenceBands(columns)
+        core.advance(if (src.size == 10) src else VisMath.resampleAverage(src, 10))
+    }
+
+    override fun settle() = core.settle()
+}
+class BinaryFrame(columns: Int) : BandsSnapshotFrame(columns, BINARY_TICK_NS) {
+
+    private companion object {
+        /**
+         * cliamp's binary is a render-only driver at TickFast (50 ms) while
+         * playing; the scroll speed is counted in ticks.
+         */
+        const val BINARY_TICK_NS = 50_000_000L
+    }
+}
+
+class FlameFrame(columns: Int) : VisFrame(columns, TICK_FAST_NS) {
+    val core = FlameCore()
+
+    override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
+        core.push(bands ?: VisMath.silenceBands(columns))
     }
 
     override fun settle() = core.settle()
 }
 
-class SandFrame(columns: Int) : VisFrame(columns, 0L) {
-    val core = SandCore(40, 24)
+class SandFrame(columns: Int) : VisFrame(columns, SAND_TICK_NS) {
+    val core = SandCore()
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        core.push(bands ?: VisMath.idleBands(columns, t))
+        core.push(bands ?: VisMath.silenceBands(columns), frame.toLong())
     }
 
     override fun settle() = core.settle()
+
+    private companion object {
+        /**
+         * cliamp ticks sand at TickFast (50 ms) while playing; the pour,
+         * fall and explosion rates are tuned to that cadence.
+         */
+        const val SAND_TICK_NS = 50_000_000L
+    }
 }
 
-class GeyserFrame(columns: Int) : VisFrame(columns, 0L) {
+class GeyserFrame(columns: Int) : VisFrame(columns, TICK_FAST_NS) {
     val core = GeyserCore()
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        core.push(bands ?: VisMath.idleBands(columns, t))
+        core.push(bands ?: VisMath.silenceBands(columns))
     }
 
     override fun settle() = core.settle()
 }
 
-class LogoFrame(columns: Int) : BandsSnapshotFrame(columns)
+// Ascii stays unthrottled (TickAnim); Logo is TickFast (moved above).
 class AsciiFrame(columns: Int) : BandsSnapshotFrame(columns)
 
-class TerrainFrame(columns: Int) : VisFrame(columns, 0L) {
+class TerrainFrame(columns: Int) : VisFrame(columns, TICK_FAST_NS) {
     val core = TerrainCore(64)
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        val src = bands ?: VisMath.idleBands(columns, t)
+        val src = bands ?: VisMath.silenceBands(columns)
         var env = 0f
         for (b in src) env += b
         core.push(if (src.isEmpty()) 0f else env / src.size)
@@ -250,11 +301,12 @@ class TerrainFrame(columns: Int) : VisFrame(columns, 0L) {
     override fun settle() = core.settle()
 }
 
-class MosaicFrame(columns: Int) : VisFrame(columns, 0L) {
-    val core = MosaicCore(10, 18)
+class MosaicFrame(columns: Int) : VisFrame(columns, TICK_FAST_NS) {
+    val core = MosaicCore()
 
     override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
-        core.push(bands ?: VisMath.idleBands(columns, t))
+        val src = bands ?: VisMath.silenceBands(columns)
+        core.push(if (src.size == 10) src else VisMath.resampleAverage(src, 10))
     }
 
     override fun settle() = core.settle()
@@ -279,7 +331,6 @@ open class SamplesFrame(columns: Int) : VisFrame(columns, 0L) {
 
 class ScopeFrame(columns: Int) : SamplesFrame(columns)
 class HeartbeatFrame(columns: Int) : SamplesFrame(columns)
-class RedSectorFrame(columns: Int) : BandsSnapshotFrame(columns)
 
 @Composable
 fun rememberVisFrame(
@@ -290,12 +341,14 @@ fun rememberVisFrame(
     stereo: State<StereoMetrics>? = null,
     spectrumProvider: (() -> FloatArray?)? = null,
     stereoProvider: (() -> StereoMetrics?)? = null,
+    generation: Int = 0,
 ): VisFrame {
     val frame = remember(mode, columns) { newVisFrame(mode, columns) }
+    LaunchedEffect(frame, generation) { frame.settle(); frame.bump() }
     LaunchedEffect(frame, live) {
-        // Paused settles to the rest state and stops, like Brick: no idle
-        // dance when the music stops. Playing with no FFT yet (session
-        // attaching) still idles inside the loop until real bands land.
+        // Paused settles to the rest state and stops: nothing dances when the
+        // music stops. Playing with no PCM yet feeds silence until real bands
+        // land — silence in, silence out, never a synthetic dance.
         if (!live) {
             frame.settle()
             frame.bump()
@@ -373,12 +426,16 @@ fun VisualizerMeter(
     modifier: Modifier = Modifier,
     spectrumProvider: (() -> FloatArray?)? = null,
     stereoProvider: (() -> StereoMetrics?)? = null,
+    generation: Int = 0,
 ) {
     if (mode == Visualizer.Brick) {
-        val frame = rememberMeter(columns, live, spectrum, spectrumProvider)
+        val frame = rememberMeter(columns, live, spectrum, spectrumProvider, generation)
         BrickMeter(frame = frame, modifier = modifier, brick = brick, gap = gap)
     } else {
-        val frame = rememberVisFrame(mode, columns, live, spectrum, stereo, spectrumProvider, stereoProvider)
+        val frame = rememberVisFrame(
+            mode, columns, live, spectrum, stereo,
+            spectrumProvider, stereoProvider, generation,
+        )
         VisualizerView(frame, modifier)
     }
 }

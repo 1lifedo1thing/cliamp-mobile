@@ -1,80 +1,135 @@
 package stream.kleeamp.mobile.player.vis
 
-import kotlin.random.Random
-
 /**
- * Particle fountain, mirroring cliamp's geyserDriver: sustained loudness
- * holds a mist column, bass transients launch vertical jets, and every
- * particle arcs back down under gravity with lateral spray. Tiers follow
- * the band that produced each particle.
+ * Particle fountain, ported from cliamp's geyserDriver (`ui/vis_geyser.go`):
+ * sustained loudness holds a steady mist column (bass-weighted), bass
+ * transients launch vertical jets, and every particle arcs back down under
+ * gravity with lateral spray. Tiers follow the producing band: dense bass
+ * paints the column red, mids yellow, the rest green.
+ *
+ * The dot grid (with max-tier merge) lives here like cliamp's brailleGrid:
+ * the tick clears it, advances particles and stamps them; the renderer only
+ * draws braille cells.
  */
-class GeyserCore(seed: Long = 0xFEED5EED) {
-    data class Drop(var x: Float, var y: Float, var vx: Float, var vy: Float, val tier: Int, var life: Int)
+class GeyserCore(seed: Long = 0xFEED5EEDL) {
 
-    private val rng = Random(seed)
-    private val drops = ArrayList<Drop>()
-    private var prevBass = 0f
+    data class Particle(
+        var x: Double,
+        var y: Double,
+        var vx: Double,
+        var vy: Double,
+        val tier: Byte,
+        var life: Int,
+    )
 
-    fun drops(): List<Drop> = drops.toList()
+    var dotRows: Int = 0
+        private set
+    var dotCols: Int = 0
+        private set
 
-    /**
-     * Fixed virtual canvas: positions live in 0..100 x 0..160 so the sim
-     * never depends on pixels; renderers scale up.
-     */
-    fun push(bands: FloatArray) {
-        push(bands, 100f, 160f)
+    /** 0 = empty, else 1..3 tiers with max-merge. Row-major. */
+    var grid: ByteArray = ByteArray(0)
+        private set
+
+    private val particles = ArrayList<Particle>()
+    private var rng = seed
+    private var prevBass = 0.0
+
+    fun particleCount(): Int = particles.size
+
+    fun ensure(rows: Int, cols: Int) {
+        if (rows == dotRows && cols == dotCols && grid.size == rows * cols) return
+        dotRows = rows
+        dotCols = cols
+        grid = ByteArray(rows * cols)
+        particles.clear()
     }
 
-    fun push(bands: FloatArray, width: Float, height: Float) {
-        if (width <= 0f || height <= 0f) return
-        val bass = VisMath.sampleLinear(bands, 0.5f)
-        val avg = if (bands.isEmpty()) 0f else bands.average().toFloat()
-        // Steady mist column while loud.
-        val mist = (avg * 6).toInt()
-        repeat(mist) {
-            drops += Drop(
-                x = width * (0.42f + rng.nextFloat() * 0.16f),
-                y = height,
-                vx = rng.nextFloat() - 0.5f,
-                vy = -(height * (0.008f + rng.nextFloat() * 0.012f)),
-                tier = 1,
-                life = 40 + rng.nextInt(40),
-            )
-        }
-        // Bass transient launches a jet.
-        if (bass - prevBass > 0.3f) {
-            repeat(24) {
-                val band = rng.nextInt(bands.size.coerceAtLeast(1))
-                drops += Drop(
-                    x = width * (0.46f + rng.nextFloat() * 0.08f),
-                    y = height,
-                    vx = rng.nextFloat() * 2f - 1f,
-                    vy = -(height * (0.02f + rng.nextFloat() * 0.03f)),
-                    tier = (band * 3 / bands.size.coerceAtLeast(1) + 1).coerceIn(1, 3),
-                    life = 50 + rng.nextInt(40),
-                )
-            }
-        }
+    /** Uniform [0,1), advancing cliamp's LCG exactly. */
+    private fun rand01(): Double {
+        rng = rng * 6364136223846793005L + 1442695040888963407L
+        return ((rng ushr 33) % 1000).toDouble() / 1000.0
+    }
+
+    fun push(bands: FloatArray) {
+        if (dotRows < 4 || dotCols < 4 || grid.size != dotRows * dotCols) return
+        grid.fill(0)
+        // cliamp analyzes DefaultSpectrumBands (10).
+        val spec = if (bands.size == BANDS) bands else VisMath.resampleAverage(bands, BANDS)
+        if (spec.isEmpty()) return
+        val third = maxOf(1, spec.size / 3)
+        val bass = spec.take(third).average()
+        val mid = spec.drop(third).take(third).average()
+        val high = spec.drop(2 * third).average()
+        val delta = bass - prevBass
         prevBass = bass
-        val it = drops.iterator()
-        while (it.hasNext()) {
-            val d = it.next()
-            d.life--
-            if (d.life <= 0 || d.y > height) {
-                it.remove()
-                continue
+
+        val jetX = dotCols / 2
+        val jetSpread = maxOf(2, dotCols / 16)
+
+        // Steady drizzle, bass-weighted.
+        val steady = bass * 0.85 + mid * 0.25 + high * 0.08
+        repeat((steady * 6).toInt()) {
+            spawn(jetX, dotRows - 1, jetSpread, 1.5 + steady * 4.5, bass, mid)
+        }
+        // Transient kick: thick burst even on gentle kick drums.
+        if (delta > 0.06 && bass > 0.15) {
+            val burst = 40 + (delta * 180).toInt()
+            repeat(burst) {
+                spawn(jetX, dotRows - 1, jetSpread * 2, 4.5 + delta * 10.0 + bass * 4.0, bass, mid)
             }
-            d.x += d.vx
-            d.y += d.vy
-            d.vy += height * 0.0006f
         }
-        if (drops.size > 400) {
-            repeat(drops.size - 400) { drops.removeAt(0) }
+
+        // Advance: gravity pulls down, drag slows lateral motion. Past the
+        // floor or its 200-frame life a particle is gone; above the top it
+        // pins to row 0 until it falls back or expires.
+        val live = ArrayList<Particle>(particles.size)
+        for (p in particles) {
+            p.vy += GRAVITY
+            p.vx *= DRAG
+            p.x += p.vx
+            p.y += p.vy
+            p.life++
+            val ix = p.x.toInt()
+            var iy = p.y.toInt()
+            if (iy >= dotRows || ix < 0 || ix >= dotCols || p.life > LIFE) continue
+            if (iy < 0) iy = 0
+            val at = iy * dotCols + ix
+            if (p.tier > grid[at]) grid[at] = p.tier
+            live += p
         }
+        particles.clear()
+        particles.addAll(live)
+    }
+
+    private fun spawn(x: Int, y: Int, spread: Int, vy: Double, bass: Double, mid: Double) {
+        val jx = x + (rand01() * (2 * spread + 1)).toInt() - spread
+        val vyJitter = vy * (0.6 + rand01() * 0.5)
+        val vxJitter = (rand01() - 0.5) * (1.0 + vy * 0.4)
+        val r = rand01()
+        val tier: Byte = when {
+            r < bass -> 3
+            r < bass + mid -> 2
+            else -> 1
+        }
+        particles += Particle(jx.toDouble(), y.toDouble(), vxJitter, -vyJitter, tier, 0)
+    }
+
+    fun tierAt(x: Int, y: Int): Int {
+        if (x !in 0 until dotCols || y !in 0 until dotRows) return 0
+        return grid[y * dotCols + x].toInt()
     }
 
     fun settle() {
-        drops.clear()
-        prevBass = 0f
+        grid.fill(0)
+        particles.clear()
+        prevBass = 0.0
+    }
+
+    private companion object {
+        const val BANDS = 10
+        const val GRAVITY = 0.30
+        const val DRAG = 0.992
+        const val LIFE = 200
     }
 }

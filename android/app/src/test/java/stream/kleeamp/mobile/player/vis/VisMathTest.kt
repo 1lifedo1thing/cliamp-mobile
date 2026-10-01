@@ -49,12 +49,11 @@ class VisMathTest {
     }
 
     @Test
-    fun idleBandsAreBoundedAndStable() {
-        val first = VisMath.idleBands(24, 1.25)
-        val second = VisMath.idleBands(24, 1.25)
-        assertEquals(24, first.size)
-        assertTrue(first.contentEquals(second))
-        for (v in first) assertTrue(v in 0f..0.96f)
+    fun silenceBandsAreAllZero() {
+        // No-signal contract: silence in, silence out — never synthetic motion.
+        val bands = VisMath.silenceBands(24)
+        assertEquals(24, bands.size)
+        for (v in bands) assertEquals(0f, v, 0f)
     }
 
     @Test
@@ -64,6 +63,16 @@ class VisMathTest {
         // cliamp Analyze blend: 0.6 new on rises, 0.25 new on falls.
         assertEquals(0.6f, out[0], 1e-4f)
         assertEquals(0.75f, out[1], 1e-4f)
+    }
+
+    @Test
+    fun spreadSeedCoversTheGrid() {
+        // The cliamp petal stride (104729) is 1 mod 106: a raw mod would
+        // park 12 petals in 12 adjacent columns. The prime reduction must
+        // spread them across the whole grid instead.
+        val xs = (0 until 12).map { VisMath.spreadSeed(it * 104729L + 7919L, 106) }
+        assertTrue(xs.all { it in 0 until 106 })
+        assertTrue("petals bunched: $xs", xs.max() - xs.min() > 60)
     }
 
     @Test

@@ -116,6 +116,15 @@ class QueueModelTest {
     }
 
     @Test
+    fun repeatModeRoundTrips() {
+        val model = QueueModel()
+        assertEquals(RepeatMode.Off, model.repeatMode)
+        model.setRepeatMode(RepeatMode.One)
+        assertEquals(RepeatMode.One, model.repeatMode)
+        assertEquals(RepeatMode.One, model.repeat.value)
+    }
+
+    @Test
     fun fallbackSourceIsSettable() {
         val model = QueueModel()
         model.setFallbackSource(list(3))

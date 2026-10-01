@@ -81,11 +81,80 @@ object StationArtSource {
     private const val MISS_RETRY_MS = 60_000L
 
     private fun noteMiss(key: String) = missedAt.put(key, System.currentTimeMillis())
+    private fun clearMiss(key: String) { missedAt.remove(key) }
     private fun isOut(key: String): Boolean =
         missedAt.get(key)?.let { System.currentTimeMillis() - it < MISS_RETRY_MS } ?: false
 
+    /** Public guard so rows skip even the disk peek while a station rests. */
+    fun isMissOut(key: String): Boolean = isOut(key)
+
+    /**
+     * Direct image URLs to try before any homepage scrape, in order. Pure
+     * string math (no I/O) so JVM unit tests can pin the pick order: a known
+     * cover first, then the directory favicon. The homepage is deliberately
+     * not a candidate - it is a page to scrape only after every direct image
+     * has failed. SVG never decodes, so it is skipped without a network try.
+     */
+    fun artCandidates(cover: String, favicon: String, homepage: String): List<String> {
+        val out = ArrayList<String>(2)
+        if (cover.startsWith("http") && !isSvgUrl(cover)) out.add(cover)
+        if (favicon.startsWith("http") && !isSvgUrl(favicon) && favicon !in out) out.add(favicon)
+        return out
+    }
+
+    /** True when the URL points at an SVG BitmapFactory can never decode. */
+    fun isSvgUrl(url: String): Boolean {
+        val path = url.substringBefore('?').substringBefore('#').lowercase()
+        return path.endsWith(".svg")
+    }
+
     /** Directory holding decoded embedded-art bytes, keyed by audio path hash. */
     private var cacheDir: java.io.File? = null
+
+    // Persisted winning image URL: memory `resolved` dies with the process,
+    // so the winner is also filed next to covers/ as <md5(id)>.txt holding
+    // "url\ntimestamp". Next launch serves disk bytes or re-downloads that
+    // URL without ever scraping. TTL matches DISK_TTL_MS.
+    private fun resolvedFile(id: String): java.io.File? {
+        val base = cacheDir ?: return null
+        val name = runCatching {
+            java.security.MessageDigest.getInstance("MD5")
+                .digest(id.toByteArray()).joinToString("") { "%02x".format(it) }
+        }.getOrNull() ?: return null
+        return java.io.File(java.io.File(base, "resolved").apply { mkdirs() }, "$name.txt")
+    }
+
+    private fun readResolvedDisk(id: String): String? {
+        val f = resolvedFile(id) ?: return null
+        if (!f.isFile) return null
+        val lines = runCatching { f.readLines() }.getOrNull() ?: return null
+        if (lines.isEmpty()) return null
+        val url = lines[0].trim()
+        val at = lines.getOrNull(1)?.toLongOrNull() ?: f.lastModified()
+        if (url.isBlank() || !url.startsWith("http")) {
+            runCatching { f.delete() }
+            return null
+        }
+        if (System.currentTimeMillis() - at > DISK_TTL_MS) {
+            runCatching { f.delete() }
+            return null
+        }
+        return url
+    }
+
+    private fun writeResolved(id: String, url: String) {
+        resolved.put(id, url)
+        val f = resolvedFile(id) ?: return
+        runCatching {
+            f.parentFile?.mkdirs()
+            f.writeText("$url\n${System.currentTimeMillis()}")
+        }
+    }
+
+    private fun dropResolved(id: String) {
+        resolved.remove(id)
+        runCatching { resolvedFile(id)?.delete() }
+    }
 
     /** Call once at startup with an application context. */
     fun init(context: android.content.Context) {
@@ -194,45 +263,191 @@ object StationArtSource {
     }
 
     /**
+     * Full-size hero art for the player: homepage og:image first, then the
+     * direct favicon/cover. The inverse of the thumb path on purpose - a
+     * tiny but decodable favicon must not pin the ~900px hero when a large
+     * og:image exists on the homepage. List rows never use this; only the
+     * player hero and the bounded hero warm do.
+     *
+     * Shares the id miss backoff with the thumb path so a dead homepage
+     * rests for both together, and coalesces per station so concurrent
+     * player + warm lookups share one job. Disk bytes are shared with the
+     * thumb path (original bytes, decoded per target), including URL-keyed
+     * files left by earlier builds.
+     */
+    suspend fun bitmapForHero(station: Station): Bitmap? {
+        if (station.source == StationSource.Cliamp) return null
+        bitmaps.get(station.id)?.let { return it }
+        if (isOut(station.id)) return null
+        if (station.source == StationSource.Local) return bitmapFor(station)
+        return coalesced("hero:${station.id}") {
+            bitmaps.get(station.id)?.let { return@coalesced it }
+            if (isOut(station.id)) return@coalesced null
+            val candidates = artCandidates(station.cover, station.favicon, station.homepage)
+            withContext(CoverIo) {
+                (listOf(station.id) + candidates).distinct()
+                    .firstNotNullOfOrNull { key ->
+                        disk(key, TARGET)?.let { key to it }
+                    }
+            }?.let { (key, bmp) ->
+                withContext(CoverIo) { ensureDiskCopy(key, station.id) }
+                bitmaps.put(station.id, bmp)
+                clearMiss(station.id)
+                return@coalesced bmp
+            }
+            // Scrape-first: og:image is usually the large brand mark; the
+            // direct favicon/cover is the fallback, not the prize.
+            val bmp = cover(station) { url, save -> download(url, save) }
+                ?: candidates.firstNotNullOfOrNull { url -> download(url, save = station.id) }
+            if (bmp == null) noteMiss(station.id) else {
+                bitmaps.put(station.id, bmp)
+                clearMiss(station.id)
+            }
+            bmp
+        }
+    }
+
+    /**
      * Low-quality art for tiny surfaces (row icons, the mini player).
      * Decodes at [TARGET_SMALL] and serves its own cache so a 100-row list
      * doesn't hold a dozen full-size bitmaps in memory. Failed covers rest
-     * for [MISS_RETRY_MS] like [bitmapFor]'s do, so scroll storms never
+     * for [MISS_RETRY_MS] whatever the source, so scroll storms never
      * re-hit the network.
+     *
+     * Fast path: direct favicon/cover downloads on ArtFetch first, homepage
+     * scrape only when every direct image failed. The whole station job is
+     * one coalesced unit so prefetch + rows + scroll share it.
      */
     suspend fun bitmapForSmall(station: Station): Bitmap? {
         if (station.source == StationSource.Cliamp) return null
         smallBitmaps.get(station.id)?.let { return it }
-        if (station.source == StationSource.Local && isOut(station.id)) return null
-        // Same pool discipline as [bitmapFor]: disk on the pool, network off it.
-        val bmp = if (station.source == StationSource.Local) {
-            embeddedArt(station.url, TARGET_SMALL)
-        } else {
-            withContext(CoverIo) { disk(station.id, TARGET_SMALL) }
-                ?: cover(station) { url, save -> download(url, save, TARGET_SMALL) }
+        peekSmallUrl(station)?.let { return fileUnderId(station.id, it) }
+        if (isOut(station.id)) return null
+        if (station.source == StationSource.Local) {
+            val bmp = embeddedArt(station.url, TARGET_SMALL)
+            if (bmp != null) { clearMiss(station.id); smallBitmaps.put(station.id, bmp) }
+            else noteMiss(station.id)
+            return bmp
         }
-        if (bmp != null) smallBitmaps.put(station.id, bmp)
-        // Every miss rests, not just local ones: a failed cover used to be
-        // re-hit on every scroll pass for non-local stations.
-        else noteMiss(station.id)
-        return bmp
+        return coalesced("small:${station.id}") { smallCoalesced(station) }
+    }
+
+    /** Memory peek over the direct URL lanes (cover, favicon, resolved). */
+    private fun peekSmallUrl(station: Station): Bitmap? {
+        station.cover.takeIf { it.startsWith("http") }?.let { smallBitmaps.get(it)?.let { return it } }
+        station.favicon.takeIf { it.startsWith("http") }?.let { smallBitmaps.get(it)?.let { return it } }
+        resolved.get(station.id)?.let { smallBitmaps.get(it)?.let { return it } }
+        return null
     }
 
     /**
-     * The station's cover: the og:image on its homepage first, then the
-     * favicon the directory recorded. A discovered URL that refuses to decode
-     * is forgotten, so the next attempt is never pinned to a dead link and
-     * the fallback to the favicon happens on the spot. Anything that decodes
-     * is written to disk under [station]'s id, so a later launch reads it
-     * back without the network.
+     * The coalesced thumb worker: disk (id + URL keys), then direct
+     * downloads, then the persisted winner URL, then homepage scrape last.
+     * Disk lives on CoverIo; scrape/download suspend off it.
+     */
+    private suspend fun smallCoalesced(station: Station): Bitmap? {
+        smallBitmaps.get(station.id)?.let { return it }
+        peekSmallUrl(station)?.let { return fileUnderId(station.id, it) }
+        if (isOut(station.id)) return null
+
+        val candidates = artCandidates(station.cover, station.favicon, station.homepage)
+        val winnerDisk = resolved.get(station.id) ?: withContext(CoverIo) { readResolvedDisk(station.id) }
+        if (winnerDisk != null) resolved.put(station.id, winnerDisk)
+        val diskKeys = buildList {
+            add(station.id)
+            winnerDisk?.let { add(it) }
+            candidates.forEach { add(it) }
+        }.distinct()
+
+        val diskHit = withContext(CoverIo) {
+            diskKeys.firstNotNullOfOrNull { key ->
+                disk(key, TARGET_SMALL)?.let { key to it }
+            }
+        }
+        if (diskHit != null) {
+            val (key, bmp) = diskHit
+            withContext(CoverIo) {
+                ensureDiskCopy(key, station.id)
+                if (key != station.id) ensureDiskCopy(station.id, key)
+            }
+            winnerDisk?.let { writeResolved(station.id, it) }
+            if (key.startsWith("http")) writeResolved(station.id, key)
+            clearMiss(station.id)
+            smallBitmaps.put(station.id, bmp)
+            if (key.startsWith("http")) smallBitmaps.put(key, bmp)
+            return bmp
+        }
+
+        for (url in candidates) {
+            val bmp = download(url, save = station.id, target = TARGET_SMALL) ?: continue
+            onSmallSuccess(station.id, url, bmp)
+            return bmp
+        }
+
+        if (winnerDisk != null && winnerDisk !in candidates) {
+            val bmp = download(winnerDisk, save = station.id, target = TARGET_SMALL)
+            if (bmp != null) {
+                onSmallSuccess(station.id, winnerDisk, bmp)
+                return bmp
+            }
+            dropResolved(station.id)
+        }
+
+        val page = station.homepage.takeIf { it.startsWith("http") }
+        if (page != null) {
+            val scraped = coalesced("page:${station.id}") { scrape(page) }
+            if (scraped != null && !isSvgUrl(scraped)) {
+                val bmp = download(scraped, save = station.id, target = TARGET_SMALL)
+                if (bmp != null) {
+                    onSmallSuccess(station.id, scraped, bmp)
+                    return bmp
+                }
+                if (scraped == resolved.get(station.id)) dropResolved(station.id)
+            }
+        }
+        noteMiss(station.id)
+        return null
+    }
+
+    /** Warm id + URL memory keys, mirror disk bytes, persist the winner. */
+    private suspend fun onSmallSuccess(id: String, url: String, bmp: Bitmap) {
+        smallBitmaps.put(id, bmp)
+        if (url.startsWith("http")) smallBitmaps.put(url, bmp)
+        withContext(CoverIo) { ensureDiskCopy(id, url) }
+        writeResolved(id, url)
+        clearMiss(id)
+    }
+
+    /** Copy cover bytes from [fromKey] to [toKey] when the target is missing. */
+    private fun ensureDiskCopy(fromKey: String, toKey: String) {
+        if (fromKey == toKey || cacheDir == null) return
+        runCatching {
+            val src = coverFile(fromKey)
+            val dst = coverFile(toKey)
+            if (src.absolutePath != dst.absolutePath && src.isFile &&
+                (!dst.isFile || dst.length() == 0L)
+            ) {
+                src.copyTo(dst, overwrite = true)
+            }
+        }
+    }
+
+    /**
+     * The station's full-size cover for the player: the persisted winner or
+     * homepage og:image first, then the directory favicon. A discovered URL
+     * that refuses to decode is forgotten, so the next attempt is never
+     * pinned to a dead link and the fallback to the favicon happens on the
+     * spot. Anything that decodes is written to disk under [station]'s id,
+     * so a later launch reads it back without the network. List rows never
+     * use this path - they stay on the favicon-first thumb above.
      */
     private suspend fun cover(station: Station, fetch: suspend (String, String?) -> Bitmap?): Bitmap? {
         val url = imageUrl(station) ?: return null
         val bmp = fetch(url, station.id)
         if (bmp != null) return bmp
-        resolved.remove(station.id)
+        dropResolved(station.id)
         val fav = station.favicon
-        return if (fav.startsWith("http") && fav != url) fetch(fav, station.id) else null
+        return if (fav.startsWith("http") && fav != url && !isSvgUrl(fav)) fetch(fav, station.id) else null
     }
 
     /**
@@ -275,7 +490,11 @@ object StationArtSource {
         // prefetch; check it before the id key so a fresh surface (menu,
         // mini player) paints from memory on its first frame. Rotating
         // signed URLs miss here and fall through to the id key as before.
+        // Favicon and resolved lanes join so a thumb warmed under any key
+        // paints on the first frame.
         station.cover.takeIf { it.startsWith("http") }?.let { smallBitmaps.get(it) }
+            ?: station.favicon.takeIf { it.startsWith("http") }?.let { smallBitmaps.get(it) }
+            ?: resolved.get(station.id)?.let { smallBitmaps.get(it) }
             ?: smallBitmaps.get(station.id)
 
     /** Memory-only peek for full-size art, the [bitmapFor] counterpart of
@@ -307,6 +526,18 @@ object StationArtSource {
         smallBitmaps.remove(key)
     }
 
+    /** Test-only: force a miss timestamp so backoff branches stay JVM-testable. */
+    @androidx.annotation.VisibleForTesting
+    internal fun seedMissForTest(key: String, atMs: Long = System.currentTimeMillis()) {
+        missedAt.put(key, atMs)
+    }
+
+    /** Test-only: clear miss state between JVM tests. */
+    @androidx.annotation.VisibleForTesting
+    internal fun clearMissForTest(key: String) {
+        missedAt.remove(key)
+    }
+
     /**
      * A known cover URL cached the stations way: keyed by the stable station
      * id rather than the URL. Provider artwork URLs are signed per request,
@@ -320,17 +551,34 @@ object StationArtSource {
      * under the id key. A URL hit is also filed under the id, so the
      * id-keyed peek hits from then on. Rotating signed URLs simply miss both
      * URL checks and fall through to the id lane as before.
+     *
+     * Directory/Custom stations share the favicon-first coalesced thumb job
+     * with [bitmapForSmall] (same "small:id" key), so prefetch and rows never
+     * run duplicate downloads and a dead favicon still falls back to the
+     * homepage scrape inside [smallCoalesced]. Provider/Podcast art has no
+     * homepage and stays scrape-free.
      */
     suspend fun bitmapForKnownSmall(station: Station): Bitmap? {
         val url = station.cover.takeIf { it.startsWith("http") } ?: return bitmapForSmall(station)
+        if (station.source == StationSource.Directory || station.source == StationSource.Custom) {
+            return bitmapForSmall(station)
+        }
         smallBitmaps.get(url)?.let { return fileUnderId(station.id, it) }
         val fromDisk = withContext(CoverIo) { disk(url, TARGET_SMALL) }
-        if (fromDisk != null) return fileUnderId(station.id, fromDisk)
+        if (fromDisk != null) {
+            withContext(CoverIo) { ensureDiskCopy(url, station.id) }
+            return fileUnderId(station.id, fromDisk)
+        }
         smallBitmaps.get(station.id)?.let { return it }
         if (isOut(station.id)) return null
         val bmp = withContext(CoverIo) { disk(station.id, TARGET_SMALL) }
             ?: download(url, save = station.id, target = TARGET_SMALL)
-        if (bmp == null) noteMiss(station.id) else smallBitmaps.put(station.id, bmp)
+        if (bmp == null) noteMiss(station.id) else {
+            smallBitmaps.put(station.id, bmp)
+            smallBitmaps.put(url, bmp)
+            withContext(CoverIo) { ensureDiskCopy(station.id, url) }
+            clearMiss(station.id)
+        }
         return bmp
     }
 
@@ -342,11 +590,15 @@ object StationArtSource {
 
     private suspend fun imageUrl(station: Station): String? {
         resolved.get(station.id)?.let { return it }
+        withContext(CoverIo) { readResolvedDisk(station.id) }?.let {
+            resolved.put(station.id, it)
+            return it
+        }
         val fromPage = station.homepage.takeIf { it.startsWith("http") }?.let { page ->
             coalesced("page:${station.id}") { scrape(page) }
         }
-        val candidate = fromPage ?: station.favicon.takeIf { it.startsWith("http") }
-        if (candidate != null) resolved.put(station.id, candidate)
+        val candidate = fromPage ?: station.favicon.takeIf { it.startsWith("http") && !isSvgUrl(it) }
+        if (candidate != null) writeResolved(station.id, candidate)
         return candidate
     }
 
@@ -426,18 +678,24 @@ object StationArtSource {
     /**
      * Delete what `disk` would reject anyway (stale) plus anything past a
      * file cap, oldest first. Nothing pruned this directory before: the TTL
-     * only applied on read, so it grew forever.
+     * only applied on read, so it grew forever. The resolved-URL sidecars
+     * prune under the same TTL.
      */
     suspend fun pruneDisk() = withContext(CoverIo) {
         val dir = cacheDir ?: return@withContext
         val now = System.currentTimeMillis()
         dir.listFiles()?.forEach { f ->
-            if (now - f.lastModified() > DISK_TTL_MS) runCatching { f.delete() }
+            if (f.isFile && now - f.lastModified() > DISK_TTL_MS) runCatching { f.delete() }
         }
-        dir.listFiles()
+        dir.listFiles { f -> f.isFile }
             ?.sortedBy { it.lastModified() }
             ?.dropLast(MAX_DISK_FILES)
             ?.forEach { runCatching { it.delete() } }
+        runCatching {
+            java.io.File(dir, "resolved").listFiles()?.forEach { f ->
+                if (now - f.lastModified() > DISK_TTL_MS) runCatching { f.delete() }
+            }
+        }
     }
 
     /** Reads up to [limit], and gives up rather than buffering something huge. */

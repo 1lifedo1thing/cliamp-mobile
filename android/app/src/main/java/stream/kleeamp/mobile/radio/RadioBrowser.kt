@@ -235,6 +235,11 @@ private data class RbStation(
         votes = votes,
         homepage = homepage,
         favicon = favicon,
+        // Copy the directory favicon into cover so ArtResolve.small() takes
+        // the known-http branch (bitmapForKnownSmall) like podcasts: the
+        // thumb downloads the favicon directly instead of scraping the
+        // homepage first. The favicon field stays for scrape fallback.
+        cover = favicon.takeIf { it.startsWith("http") }.orEmpty(),
         uuid = stationuuid,
     )
 }

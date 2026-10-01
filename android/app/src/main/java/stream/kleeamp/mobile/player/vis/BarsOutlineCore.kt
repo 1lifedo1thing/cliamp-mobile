@@ -1,23 +1,18 @@
 package stream.kleeamp.mobile.player.vis
 
-import androidx.compose.ui.geometry.Offset
+import kotlin.math.ceil
 
 /**
- * Line-graph peak outline: one point per band top, mirroring cliamp's
- * bars-outline rows on a Canvas polyline.
+ * Bar peak rows, mirroring cliamp's renderBarsOutline row logic: the single
+ * row with `rowTop > level > rowBottom` draws, everything else stays empty.
+ * Full scale draws nothing (every row's top sits at or below the peak) and
+ * silence draws nothing - both exactly like the terminal original.
  */
 object BarsOutlineCore {
 
-    /** Bar-top points across [width], y measured from the top. */
-    fun tops(
-        levels: FloatArray,
-        width: Float,
-        height: Float,
-    ): List<Offset> {
-        if (levels.isEmpty() || width <= 0f || height <= 0f) return emptyList()
-        val cell = width / levels.size
-        return levels.mapIndexed { i, level ->
-            Offset(cell * (i + 0.5f), height * (1f - level.coerceIn(0f, 1f)))
-        }
+    /** Row containing [level]'s peak in a [rows]-tall field, or null. */
+    fun peakRow(level: Float, rows: Int): Int? {
+        if (rows <= 0 || level <= 0f || level >= 1f) return null
+        return (ceil(rows * (1.0 - level)) - 1).toInt().coerceIn(0, rows - 1)
     }
 }

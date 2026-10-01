@@ -1,8 +1,6 @@
 package stream.kleeamp.mobile.player.vis
 
-import kotlin.math.PI
 import kotlin.math.exp
-import kotlin.math.sin
 import stream.kleeamp.mobile.model.NowPlaying
 
 /**
@@ -114,10 +112,10 @@ enum class Visualizer(val id: String, val label: String, val columns: Int) {
  * source of the lit levels and peak rows that every visualizer host draws,
  * so the in-app meter and the widget always agree.
  *
- * Each live spectrum frame is [push]ed (or [pushIdle] when there is no signal,
- * [settle] when nothing is playing) and the caller reads [levels]/[peaks] as
- * 0..1 per column. The in-app meter runs it at frame rate; the widget persists
- * a bounded-window copy of it for its static snapshot.
+ * Each live spectrum frame from [AudioAnalyzer] is [push]ed; [settle] parks
+ * the meter at rest when nothing is playing. There is deliberately no
+ * synthetic idle animation: with no PCM the meter shows silence, never a
+ * sine dance — silence in means silence out.
  */
 class MeterCore(val columns: Int) {
     val levels = FloatArray(columns) { 0.05f }
@@ -162,17 +160,6 @@ class MeterCore(val columns: Int) {
         var peak = 0f
         for (k in lo until hi.coerceAtMost(src.size)) if (src[k] > peak) peak = src[k]
         return peak
-    }
-
-    fun pushIdle(t: Double) {
-        for (i in 0 until columns) {
-            val period = 0.85 + (i % 7) * 0.11
-            val phase = (i % 6) * 0.07
-            val s = (sin(2 * PI * ((t / period) + phase)) + 1.0) / 2.0
-            val bias = 0.34 + 0.5 * ((i * 37 % 13) / 13.0)
-            levels[i] = (0.12 + s * bias).toFloat().coerceIn(0f, 0.96f)
-            peaks[i] = (levels[i] + 0.08f).coerceIn(0f, 0.99f)
-        }
     }
 
     fun settle() {

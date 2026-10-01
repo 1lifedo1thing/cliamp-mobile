@@ -7,7 +7,7 @@ import org.junit.Test
 /**
  * Pause must rest every family on the same floor BrickMeter settles to
  * (levels 0.04, peaks 0.06), and pushing live bands afterwards must resume
- * tracking - the idle dance is only for live playback with no FFT yet.
+ * tracking. With no PCM the meters hold silence — never a synthetic dance.
  */
 class VisSettleTest {
 

@@ -7,10 +7,11 @@ package stream.kleeamp.mobile.player.vis
  * mapping feeds a Canvas path instead of braille cells, so the trace keeps
  * its oscilloscope character at any size.
  *
- * Waveform capture is 8-bit unsigned (128 is silence); [fromBytes] unwraps it
- * to -1..1. [trace] nearest-downsamples to y-fractions 0..1 (0 is the top),
- * exactly like the Go version - no smoothing, an authentic scope is jagged.
- * Empty input traces the center line, which is also the pause rest state.
+ * The live path carries float PCM (-1..1) from the Media3 tap via [PcmRing];
+ * [fromBytes] remains for the legacy 8-bit unsigned capture shape (128 is
+ * silence) and its tests. [trace] nearest-downsamples to y-fractions 0..1
+ * (0 is the top), exactly like the Go version - no smoothing, an authentic
+ * scope is jagged. Empty input traces the center line, also the pause rest.
  */
 object WaveCore {
 

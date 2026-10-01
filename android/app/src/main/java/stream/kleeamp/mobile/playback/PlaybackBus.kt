@@ -21,6 +21,14 @@ object PlaybackBus {
     val spectrumLive: StateFlow<Boolean> = _spectrumLive.asStateFlow()
 
     /**
+     * Bumped on every source change (track/station transition). Visualizer
+     * frames key on this to drop stale peak state; ICY title changes do not
+     * bump it so animation continues across metadata updates.
+     */
+    private val _generation = MutableStateFlow(0)
+    val generation: StateFlow<Int> = _generation.asStateFlow()
+
+    /**
      * Raw time-domain samples for the wave oscilloscope, -1..1. The FFT
      * cannot produce these, so they ride their own Visualizer tap. Nobody
      * collects this flow: frames read the current value directly in their
@@ -67,6 +75,7 @@ object PlaybackBus {
 
     fun publishSpectrum(v: FloatArray) { _spectrum.value = v }
     fun publishSpectrumLive(v: Boolean) { _spectrumLive.value = v }
+    fun publishGeneration(v: Int) { _generation.value = v }
     fun publishWaveform(v: FloatArray) { _waveform.value = v }
     fun publishStereo(v: StereoMetrics) { _stereo.value = v }
     fun publishStreamTitle(v: String) { _streamTitle.value = v }

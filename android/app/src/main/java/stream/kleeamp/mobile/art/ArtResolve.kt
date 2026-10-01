@@ -42,7 +42,18 @@ object ArtResolve {
             StationArtSource.bitmapFor(station)
                 ?: LocalArt.bitmapFor(station.cover, resolver)
                 ?: station.localDir()?.let { LocalArt.folder(it, resolver) }
-        station.cover.startsWith("http") -> StationArtSource.bitmapForUrl(station.cover)
+        station.cover.startsWith("http") ->
+            // Directory/Custom hero prefers the scraped og:image over a tiny
+            // favicon (bitmapForHero); provider/podcast art has no homepage
+            // and stays a direct download. No bitmapForUrl fallback here:
+            // the hero already tries the cover download, so one would only
+            // re-hit a URL the hero just proved dead, and it would bypass
+            // the shared id backoff via its separate URL key.
+            if (station.source == StationSource.Directory || station.source == StationSource.Custom) {
+                StationArtSource.bitmapForHero(station)
+            } else {
+                StationArtSource.bitmapForUrl(station.cover)
+            }
         else -> StationArtSource.bitmapFor(station)
     }
 

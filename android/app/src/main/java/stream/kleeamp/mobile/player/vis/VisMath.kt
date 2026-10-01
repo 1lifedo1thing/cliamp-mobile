@@ -1,8 +1,5 @@
 package stream.kleeamp.mobile.player.vis
 
-import kotlin.math.PI
-import kotlin.math.sin
-
 object VisMath {
 
     fun scatterHash(band: Int, row: Int, col: Int, frame: Long): Float {
@@ -66,17 +63,26 @@ object VisMath {
         return out
     }
 
-    fun idleBands(columns: Int, t: Double): FloatArray {
-        val out = FloatArray(columns)
-        for (i in 0 until columns) {
-            val period = 0.85 + (i % 7) * 0.11
-            val phase = (i % 6) * 0.07
-            val s = (sin(2 * PI * (t / period + phase)) + 1.0) / 2.0
-            val bias = 0.34 + 0.5 * ((i * 37 % 13) / 13.0)
-            out[i] = (0.12 + s * bias).coerceIn(0.0, 0.96).toFloat()
-        }
-        return out
+    /**
+     * Silence frame: zeros of [columns]. Renderers use this while no PCM has
+     * arrived yet so meters rest at the floor instead of dancing. Never a
+     * sine wave, never random — silence in, silence out.
+     */
+    fun silenceBands(columns: Int): FloatArray = FloatArray(columns)
+
+    /**
+     * Spreads a seed stream uniformly onto `[0, n)`. A raw `seed % n` bunches
+     * when the seed step is ≡ ±1 (mod n) for the grid at hand - cliamp's
+     * petal step 104729 ≡ 1 (mod 106), parking every petal in adjacent
+     * columns on a 106-wide grid. Reducing modulo a prime first keeps the
+     * deterministic spread on every grid size.
+     */
+    fun spreadSeed(seed: Long, n: Int): Int {
+        if (n <= 0) return 0
+        return (((seed % PRIME) * n) / PRIME).toInt().coerceIn(0, n - 1)
     }
+
+    private const val PRIME = 1009L
 
     /**
      * Per-capture smoothing, mirroring cliamp Analyze's fast-attack /

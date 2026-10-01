@@ -4,53 +4,79 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.drawText
+import stream.kleeamp.mobile.theme.KleeampPalette
 import stream.kleeamp.mobile.theme.LocalPalette
 
+/**
+ * Wireframe equalizer, ported from cliamp's redSectorDriver
+ * (`ui/vis_red_sector.go`): five hollow bars on a ground line tumble as a
+ * rigid body with backface-culled faces over a drifting starfield, drawn as
+ * braille. Cells keep the highest tag, so bars (5..7) always win over stars
+ * (1..4). Like cliamp's Render, the grid is ensured from canvas dimensions.
+ */
 @Composable
 internal fun VisRedSector(frame: RedSectorFrame, modifier: Modifier) {
     val p = LocalPalette.current
+    val grid = rememberBrailleGrid()
+    val cellW = grid.cellW
+    val cellH = grid.cellH
     Canvas(modifier) {
         @Suppress("UNUSED_EXPRESSION") frame.frame
         if (size.width <= 0f || size.height <= 0f) return@Canvas
-        val angle = RedSectorCore.angle(frame.frame.toLong())
-        // Starfield behind the bars.
-        for (i in 0 until 40) {
-            val (sx, sy, depth) = RedSectorCore.star(i, frame.frame.toLong())
-            val (px, py) = RedSectorCore.project(sx, sy, size.width, size.height)
-            drawCircle(
-                p.inkFaint.copy(alpha = (0.25f + 0.45f * depth).toFloat()),
-                (1f + depth * 1.6f).toFloat(),
-                Offset(px, py),
-            )
-        }
-        // Five hollow bars tumbling as a rigid body around Y.
-        val heights = RedSectorCore.barHeights(frame.bands)
-        val groundY = 0.72
-        for (b in heights.indices) {
-            val half = 0.11
-            val cx = -0.8 + b * 0.4
-            val top = groundY - heights[b] * 1.1
-            // Front (z +) and back (z −) faces; weak perspective by depth.
-            for ((z, dim) in listOf(0.15 to 1f, -0.15 to 0.45f)) {
-                val quad = listOf(
-                    RedSectorCore.rotY(cx - half, z, angle),
-                    RedSectorCore.rotY(cx + half, z, angle),
-                ).map { (rx, rz) ->
-                    val scale = 1.0 / (1.0 + (rz + 0.5) * 0.35)
-                    RedSectorCore.project(rx * scale, groundY, size.width, size.height) to
-                        RedSectorCore.project(rx * scale, top * scale, size.width, size.height)
+        val charCols = (size.width / cellW).toInt().coerceAtLeast(1)
+        val rows = (size.height / cellH).toInt().coerceAtLeast(1)
+        val dotRows = rows * 4
+        val dotCols = charCols * 2
+        if (dotRows < 4 || dotCols < 16) return@Canvas
+        val core = frame.core
+        core.ensure(dotRows, dotCols)
+        core.draw(frame.frame.toLong())
+
+        for (row in 0 until rows) {
+            val dotRowStart = row * 4
+            for (ch in 0 until charCols) {
+                var braille = BRAILLE_BASE
+                var tag = 0
+                val dotColStart = ch * 2
+                for (dc in 0 until 2) {
+                    val x = dotColStart + dc
+                    if (x >= core.dotCols) continue
+                    for (dr in 0 until 4) {
+                        val y = dotRowStart + dr
+                        if (y >= core.dotRows) continue
+                        val t = core.tagAt(x, y)
+                        if (t == 0) continue
+                        braille += BRAILLE_BIT[dr][dc]
+                        if (t > tag) tag = t
+                    }
                 }
-                val ink = p.accentBright.copy(alpha = dim)
-                for ((base, cap) in quad) {
-                    drawLine(ink, Offset(base.first, base.second), Offset(cap.first, cap.second), 2f)
-                }
-                drawLine(
-                    ink,
-                    Offset(quad[0].second.first, quad[0].second.second),
-                    Offset(quad[1].second.first, quad[1].second.second),
-                    2f,
+                // Blank braille paints nothing, so empty cells are skipped.
+                if (braille == BRAILLE_BASE) continue
+                val layout = grid.layoutOf(braille)
+                drawText(
+                    textLayoutResult = layout,
+                    color = redSectorColor(p, tag),
+                    topLeft = Offset(
+                        ch * cellW + (cellW - layout.size.width) / 2f,
+                        row * cellH + (cellH - layout.size.height) / 2f,
+                    ),
                 )
             }
         }
     }
 }
+
+/**
+ * Seven-tag palette: the four star tags sit below the three bar tags.
+ * Stars read dim, bars read the spectrum tiers - the contrast between the
+ * dim field and the vector object that the homage is built on.
+ */
+private fun redSectorColor(p: KleeampPalette, tag: Int): Color =
+    when {
+        tag >= RedSectorCore.TAG_HIGH -> visTier(p, 2)
+        tag >= RedSectorCore.TAG_MID -> visTier(p, 1)
+        tag >= RedSectorCore.TAG_LOW -> visTier(p, 0)
+        else -> p.inkFaint.copy(alpha = 0.30f + 0.12f * tag)
+    }

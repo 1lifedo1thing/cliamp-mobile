@@ -171,17 +171,28 @@ object QueuePolicy {
     /**
      * Absolute target for one prev/next step of [delta]. Ring wraps (positive
      * modulo, so negative deltas stay in range); Linear clamps; Cold walks
-     * from the shown item or from the head when it is unknown.
+     * from the shown item or from the head when it is unknown. Repeat-all
+     * turns a clamped Linear step (prev at the head, next at the tail) into
+     * a wrap instead of a no-op.
      */
-    fun stepTarget(mode: StepMode, srcSize: Int, here: Int, delta: Int): Int {
+    fun stepTarget(
+        mode: StepMode,
+        srcSize: Int,
+        here: Int,
+        delta: Int,
+        repeat: RepeatMode = RepeatMode.Off,
+    ): Int {
         fun wrap(k: Int) = ((k % srcSize) + srcSize) % srcSize
-        return when (mode) {
+        val stepped = when (mode) {
             is StepMode.Cold ->
                 if (mode.shown >= 0) wrap(mode.shown + delta)
                 else (0 + delta).coerceIn(0, srcSize - 1)
             StepMode.Ring -> wrap(here + delta)
             StepMode.Linear -> (here + delta).coerceIn(0, srcSize - 1)
         }
+        return if (repeat == RepeatMode.All && stepped == here) {
+            repeatAllTarget(srcSize, here, delta)
+        } else stepped
     }
 
     /**

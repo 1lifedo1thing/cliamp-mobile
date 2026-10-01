@@ -110,15 +110,43 @@ fun StationsScreen(
     val tags = ui.tags
     val countries = ui.countries
 
-    // Warm small art for the head of every section on entry and on page
-    // append, so rows compose onto warm memory instead of each firing a
-    // cold lookup as they scroll in.
+    // Viewport-first warm: only the visible window + small overscan, keyed
+    // by the visible index range so scrolling cancels the previous run.
+    // A blind head-of-list prefetch queued 40 homepage scrapes ahead of the
+    // visible rows; this warms small art only, never full.
     val resolver = LocalContext.current.contentResolver
-    LaunchedEffect(source, cliamp.size, custom.size, directory.stations.size) {
-        ArtResolve.prefetchSmall(cliamp + custom + directory.stations, resolver)
+    val listState = rememberLazyListState()
+    val displayStations: List<Station> = remember(source, cliamp, custom, directory.stations) {
+        when (source) {
+            Source.All -> cliamp + custom + directory.stations
+            Source.Cliamp -> cliamp
+            Source.Custom -> custom
+            Source.Directory -> directory.stations
+        }
+    }
+    val visibleRange by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val first = info.visibleItemsInfo.firstOrNull()?.index ?: 0
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: first
+            first..last
+        }
+    }
+    LaunchedEffect(visibleRange, source, displayStations.size) {
+        // Lazy indices include section headers, so shift back slightly and
+        // clamp; the +8 overscan absorbs the offset either way.
+        val start = (visibleRange.first - 2).coerceAtLeast(0)
+        val end = (visibleRange.last + 8).coerceAtMost(displayStations.size)
+        if (start >= end) return@LaunchedEffect
+        val window = displayStations.subList(start, end)
+        ArtResolve.prefetchSmall(window, resolver, limit = 24)
+        // Hero warm, strictly after the thumbs and tightly bounded: full
+        // decodes are heavy, so only the head of the visible window warms
+        // them, and scrolling cancels the run via the effect key. Tapping a
+        // warmed row then opens the player onto cached full art.
+        ArtResolve.prefetchFull(window, resolver, limit = 4)
     }
 
-    val listState = rememberLazyListState()
     // The row menu's subject: set by the ⋮ trigger, cleared on dismiss.
     // The sheet itself is emitted after the list below.
     var menuFor by remember { mutableStateOf<Station?>(null) }

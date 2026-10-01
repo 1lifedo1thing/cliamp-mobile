@@ -109,6 +109,7 @@ internal data class PlayerModel(
     val visualizer: String,
     val spectrumProvider: () -> FloatArray?,
     val stereoProvider: () -> StereoMetrics?,
+    val generation: Int,
     val outputDevice: Int,
     val outputs: List<AudioOutput>,
     val currentOutput: AudioOutput?,
@@ -120,6 +121,7 @@ internal data class PlayerActions(
     val onOpenUpNext: () -> Unit,
     val onToggleShuffle: () -> Unit,
     val onOpenSpeed: () -> Unit,
+    val onCycleRepeat: () -> Unit,
     val onOpenScope: () -> Unit,
     val onToggleFav: () -> Unit,
     val onSeek: (Float) -> Unit,
@@ -150,6 +152,7 @@ fun NowPlayingScreen(
     // Lambdas are not effect keys, so re-creating them never restarts a loop.
     val spectrumProvider: () -> FloatArray? = { PlaybackBus.spectrum.value }
     val stereoProvider: () -> StereoMetrics? = { PlaybackBus.stereo.value }
+    val generation by PlaybackBus.generation.collectAsState()
     // The connected sinks and the one the stream is on: "speaker" until a
     // headset or Bluetooth route takes over.
     val context = LocalContext.current
@@ -172,6 +175,7 @@ fun NowPlayingScreen(
         visualizer = uiState.visualizer,
         spectrumProvider = spectrumProvider,
         stereoProvider = stereoProvider,
+        generation = generation,
         outputDevice = uiState.outputDevice,
         outputs = outputs,
         currentOutput = currentOutput,
@@ -181,6 +185,7 @@ fun NowPlayingScreen(
         onOpenUpNext = onOpenUpNext,
         onToggleShuffle = { vm.player.toggleShuffle() },
         onOpenSpeed = { speedOpen = true },
+        onCycleRepeat = { vm.player.toggleRepeat() },
         onOpenScope = onOpenScope,
         onToggleFav = { vm.onEvent(NowPlayingViewModel.Event.ToggleFavorite) },
         onSeek = { vm.player.seekTo(it) },

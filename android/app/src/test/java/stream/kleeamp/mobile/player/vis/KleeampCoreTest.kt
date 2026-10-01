@@ -33,9 +33,9 @@ class KleeampCoreTest {
     }
 
     @Test
-    fun idleBandsKeepTheMaxBounded() {
+    fun silenceKeepsTheMaxBounded() {
         val core = KleeampCore(24)
-        repeat(30) { core.push(VisMath.idleBands(24, it * 0.05), 1f / 60f) }
+        repeat(30) { core.push(VisMath.silenceBands(24), 1f / 60f) }
         for (level in core.barLevels) assertTrue(level in 0f..1f)
         assertTrue(core.bass in 0f..1f)
     }

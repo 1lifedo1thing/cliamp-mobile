@@ -96,12 +96,14 @@ fun UpNextScreen(
     // read the setting here so only this screen recomposes when it changes.
     val app = LocalContext.current.applicationContext as KleeampApp
     val visualizer by app.prefs.visualizer.collectAsState(initial = "spectrum")
+    val generation by PlaybackBus.generation.collectAsState()
     UpNextContent(
         upNext = upNext,
         activeIndex = upNextIndex.takeIf { upNext.getOrNull(it)?.url == current?.url } ?: -1,
         current = current,
         playing = playing,
         visualizer = visualizer,
+        generation = generation,
         onPlay = { if (player.upNext.value == upNext) onPlay(it) },
         onClear = player::clearUpNext,
         canUndo = canUndo,
@@ -132,6 +134,7 @@ internal fun UpNextContent(
     canUndo: Boolean = false,
     onUndo: () -> Unit = {},
     visualizer: String = "spectrum",
+    generation: Int = 0,
 ) {
     val p = LocalPalette.current
     val listState = rememberLazyListState()
@@ -185,7 +188,7 @@ internal fun UpNextContent(
         }
 
         if (current != null && activeIndex >= 0) {
-            NowPlayingCard(current, playing, p, visualizer)
+            NowPlayingCard(current, playing, p, visualizer, generation)
         }
 
         LazyColumn(
@@ -261,7 +264,7 @@ internal fun UpNextContent(
 }
 
 @Composable
-private fun NowPlayingCard(s: Station, playing: Boolean, p: KleeampPalette, visualizer: String) {
+private fun NowPlayingCard(s: Station, playing: Boolean, p: KleeampPalette, visualizer: String, generation: Int = 0) {
     Column(Modifier.fillMaxWidth().background(p.panel)) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 14.dp),
@@ -285,6 +288,7 @@ private fun NowPlayingCard(s: Station, playing: Boolean, p: KleeampPalette, visu
                         modifier = Modifier.size(width = 62.dp, height = 18.dp),
                         spectrumProvider = { PlaybackBus.spectrum.value },
                         stereoProvider = { PlaybackBus.stereo.value },
+                        generation = generation,
                     )
                     Mono(if (playing) "PLAYING" else "PAUSED", KleeampType.tabLabel,
                         if (playing) p.accent else p.inkTertiary)

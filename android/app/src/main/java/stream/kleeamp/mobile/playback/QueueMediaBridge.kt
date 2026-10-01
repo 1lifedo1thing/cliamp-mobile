@@ -106,6 +106,19 @@ internal class QueueMediaBridge(
         }
     }
 
+    /**
+     * Replays the audible item from its head without touching the queue:
+     * no window rebuild, no re-prepare gap, no resume position. The live
+     * Media3 index wins over the model, which can lag an auto-advance.
+     */
+    fun replayCurrent() {
+        val c = controller() ?: return
+        if (c.mediaItemCount == 0) return
+        c.seekTo(c.currentMediaItemIndex.coerceIn(0, c.mediaItemCount - 1), 0L)
+        c.play()
+        onSync()
+    }
+
     /** Cancels shuffle/extend work; a new toggle supersedes both. */
     fun cancelShuffleWork() {
         shuffleJob?.cancel()
