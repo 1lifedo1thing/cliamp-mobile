@@ -87,7 +87,7 @@ fun ScopeScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(p.groundScope)
+            .background(p.ground)
             .navigationBarsPadding()
             .verticalScroll(rememberScrollState())
     ) {

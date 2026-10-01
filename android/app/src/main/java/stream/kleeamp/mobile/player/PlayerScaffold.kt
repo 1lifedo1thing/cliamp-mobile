@@ -362,7 +362,9 @@ internal fun LandscapePlayer(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top,
             ) {
-                Box(Modifier.weight(1f)) {
+                // The end padding is the gap: long titles scroll inside
+                // their lane and stop here instead of sticking to the badge.
+                Box(Modifier.weight(1f).padding(end = 12.dp)) {
                     PlayerMeta(model)
                 }
                 UpNextBadge(model.upNextCount, actions.onOpenUpNext)
