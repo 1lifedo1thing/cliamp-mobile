@@ -355,15 +355,18 @@ internal fun LandscapePlayer(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            // No back chevron in landscape: system back covers it, and the
+            // row belongs to the title. Up Next rides at the title's right
+            // edge; the weighted meta never runs underneath it.
             Row(
-                Modifier.fillMaxWidth().height(48.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
             ) {
-                BackChevron(actions.onBack)
-                Spacer(Modifier.weight(1f))
+                Box(Modifier.weight(1f)) {
+                    PlayerMeta(model)
+                }
                 UpNextButton(model.upNextCount, actions.onOpenUpNext)
             }
-            PlayerMeta(model)
             Spacer(Modifier.weight(1f))
             PlayerTransport(model, actions, meterHeight = 56.dp)
             TransportKeys(model, actions)
