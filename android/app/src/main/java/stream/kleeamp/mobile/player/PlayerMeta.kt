@@ -200,7 +200,6 @@ internal fun PlayerStatusRow(
             RepeatAction(repeat = model.state.repeat) { actions.onCycleRepeat() }
         }
         SpeedAction(speed = model.state.speed) { actions.onOpenSpeed() }
-        SmallAction(KleeampIcons.MeterSmall, "scope and equaliser", onClick = actions.onOpenScope)
         OverflowButton({ menuOpen = true }, size = 16)
     }
 
@@ -213,7 +212,12 @@ internal fun PlayerStatusRow(
                 if (station != null) StationMenuArt(station)
                 else Spacer(Modifier.size(52.dp))
             },
-            actions = playerMenuActions(model, actions) { outputOpen = true },
+            actions = playerMenuActions(
+                model,
+                actions,
+                onOpenOutput = { outputOpen = true },
+                onOpenScope = { menuOpen = false; actions.onOpenScope() },
+            ),
             onDismiss = { menuOpen = false },
         )
     }
@@ -233,19 +237,28 @@ internal fun PlayerStatusRow(
 }
 
 /**
- * The player controls as menu rows: output and speed open their sheets,
- * sleep opens its own. Shuffle and scope stay out on the toolbar beside
- * the heart. [onOpenOutput] lifts the output sheet above this menu.
+ * The player controls as menu rows: scope first, then output and speed
+ * open their sheets, sleep opens its own. Shuffle stays out on the toolbar
+ * beside the heart. [onOpenOutput] lifts the output sheet above this menu;
+ * scope hides the player sheet, so the menu closes first.
  */
 @Composable
 private fun playerMenuActions(
     model: PlayerModel,
     actions: PlayerActions,
     onOpenOutput: () -> Unit,
+    onOpenScope: () -> Unit,
 ): List<MenuAction> {
     val p = LocalPalette.current
     val sleepArmed = model.state.sleepAtMs != null
     return listOf(
+        MenuAction(
+            id = "scope",
+            label = "Scope & Equaliser",
+            subtitle = "visualizer and tone controls",
+            icon = KleeampIcons.MeterSmall,
+            onClick = onOpenScope,
+        ),
         MenuAction(
             id = "output",
             label = "Sound Output",
