@@ -78,9 +78,7 @@ fun ListenerAnalytics(
     }
 
     Column(modifier.fillMaxWidth()) {
-        SectionLabel("who's listening — live", gutter = 8.dp) {
-            LiveIndicator(stats)
-        }
+        SectionLabel("who's listening — live", gutter = 8.dp)
         // Header totals, like the website's LISTENERS / ON PLAYLISTS / COUNTRIES.
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp),
