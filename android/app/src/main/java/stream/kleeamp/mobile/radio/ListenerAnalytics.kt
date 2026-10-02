@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -23,8 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import stream.kleeamp.mobile.chrome.Chip
-import stream.kleeamp.mobile.chrome.EmptyNote
 import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.theme.Mono
 import stream.kleeamp.mobile.theme.KleeampShape
@@ -51,13 +53,18 @@ fun ListenerAnalytics(
     val selected = rows.firstOrNull { it.code == selectedCode }
     if (selectedCode != null && selected == null) selectedCode = null
 
+    // The website polls while visible; a slow first fetch (or offline start)
+    // lands whenever it lands and the status flips loading -> live itself.
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            delay(30_000)
+            onRefresh()
+        }
+    }
+
     Column(modifier.fillMaxWidth()) {
         SectionLabel("who's listening — live", gutter = 8.dp) {
-            Mono(
-                if (stats?.isLive == true) "● live" else "○ all-time",
-                KleeampType.meta,
-                if (stats?.isLive == true) p.accent else p.inkFaint,
-            )
+            LiveIndicator(stats)
         }
         // Header totals, like the website's LISTENERS / ON PLAYLISTS / COUNTRIES.
         Row(
@@ -78,12 +85,12 @@ fun ListenerAnalytics(
                         geometry = geometry,
                         selectedCode = selectedCode,
                         onSelect = { selectedCode = it },
-                        onRefresh = onRefresh,
                         modifier = Modifier.weight(1f),
                     )
                     CountrySide(
                         rows = rows,
                         isLive = stats?.isLive == true,
+                        loading = stats == null,
                         selectedCode = selectedCode,
                         onSelect = { selectedCode = it },
                         modifier = Modifier.weight(0.55f),
@@ -96,12 +103,12 @@ fun ListenerAnalytics(
                         geometry = geometry,
                         selectedCode = selectedCode,
                         onSelect = { selectedCode = it },
-                        onRefresh = onRefresh,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     CountrySide(
                         rows = rows,
                         isLive = stats?.isLive == true,
+                        loading = stats == null,
                         selectedCode = selectedCode,
                         onSelect = { selectedCode = it },
                         modifier = Modifier.fillMaxWidth(),
@@ -139,13 +146,23 @@ private fun StatBlock(label: String, value: String, primary: Boolean) {
     }
 }
 
+/** Status pill: loading while no data has arrived, live/all-time after. */
+@Composable
+private fun LiveIndicator(stats: CliampStats?) {
+    val p = LocalPalette.current
+    when {
+        stats == null -> Mono("loading..", KleeampType.meta, p.inkFaint)
+        stats.isLive -> Mono("● live", KleeampType.meta, p.accent)
+        else -> Mono("○ all-time", KleeampType.meta, p.inkFaint)
+    }
+}
+
 @Composable
 private fun GlobeCard(
     stats: CliampStats?,
     geometry: List<CountryGeometry>?,
     selectedCode: String?,
     onSelect: (String?) -> Unit,
-    onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
@@ -161,23 +178,20 @@ private fun GlobeCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Mono("$ cliamp radio --stats --globe", KleeampType.meta, p.inkSecondary)
-            Mono(
-                if (stats?.isLive == true) "● live" else "○ all-time",
-                KleeampType.meta,
-                if (stats?.isLive == true) p.accent else p.inkFaint,
-            )
+            LiveIndicator(stats)
         }
         Box(
             Modifier.fillMaxWidth().height(340.dp)
                 .background(p.ground, RoundedCornerShape(KleeampShape.small)),
             contentAlignment = Alignment.Center,
         ) {
-            when {
-                geometry == null -> Mono("loading world map…", KleeampType.meta, p.inkFaint)
-                stats == null -> EmptyGlobeNote("live statistics unavailable", onRefresh)
-                stats.countries.isEmpty() -> EmptyGlobeNote("nobody is tuned in right now", onRefresh)
-                else -> ListenerGlobe(
-                    rows = stats.countries,
+            // The globe always renders: geography alone while loading,
+            // markers and counts layered on once data arrives.
+            if (geometry == null) {
+                Mono("loading world map…", KleeampType.meta, p.inkFaint)
+            } else {
+                ListenerGlobe(
+                    rows = stats?.countries.orEmpty(),
                     geometry = geometry,
                     selectedCode = selectedCode,
                     onSelect = onSelect,
@@ -188,31 +202,32 @@ private fun GlobeCard(
     }
 }
 
-@Composable
-private fun EmptyGlobeNote(text: String, onRefresh: () -> Unit) {
-    val p = LocalPalette.current
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Mono(text, KleeampType.meta, p.inkFaint)
-        Chip("try again", selected = false, onClick = onRefresh)
-    }
-}
-
-/** Ranked country list: name + listeners with a max-relative bar, top 10. */
+/**
+ * Ranked country list behind a toggle: the globe stays the hero and the
+ * ranking opens on demand instead of always filling the page.
+ */
 @Composable
 private fun CountrySide(
     rows: List<CountryListeners>,
     isLive: Boolean,
+    loading: Boolean,
     selectedCode: String?,
     onSelect: (String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
+    var open by rememberSaveable { mutableStateOf(false) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(9.dp)) {
         Row(
-            Modifier.fillMaxWidth(),
+            Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(KleeampShape.tiny))
+                .clickable(
+                    enabled = rows.isNotEmpty(),
+                    role = Role.Button,
+                    onClickLabel = if (open) "hide top countries" else "show top countries",
+                    onClick = { open = !open },
+                )
+                .padding(vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -221,11 +236,18 @@ private fun CountrySide(
                 KleeampType.meta,
                 p.inkSecondary,
             )
-            Mono(if (isLive) "LISTENERS" else "SESSIONS", KleeampType.meta, p.inkSecondary)
+            Mono(
+                when {
+                    loading -> "loading.."
+                    rows.isEmpty() -> "–"
+                    open -> "hide ▲"
+                    else -> "${rows.size} ▼"
+                },
+                KleeampType.meta,
+                p.inkSecondary,
+            )
         }
-        if (rows.isEmpty()) {
-            EmptyNote("nobody is tuned in right now")
-        } else {
+        if (open && rows.isNotEmpty()) {
             val top = rows.take(10)
             val max = top.firstOrNull()?.listeners?.coerceAtLeast(1) ?: 1
             top.forEach { c ->
