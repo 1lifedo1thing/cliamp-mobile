@@ -1,7 +1,8 @@
 package stream.kleeamp.mobile.radio
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,6 +15,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -26,6 +28,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -35,6 +38,7 @@ import kotlinx.coroutines.withContext
 import stream.kleeamp.mobile.theme.Mono
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
+import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -84,6 +88,7 @@ fun ListenerGlobe(
 ) {
     val p = LocalPalette.current
     val density = LocalDensity.current
+    val viewConfiguration = LocalViewConfiguration.current
 
     // The website's rotation [-18, -14] centres the sphere on (18E, 14N).
     var centerLon by remember { mutableFloatStateOf(18f) }
@@ -117,6 +122,19 @@ fun ListenerGlobe(
         }.sortedBy { it.first.listeners }
     }
     val graticule = remember { WorldAtlas.graticule(10) }
+    // Flat lon/lat arrays decoded once: per-frame projection then works on
+    // primitives with no allocations until the draw Path itself.
+    val flatCountries = remember(geometry) {
+        geometry.map { g ->
+            g.id to g.polygons.flatMap { rings ->
+                rings.map { ring ->
+                    DoubleArray(ring.size * 2) { i ->
+                        if (i % 2 == 0) ring[i / 2].lon else ring[i / 2].lat
+                    }
+                }
+            }
+        }
+    }
     val idToCode = remember(rows) {
         rows.mapNotNull { c -> atlasIdFor(c.code)?.let { it to c.code } }.toMap()
     }
@@ -193,6 +211,12 @@ fun ListenerGlobe(
     val litStroke = p.accent.copy(alpha = 0.35f)
     val selectedId = selectedCode?.let(::atlasIdFor)
 
+    // Latest tap logic without recreating the gesture detector: hitTest reads
+    // rotation state at tap time, so taps always use the current globe angle.
+    val tapHandler = rememberUpdatedState { tap: Offset ->
+        onSelect(hitTest(tap.x, tap.y)?.let { idToCode[it] })
+    }
+
     Box(modifier.onSizeChanged { globeSize = it }) {
         Canvas(
             Modifier
@@ -217,25 +241,50 @@ fun ListenerGlobe(
                         }
                     }
                 }
-                .pointerInput(geometry, byId, centerLon, centerLat, globeSize) {
+                // Tap reads rotation fresh via the updated handler, so this
+                // detector is created once and never restarted by rotation.
+                .pointerInput(geometry, byId, globeSize) {
                     detectTapGestures { tap ->
-                        onSelect(hitTest(tap.x, tap.y)?.let { idToCode[it] })
+                        tapHandler.value(tap)
                     }
                 }
-                .pointerInput(density) {
-                    detectDragGestures(
-                        onDragStart = {
-                            dragging = true
-                            hoverLabel = null
-                        },
-                        onDragEnd = { dragging = false },
-                        onDragCancel = { dragging = false },
-                    ) { change, drag ->
-                        change.consume()
-                        // 0.3 degrees per dp, like the website's 0.3 per CSS px.
-                        centerLon = normalizeLon(centerLon - drag.x / density.density * 0.3f)
-                        centerLat = (centerLat + drag.y / density.density * 0.3f)
-                            .coerceIn(-80f, 80f)
+                .pointerInput(density, viewConfiguration) {
+                    // Direction lock: a horizontal-dominant drag belongs to the
+                    // globe, a vertical-dominant one is never consumed so the
+                    // page scrolls instead. 0.3 degrees per dp, like the
+                    // website's 0.3 per CSS px.
+                    val slop = viewConfiguration.touchSlop
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        var acc = Offset.Zero
+                        var owned = false
+                        var done = false
+                        while (!done) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull()
+                            if (change == null || !change.pressed) {
+                                done = true
+                            } else if (!owned) {
+                                acc += change.position - change.previousPosition
+                                if (abs(acc.x) > slop && abs(acc.x) >= abs(acc.y)) {
+                                    owned = true
+                                    dragging = true
+                                    hoverLabel = null
+                                } else if (abs(acc.y) > slop) {
+                                    // Vertical: leave every change unconsumed
+                                    // for the scrolling parent.
+                                    done = true
+                                }
+                            } else {
+                                val delta = change.position - change.previousPosition
+                                change.consume()
+                                centerLon = normalizeLon(centerLon - delta.x / density.density * 0.3f)
+                                centerLat = (centerLat + delta.y / density.density * 0.3f)
+                                    .coerceIn(-80f, 80f)
+                            }
+                            if (event.changes.all { !it.pressed }) done = true
+                        }
+                        dragging = false
                     }
                 },
         ) {
@@ -254,10 +303,12 @@ fun ListenerGlobe(
             gratLines(graticule, cx, cy, r, cLon, cLat) { path ->
                 drawPath(path, gratColor, style = Stroke(0.6.dp.toPx()))
             }
-            // Countries: filled when fully front, stroked when crossing the limb.
-            geometry.forEach { country ->
-                val lit = byId[country.id]
-                val selected = selectedId == country.id
+            // Countries: every front point draws, so a country crossing the
+            // limb shrinks smoothly instead of flipping between filled and
+            // unfilled. The closing chord always hugs the limb.
+            flatCountries.forEach { (id, rings) ->
+                val lit = byId[id]
+                val selected = selectedId == id
                 val fill = when {
                     selected -> p.accent.copy(alpha = 0.22f)
                     lit != null -> landLit
@@ -269,14 +320,12 @@ fun ListenerGlobe(
                     else -> coast
                 }
                 val width = if (selected) 1.5.dp.toPx() else 0.6.dp.toPx()
-                country.polygons.forEach { rings ->
-                    rings.forEach { ring ->
-                        globeRing(
-                            ring, cx, cy, r, cLon, cLat,
-                            onFill = { path -> drawPath(path, fill) },
-                            onStroke = { path -> drawPath(path, stroke, style = Stroke(width)) },
-                        )
-                    }
+                rings.forEach { pts ->
+                    globeRingFlat(
+                        pts, cx, cy, r, cLon, cLat,
+                        onFill = { path -> drawPath(path, fill) },
+                        onStroke = { path -> drawPath(path, stroke, style = Stroke(width)) },
+                    )
                 }
             }
             // Markers: smallest first so the largest lands on top.
@@ -316,36 +365,42 @@ fun ListenerGlobe(
     }
 }
 
-/** Draws one ring: filled when every point is front, else front strokes only. */
-private fun DrawScope.globeRing(
-    ring: List<LatLon>,
+/**
+ * Draws one ring from its flat lon/lat array. Front points always draw and
+ * the shape closes along the limb, so rotation never flips a country
+ * between filled and unfilled: it shrinks smoothly off the edge instead.
+ */
+private fun DrawScope.globeRingFlat(
+    pts: DoubleArray,
     cx: Float, cy: Float, r: Float,
     centerLon: Double, centerLat: Double,
     onFill: (Path) -> Unit,
     onStroke: (Path) -> Unit,
 ) {
-    if (ring.size < 3) return
-    val pts = ring.map { WorldAtlas.project(it.lon, it.lat, centerLon, centerLat) }
-    if (pts.all { it != null }) {
-        onFill(Path().apply {
-            pts.forEachIndexed { i, pr ->
-                val x = cx + r * pr!!.x.toFloat()
-                val y = cy - r * pr.y.toFloat()
-                if (i == 0) moveTo(x, y) else lineTo(x, y)
-            }
-            close()
-        })
-        return
+    val n = pts.size / 2
+    if (n < 2) return
+    // First pass counts front points; no path is built for slivers.
+    var front = 0
+    for (i in 0 until n) {
+        if (WorldAtlas.project(pts[i * 2], pts[i * 2 + 1], centerLon, centerLat) != null) front++
     }
-    // Limb crossing: stroke each fully-front segment so nothing wraps the disc.
-    for (i in ring.indices) {
-        val a = pts[i] ?: continue
-        val b = pts[(i + 1) % ring.size] ?: continue
-        onStroke(Path().apply {
-            moveTo((cx + r * a.x).toFloat(), (cy - r * a.y).toFloat())
-            lineTo((cx + r * b.x).toFloat(), (cy - r * b.y).toFloat())
-        })
+    if (front < 2) return
+    val path = Path()
+    var started = false
+    for (i in 0 until n) {
+        val pr = WorldAtlas.project(pts[i * 2], pts[i * 2 + 1], centerLon, centerLat) ?: continue
+        val x = cx + r * pr.x.toFloat()
+        val y = cy - r * pr.y.toFloat()
+        if (!started) {
+            path.moveTo(x, y)
+            started = true
+        } else {
+            path.lineTo(x, y)
+        }
     }
+    path.close()
+    if (front >= 3) onFill(path)
+    onStroke(path)
 }
 
 /** Projects every graticule line, calling [draw] once per front run. */
