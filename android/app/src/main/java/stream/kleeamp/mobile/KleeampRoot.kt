@@ -60,12 +60,14 @@ import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection
 import stream.kleeamp.mobile.chrome.KleeampTabBar
 import stream.kleeamp.mobile.chrome.KleeampTabRail
+import stream.kleeamp.mobile.chrome.DownloadQueueButton
 import stream.kleeamp.mobile.chrome.QueueConfirmHost
 import stream.kleeamp.mobile.player.MiniPlayer
 import stream.kleeamp.mobile.player.NowPlayingSheet
 import stream.kleeamp.mobile.chrome.Tab
 import stream.kleeamp.mobile.search.SearchScreen
 import stream.kleeamp.mobile.library.FavScope
+import stream.kleeamp.mobile.library.DownloadQueueSheet
 import stream.kleeamp.mobile.library.LibraryPlaylistPane
 import stream.kleeamp.mobile.library.LibraryAddToPlaylistPane
 import stream.kleeamp.mobile.servers.LibraryProvidersPane
@@ -166,6 +168,9 @@ fun KleeampRoot(
     // backstack entry: the list stays composed underneath, so it shows
     // through the scrim instead of an empty page.
     var playerOpen by rememberSaveable { mutableStateOf(false) }
+    // The downloading queue is a sheet the same way: the floating fetch
+    // key opens it wherever the user is, and dismiss returns in place.
+    var downloadQueueOpen by rememberSaveable { mutableStateOf(false) }
     // Up Next and Scope stack over whatever opened them and peel back
     // to exactly that: sheets underneath stay open in place, never close
     // to reopen.
@@ -752,6 +757,28 @@ fun KleeampRoot(
             contentAlignment = Alignment.Center,
         ) {
             QueueConfirmHost()
+        }
+
+        // The floating fetch key: a plain circle at the right edge above
+        // the chrome while anything is downloading. It overlays instead of
+        // measuring into the chrome, so tabs and pages never shift when it
+        // pops in; the queue sheet opens over whatever is underneath.
+        app?.downloads?.let { downloads ->
+            val queue by downloads.queue.collectAsState()
+            DownloadQueueButton(
+                count = queue.size,
+                onClick = { downloadQueueOpen = true },
+                modifier = Modifier.align(Alignment.BottomEnd)
+                    .padding(bottom = chromeBottom + 6.dp, end = contentEnd + 16.dp),
+            )
+        }
+        if (downloadQueueOpen) {
+            app?.downloads?.let { downloads ->
+                DownloadQueueSheet(
+                    downloads = downloads,
+                    onDismiss = { downloadQueueOpen = false },
+                )
+            }
         }
     }
 }
