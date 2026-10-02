@@ -4,8 +4,8 @@ description: >
   Rust workspace rules for the kleeamp desktop client. Use when adding a
   crate, writing a provider, playback, or error type, or reviewing Rust
   that is not UI. Trigger examples: "new crate", "thiserror", "provider
-  trait", "playback thread", "no unwrap". Not for gpui-ce views — use
-  gpui-ce. Not a substitute for clippy.
+  trait", "playback thread", "no unwrap". Not for gpui-kit views — use
+  gpui-kit. Not a substitute for clippy.
 user-invocable: true
 license: MIT
 compatibility: Rust 2024 edition workspace. Requires cargo, clippy, rustfmt.
@@ -18,9 +18,9 @@ Four crates. Do not add a fifth until a file is hard to read.
 
 | Crate | May do | May not import |
 | --- | --- | --- |
-| `core` | types, `QueuePolicy`, `Palette`, `thiserror` | gpui-ce, tokio runtime, sql, http |
-| `playback` | cpal, symphonia, fft, eq, command/event channels | gpui-ce |
-| `providers` | http, ssh, parsers, return `core` types | gpui-ce |
+| `core` | types, `QueuePolicy`, `Palette`, `thiserror` | gpui-kit, tokio runtime, sql, http |
+| `playback` | cpal, symphonia, fft, eq, command/event channels | gpui-kit |
+| `providers` | http, ssh, parsers, return `core` types | gpui-kit |
 | `app` | window, views, keymap, composition | decode, raw sockets |
 
 Edition 2024. `rustfmt` on save. `cargo clippy --workspace --all-targets -- -D warnings` before a task is done.
@@ -41,7 +41,7 @@ Providers share one trait: `probe`, `albums`, `tracks`, `open`. Subsonic auth st
 
 ## Tests
 
-Queue policy, palette parsing, and reconnect backoff are `#[test]` in `core` / `playback`. No GPUI in those tests. A pane test exists only when the interaction is the bug.
+Queue policy, palette parsing, and reconnect backoff are `#[test]` in `core` / `playback`. No gpui-kit in those tests. A pane test exists only when the interaction is the bug.
 
 ## Do not
 

@@ -39,7 +39,7 @@ One local skill owns product work. Everything else is generic language guidance.
 
 **Rust / Desktop** (`.agents/skills/`) — the `desktop/` client is Rust 2024:
 
-`rust-desktop`, `gpui-ce`, `rust-skills`
+`rust-desktop`, `gpui-kit`, `rust-skills`
 
 Do not add git plugin entries to `opencode.jsonc`.
 
@@ -52,7 +52,7 @@ Load `android-kotlin-modernize` plus the Kotlin/Compose set. Do not edit cliamp.
 Any question that needs checking cliamp loads the Go set first.
 
 **Desktop work**  
-Load the Rust/Desktop set (`rust-desktop`, `gpui-ce`, `rust-skills`).
+Load the Rust/Desktop set (`rust-desktop`, `gpui-kit`, `rust-skills`).
 
 **Cross-folder info**  
 Working in one area but needing info from another loads that area's
