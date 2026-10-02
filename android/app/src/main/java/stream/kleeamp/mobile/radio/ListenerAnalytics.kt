@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,6 +53,16 @@ fun ListenerAnalytics(
     val rows = stats?.countries.orEmpty()
     val selected = rows.firstOrNull { it.code == selectedCode }
     if (selectedCode != null && selected == null) selectedCode = null
+    // Fly-to target for the globe: set on leaderboard taps so the camera
+    // finds the country. The nonce retriggers flights to the same country.
+    // Plain remember: a flight is transient, nothing to restore.
+    var flyTo by remember { mutableStateOf<FlyTo?>(null) }
+    fun select(code: String?, fly: Boolean) {
+        selectedCode = code
+        if (fly && code != null) {
+            flyTo = FlyTo(code, (flyTo?.nonce ?: 0L) + 1L)
+        }
+    }
 
     // The website polls while visible; a slow first fetch (or offline start)
     // lands whenever it lands and the status flips loading -> live itself.
@@ -84,7 +95,8 @@ fun ListenerAnalytics(
                         stats = stats,
                         geometry = geometry,
                         selectedCode = selectedCode,
-                        onSelect = { selectedCode = it },
+                        onSelect = { select(it, fly = false) },
+                        flyTo = flyTo,
                         modifier = Modifier.weight(1f),
                     )
                     CountrySide(
@@ -92,7 +104,7 @@ fun ListenerAnalytics(
                         isLive = stats?.isLive == true,
                         loading = stats == null,
                         selectedCode = selectedCode,
-                        onSelect = { selectedCode = it },
+                        onSelect = { select(it, fly = it != null) },
                         modifier = Modifier.weight(0.55f),
                     )
                 }
@@ -102,7 +114,8 @@ fun ListenerAnalytics(
                         stats = stats,
                         geometry = geometry,
                         selectedCode = selectedCode,
-                        onSelect = { selectedCode = it },
+                        onSelect = { select(it, fly = false) },
+                        flyTo = flyTo,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     CountrySide(
@@ -110,7 +123,7 @@ fun ListenerAnalytics(
                         isLive = stats?.isLive == true,
                         loading = stats == null,
                         selectedCode = selectedCode,
-                        onSelect = { selectedCode = it },
+                        onSelect = { select(it, fly = it != null) },
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -163,6 +176,7 @@ private fun GlobeCard(
     geometry: List<CountryGeometry>?,
     selectedCode: String?,
     onSelect: (String?) -> Unit,
+    flyTo: FlyTo?,
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
@@ -196,6 +210,7 @@ private fun GlobeCard(
                     selectedCode = selectedCode,
                     onSelect = onSelect,
                     modifier = Modifier.fillMaxWidth().height(340.dp),
+                    flyTo = flyTo,
                 )
             }
         }

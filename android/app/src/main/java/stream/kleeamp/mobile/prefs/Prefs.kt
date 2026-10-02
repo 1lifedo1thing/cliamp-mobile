@@ -99,6 +99,7 @@ class Prefs(private val context: Context) {
         val autoKeep = stringPreferencesKey("auto_keep")
         val resumeLocal = booleanPreferencesKey("resume_local")
         val scrobbleRadio = booleanPreferencesKey("scrobble_radio")
+        val listenerGlobe = booleanPreferencesKey("listener_globe")
         val wPlaying = booleanPreferencesKey("w_playing")
         val wTrack = stringPreferencesKey("w_track")
         val wSeekable = booleanPreferencesKey("w_seekable")
@@ -142,6 +143,8 @@ class Prefs(private val context: Context) {
     val resumeLocal: Flow<Boolean> = context.settingsStore.data.map { it[K.resumeLocal] ?: false }
     /** Scrobble radio stream titles too. Off by default: titles would spam. */
     val scrobbleRadio: Flow<Boolean> = context.settingsStore.data.map { it[K.scrobbleRadio] ?: false }
+    /** Listener globe hero plus top countries on Stations. On by default. */
+    val listenerGlobe: Flow<Boolean> = context.settingsStore.data.map { it[K.listenerGlobe] ?: true }
     val volume: Flow<Float> = context.settingsStore.data.map { it[K.volume] ?: 1f }
     /** Playback speed multiplier, 0.25–2.0 like cliamp. Applied to every play. */
     val speed: Flow<Float> = context.settingsStore.data.map { (it[K.speed] ?: 1f).coerceIn(0.25f, 2f) }
@@ -290,6 +293,7 @@ class Prefs(private val context: Context) {
         put(K.customTheme, "")
     }
     suspend fun setHaptics(v: Boolean) = put(K.haptics, v)
+    suspend fun setListenerGlobe(v: Boolean) = put(K.listenerGlobe, v)
     suspend fun setVisualizer(v: String) = put(K.visualizer, v)
     suspend fun setOutputDevice(v: Int) = put(K.outputDevice, v)
     suspend fun setCellular(v: Boolean) = put(K.cellular, v)

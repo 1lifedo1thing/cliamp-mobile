@@ -246,12 +246,15 @@ fun StationsScreen(
         ) {
 
             // Page hero: the live listener globe sits above everything else,
-            // unfiltered by the source chips below it.
-            item {
-                ListenerAnalytics(
-                    stats = stats,
-                    onRefresh = { vm.onEvent(StationsViewModel.Event.RefreshStats) },
-                )
+            // unfiltered by the source chips below it. The setting toggles
+            // the whole section - globe and top countries together.
+            if (ui.listenerGlobe) {
+                item {
+                    ListenerAnalytics(
+                        stats = stats,
+                        onRefresh = { vm.onEvent(StationsViewModel.Event.RefreshStats) },
+                    )
+                }
             }
 
             if (source == Source.All || source == Source.Cliamp) {

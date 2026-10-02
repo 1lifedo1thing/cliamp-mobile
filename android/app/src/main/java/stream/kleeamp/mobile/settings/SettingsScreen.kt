@@ -86,6 +86,7 @@ fun SettingsScreen(
     val customName = uiState.customName
     val importError = uiState.importError
     val haptics = uiState.haptics
+    val listenerGlobe = uiState.listenerGlobe
     val visualizer = uiState.visualizer
     val cellular = uiState.cellular
     val mono = uiState.mono
@@ -248,6 +249,11 @@ fun SettingsScreen(
         )
 
         SectionLabel("themes — ${OmarchyThemeKeys.size + 6}")
+        ToggleRow(
+            title = "Listener globe",
+            checked = listenerGlobe,
+            onChange = { vm.onEvent(SettingsViewModel.Event.SetListenerGlobe(it)) },
+        )
         listOf(
             // system first: it is the default, and its swatch is whichever
             // half of oxide the device is currently asking for.

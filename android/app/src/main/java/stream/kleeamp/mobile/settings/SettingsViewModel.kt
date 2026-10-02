@@ -44,6 +44,7 @@ class SettingsViewModel(
         val favoritesCount: Int = 0,
         val historyCount: Int = 0,
         val directoryStats: DirectoryStats? = null,
+        val listenerGlobe: Boolean = true,
     )
 
     sealed interface Event {
@@ -57,6 +58,7 @@ class SettingsViewModel(
         data class SetMono(val v: Boolean) : Event
         data class SetBuffer(val seconds: Int) : Event
         data class SetHaptics(val v: Boolean) : Event
+        data class SetListenerGlobe(val v: Boolean) : Event
         data class SetVisualizer(val v: String) : Event
         data class ImportTheme(val raw: String?) : Event
         data object ClearCustomTheme : Event
@@ -73,6 +75,7 @@ class SettingsViewModel(
         val importError: String? = null,
         val haptics: Boolean = true,
         val visualizer: String = "spectrum",
+        val listenerGlobe: Boolean = true,
     )
 
     /** Playback behaviour prefs. */
@@ -104,13 +107,18 @@ class SettingsViewModel(
 
     val state: StateFlow<UiState> = combine(
         combine(
-            prefs.palette,
-            prefs.customTheme,
-            importError,
-            prefs.haptics,
-            prefs.visualizer,
-            ::Appearance,
-        ),
+            combine(
+                prefs.palette,
+                prefs.customTheme,
+                importError,
+                prefs.haptics,
+                prefs.visualizer,
+                ::Appearance,
+            ),
+            prefs.listenerGlobe,
+        ) { appearance, globe ->
+            appearance.copy(listenerGlobe = globe)
+        },
         combine(
             combine(
                 prefs.cellular,
@@ -147,6 +155,7 @@ class SettingsViewModel(
             importError = appearance.importError,
             haptics = appearance.haptics,
             visualizer = appearance.visualizer,
+            listenerGlobe = appearance.listenerGlobe,
             cellular = playback.cellular,
             mono = playback.mono,
             buffer = playback.buffer,
@@ -179,6 +188,7 @@ class SettingsViewModel(
             is Event.SetMono -> viewModelScope.launch { prefs.setMono(e.v) }
             is Event.SetBuffer -> viewModelScope.launch { prefs.setBufferSeconds(e.seconds) }
             is Event.SetHaptics -> viewModelScope.launch { prefs.setHaptics(e.v) }
+            is Event.SetListenerGlobe -> viewModelScope.launch { prefs.setListenerGlobe(e.v) }
             is Event.SetVisualizer -> viewModelScope.launch { prefs.setVisualizer(e.v) }
             is Event.SetScrobbleRadio -> viewModelScope.launch { prefs.setScrobbleRadio(e.v) }
             is Event.ImportTheme -> viewModelScope.launch {

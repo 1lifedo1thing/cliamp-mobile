@@ -22,6 +22,7 @@ class StationsViewModel(
         val directoryStats: DirectoryStats?,
         val tags: List<NameCount>,
         val countries: List<CountryCount>,
+        val listenerGlobe: Boolean,
     )
 
     sealed interface Event {
@@ -76,7 +77,10 @@ class StationsViewModel(
             directoryStats = catalog.directoryStats,
             tags = facets.tags,
             countries = facets.countries,
+            listenerGlobe = true,
         )
+    }.combine(prefs.listenerGlobe) { ui, globe ->
+        ui.copy(listenerGlobe = globe)
     }.stateInUi(
         viewModelScope,
         UiState(
@@ -88,6 +92,7 @@ class StationsViewModel(
             directoryStats = repository.directoryStats.value,
             tags = repository.tags.value,
             countries = emptyList(),
+            listenerGlobe = true,
         ),
     )
 
