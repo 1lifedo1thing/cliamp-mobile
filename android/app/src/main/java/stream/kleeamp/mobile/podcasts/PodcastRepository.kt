@@ -474,9 +474,10 @@ private var chartCursor: List<String> = emptyList()
         return progress.positionMs.coerceAtLeast(0L)
     }
 
-    suspend fun saveProgress(station: Station, positionMs: Long, durationMs: Long) {
-        if (!station.isTrack) return
-        if (positionMs <= 0) return
+    /** True when the position counts as listened (within [NEAR_END] of the end). */
+    suspend fun saveProgress(station: Station, positionMs: Long, durationMs: Long): Boolean {
+        if (!station.isTrack) return false
+        if (positionMs <= 0) return false
         val done = durationMs > 0 && positionMs >= durationMs - NEAR_END
         dao.saveProgress(
             EpisodeProgressEntity(
@@ -487,6 +488,7 @@ private var chartCursor: List<String> = emptyList()
                 updatedAt = System.currentTimeMillis(),
             )
         )
+        return done
     }
 
     suspend fun markCompleted(station: Station) {

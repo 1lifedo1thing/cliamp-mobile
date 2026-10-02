@@ -67,6 +67,9 @@ import stream.kleeamp.mobile.podcasts.ShowState
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.radio.DirectoryState
 import stream.kleeamp.mobile.podcasts.EpisodeProgress
+import stream.kleeamp.mobile.podcasts.DownloadQueueItem
+import stream.kleeamp.mobile.podcasts.DownloadState
+import stream.kleeamp.mobile.podcasts.downloadSizeLabel
 import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.podcasts.toStation
 import stream.kleeamp.mobile.podcasts.downloadSizeLabel
@@ -87,6 +90,7 @@ import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
+import stream.kleeamp.mobile.chrome.DownloadBlocks
 import stream.kleeamp.mobile.chrome.OverflowButton
 import stream.kleeamp.mobile.chrome.ContextMenuSheet
 import stream.kleeamp.mobile.chrome.DestructiveAction
@@ -254,6 +258,16 @@ fun LibrarySmartPlaylistPane(
                         showResume = showResume,
                         sort = detailSort,
                         fetchedBytes = fetched.mapValues { it.value.bytes },
+                        queue = ui.queue,
+                        onRetryDownload = { s, auto ->
+                            vm.onEvent(SmartPlaylistViewModel.Event.RetryDownload(s, auto))
+                        },
+                        onCancelDownload = {
+                            vm.onEvent(SmartPlaylistViewModel.Event.CancelDownload(it))
+                        },
+                        onCancelAllDownloads = {
+                            vm.onEvent(SmartPlaylistViewModel.Event.CancelAllDownloads)
+                        },
                         onBeginAdd = if (pl.kind == SmartKind.Favorites) {
                             { adding = true }
                         } else null,
@@ -510,6 +524,11 @@ private fun SmartPlaylistDetail(
     showResume: Boolean = false,
     sort: PlaylistSort = PlaylistSort.Title,
     fetchedBytes: Map<String, Long> = emptyMap(),
+    /** Active, queued and failed fetches; shown as a section on downloads. */
+    queue: List<DownloadQueueItem> = emptyList(),
+    onRetryDownload: (Station, Boolean) -> Unit = { _, _ -> },
+    onCancelDownload: (String) -> Unit = {},
+    onCancelAllDownloads: () -> Unit = {},
     /** Non-null on lists that can grow: renders the section + button. */
     onBeginAdd: (() -> Unit)? = null,
 ) {
@@ -578,6 +597,67 @@ private fun SmartPlaylistDetail(
             }
         }
         item { FilterRow(value = query, onValue = { query = it }) }
+        // The downloading view: every active, queued and failed fetch with
+        // its status, ahead of the finished files. Retry and cancel ride
+        // the rows; cancel all clears the whole queue.
+        if (pl.kind == SmartKind.Downloads && queue.isNotEmpty()) {
+            item {
+                SectionLabel("downloading — ${queue.size}") {
+                    Mono(
+                        "cancel all",
+                        KleeampType.meta,
+                        p.inkTertiary,
+                        Modifier.microPress(onClick = onCancelAllDownloads),
+                    )
+                }
+            }
+            items(queue, key = { it.url }, contentType = { "download-queue" }) { q ->
+                ListRow(
+                    onClick = null,
+                    verticalPadding = 9.dp,
+                    leading = { SongCover(s = q.station, current = null, playing = false) },
+                    trailing = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            if (q.state is DownloadState.Active) {
+                                DownloadBlocks(q.state.fraction)
+                            }
+                            if (q.state is DownloadState.Failed) {
+                                Mono(
+                                    "retry",
+                                    KleeampType.meta,
+                                    p.accent,
+                                    Modifier.microPress { onRetryDownload(q.station, q.auto) },
+                                )
+                            }
+                            Mono(
+                                "cancel",
+                                KleeampType.meta,
+                                p.inkTertiary,
+                                Modifier.microPress { onCancelDownload(q.url) },
+                            )
+                        }
+                    },
+                ) {
+                    Mono(q.station.name, KleeampType.rowPrimary, p.ink, maxLines = 1)
+                    Mono(
+                        when (val s = q.state) {
+                            is DownloadState.Active ->
+                                if (s.indeterminate) "fetching ${downloadSizeLabel(s.bytesRead)}"
+                                else "fetching ${(s.fraction * 100).toInt()}%"
+                            is DownloadState.Queued -> "queued"
+                            is DownloadState.Failed -> s.reason
+                            is DownloadState.Idle -> ""
+                        },
+                        KleeampType.rowSecondary,
+                        if (q.state is DownloadState.Failed) p.destructiveInk else p.inkTertiary,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
         if (shown.isEmpty()) {
             // Growable lists keep their + on empty too, like playlists do.
             if (onBeginAdd != null) {
