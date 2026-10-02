@@ -33,7 +33,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.art.SeedPlate
-import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.ContextMenuSheet
 import stream.kleeamp.mobile.chrome.EmptyNote
 import stream.kleeamp.mobile.chrome.FilterRow
@@ -134,17 +133,6 @@ fun CliampChannelScreen(
             }
 
             if (ordered.isNotEmpty()) {
-                item {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        listOf(PlaylistSort.Title, PlaylistSort.Artist, PlaylistSort.Album).forEach { t ->
-                            Chip(t.label, sort == t, onClick = { sort = t })
-                        }
-                    }
-                }
                 item { FilterRow(value = query, onValue = { query = it }) }
                 item {
                     SectionLabel("tracks — ${shown.size}") {
