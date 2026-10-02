@@ -75,11 +75,19 @@ class RadioRepository(
     private val _cliampChannels = MutableStateFlow<List<CliampChannels.Channel>>(emptyList())
     val cliampChannels: StateFlow<List<CliampChannels.Channel>> = _cliampChannels.asStateFlow()
 
+    /**
+     * Channel track lists loaded so far, across every opened channel. Search
+     * reads this; the channel pages keep their own copies for ordering.
+     */
+    private val _cliampChannelTracks = MutableStateFlow<List<Station>>(emptyList())
+    val cliampChannelTracks: StateFlow<List<Station>> = _cliampChannelTracks.asStateFlow()
+
     /** One channel's tracks, cached in [CliampChannels]; empty on failure. */
     suspend fun cliampTracks(channelId: String, refresh: Boolean = false): List<Station> {
         val channel = _cliampChannels.value.firstOrNull { it.id == channelId } ?: return emptyList()
         if (!channel.hasTracks) return emptyList()
         return runCatching { CliampChannels.fetchTracks(channel, refresh) }.getOrDefault(emptyList())
+            .also { _cliampChannelTracks.value = CliampChannels.cachedTracks() }
     }
 
     /** Live listener figures for the cliamp channels; null until fetched. */

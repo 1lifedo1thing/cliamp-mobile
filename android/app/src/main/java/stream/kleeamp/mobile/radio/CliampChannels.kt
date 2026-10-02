@@ -123,6 +123,14 @@ object CliampChannels {
         return tracks
     }
 
+    /**
+     * Every channel track list loaded so far, for search: only channels the
+     * user already opened are in here, so search answers from memory and
+     * never fans a query out into one fetch per channel.
+     */
+    fun cachedTracks(): List<Station> =
+        synchronized(trackCacheLock) { trackCache.values.flatten() }
+
     private fun isHttp(raw: String): Boolean {
         if (raw.isBlank()) return false
         val scheme = raw.substringBefore(':').lowercase()
