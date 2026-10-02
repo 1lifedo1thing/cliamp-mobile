@@ -37,6 +37,7 @@ import stream.kleeamp.mobile.art.ArtResolve
 import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.chrome.ArtKind
 import stream.kleeamp.mobile.chrome.Chip
+import stream.kleeamp.mobile.chrome.DownloadBlocks
 import stream.kleeamp.mobile.chrome.rememberArt
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.EmptyNote
@@ -98,6 +99,7 @@ fun PodcastShowScreen(
     val subscribed = remember(subscriptions, show?.feedUrl) {
         show != null && subscriptions.any { it.feedUrl == show.feedUrl }
     }
+    val keep = show?.let { ui.autoKeep[it.id] } ?: DEFAULT_AUTO_KEEP
 
     // Mapped once per feed load, not per row: a 300 episode list would
     // otherwise rebuild every Station on every recomposition.
@@ -149,6 +151,29 @@ fun PodcastShowScreen(
                         prominent = true,
                         onRetry = { vm.onEvent(PodcastShowViewModel.Event.RefreshShow) },
                     )
+                }
+            }
+
+            // Per-show auto-download depth, next to the episodes it governs:
+            // how many latest full episodes this show keeps offline.
+            if (subscribed && show != null && queue.isNotEmpty()) {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Mono("keep offline", KleeampType.meta, p.inkTertiary)
+                        AUTO_KEEP_CHOICES.forEach { n ->
+                            Chip(
+                                "$n",
+                                keep == n,
+                                onClick = {
+                                    vm.onEvent(PodcastShowViewModel.Event.SetAutoKeep(show.id, n))
+                                },
+                            )
+                        }
+                    }
                 }
             }
 
@@ -213,7 +238,7 @@ fun PodcastShowScreen(
                             kind = MenuKind.EPISODE,
                             favorite = s.url in ui.favorites,
                             downloaded = (dlEntries[s.url]?.bytes ?: 0L) > 0L,
-                            downloading = mdl is DownloadState.Active,
+                            downloading = mdl is DownloadState.Active || mdl is DownloadState.Queued,
                             downloadFailed = mdl is DownloadState.Failed,
                             playedDone = done,
                             onPlayNext = { onPlayNext(s) },
@@ -378,8 +403,14 @@ private fun EpisodeRow(
         },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Fetch actions live in the ⋮ menu now; the subtitle below
-                // still names the fetch state (offline · size, fetching %).
+                // The fetch meter rides the row: blocks while fetching,
+                // nothing once the file is offline or the fetch died (the
+                // subtitle below still names those states). Fetch actions
+                // live in the ⋮ menu.
+                if (dlState is DownloadState.Active) DownloadBlocks(dlState.fraction)
+                else if (dlState is DownloadState.Queued) {
+                    Mono("queued", KleeampType.meta, p.inkTertiary)
+                }
                 OverflowButton(onOpenMenu)
             }
         },
@@ -405,6 +436,7 @@ private fun EpisodeRow(
                         if (d.indeterminate) "fetching ${downloadSizeLabel(d.bytesRead)}"
                         else "fetching ${(d.fraction * 100).toInt()}%"
                     )
+                    is DownloadState.Queued -> add("queued")
                     is DownloadState.Failed -> add(d.reason)
                     is DownloadState.Idle -> {}
                 }
@@ -422,6 +454,9 @@ private fun EpisodeRow(
 
 private val dayMonth = DateTimeFormatter.ofPattern("d MMM", Locale.US)
 private val dayMonthYear = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.US)
+
+/** Per-show auto-download depths offered on the show page. */
+private val AUTO_KEEP_CHOICES = listOf(3, 5, 10)
 
 /** `3 sep` this year, `3 sep 2024` before that. Null when the feed omitted it. */
 private fun shortDate(epochMillis: Long): String? {

@@ -57,6 +57,14 @@ class KleeampApp : Application() {
     @UnstableApi
     private var playerField: PlayerConnection? = null
 
+    /**
+     * Episodes already swept for delete-after-listening this process. The
+     * progress sink fires every tick inside the finished window, so without
+     * this each tick would queue another delete of an already gone file.
+     */
+    private val cleanedUp = mutableSetOf<String>()
+    private val cleanupLock = Any()
+
     @UnstableApi
     private fun buildPlayer(): PlayerConnection =
         PlayerConnection(
@@ -65,12 +73,23 @@ class KleeampApp : Application() {
             streamResolver,
             resumeLookup = { station -> podcasts.resumePosition(station) },
             progressSink = { station, position, duration ->
-                podcasts.saveProgress(station, position, duration)
+                if (podcasts.saveProgress(station, position, duration)) {
+                    maybeCleanupDownload(station.url)
+                }
             },
             scrobbleTick = { station, playing, durationMs, streamTitle ->
                 scrobbler.onTick(station, playing, durationMs, streamTitle)
             },
         )
+
+    /** Delete-after-listening for a naturally finished episode, per scope. */
+    private suspend fun maybeCleanupDownload(url: String) {
+        if (synchronized(cleanupLock) { url in cleanedUp }) return
+        val entry = downloads.entries.value[url] ?: return
+        if (!prefs.cleanupPlayed.first().covers(entry.auto)) return
+        synchronized(cleanupLock) { cleanedUp.add(url) }
+        downloads.remove(url)
+    }
     val downloads: DownloadStore by lazy { DownloadStore(this, prefs, appScope) }
     val scrobbler: Scrobbler by lazy { Scrobbler(this, prefs, appScope) }
     val providerRouter: ProviderRouter by lazy { ProviderRouter(ProviderRouter.defaults()) }

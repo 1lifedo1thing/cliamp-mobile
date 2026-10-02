@@ -107,6 +107,38 @@ import stream.kleeamp.mobile.art.LocalArt
 import stream.kleeamp.mobile.model.NowPlaying
 
 
+/**
+ * Minimal up-next key for the Now Playing page: the outlined chip with
+ * icon plus count, no text label. 40dp like the other page keys. The
+ * full Up Next chip stays in the Up Next sheet.
+ */
+@Composable
+internal fun UpNextBadge(
+    count: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    Box(
+        modifier
+            .height(40.dp)
+            .semantics { role = Role.Button }
+            .microPress(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            Modifier
+                .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small))
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(KleeampIcons.UpNextTabLines, "open up next", Modifier.size(14.dp), tint = p.accent)
+            Mono(count.toString(), KleeampType.chip, p.inkFaint, maxLines = 1)
+        }
+    }
+}
+
 /** Compact outlined header control, with a full-height touch target. */
 @Composable
 internal fun UpNextButton(
@@ -161,9 +193,13 @@ internal fun PlayerStatusRow(
             if (model.shuffled) "stop shuffling" else "shuffle",
             tint = if (model.shuffled) p.accent else p.inkSecondary,
         ) { actions.onToggleShuffle() }
-        RepeatAction(repeat = model.state.repeat) { actions.onCycleRepeat() }
+        // Repeat is a track-list concept like cliamp's: it governs list
+        // boundaries and track ends, which live streams don't have. Shown
+        // for tracks (local, podcast, provider) and hidden for stations.
+        if (model.shownStation?.isTrack == true) {
+            RepeatAction(repeat = model.state.repeat) { actions.onCycleRepeat() }
+        }
         SpeedAction(speed = model.state.speed) { actions.onOpenSpeed() }
-        SmallAction(KleeampIcons.MeterSmall, "scope and equaliser", onClick = actions.onOpenScope)
         OverflowButton({ menuOpen = true }, size = 16)
     }
 
@@ -176,7 +212,12 @@ internal fun PlayerStatusRow(
                 if (station != null) StationMenuArt(station)
                 else Spacer(Modifier.size(52.dp))
             },
-            actions = playerMenuActions(model, actions) { outputOpen = true },
+            actions = playerMenuActions(
+                model,
+                actions,
+                onOpenOutput = { outputOpen = true },
+                onOpenScope = { menuOpen = false; actions.onOpenScope() },
+            ),
             onDismiss = { menuOpen = false },
         )
     }
@@ -196,19 +237,28 @@ internal fun PlayerStatusRow(
 }
 
 /**
- * The player controls as menu rows: output and speed open their sheets,
- * sleep opens its own. Shuffle and scope stay out on the toolbar beside
- * the heart. [onOpenOutput] lifts the output sheet above this menu.
+ * The player controls as menu rows: scope first, then output and speed
+ * open their sheets, sleep opens its own. Shuffle stays out on the toolbar
+ * beside the heart. [onOpenOutput] lifts the output sheet above this menu;
+ * scope hides the player sheet, so the menu closes first.
  */
 @Composable
 private fun playerMenuActions(
     model: PlayerModel,
     actions: PlayerActions,
     onOpenOutput: () -> Unit,
+    onOpenScope: () -> Unit,
 ): List<MenuAction> {
     val p = LocalPalette.current
     val sleepArmed = model.state.sleepAtMs != null
     return listOf(
+        MenuAction(
+            id = "scope",
+            label = "Scope & Equaliser",
+            subtitle = "visualizer and tone controls",
+            icon = KleeampIcons.MeterSmall,
+            onClick = onOpenScope,
+        ),
         MenuAction(
             id = "output",
             label = "Sound Output",
@@ -419,28 +469,22 @@ internal fun SpeedAction(speed: Float, onClick: () -> Unit) {
     }
 }
 
-/** Repeat mode as a terse mono key: taps cycle off/all/one like cliamp. */
+/** Repeat mode as an icon key: taps cycle off/all/one like cliamp. */
 @Composable
 internal fun RepeatAction(repeat: Repeat, onClick: () -> Unit) {
     val p = LocalPalette.current
-    Box(
-        Modifier
-            .size(28.dp)
-            .clip(RoundedCornerShape(KleeampShape.small))
-            .microPress(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Mono(
-            when (repeat) {
-                Repeat.Off -> "RPT"
-                Repeat.All -> "ALL"
-                Repeat.One -> "ONE"
-            },
-            KleeampType.meta,
-            if (repeat != Repeat.Off) p.accent else p.inkSecondary,
-            maxLines = 1,
-        )
-    }
+    SmallAction(
+        when (repeat) {
+            Repeat.One -> KleeampIcons.RepeatOne
+            else -> KleeampIcons.Repeat
+        },
+        when (repeat) {
+            Repeat.Off -> "repeat off"
+            Repeat.All -> "repeat all"
+            Repeat.One -> "repeat one"
+        },
+        tint = if (repeat != Repeat.Off) p.accent else p.inkSecondary,
+    ) { onClick() }
 }
 
 /**

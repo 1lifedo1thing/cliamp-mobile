@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.common.stateInUi
 import stream.kleeamp.mobile.podcasts.DownloadEntry
+import stream.kleeamp.mobile.podcasts.DownloadQueueItem
 import stream.kleeamp.mobile.podcasts.DownloadStore
 import stream.kleeamp.mobile.radio.DirectoryState
 import stream.kleeamp.mobile.podcasts.PodcastRepository
@@ -51,6 +52,7 @@ class SmartPlaylistViewModel(
         val localSort: PlaylistSort = PlaylistSort.Title,
         val detailSort: PlaylistSort = PlaylistSort.Title,
         val fetched: Map<String, DownloadEntry> = emptyMap(),
+        val queue: List<DownloadQueueItem> = emptyList(),
         val favorites: List<Station> = emptyList(),
         val recent: List<Station> = emptyList(),
         val viewRecent: List<Station> = emptyList(),
@@ -64,6 +66,9 @@ class SmartPlaylistViewModel(
         data class ToggleFavorite(val station: Station) : Event
         data class DeleteLocal(val station: Station) : Event
         data class RemoveDownload(val station: Station) : Event
+        data class RetryDownload(val station: Station, val auto: Boolean) : Event
+        data class CancelDownload(val url: String) : Event
+        data object CancelAllDownloads : Event
         data class SetSort(val sort: PlaylistSort) : Event
         data class OpenShow(val show: PodcastShow) : Event
     }
@@ -113,7 +118,8 @@ class SmartPlaylistViewModel(
             podcasts.show,
             ::CatalogState,
         ),
-    ) { device, social, catalog ->
+        downloads.queue,
+    ) { device, social, catalog, queue ->
         val favRadio = social.favorites.filterNot {
             it.source == StationSource.Local || it.source == StationSource.Podcast
         }
@@ -124,6 +130,7 @@ class SmartPlaylistViewModel(
             localSort = device.localSort,
             detailSort = device.detailSort,
             fetched = device.fetched,
+            queue = queue,
             favorites = social.favorites,
             recent = social.recent,
             viewRecent = if (kind == SmartKind.RecentlyPlayed) {
@@ -160,6 +167,9 @@ class SmartPlaylistViewModel(
                 prefs.removeFavorite(e.station)
             }
             is Event.RemoveDownload -> downloads.remove(e.station.url)
+            is Event.RetryDownload -> downloads.download(e.station, e.auto)
+            is Event.CancelDownload -> downloads.cancel(e.url)
+            is Event.CancelAllDownloads -> downloads.cancelAll()
             is Event.SetSort -> prefs.setPlaylistSort(sortKey, e.sort)
             is Event.OpenShow -> podcasts.openShow(e.show)
         }

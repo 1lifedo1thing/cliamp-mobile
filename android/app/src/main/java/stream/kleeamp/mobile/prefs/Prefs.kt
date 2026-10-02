@@ -30,6 +30,7 @@ import stream.kleeamp.mobile.db.FavoriteEntity
 import stream.kleeamp.mobile.db.HistoryEntity
 import stream.kleeamp.mobile.db.toEntity
 import stream.kleeamp.mobile.net.Http
+import stream.kleeamp.mobile.podcasts.CleanupScope
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.podcasts.DownloadEntry
 
@@ -93,6 +94,9 @@ class Prefs(private val context: Context) {
         val lbToken = stringPreferencesKey("lb_token")
         val autoResume = booleanPreferencesKey("auto_resume")
         val autoDownload = booleanPreferencesKey("auto_download")
+        val autoCellular = booleanPreferencesKey("auto_cellular")
+        val cleanupPlayed = stringPreferencesKey("cleanup_played")
+        val autoKeep = stringPreferencesKey("auto_keep")
         val resumeLocal = booleanPreferencesKey("resume_local")
         val scrobbleRadio = booleanPreferencesKey("scrobble_radio")
         val wPlaying = booleanPreferencesKey("w_playing")
@@ -128,6 +132,12 @@ class Prefs(private val context: Context) {
     val autoResume: Flow<Boolean> = context.settingsStore.data.map { it[K.autoResume] ?: false }
     /** Latest episodes fetch themselves for subscribed shows. Off by default. */
     val autoDownload: Flow<Boolean> = context.settingsStore.data.map { it[K.autoDownload] ?: false }
+    /** Auto-download may use metered data. Off by default: wifi-only unless opted in. */
+    val autoCellular: Flow<Boolean> = context.settingsStore.data.map { it[K.autoCellular] ?: false }
+    /** Which played downloads are deleted: off, auto-downloads only, or all. */
+    val cleanupPlayed: Flow<CleanupScope> = context.settingsStore.data.map {
+        CleanupScope.of(it[K.cleanupPlayed].orEmpty())
+    }
     /** Local files reopen where they stopped. Off by default: songs restart. */
     val resumeLocal: Flow<Boolean> = context.settingsStore.data.map { it[K.resumeLocal] ?: false }
     /** Scrobble radio stream titles too. Off by default: titles would spam. */
@@ -291,6 +301,17 @@ class Prefs(private val context: Context) {
     suspend fun setEqPreset(v: String) = put(K.eqPreset, v)
     suspend fun setAutoResume(v: Boolean) = put(K.autoResume, v)
     suspend fun setAutoDownload(v: Boolean) = put(K.autoDownload, v)
+    suspend fun setAutoCellular(v: Boolean) = put(K.autoCellular, v)
+    suspend fun setCleanupPlayed(v: CleanupScope) = put(K.cleanupPlayed, v.key)
+    /** Per-show auto-download keep count, by show id. Absent means the default. */
+    val autoKeep: Flow<Map<String, Int>> = context.settingsStore.data.map { p ->
+        p[K.autoKeep]?.let { raw ->
+            runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
+        } ?: emptyMap()
+    }
+    suspend fun setAutoKeep(showId: String, keep: Int) {
+        put(K.autoKeep, Http.json.encodeToString(autoKeep.first() + (showId to keep)))
+    }
     suspend fun setResumeLocal(v: Boolean) = put(K.resumeLocal, v)
     suspend fun setScrobbleRadio(v: Boolean) = put(K.scrobbleRadio, v)
     suspend fun setVolume(v: Float) = put(K.volume, v)

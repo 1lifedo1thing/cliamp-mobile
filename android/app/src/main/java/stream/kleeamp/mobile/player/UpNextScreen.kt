@@ -28,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -65,6 +66,7 @@ import stream.kleeamp.mobile.chrome.BackChevron
 import stream.kleeamp.mobile.player.vis.VisualizerMeter
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.ListRow
+import stream.kleeamp.mobile.chrome.MarqueeLabel
 import stream.kleeamp.mobile.chrome.ScreenHeader
 import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.microPress
@@ -167,7 +169,10 @@ internal fun UpNextContent(
     }
 
     Column(Modifier.fillMaxSize().background(p.ground).navigationBarsPadding()) {
-        ScreenHeader {
+        // No status inset here: the sheet's handle zone already sits below
+        // the status bar, same as the Now Playing page - insetting twice is
+        // what left the empty space on top.
+        ScreenHeader(inset = false) {
             Row(
                 Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 8.dp, bottom = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -293,7 +298,15 @@ private fun NowPlayingCard(s: Station, playing: Boolean, p: KleeampPalette, visu
                     Mono(if (playing) "PLAYING" else "PAUSED", KleeampType.tabLabel,
                         if (playing) p.accent else p.inkTertiary)
                 }
-                Mono(s.name.ifBlank { "unknown" }, KleeampType.trackTitleSmall, p.ink, maxLines = 1)
+                // Same marquee title as Now Playing: long names scroll
+                // instead of cutting off mid-word.
+                key(s.id) {
+                    MarqueeLabel(
+                        s.name.ifBlank { "unknown" },
+                        KleeampType.trackTitleSmall,
+                        p.ink,
+                    )
+                }
                 Mono(
                     if (s.isTrack) "${sourceSubtitle(s)} · ${upNextDuration(s)}" else sourceSubtitle(s),
                     KleeampType.meta, p.inkTertiary, maxLines = 1,

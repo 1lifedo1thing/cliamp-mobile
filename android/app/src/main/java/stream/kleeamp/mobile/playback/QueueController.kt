@@ -808,11 +808,12 @@ internal class QueueController(
      * Advances when a finite item plays to its end before the next window
      * could be appended: repeat-one replays the audible item, repeat-all
      * wraps past the tail, otherwise the next item plays. Called from sync.
-     * Live streams never end on their own, so repeat-one cannot stall one.
+     * Live streams never end on their own, so repeat-one cannot stall one;
+     * anything actually reporting ended is finite and may repeat.
      */
     internal fun advanceOnEnded(changingPlayback: Boolean, ended: Boolean) {
         if (changingPlayback || !ended) return
-        if (model.currentUpNext.getOrNull(model.currentIndex)?.isTrack != true) return
+        if (model.currentUpNext.getOrNull(model.currentIndex) == null) return
         when (model.repeatMode) {
             RepeatMode.One -> bridge.replayCurrent()
             RepeatMode.All -> {

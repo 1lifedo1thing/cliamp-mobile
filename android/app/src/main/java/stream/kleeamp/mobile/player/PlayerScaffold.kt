@@ -201,7 +201,7 @@ internal fun PortraitPlayer(
         ) {
             BackChevron(actions.onBack)
             Spacer(Modifier.weight(1f))
-            UpNextButton(model.upNextCount, actions.onOpenUpNext)
+            UpNextBadge(model.upNextCount, actions.onOpenUpNext)
         }
         // Tight: buys room back for the plate (see pinned text lines).
         Spacer(Modifier.height(2.dp))
@@ -355,15 +355,20 @@ internal fun LandscapePlayer(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            // No back chevron in landscape: system back covers it, and the
+            // row belongs to the title. Up Next rides at the title's right
+            // edge; the weighted meta never runs underneath it.
             Row(
-                Modifier.fillMaxWidth().height(48.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
             ) {
-                BackChevron(actions.onBack)
-                Spacer(Modifier.weight(1f))
-                UpNextButton(model.upNextCount, actions.onOpenUpNext)
+                // The end padding is the gap: long titles scroll inside
+                // their lane and stop here instead of sticking to the badge.
+                Box(Modifier.weight(1f).padding(end = 12.dp)) {
+                    PlayerMeta(model)
+                }
+                UpNextBadge(model.upNextCount, actions.onOpenUpNext)
             }
-            PlayerMeta(model)
             Spacer(Modifier.weight(1f))
             PlayerTransport(model, actions, meterHeight = 56.dp)
             TransportKeys(model, actions)

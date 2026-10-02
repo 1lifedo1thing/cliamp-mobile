@@ -43,6 +43,8 @@ import stream.kleeamp.mobile.BuildConfig
 import stream.kleeamp.mobile.R
 import stream.kleeamp.mobile.player.vis.Visualizer
 import stream.kleeamp.mobile.chrome.Chip
+import stream.kleeamp.mobile.chrome.ChipDropdown
+import stream.kleeamp.mobile.chrome.ChipOption
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.KleeampToggle
 import stream.kleeamp.mobile.chrome.Gutter
@@ -64,6 +66,7 @@ import stream.kleeamp.mobile.theme.OxidePalette
 import stream.kleeamp.mobile.theme.OmarchyThemeKeys
 import stream.kleeamp.mobile.theme.Mono
 import stream.kleeamp.mobile.player.UpNextSwipeToRemove
+import stream.kleeamp.mobile.podcasts.CleanupScope
 import kotlin.math.roundToInt
 
 @Composable
@@ -89,6 +92,8 @@ fun SettingsScreen(
     val buffer = uiState.buffer
     val autoResume = uiState.autoResume
     val autoDownload = uiState.autoDownload
+    val autoCellular = uiState.autoCellular
+    val cleanupPlayed = uiState.cleanupPlayed
     val resumeLocal = uiState.resumeLocal
     val listenBrainzOn = uiState.listenBrainzOn
     val scrobbleRadio = uiState.scrobbleRadio
@@ -137,6 +142,30 @@ fun SettingsScreen(
             checked = autoDownload,
             onChange = { vm.onEvent(SettingsViewModel.Event.SetAutoDownload(it)) },
         )
+        ToggleRow(
+            title = "Auto-download over cellular",
+            checked = autoCellular,
+            onChange = { vm.onEvent(SettingsViewModel.Event.SetAutoCellular(it)) },
+        )
+        Column {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Mono("Delete played episodes", KleeampType.rowPrimary, p.ink, Modifier.weight(1f))
+                ChipDropdown(
+                    label = cleanupLabel(cleanupPlayed),
+                    selected = cleanupPlayed != CleanupScope.Off,
+                    options = CleanupScope.entries.map { scope ->
+                        ChipOption(cleanupLabel(scope)) {
+                            vm.onEvent(SettingsViewModel.Event.SetCleanupPlayed(scope))
+                        }
+                    },
+                )
+            }
+            Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
+        }
         ToggleRow(
             title = "Stream over cellular",
             checked = cellular,
@@ -340,6 +369,13 @@ fun SettingsScreen(
         Spacer(Modifier.height(40.dp))
         }
     }
+}
+
+/** Dropdown label for a delete-after-listening scope. */
+private fun cleanupLabel(scope: CleanupScope): String = when (scope) {
+    CleanupScope.Auto -> "auto-downloads"
+    CleanupScope.All -> "all downloads"
+    CleanupScope.Off -> "off"
 }
 
 @Composable

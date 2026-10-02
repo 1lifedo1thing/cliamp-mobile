@@ -131,11 +131,16 @@ fun GridListToggle(gridMode: Boolean, onToggle: () -> Unit) {
     }
 }
 
-/** Fixed header: the system status bar inset, then title + filters. */
+/**
+ * Fixed header: the system status bar inset, then title + filters. Sheets
+ * already pad below the status bar in their handle zone, so they opt out
+ * with [inset] = false instead of stacking the inset twice.
+ */
 @Composable
 fun ScreenHeader(
     modifier: Modifier = Modifier,
     divider: Boolean = true,
+    inset: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val p = LocalPalette.current
@@ -143,7 +148,13 @@ fun ScreenHeader(
         modifier
             .fillMaxWidth()
             .background(p.ground)
-            .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
+            .padding(
+                top = if (inset) {
+                    WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+                } else {
+                    0.dp
+                },
+            )
     ) {
         content()
         if (divider) HairlineDivider(region = true)

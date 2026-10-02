@@ -13,8 +13,10 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import stream.kleeamp.mobile.common.stateInUi
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
@@ -24,7 +26,7 @@ import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.prefs.Prefs
 
     /** Auto-download keeps this many latest episodes per subscribed show. */
-private const val AUTO_KEEP = 3
+internal const val DEFAULT_AUTO_KEEP = 3
 
 /**
  * One fetched file: where it lives plus the station snapshot that plays it.
@@ -46,12 +48,53 @@ data class DownloadEntry(
 /** Transient per-URL fetch state; anything permanent lives in [DownloadEntry]. */
 sealed interface DownloadState {
     data object Idle : DownloadState
+    /** Waiting for one of the 3 fetch slots; cancellable while parked. */
+    data object Queued : DownloadState
     data class Active(val fraction: Float, val bytesRead: Long, val totalBytes: Long) : DownloadState {
         /** Negative while the server hides its length; the row then reads bytes. */
         val indeterminate: Boolean get() = fraction < 0f
     }
     data class Failed(val reason: String) : DownloadState
 }
+
+/** Which played downloads are deleted after listening. */
+enum class CleanupScope(val key: String) {
+    Off("off"),
+    Auto("auto"),
+    All("all");
+
+    /** Manual downloads survive unless the scope covers everything. */
+    fun covers(auto: Boolean): Boolean = when (this) {
+        Off -> false
+        Auto -> auto
+        All -> true
+    }
+
+    companion object {
+        fun of(key: String): CleanupScope = entries.firstOrNull { it.key == key } ?: Off
+    }
+}
+
+/** In-flight fetch identity: what to show in the queue and how to retry it. */
+internal data class DlMeta(val station: Station, val auto: Boolean)
+
+/** One queue row: an active, queued or failed fetch with its episode. */
+data class DownloadQueueItem(val url: String, val station: Station, val state: DownloadState, val auto: Boolean)
+
+/**
+ * Queue order, stable: active fetches first, then queued, then failures.
+ * Pure so the row order is unit-tested on the JVM.
+ */
+internal fun orderQueueItems(items: List<DownloadQueueItem>): List<DownloadQueueItem> =
+    items.sortedWith(
+        compareBy(
+            { when (it.state) {
+                is DownloadState.Active -> 0
+                is DownloadState.Queued -> 1
+                else -> 2
+            } },
+        ),
+    )
 
 /** `38 MB` / `410 KB`, for rows that name a file's weight. */
 internal fun downloadSizeLabel(bytes: Long): String =
@@ -89,6 +132,28 @@ class DownloadStore(
     private val _states = MutableStateFlow<Map<String, DownloadState>>(emptyMap())
     val states: StateFlow<Map<String, DownloadState>> = _states.asStateFlow()
 
+    private val _meta = MutableStateFlow<Map<String, DlMeta>>(emptyMap())
+    internal val meta: StateFlow<Map<String, DlMeta>> = _meta.asStateFlow()
+
+    /**
+     * The downloading view's rows: every active, queued or failed fetch with
+     * its episode, active first. Completed fetches leave the queue for the
+     * downloads list; cancelled ones vanish.
+     */
+    val queue: StateFlow<List<DownloadQueueItem>> =
+        combine(_states, _meta) { states, meta ->
+            orderQueueItems(
+                states.mapNotNull { (url, st) ->
+                    val m = meta[url] ?: return@mapNotNull null
+                    if (st is DownloadState.Active || st is DownloadState.Queued || st is DownloadState.Failed) {
+                        DownloadQueueItem(url, m.station, st, m.auto)
+                    } else {
+                        null
+                    }
+                },
+            )
+        }.stateInUi(scope, emptyList())
+
     init {
         scope.launch {
             dir.listFiles { f -> f.extension == "tmp" }?.forEach { runCatching { it.delete() } }
@@ -122,7 +187,9 @@ class DownloadStore(
                 setState(url, DownloadState.Failed("storage full"))
                 return
             }
+            _meta.value = _meta.value + (url to DlMeta(station, auto))
             jobs[url] = scope.launch(Dispatchers.IO) {
+                setState(url, DownloadState.Queued)
                 slots.acquire()
                 try {
                     if (!prefs.cellular.first() && !unmetered()) {
@@ -176,6 +243,7 @@ class DownloadStore(
                         prefs.addDownload(entry)
                         _entries.value = _entries.value + (url to entry)
                         clearState(url)
+                        dropMeta(url)
                     }
                 } catch (e: CancellationException) {
                     setState(url, DownloadState.Idle)
@@ -194,6 +262,20 @@ class DownloadStore(
     fun cancel(url: String) {
         synchronized(jobsLock) { jobs.remove(url) }?.cancel()
         if (!isDownloaded(url)) setState(url, DownloadState.Idle)
+        dropMeta(url)
+    }
+
+    /**
+     * Stop everything and clear the queue: active fetches stop, queued ones
+     * never start, and failures leave the view. Completed downloads stay.
+     */
+    fun cancelAll() {
+        val urls = synchronized(jobsLock) { jobs.keys.toList() }
+        urls.forEach { cancel(it) }
+        _states.value.keys.filter { !isDownloaded(it) }.forEach {
+            clearState(it)
+            dropMeta(it)
+        }
     }
 
     /**
@@ -210,32 +292,42 @@ class DownloadStore(
             _entries.value[url]?.let { runCatching { File(it.path).delete() } }
             _entries.value = _entries.value - url
             clearState(url)
+            dropMeta(url)
             prefs.removeDownload(url)
         }
     }
 
     /**
-     * Auto-download for one subscribed show: the latest [AUTO_KEEP] full,
+     * Auto-download for one subscribed show: the latest [keep] full,
      * unplayed episodes fetch themselves, and older auto fetches for the
      * show are swept. Manual downloads are never touched. Idempotent, so a
      * feed refresh re-firing it is free.
+     *
+     * Auto fetches are wifi-only unless the cellular opt-in is on; manual
+     * taps keep their own [Prefs.cellular] gate inside [download].
      */
-    fun autoDownload(show: PodcastShow, episodes: List<PodcastEpisode>, completedUrls: Set<String>) {
+    fun autoDownload(
+        show: PodcastShow,
+        episodes: List<PodcastEpisode>,
+        completedUrls: Set<String>,
+        keep: Int = DEFAULT_AUTO_KEEP,
+    ) {
         scope.launch {
             if (!prefs.autoDownload.first()) return@launch
+            if (!prefs.autoCellular.first() && !unmetered()) return@launch
             val fresh = episodes
                 .filter { it.isFull && it.audioUrl.isNotBlank() && it.audioUrl !in completedUrls }
-                .take(AUTO_KEEP)
+                .take(keep.coerceAtLeast(1))
             fresh.forEach { ep ->
                 if (!isDownloaded(ep.audioUrl) && !jobs.containsKey(ep.audioUrl)) {
                     download(ep.toStation(show), auto = true)
                 }
             }
-            // Retention: keep the newest AUTO_KEEP auto fetches of this show.
+            // Retention: keep the newest [keep] auto fetches of this show.
             val mine = _entries.value.values
                 .filter { it.auto && it.station.slug == show.id }
                 .sortedByDescending { it.downloadedAt }
-            mine.drop(AUTO_KEEP).forEach { remove(it.url) }
+            mine.drop(keep.coerceAtLeast(1)).forEach { remove(it.url) }
             // Global backstop: auto fetches across many shows still add up.
             // Manual downloads are never swept.
             _entries.value.values
@@ -252,6 +344,10 @@ class DownloadStore(
 
     private fun clearState(url: String) {
         _states.value = _states.value - url
+    }
+
+    private fun dropMeta(url: String) {
+        _meta.value = _meta.value - url
     }
 
     private fun unmetered(): Boolean {

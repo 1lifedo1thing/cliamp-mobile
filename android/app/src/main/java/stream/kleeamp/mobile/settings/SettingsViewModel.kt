@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.radio.DirectoryStats
 import stream.kleeamp.mobile.common.stateInUi
 import stream.kleeamp.mobile.prefs.Prefs
+import stream.kleeamp.mobile.podcasts.CleanupScope
 import stream.kleeamp.mobile.radio.RadioRepository
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.theme.KleeampPalette
@@ -33,6 +34,8 @@ class SettingsViewModel(
         val buffer: Int = 20,
         val autoResume: Boolean = false,
         val autoDownload: Boolean = false,
+        val autoCellular: Boolean = false,
+        val cleanupPlayed: CleanupScope = CleanupScope.Off,
         val resumeLocal: Boolean = false,
         val listenBrainzOn: Boolean = false,
         val scrobbleRadio: Boolean = false,
@@ -48,6 +51,8 @@ class SettingsViewModel(
         data class SetAutoResume(val v: Boolean) : Event
         data class SetResumeLocal(val v: Boolean) : Event
         data class SetAutoDownload(val v: Boolean) : Event
+        data class SetAutoCellular(val v: Boolean) : Event
+        data class SetCleanupPlayed(val v: CleanupScope) : Event
         data class SetCellular(val v: Boolean) : Event
         data class SetMono(val v: Boolean) : Event
         data class SetBuffer(val seconds: Int) : Event
@@ -77,6 +82,8 @@ class SettingsViewModel(
         val buffer: Int = 20,
         val autoResume: Boolean = false,
         val autoDownload: Boolean = false,
+        val autoCellular: Boolean = false,
+        val cleanupPlayed: CleanupScope = CleanupScope.Off,
     )
 
     /** Library counts, scrobble flag and directory stats. */
@@ -105,13 +112,19 @@ class SettingsViewModel(
             ::Appearance,
         ),
         combine(
-            prefs.cellular,
-            prefs.mono,
-            prefs.bufferSeconds,
-            prefs.autoResume,
-            prefs.autoDownload,
-            ::Playback,
-        ),
+            combine(
+                prefs.cellular,
+                prefs.mono,
+                prefs.bufferSeconds,
+                prefs.autoResume,
+                prefs.autoDownload,
+                ::Playback,
+            ),
+            prefs.autoCellular,
+            prefs.cleanupPlayed,
+        ) { playback, cell, clean ->
+            playback.copy(autoCellular = cell, cleanupPlayed = clean)
+        },
         combine(
             prefs.resumeLocal,
             prefs.listenBrainzToken,
@@ -139,6 +152,8 @@ class SettingsViewModel(
             buffer = playback.buffer,
             autoResume = playback.autoResume,
             autoDownload = playback.autoDownload,
+            autoCellular = playback.autoCellular,
+            cleanupPlayed = playback.cleanupPlayed,
             resumeLocal = library.resumeLocal,
             listenBrainzOn = library.listenBrainzToken.isNotBlank(),
             scrobbleRadio = scrobbleBox.radio,
@@ -158,6 +173,8 @@ class SettingsViewModel(
             is Event.SetAutoResume -> viewModelScope.launch { prefs.setAutoResume(e.v) }
             is Event.SetResumeLocal -> viewModelScope.launch { prefs.setResumeLocal(e.v) }
             is Event.SetAutoDownload -> viewModelScope.launch { prefs.setAutoDownload(e.v) }
+            is Event.SetAutoCellular -> viewModelScope.launch { prefs.setAutoCellular(e.v) }
+            is Event.SetCleanupPlayed -> viewModelScope.launch { prefs.setCleanupPlayed(e.v) }
             is Event.SetCellular -> viewModelScope.launch { prefs.setCellular(e.v) }
             is Event.SetMono -> viewModelScope.launch { prefs.setMono(e.v) }
             is Event.SetBuffer -> viewModelScope.launch { prefs.setBufferSeconds(e.seconds) }

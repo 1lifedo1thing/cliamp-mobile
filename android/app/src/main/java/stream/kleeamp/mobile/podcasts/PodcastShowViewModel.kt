@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.common.stateInUi
 import stream.kleeamp.mobile.prefs.Prefs
@@ -18,6 +19,7 @@ class PodcastShowViewModel(
         val dlStates: Map<String, DownloadState>,
         val dlEntries: Map<String, DownloadEntry>,
         val autoDownload: Boolean,
+        val autoKeep: Map<String, Int>,
         val showState: ShowState,
         val progress: Map<String, EpisodeProgress>,
         val subscriptions: List<PodcastShow>,
@@ -34,6 +36,7 @@ class PodcastShowViewModel(
         data class CancelDownload(val url: String) : Event
         data class RemoveDownload(val url: String) : Event
         data object AutoDownload : Event
+        data class SetAutoKeep(val showId: String, val keep: Int) : Event
     }
 
     /** Show feed plus the sets rows read: subscriptions and favourited episode urls. */
@@ -44,9 +47,16 @@ class PodcastShowViewModel(
         val favorites: Set<String>,
     )
 
+    private data class DlBits(
+        val states: Map<String, DownloadState> = emptyMap(),
+        val entries: Map<String, DownloadEntry> = emptyMap(),
+        val autoDownload: Boolean = false,
+        val autoKeep: Map<String, Int> = emptyMap(),
+    )
+
     val state: StateFlow<UiState> = combine(
-        combine(downloads.states, downloads.entries, prefs.autoDownload) { a, b, c ->
-            Triple(a, b, c)
+        combine(downloads.states, downloads.entries, prefs.autoDownload, prefs.autoKeep) { a, b, c, d ->
+            DlBits(a, b, c, d)
         },
         combine(
             podcasts.show,
@@ -58,9 +68,10 @@ class PodcastShowViewModel(
         },
     ) { x, y ->
         UiState(
-            dlStates = x.first,
-            dlEntries = x.second,
-            autoDownload = x.third,
+            dlStates = x.states,
+            dlEntries = x.entries,
+            autoDownload = x.autoDownload,
+            autoKeep = x.autoKeep,
             showState = y.show,
             progress = y.progress,
             subscriptions = y.subscriptions,
@@ -72,6 +83,7 @@ class PodcastShowViewModel(
             dlStates = downloads.states.value,
             dlEntries = downloads.entries.value,
             autoDownload = false,
+            autoKeep = emptyMap(),
             showState = podcasts.show.value,
             progress = emptyMap(),
             subscriptions = emptyList(),
@@ -88,6 +100,7 @@ class PodcastShowViewModel(
             is Event.RefreshShow -> podcasts.refreshShow()
             is Event.MarkCompleted -> viewModelScope.launch {
                 podcasts.markCompleted(e.station)
+                maybeCleanupDownload(e.station.url)
             }
             is Event.ClearProgress -> viewModelScope.launch {
                 podcasts.clearProgress(e.station)
@@ -95,6 +108,9 @@ class PodcastShowViewModel(
             is Event.Download -> downloads.download(e.station)
             is Event.CancelDownload -> downloads.cancel(e.url)
             is Event.RemoveDownload -> downloads.remove(e.url)
+            is Event.SetAutoKeep -> viewModelScope.launch {
+                prefs.setAutoKeep(e.showId, e.keep)
+            }
             is Event.AutoDownload -> {
                 val s = state.value
                 val show = s.showState.show ?: return
@@ -104,9 +120,21 @@ class PodcastShowViewModel(
                         show,
                         s.showState.episodes,
                         s.progress.filterValues { it.completed }.keys,
+                        keep = s.autoKeep[show.id] ?: DEFAULT_AUTO_KEEP,
                     )
                 }
             }
         }
+    }
+
+    /**
+     * Delete-after-listening for an explicitly finished episode. The player
+     * path (progress near the end) runs through KleeampApp's progress sink
+     * instead; both read the same scope.
+     */
+    private suspend fun maybeCleanupDownload(url: String) {
+        val scope = prefs.cleanupPlayed.first()
+        val auto = downloads.entries.value[url]?.auto ?: return
+        if (scope.covers(auto)) downloads.remove(url)
     }
 }
