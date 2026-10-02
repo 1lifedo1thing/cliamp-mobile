@@ -505,6 +505,20 @@ private var chartCursor: List<String> = emptyList()
 
     suspend fun clearProgress(station: Station) = dao.clearProgress(station.url)
 
+    /**
+     * A probed file length with no listening position behind it. Keeps any
+     * saved position, so background duration fills never reset resume.
+     */
+    suspend fun saveDurationMs(url: String, durationMs: Long) {
+        if (durationMs <= 0) return
+        val now = System.currentTimeMillis()
+        val cur = dao.progress(url)
+        dao.saveProgress(
+            cur?.copy(durationMs = durationMs, updatedAt = now)
+                ?: EpisodeProgressEntity(url, 0L, durationMs, false, now)
+        )
+    }
+
     private companion object {
         /** Close enough to the end to call it listened. */
         const val NEAR_END = 30_000L

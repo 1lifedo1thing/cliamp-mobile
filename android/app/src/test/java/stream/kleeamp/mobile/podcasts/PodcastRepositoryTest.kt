@@ -359,8 +359,41 @@ class PodcastRepositoryTest {
         override suspend fun nextTopPosition() = 0
         override suspend fun subscribe(row: PodcastSubscriptionEntity) = Unit
         override suspend fun unsubscribe(feedUrl: String) = Unit
-        override suspend fun progress(url: String): EpisodeProgressEntity? = null
-        override suspend fun saveProgress(row: EpisodeProgressEntity) = Unit
-        override suspend fun clearProgress(url: String) = Unit
+        val savedRows = mutableMapOf<String, EpisodeProgressEntity>()
+        override suspend fun progress(url: String): EpisodeProgressEntity? = savedRows[url]
+        override suspend fun saveProgress(row: EpisodeProgressEntity) {
+            savedRows[row.url] = row
+        }
+        override suspend fun clearProgress(url: String) {
+            savedRows.remove(url)
+        }
+    }
+
+    @Test
+    fun saveDurationCreatesARowWithoutPosition() = runTest {
+        val dao = FakePodcasts()
+        val repository = PodcastRepository(backgroundScope, dao, FakeCache())
+        repository.saveDurationMs("https://example.com/t.mp3", 200_000L)
+        assertEquals(200_000L, dao.savedRows["https://example.com/t.mp3"]?.durationMs)
+        assertEquals(0L, dao.savedRows["https://example.com/t.mp3"]?.positionMs)
+        assertFalse(dao.savedRows["https://example.com/t.mp3"]?.completed == true)
+    }
+
+    @Test
+    fun saveDurationKeepsTheSavedPosition() = runTest {
+        val dao = FakePodcasts()
+        dao.savedRows["u"] = EpisodeProgressEntity("u", 60_000L, 0L, false, 0L)
+        val repository = PodcastRepository(backgroundScope, dao, FakeCache())
+        repository.saveDurationMs("u", 200_000L)
+        assertEquals(200_000L, dao.savedRows["u"]?.durationMs)
+        assertEquals(60_000L, dao.savedRows["u"]?.positionMs)
+    }
+
+    @Test
+    fun saveDurationIgnoresGarbage() = runTest {
+        val dao = FakePodcasts()
+        val repository = PodcastRepository(backgroundScope, dao, FakeCache())
+        repository.saveDurationMs("u", 0L)
+        assertTrue(dao.savedRows.isEmpty())
     }
 }
