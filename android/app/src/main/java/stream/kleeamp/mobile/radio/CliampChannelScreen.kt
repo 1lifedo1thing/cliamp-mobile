@@ -40,6 +40,8 @@ import stream.kleeamp.mobile.chrome.FilterRow
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.ListRow
+import stream.kleeamp.mobile.chrome.LoadingNote
+import stream.kleeamp.mobile.chrome.RefreshIcon
 import stream.kleeamp.mobile.chrome.MainLayout
 import stream.kleeamp.mobile.chrome.MenuKind
 import stream.kleeamp.mobile.chrome.MenuSubject
@@ -126,7 +128,7 @@ fun CliampChannelScreen(
             }
 
             if (ui.loading && ordered.isEmpty()) {
-                item { EmptyNote("reading the track list…") }
+                item { LoadingNote("reading the track list…") }
             } else if (ordered.isEmpty() && ui.error == null) {
                 item { EmptyNote("no tracks in this channel") }
             }
@@ -146,11 +148,9 @@ fun CliampChannelScreen(
                 item { FilterRow(value = query, onValue = { query = it }) }
                 item {
                     SectionLabel("tracks — ${shown.size}") {
-                        Mono(
-                            "refresh",
-                            KleeampType.meta,
-                            p.inkTertiary,
-                            Modifier.microPress { vm.onEvent(CliampChannelViewModel.Event.Refresh) },
+                        RefreshIcon(
+                            loading = ui.loading,
+                            onRefresh = { vm.onEvent(CliampChannelViewModel.Event.Refresh) },
                         )
                     }
                 }

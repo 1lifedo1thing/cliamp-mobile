@@ -61,6 +61,7 @@ import stream.kleeamp.mobile.chrome.EmptyNote
 import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.ListRow
+import stream.kleeamp.mobile.chrome.LoadingNote
 import stream.kleeamp.mobile.chrome.OverflowButton
 import stream.kleeamp.mobile.chrome.ContextMenuSheet
 import stream.kleeamp.mobile.chrome.DestructiveAction
@@ -407,7 +408,7 @@ fun StationsScreen(
                                 )
                             },
                         )
-                        directory.loading -> EmptyNote("loading more…")
+                        directory.loading -> LoadingNote("loading more…")
                         directory.exhausted -> EmptyNote("end of ${directory.query.label}")
                         else -> Spacer(Modifier.height(8.dp))
                     }

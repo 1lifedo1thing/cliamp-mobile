@@ -88,6 +88,7 @@ import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
+import stream.kleeamp.mobile.chrome.LoadingNote
 import stream.kleeamp.mobile.chrome.OverflowButton
 import stream.kleeamp.mobile.chrome.ContextMenuSheet
 import stream.kleeamp.mobile.chrome.DestructiveAction
@@ -615,23 +616,28 @@ private fun SmartPlaylistDetail(
                 }
             }
             item {
-                Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
-                    Mono(
-                        when {
-                            query.isNotBlank() -> "nothing matches"
-                            pl.kind == SmartKind.Favorites && favScope == FavScope.Local -> "no local favourites yet"
-                            pl.kind == SmartKind.Favorites && favScope == FavScope.Stations ->
-                                "no station favourites yet"
-                            pl.kind == SmartKind.Favorites && favScope == FavScope.Pods -> "no podcast favourites yet"
-                            pl.kind == SmartKind.LocalSongs ->
-                                if (loading) "scanning for songs…" else "no songs on the phone yet"
-                            pl.kind == SmartKind.Downloads ->
-                                if (loading) "scanning for songs…" else "no downloads yet"
-                            pl.kind == SmartKind.Favorites -> "no favourites yet"
-                            else -> "nothing played recently"
-                        },
-                        KleeampType.rowSecondary, p.inkFaint,
-                    )
+                // Scanning wears the spinner; everything else is a plain note.
+                val scanning = query.isBlank() && loading &&
+                    (pl.kind == SmartKind.LocalSongs || pl.kind == SmartKind.Downloads)
+                if (scanning) {
+                    LoadingNote("scanning for songs…")
+                } else {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                        Mono(
+                            when {
+                                query.isNotBlank() -> "nothing matches"
+                                pl.kind == SmartKind.Favorites && favScope == FavScope.Local -> "no local favourites yet"
+                                pl.kind == SmartKind.Favorites && favScope == FavScope.Stations ->
+                                    "no station favourites yet"
+                                pl.kind == SmartKind.Favorites && favScope == FavScope.Pods -> "no podcast favourites yet"
+                                pl.kind == SmartKind.LocalSongs -> "no songs on the phone yet"
+                                pl.kind == SmartKind.Downloads -> "no downloads yet"
+                                pl.kind == SmartKind.Favorites -> "no favourites yet"
+                                else -> "nothing played recently"
+                            },
+                            KleeampType.rowSecondary, p.inkFaint,
+                        )
+                    }
                 }
             }
         } else {
