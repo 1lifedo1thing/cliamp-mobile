@@ -70,10 +70,14 @@ class RadioRepository(
 
     /**
      * cliamp radio channels with their song counts, for opening a channel as
-     * its track list. Empty until fetched; stations stay playable regardless.
+     * its track list. Restored from the last snapshot on launch so the counts
+     * paint instantly, then replaced whenever the live list answers.
      */
     private val _cliampChannels = MutableStateFlow<List<CliampChannels.Channel>>(emptyList())
     val cliampChannels: StateFlow<List<CliampChannels.Channel>> = _cliampChannels.asStateFlow()
+
+    private val channelsKey = "cliamp:channels"
+    private fun tracksKey(channelId: String) = "cliamp:tracks:$channelId"
 
     /**
      * Channel track lists loaded so far, across every opened channel. Search
@@ -82,12 +86,40 @@ class RadioRepository(
     private val _cliampChannelTracks = MutableStateFlow<List<Station>>(emptyList())
     val cliampChannelTracks: StateFlow<List<Station>> = _cliampChannelTracks.asStateFlow()
 
-    /** One channel's tracks, cached in [CliampChannels]; empty on failure. */
+    /**
+     * One channel's tracks: memory first, then the disk snapshot, then the
+     * network. A live answer replaces both caches; a failure keeps whatever
+     * the snapshot had, so an opened channel still opens offline.
+     */
     suspend fun cliampTracks(channelId: String, refresh: Boolean = false): List<Station> {
         val channel = _cliampChannels.value.firstOrNull { it.id == channelId } ?: return emptyList()
         if (!channel.hasTracks) return emptyList()
-        return runCatching { CliampChannels.fetchTracks(channel, refresh) }.getOrDefault(emptyList())
-            .also { _cliampChannelTracks.value = CliampChannels.cachedTracks() }
+        if (!refresh) {
+            CliampChannels.cachedTracksFor(channelId)?.let { return it }
+            val disk = readTracksSnapshot(channelId)
+            if (disk.isNotEmpty()) {
+                CliampChannels.seedTracks(channelId, disk)
+                _cliampChannelTracks.value = CliampChannels.cachedTracks()
+                return disk
+            }
+        }
+        val live = runCatching { CliampChannels.fetchTracks(channel, refresh) }.getOrDefault(emptyList())
+        if (live.isNotEmpty()) {
+            writeTracksSnapshot(channelId, live)
+            _cliampChannelTracks.value = CliampChannels.cachedTracks()
+            return live
+        }
+        // Forced refresh against a dead network: fall back to the snapshot
+        // rather than emptying a list the user already had.
+        if (refresh) {
+            val disk = readTracksSnapshot(channelId)
+            if (disk.isNotEmpty()) {
+                CliampChannels.seedTracks(channelId, disk)
+                _cliampChannelTracks.value = CliampChannels.cachedTracks()
+                return disk
+            }
+        }
+        return emptyList()
     }
 
     /** Live listener figures for the cliamp channels; null until fetched. */
@@ -145,6 +177,9 @@ class RadioRepository(
 
     fun bootstrap() {
         refreshCliamp()
+        // Channel counts before the network: the stations rows and the
+        // channel headers read the same flow, so one restore covers both.
+        scope.launch { restoreCliampChannels() }
         // Snapshot hygiene, once per launch: rows past their TTL are never
         // read, and search snapshots would otherwise grow one row per query.
         scope.launch {
@@ -194,10 +229,56 @@ class RadioRepository(
                 .onFailure { _cliampError.value = it.message ?: "cliamp radio unreachable" }
         }
         // Channel song counts ride alongside: best-effort, and stations keep
-        // working when it fails.
+        // working when it fails. A live answer replaces the snapshot outright.
         scope.launch {
             runCatching { retryFetch { CliampChannels.fetchChannels() } }
-                .onSuccess { _cliampChannels.value = it }
+                .onSuccess {
+                    _cliampChannels.value = it
+                    snapshotChannels(it)
+                }
+        }
+    }
+
+    /** The last channel list, so counts paint before the network answers. */
+    private suspend fun restoreCliampChannels() {
+        val row = cache.get(channelsKey) ?: return
+        val cached = runCatching { Http.json.decodeFromString<List<CliampChannels.Channel>>(row.json) }
+            .getOrNull()?.filter { it.id.isNotBlank() } ?: return
+        if (cached.isNotEmpty() && _cliampChannels.value.isEmpty()) {
+            _cliampChannels.value = cached
+        }
+    }
+
+    private fun snapshotChannels(channels: List<CliampChannels.Channel>) {
+        scope.launch {
+            runCatching {
+                cache.put(
+                    KvCacheEntity(
+                        key = channelsKey,
+                        json = Http.json.encodeToString(channels),
+                        savedAt = System.currentTimeMillis(),
+                    )
+                )
+            }
+        }
+    }
+
+    private suspend fun readTracksSnapshot(channelId: String): List<Station> {
+        val row = cache.get(tracksKey(channelId)) ?: return emptyList()
+        return runCatching { Http.json.decodeFromString<List<Station>>(row.json) }.getOrDefault(emptyList())
+    }
+
+    private fun writeTracksSnapshot(channelId: String, tracks: List<Station>) {
+        scope.launch {
+            runCatching {
+                cache.put(
+                    KvCacheEntity(
+                        key = tracksKey(channelId),
+                        json = Http.json.encodeToString(tracks),
+                        savedAt = System.currentTimeMillis(),
+                    )
+                )
+            }
         }
     }
 

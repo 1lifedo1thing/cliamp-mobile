@@ -16,6 +16,7 @@ object CliampChannels {
     const val CHANNELS_URL = "${CliampRadio.BASE}/stations"
 
     /** One channel. A channel with songs opens as its track list. */
+    @Serializable
     data class Channel(
         val id: String,
         val name: String,
@@ -130,6 +131,16 @@ object CliampChannels {
      */
     fun cachedTracks(): List<Station> =
         synchronized(trackCacheLock) { trackCache.values.flatten() }
+
+    /** One channel's memory list, or null when it was never loaded. */
+    fun cachedTracksFor(channelId: String): List<Station>? =
+        synchronized(trackCacheLock) { trackCache[channelId] }
+
+    /** Seeds the memory list, so a disk snapshot reads like a fresh load. */
+    fun seedTracks(channelId: String, tracks: List<Station>) {
+        if (tracks.isEmpty()) return
+        synchronized(trackCacheLock) { trackCache[channelId] = tracks }
+    }
 
     private fun isHttp(raw: String): Boolean {
         if (raw.isBlank()) return false

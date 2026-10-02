@@ -66,4 +66,20 @@ class CliampChannelsTest {
         val channel = CliampChannels.Channel(id = "lofi", name = "Lofi", stream = "s")
         assertTrue(CliampChannels.parseTracks("nope", channel).isEmpty())
     }
+
+    @Test fun channelSurvivesASnapshotRoundTrip() {
+        val channel = CliampChannels.Channel(
+            id = "lofi",
+            name = "Lofi",
+            stream = "https://radio.cliamp.stream/lofi/stream",
+            trackCount = 120,
+            tracksUrl = "https://radio.cliamp.stream/lofi/tracks",
+            description = "d",
+            genre = "chill",
+        )
+        val decoded = stream.kleeamp.mobile.net.Http.json.decodeFromString<List<CliampChannels.Channel>>(
+            stream.kleeamp.mobile.net.Http.json.encodeToString(listOf(channel))
+        )
+        assertEquals(listOf(channel), decoded)
+    }
 }
