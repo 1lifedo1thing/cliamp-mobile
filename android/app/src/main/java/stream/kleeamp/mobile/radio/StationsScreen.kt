@@ -96,6 +96,8 @@ fun StationsScreen(
     onOpenSettings: () -> Unit = {},
     focusDirectory: Boolean = false,
     onDirectoryFocusConsumed: () -> Unit = {},
+    /** A cliamp channel with songs opens as its track list instead of playing. */
+    onOpenChannel: (Station) -> Unit = {},
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -104,6 +106,11 @@ fun StationsScreen(
     val ui by vm.state.collectAsState()
     val cliamp = ui.cliamp
     val cliampError = ui.cliampError
+    // Channels with songs open as track lists; the rest play the stream.
+    // Matched by slug, which is the channel id on both sides.
+    val channelBySlug = remember(ui.cliampChannels) {
+        ui.cliampChannels.associateBy { it.id }
+    }
     val custom = ui.custom
     val directory = ui.directory
     val dirStats = ui.directoryStats
@@ -248,11 +255,16 @@ fun StationsScreen(
                         cliamp,
                         key = { "cl:${it.url}" },
                     ) { s ->
+                        val channel = channelBySlug[s.slug]
                         StationRow(
                             station = s,
+                            trackCount = if (channel?.hasTracks == true) channel.trackCount else 0,
                             active = current?.url == s.url,
                             playing = playing && current?.url == s.url,
-                            onPlay = { onPlay(s, cliamp) },
+                            onPlay = {
+                                if (channel?.hasTracks == true) onOpenChannel(s)
+                                else onPlay(s, cliamp)
+                            },
                             onOpenMenu = { menuFor = s },
                         )
                     }
@@ -411,9 +423,10 @@ fun StationsScreen(
         menuFor?.let { s ->
             val fav = favorites.any { it.url == s.url }
             val isCustom = custom.any { it.url == s.url }
+            val menuTracks = channelBySlug[s.slug]?.takeIf { it.hasTracks }?.trackCount ?: 0
             ContextMenuSheet(
                 title = s.name,
-                subtitle = stationMenuSubtitle(s),
+                subtitle = stationMenuSubtitle(s, menuTracks),
                 art = { StationMenuArt(s) },
                 actions = menuActions(
                     MenuSubject(
@@ -441,12 +454,16 @@ fun StationsScreen(
 }
 
 /** The sheet header line under the title: same words the row itself wears. */
-private fun stationMenuSubtitle(s: Station): String {
+private fun stationMenuSubtitle(s: Station, trackCount: Int = 0): String {
     if (s.source == StationSource.Custom) return "custom station"
     return buildList {
-        if (s.source == StationSource.Cliamp) add("cliamp radio")
-        s.meta.takeIf { it.isNotBlank() }?.let { add(it) }
-        s.tagList.take(2).forEach { add(it) }
+        if (trackCount > 0) add("$trackCount tracks")
+        else {
+            if (s.source != StationSource.Cliamp) {
+                s.meta.takeIf { it.isNotBlank() }?.let { add(it) }
+            }
+            s.tagList.take(2).forEach { add(it) }
+        }
     }.joinToString(" · ")
 }
 
@@ -457,6 +474,8 @@ private fun StationRow(
     playing: Boolean,
     onPlay: () -> Unit,
     onOpenMenu: () -> Unit,
+    /** Song count when this channel opens as a track list; 0 plays the stream. */
+    trackCount: Int = 0,
 ) {
     val p = LocalPalette.current
     ListRow(
@@ -483,9 +502,16 @@ private fun StationRow(
         )
         Mono(
             buildList {
-                if (station.source == StationSource.Cliamp) add("cliamp radio")
-                station.meta.takeIf { it.isNotBlank() }?.let { add(it) }
-                station.tagList.take(2).forEach { add(it) }
+                // A channel with songs is just its count - the section
+                // header already says cliamp radio, and the codec adds
+                // nothing. Other rows keep their meta line.
+                if (trackCount > 0) add("$trackCount tracks")
+                else {
+                    if (station.source != StationSource.Cliamp) {
+                        station.meta.takeIf { it.isNotBlank() }?.let { add(it) }
+                    }
+                    station.tagList.take(2).forEach { add(it) }
+                }
             }.joinToString(" · "),
             KleeampType.rowSecondary,
             p.inkTertiary,

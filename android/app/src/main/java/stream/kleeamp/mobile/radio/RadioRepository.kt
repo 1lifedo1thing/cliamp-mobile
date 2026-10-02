@@ -68,6 +68,20 @@ class RadioRepository(
     private val _cliampError = MutableStateFlow<String?>(null)
     val cliampError: StateFlow<String?> = _cliampError.asStateFlow()
 
+    /**
+     * cliamp radio channels with their song counts, for opening a channel as
+     * its track list. Empty until fetched; stations stay playable regardless.
+     */
+    private val _cliampChannels = MutableStateFlow<List<CliampChannels.Channel>>(emptyList())
+    val cliampChannels: StateFlow<List<CliampChannels.Channel>> = _cliampChannels.asStateFlow()
+
+    /** One channel's tracks, cached in [CliampChannels]; empty on failure. */
+    suspend fun cliampTracks(channelId: String, refresh: Boolean = false): List<Station> {
+        val channel = _cliampChannels.value.firstOrNull { it.id == channelId } ?: return emptyList()
+        if (!channel.hasTracks) return emptyList()
+        return runCatching { CliampChannels.fetchTracks(channel, refresh) }.getOrDefault(emptyList())
+    }
+
     /** Live listener figures for the cliamp channels; null until fetched. */
     private val _cliampStats = MutableStateFlow<CliampStats?>(null)
     val cliampStats: StateFlow<CliampStats?> = _cliampStats.asStateFlow()
@@ -170,6 +184,12 @@ class RadioRepository(
                     prefetchCovers(it)
                 }
                 .onFailure { _cliampError.value = it.message ?: "cliamp radio unreachable" }
+        }
+        // Channel song counts ride alongside: best-effort, and stations keep
+        // working when it fails.
+        scope.launch {
+            runCatching { retryFetch { CliampChannels.fetchChannels() } }
+                .onSuccess { _cliampChannels.value = it }
         }
     }
 

@@ -16,6 +16,7 @@ class StationsViewModel(
     data class UiState(
         val cliamp: List<Station>,
         val cliampError: String?,
+        val cliampChannels: List<CliampChannels.Channel>,
         val custom: List<Station>,
         val directory: DirectoryState,
         val directoryStats: DirectoryStats?,
@@ -36,6 +37,7 @@ class StationsViewModel(
     private data class CatalogState(
         val cliamp: List<Station>,
         val cliampError: String?,
+        val cliampChannels: List<CliampChannels.Channel>,
         val custom: List<Station>,
         val directory: DirectoryState,
         val directoryStats: DirectoryStats?,
@@ -48,13 +50,17 @@ class StationsViewModel(
 
     val state: StateFlow<UiState> = combine(
         combine(
-            repository.cliamp,
-            repository.cliampError,
-            prefs.custom,
-            repository.directory,
-            repository.directoryStats,
-            ::CatalogState,
-        ),
+            combine(
+                repository.cliamp,
+                repository.cliampError,
+                prefs.custom,
+                repository.directory,
+                repository.directoryStats,
+            ) { cliamp, cliampError, custom, directory, directoryStats ->
+                CatalogState(cliamp, cliampError, emptyList(), custom, directory, directoryStats)
+            },
+            repository.cliampChannels,
+        ) { parts, channels -> parts.copy(cliampChannels = channels) },
         combine(
             repository.tags,
             repository.countries,
@@ -64,6 +70,7 @@ class StationsViewModel(
         UiState(
             cliamp = catalog.cliamp,
             cliampError = catalog.cliampError,
+            cliampChannels = catalog.cliampChannels,
             custom = catalog.custom,
             directory = catalog.directory,
             directoryStats = catalog.directoryStats,
@@ -75,6 +82,7 @@ class StationsViewModel(
         UiState(
             cliamp = repository.cliamp.value,
             cliampError = repository.cliampError.value,
+            cliampChannels = repository.cliampChannels.value,
             custom = emptyList(),
             directory = repository.directory.value,
             directoryStats = repository.directoryStats.value,

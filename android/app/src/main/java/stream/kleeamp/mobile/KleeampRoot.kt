@@ -85,6 +85,8 @@ import stream.kleeamp.mobile.servers.ProviderWizard as ProviderWizardScreen
 import stream.kleeamp.mobile.settings.SettingsScreen
 import stream.kleeamp.mobile.radio.StationsScreen
 import stream.kleeamp.mobile.radio.StationsViewModel
+import stream.kleeamp.mobile.radio.CliampChannelScreen
+import stream.kleeamp.mobile.radio.CliampChannelViewModel
 import stream.kleeamp.mobile.podcasts.PodcastsViewModel
 import stream.kleeamp.mobile.podcasts.PodcastShowViewModel
 import stream.kleeamp.mobile.library.LocalViewModel
@@ -402,6 +404,9 @@ fun KleeampRoot(
                                 },
                                 focusDirectory = focusDirectory,
                                 onDirectoryFocusConsumed = { focusDirectory = false },
+                                onOpenChannel = { s ->
+                                    navController.navigate(CliampChannelRoute(s.slug))
+                                },
                             )
                             Tab.Pods -> PodcastsScreen(
                                 vm = appViewModel { app ->
@@ -435,6 +440,25 @@ fun KleeampRoot(
             }
 
             // -- Tab panes (sit above the pager, keep the chrome) --
+            composable<CliampChannelRoute> { backStackEntry ->
+                val channelId = backStackEntry.toRoute<CliampChannelRoute>().channelId
+                Box(contentModifier) {
+                    CliampChannelScreen(
+                        vm = appViewModel { app ->
+                            CliampChannelViewModel(channelId, app.radio, app.prefs)
+                        },
+                        current = station,
+                        playing = playerState.playing,
+                        onBack = { navController.popBackStack() },
+                        onPlay = { s, from -> play(s, from) },
+                        onAddToUpNext = { player.addToUpNext(it) },
+                        onPlayNext = { player.playNext(it) },
+                        onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
+                        onOpenSearch = { navController.navigate(Search) },
+                        onOpenSettings = { navController.navigate(Settings) },
+                    )
+                }
+            }
             composable<PodcastShowRoute> {
                 Box(contentModifier) {
                     PodcastShowScreen(
@@ -887,6 +911,7 @@ private fun StationsTab(
     onOpenSettings: () -> Unit,
     focusDirectory: Boolean,
     onDirectoryFocusConsumed: () -> Unit,
+    onOpenChannel: (Station) -> Unit = {},
 ) {
     val favorites by prefs.favorites.collectAsState(initial = emptyList())
     StationsScreen(
@@ -901,5 +926,6 @@ private fun StationsTab(
         onOpenSettings = onOpenSettings,
         focusDirectory = focusDirectory,
         onDirectoryFocusConsumed = onDirectoryFocusConsumed,
+        onOpenChannel = onOpenChannel,
     )
 }
