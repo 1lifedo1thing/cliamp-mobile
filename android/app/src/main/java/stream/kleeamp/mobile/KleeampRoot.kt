@@ -217,6 +217,17 @@ fun KleeampRoot(
         player.play(s, from)
         repository.reportPlay(s)
     }
+    // A cliamp channel opens its track list wherever it is tapped -
+    // favourites, recents, playlists - instead of playing one stream.
+    // Tracks never match: their urls are files, never the channel stream.
+    val cliampChannels by repository.cliampChannels.collectAsState()
+    val playOrOpenChannel: (Station, List<Station>) -> Unit = { s, from ->
+        val channel = cliampChannels.firstOrNull { c ->
+            c.id == s.slug && c.hasTracks && c.stream == s.url
+        }
+        if (channel != null) navController.navigate(CliampChannelRoute(channel.id))
+        else play(s, from)
+    }
 
     // Move to a tab. Anything sitting above Home - a pane, Settings, Search -
     // is popped first, so a tab tap always lands on the pager and never leaves
@@ -534,7 +545,7 @@ fun KleeampRoot(
                         kindName = kind,
                         current = station,
                         playing = playerState.playing,
-                        onPlay = { s, from -> play(s, from) },
+                        onPlay = playOrOpenChannel,
                         onAddToQueue = { player.addToUpNext(it) },
                         favScope = favScope,
                         onFavScopeChange = { favScope = it },
@@ -565,7 +576,7 @@ fun KleeampRoot(
                         slug = slug,
                         current = station,
                         playing = playerState.playing,
-                        onPlay = { s, from -> play(s, from) },
+                        onPlay = playOrOpenChannel,
                         onAddToQueue = { player.addToUpNext(it) },
                         onBack = { navController.popBackStack() },
                         onOpenSearch = { navController.navigate(Search) },

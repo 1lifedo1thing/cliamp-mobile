@@ -112,11 +112,7 @@ fun CliampChannelScreen(
     ) {
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
             item {
-                ChannelHeader(
-                    channel = channel,
-                    onPlayAll = { first, all -> onPlay(first, all) },
-                    tracks = ordered,
-                )
+                ChannelHeader(channel = channel)
             }
 
             ui.error?.let { message ->
@@ -204,11 +200,7 @@ fun CliampChannelScreen(
 }
 
 @Composable
-private fun ChannelHeader(
-    channel: CliampChannels.Channel?,
-    tracks: List<Station>,
-    onPlayAll: (Station, List<Station>) -> Unit,
-) {
+private fun ChannelHeader(channel: CliampChannels.Channel?) {
     val p = LocalPalette.current
     if (channel == null) return
     Column {
@@ -234,12 +226,6 @@ private fun ChannelHeader(
                 }.joinToString(" · ")
                 if (meta.isNotBlank()) {
                     Mono(meta, KleeampType.rowSecondary, p.inkSecondary, maxLines = 1)
-                }
-                Spacer(Modifier.height(3.dp))
-                if (tracks.isNotEmpty()) {
-                    Chip("play all", selected = true, onClick = {
-                        onPlayAll(tracks.first(), tracks)
-                    })
                 }
             }
         }
