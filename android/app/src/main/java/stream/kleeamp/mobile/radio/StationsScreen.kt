@@ -74,7 +74,7 @@ import stream.kleeamp.mobile.chrome.RetryNote
 
 import stream.kleeamp.mobile.chrome.MainLayout
 import stream.kleeamp.mobile.chrome.SectionLabel
-import stream.kleeamp.mobile.chrome.scrollToTop
+import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
@@ -208,7 +208,10 @@ fun StationsScreen(
         title = "Stations",
         onOpenSearch = onOpenSearch,
         onOpenSettings = onOpenSettings,
-        onTitleClick = { scope.scrollToTop(listState) },
+        // Straight to the hero in one landing-exact flight: the pixel
+        // estimator undershoots past the tall globe card and then snaps,
+        // which reads as scroll-then-jump.
+        onTitleClick = { scope.launch { listState.animateScrollToItem(0) } },
         chips = {
             Source.entries.forEach { s ->
                 Chip(s.label, source == s, onClick = { source = s })
@@ -252,6 +255,8 @@ fun StationsScreen(
                 item {
                     ListenerAnalytics(
                         stats = stats,
+                        hintSeen = ui.globeHintSeen,
+                        onFirstSpin = { vm.onEvent(StationsViewModel.Event.MarkGlobeHintSeen) },
                         onRefresh = { vm.onEvent(StationsViewModel.Event.RefreshStats) },
                     )
                 }

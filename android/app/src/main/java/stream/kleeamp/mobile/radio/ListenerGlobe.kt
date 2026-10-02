@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -37,6 +38,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import stream.kleeamp.mobile.theme.Mono
 import stream.kleeamp.mobile.theme.KleeampType
@@ -93,6 +95,8 @@ fun ListenerGlobe(
     modifier: Modifier = Modifier,
     /** Non-null (with a fresh nonce) flies the camera to that country. */
     flyTo: FlyTo? = null,
+    /** Fired once on the first drag that actually rotates the globe. */
+    onFirstSpin: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val density = LocalDensity.current
@@ -112,6 +116,27 @@ fun ListenerGlobe(
     // Fly-to animation state: a new drag cancels the flight.
     var animating by remember { mutableStateOf(false) }
     var animGen by remember { mutableIntStateOf(0) }
+    // Tap feedback: label + position, dismissed after a pause. Hover keeps
+    // its own state for the mouse; taps use this on touch screens.
+    var tapTip by remember { mutableStateOf<Pair<Offset, String>?>(null) }
+    var spinFired by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    var dismissJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+
+    fun dismissTapTip() {
+        dismissJob?.cancel()
+        dismissJob = null
+        tapTip = null
+    }
+
+    fun showTapTip(at: Offset, label: String) {
+        dismissJob?.cancel()
+        tapTip = at to label
+        dismissJob = scope.launch {
+            kotlinx.coroutines.delay(TAP_TIP_MS)
+            tapTip = null
+        }
+    }
 
     fun globeRadiusPx(): Float {
         if (globeSize == IntSize.Zero) return 0f
@@ -155,7 +180,17 @@ fun ListenerGlobe(
     fun labelFor(c: CountryListeners): String =
         c.name + "  " + "%,d".format(c.listeners) + if (isLive) " listening" else " sessions"
 
-    /** Atlas id under the point, or null for water/unknown land. */
+    /** Display label for an atlas id: real count, or quiet when dataless. */
+    fun labelForId(id: String): String? {
+        byId[id]?.let { return labelFor(it) }
+        val name = geometry.firstOrNull { it.id == id }?.name ?: return null
+        return "$name  quiet right now"
+    }
+
+    /**
+     * Atlas id under the point: any real country counts, so taps always
+     * answer. Water and id-less regions stay null.
+     */
     fun hitTest(x: Float, y: Float): String? {
         val r = globeRadiusPx()
         if (r <= 0f) return null
@@ -184,8 +219,9 @@ fun ListenerGlobe(
             x.toDouble(), y.toDouble(), cx.toDouble(), cy.toDouble(), r.toDouble(), cLon, cLat,
         ) ?: return null
         // Geographic hit-test, not nearest dot: the actual country polygon.
-        geometry.firstOrNull { WorldAtlas.countryContains(it, ll) }?.let { g ->
-            if (byId[g.id] != null) return g.id
+        // Id-less regions (disputed areas) have no stable identity: water.
+        geometry.firstOrNull { it.id.isNotEmpty() && WorldAtlas.countryContains(it, ll) }?.let { g ->
+            return g.id
         }
         return null
     }
@@ -244,7 +280,7 @@ fun ListenerGlobe(
         val x = hoverPx.x
         val y = hoverPx.y
         hoverLabel = withContext(Dispatchers.Default) {
-            hitTest(x, y)?.let { byId[it]?.let(::labelFor) }
+            hitTest(x, y)?.let(::labelForId)
         }
     }
 
@@ -260,9 +296,13 @@ fun ListenerGlobe(
 
     // Latest tap logic without recreating the gesture detector: hitTest reads
     // rotation state at tap time, so taps always use the current globe angle.
+    // The label shows at the finger because phones have no hover.
     val tapHandler = rememberUpdatedState { tap: Offset ->
         lastTouch = android.os.SystemClock.uptimeMillis()
-        onSelect(hitTest(tap.x, tap.y)?.let { idToCode[it] })
+        val id = hitTest(tap.x, tap.y)
+        onSelect(id?.let { idToCode[it] })
+        val label = id?.let(::labelForId)
+        if (label != null) showTapTip(tap, label) else dismissTapTip()
     }
 
     Box(modifier.onSizeChanged { globeSize = it }) {
@@ -321,6 +361,7 @@ fun ListenerGlobe(
                         dragging = true
                         animGen++
                         hoverLabel = null
+                        dismissTapTip()
                         lastTouch = android.os.SystemClock.uptimeMillis()
                         try {
                             var done = false
@@ -333,6 +374,10 @@ fun ListenerGlobe(
                                     val delta = change.position - change.previousPosition
                                     change.consume()
                                     lastTouch = android.os.SystemClock.uptimeMillis()
+                                    if (!spinFired) {
+                                        spinFired = true
+                                        onFirstSpin()
+                                    }
                                     centerLon = normalizeLon(centerLon - delta.x / density.density * 0.3f)
                                     centerLat = (centerLat + delta.y / density.density * 0.3f)
                                         .coerceIn(-80f, 80f)
@@ -407,16 +452,19 @@ fun ListenerGlobe(
             drawCircle(edgeColor, r, Offset(cx, cy), style = Stroke(1.dp.toPx()))
         }
 
-        // Hover tooltip follows the pointer, like the website's #tip.
-        if (hovering && hoverLabel != null && !dragging) {
+        // Hover tooltip follows the pointer, like the website's #tip; on
+        // touch screens the tap label shows at the finger instead.
+        val overlay = if (!dragging) hoverLabel?.let { hoverPx to it } ?: tapTip else null
+        if (overlay != null) {
+            val (at, text) = overlay
             Mono(
-                hoverLabel!!,
+                text,
                 KleeampType.meta,
                 p.ink,
                 Modifier
                     .offset {
-                        val x = if (hoverPx != Offset.Unspecified) hoverPx.x.roundToInt() else 0
-                        val y = if (hoverPx != Offset.Unspecified) hoverPx.y.roundToInt() - 48 else 0
+                        val x = if (at != Offset.Unspecified) at.x.roundToInt() else 0
+                        val y = if (at != Offset.Unspecified) at.y.roundToInt() - 48 else 0
                         IntOffset(x - 60, y)
                     }
                     .padding(4.dp),
@@ -427,6 +475,9 @@ fun ListenerGlobe(
 
 /** Idle delay before auto-rotation resumes after a touch, milliseconds. */
 private const val IDLE_RESUME_MS = 3000L
+
+/** How long a tap label lingers at the finger, milliseconds. */
+private const val TAP_TIP_MS = 2500L
 
 /**
  * Projects one flat ring once, returning its screen subpath and front-point

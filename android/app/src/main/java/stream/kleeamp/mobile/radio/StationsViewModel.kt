@@ -23,12 +23,14 @@ class StationsViewModel(
         val tags: List<NameCount>,
         val countries: List<CountryCount>,
         val listenerGlobe: Boolean,
+        val globeHintSeen: Boolean,
     )
 
     sealed interface Event {
         data object NextPage : Event
         data object RefreshCliamp : Event
         data object RefreshStats : Event
+        data object MarkGlobeHintSeen : Event
         data class LoadDirectory(val query: DirectoryQuery, val reset: Boolean = true) : Event
         data class AddCustom(val station: Station) : Event
         data class RemoveCustom(val station: Station) : Event
@@ -78,9 +80,12 @@ class StationsViewModel(
             tags = facets.tags,
             countries = facets.countries,
             listenerGlobe = true,
+            globeHintSeen = false,
         )
     }.combine(prefs.listenerGlobe) { ui, globe ->
         ui.copy(listenerGlobe = globe)
+    }.combine(prefs.globeHintSeen) { ui, seen ->
+        ui.copy(globeHintSeen = seen)
     }.stateInUi(
         viewModelScope,
         UiState(
@@ -93,6 +98,7 @@ class StationsViewModel(
             tags = repository.tags.value,
             countries = emptyList(),
             listenerGlobe = true,
+            globeHintSeen = false,
         ),
     )
 
@@ -103,6 +109,7 @@ class StationsViewModel(
             is Event.NextPage -> repository.nextPage()
             is Event.RefreshCliamp -> repository.refreshCliamp()
             is Event.RefreshStats -> repository.refreshCliampStats()
+            is Event.MarkGlobeHintSeen -> viewModelScope.launch { prefs.setGlobeHintSeen() }
             is Event.LoadDirectory -> repository.loadDirectory(e.query, e.reset)
             is Event.AddCustom -> viewModelScope.launch {
                 prefs.addCustom(e.station)

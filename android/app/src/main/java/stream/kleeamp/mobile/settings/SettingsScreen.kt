@@ -241,6 +241,11 @@ fun SettingsScreen(
             checked = haptics,
             onChange = { vm.onEvent(SettingsViewModel.Event.SetHaptics(it)) },
         )
+        ToggleRow(
+            title = "Listener globe",
+            checked = listenerGlobe,
+            onChange = { vm.onEvent(SettingsViewModel.Event.SetListenerGlobe(it)) },
+        )
         ChoiceRow(
             title = "Visualizer",
             options = Visualizer.selectable.map { it.id to it.label } + listOf("off" to "off"),
@@ -249,11 +254,6 @@ fun SettingsScreen(
         )
 
         SectionLabel("themes — ${OmarchyThemeKeys.size + 6}")
-        ToggleRow(
-            title = "Listener globe",
-            checked = listenerGlobe,
-            onChange = { vm.onEvent(SettingsViewModel.Event.SetListenerGlobe(it)) },
-        )
         listOf(
             // system first: it is the default, and its swatch is whichever
             // half of oxide the device is currently asking for.

@@ -46,6 +46,10 @@ fun ListenerAnalytics(
     stats: CliampStats?,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
+    /** True once the user has spun the globe: the hint stays hidden. */
+    hintSeen: Boolean = false,
+    /** Fired once on the first real spin, to persist the hint dismissal. */
+    onFirstSpin: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val geometry = rememberWorldGeometry()
@@ -97,6 +101,8 @@ fun ListenerAnalytics(
                         selectedCode = selectedCode,
                         onSelect = { select(it, fly = false) },
                         flyTo = flyTo,
+                        showHint = !hintSeen,
+                        onFirstSpin = onFirstSpin,
                         modifier = Modifier.weight(1f),
                     )
                     CountrySide(
@@ -116,6 +122,8 @@ fun ListenerAnalytics(
                         selectedCode = selectedCode,
                         onSelect = { select(it, fly = false) },
                         flyTo = flyTo,
+                        showHint = !hintSeen,
+                        onFirstSpin = onFirstSpin,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     CountrySide(
@@ -177,6 +185,8 @@ private fun GlobeCard(
     selectedCode: String?,
     onSelect: (String?) -> Unit,
     flyTo: FlyTo?,
+    showHint: Boolean,
+    onFirstSpin: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
@@ -211,6 +221,23 @@ private fun GlobeCard(
                     onSelect = onSelect,
                     modifier = Modifier.fillMaxWidth().height(340.dp),
                     flyTo = flyTo,
+                    onFirstSpin = onFirstSpin,
+                )
+            }
+            // Hold-to-spin hint, centered on the globe until the first real
+            // spin. Plain text never consumes touches, so hold-to-drag and
+            // taps pass straight through to the globe underneath.
+            if (showHint && geometry != null) {
+                Mono(
+                    "hold and drag to spin · tap a country for its count",
+                    KleeampType.meta,
+                    p.ink,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(KleeampShape.small))
+                        .background(p.panel.copy(alpha = 0.88f))
+                        .border(1.dp, p.hairline, RoundedCornerShape(KleeampShape.small))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    maxLines = 1,
                 )
             }
         }
