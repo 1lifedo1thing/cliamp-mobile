@@ -107,6 +107,13 @@ fun StationsScreen(
     val ui by vm.state.collectAsState()
     val cliamp = ui.cliamp
     val cliampError = ui.cliampError
+    // Live listener figures from the same documents cliamp.stream renders,
+    // fetched once per screen lifetime. Informational only: nothing here
+    // navigates, scrolls or focuses anywhere.
+    val stats by vm.cliampStats.collectAsState()
+    LaunchedEffect(Unit) {
+        if (stats == null) vm.onEvent(StationsViewModel.Event.RefreshStats)
+    }
     // Channels with songs open as track lists; the rest play the stream.
     // Matched by slug, which is the channel id on both sides.
     val channelBySlug = remember(ui.cliampChannels) {
@@ -238,6 +245,15 @@ fun StationsScreen(
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
         ) {
 
+            // Page hero: the live listener globe sits above everything else,
+            // unfiltered by the source chips below it.
+            item {
+                ListenerAnalytics(
+                    stats = stats,
+                    onRefresh = { vm.onEvent(StationsViewModel.Event.RefreshStats) },
+                )
+            }
+
             if (source == Source.All || source == Source.Cliamp) {
                 item {
                     SectionLabel("cliamp radio — ${cliamp.size}", gutter = 8.dp) {
@@ -260,6 +276,7 @@ fun StationsScreen(
                         StationRow(
                             station = s,
                             trackCount = if (channel?.hasTracks == true) channel.trackCount else 0,
+                            listenerCount = stats?.listenersFor(s.slug),
                             active = current?.url == s.url,
                             playing = playing && current?.url == s.url,
                             onPlay = {
@@ -477,6 +494,12 @@ private fun StationRow(
     onOpenMenu: () -> Unit,
     /** Song count when this channel opens as a track list; 0 plays the stream. */
     trackCount: Int = 0,
+    /**
+     * Live listeners on this channel, or null before stats land. Rendered as
+     * a centered informational line only: no click handler, no button
+     * semantics, no navigation. Peak is never shown in station rows.
+     */
+    listenerCount: Int? = null,
 ) {
     val p = LocalPalette.current
     ListRow(
@@ -488,6 +511,18 @@ private fun StationRow(
         leading = { StationThumb(station, active, playing) },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Live count in the trailing slot, vertically centered like
+                // directory vote counts. Plain text: no handler, no button
+                // semantics, no navigation. Peak is never shown in rows.
+                if (listenerCount != null) {
+                    Mono(
+                        if (listenerCount > 0) "● $listenerCount listening now"
+                        else "○ quiet right now",
+                        KleeampType.meta,
+                        if (listenerCount > 0) p.accent else p.inkFaint,
+                        maxLines = 1,
+                    )
+                }
                 if (station.votes > 0) {
                     Mono(compact(station.votes), KleeampType.meta, p.inkFaint)
                 }
@@ -577,22 +612,19 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
 
 /**
  * Live "who's listening" line at the right end of the cliamp header, from
- * the same statistics document cliamp.stream renders. Fetches once per
- * screen lifetime; tapping refreshes. Hidden until the first fetch lands.
+ * the same statistics document cliamp.stream renders. Informational only:
+ * no tap handler, and peak is never shown in rows. Hidden until the first
+ * fetch lands.
  */
 @Composable
 private fun CliampStatsText(vm: StationsViewModel) {
     val p = LocalPalette.current
     val stats by vm.cliampStats.collectAsState()
-    LaunchedEffect(Unit) {
-        if (stats == null) vm.onEvent(StationsViewModel.Event.RefreshStats)
-    }
     stats?.let {
         Mono(
-            "${it.activeNow} listening now · peak ${it.peak}",
+            "${it.activeNow} listening now",
             KleeampType.meta,
             p.inkFaint,
-            Modifier.microPress { vm.onEvent(StationsViewModel.Event.RefreshStats) },
             maxLines = 1,
         )
     }
