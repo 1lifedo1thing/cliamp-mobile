@@ -87,10 +87,13 @@ fun CliampChannelScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var menuFor by remember { mutableStateOf<Station?>(null) }
 
+    // One row per file: a repeated URL in the track list used to crash the
+    // list on a duplicate key. The first occurrence wins, order preserved.
     val ordered = remember(ui.tracks, sort) {
+        val unique = ui.tracks.distinctBy { it.url }
         when (sort) {
-            PlaylistSort.RecentlyAdded -> sortedStations(ui.tracks, PlaylistSort.Title)
-            else -> sortedStations(ui.tracks, sort)
+            PlaylistSort.RecentlyAdded -> sortedStations(unique, PlaylistSort.Title)
+            else -> sortedStations(unique, sort)
         }
     }
     val shown = remember(ordered, query) {

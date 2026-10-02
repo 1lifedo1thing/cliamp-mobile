@@ -551,7 +551,9 @@ private fun SmartPlaylistDetail(
         }
     }
     var query by rememberSaveable(pl.key) { mutableStateOf("") }
-    val shown = remember(visible, query) { visible.matching(query) }
+    // One row per file: a repeated URL (re-downloaded episode, MediaStore
+    // duplicate) used to crash the list on a duplicate key. First wins.
+    val shown = remember(visible, query) { visible.matching(query).distinctBy { it.url } }
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
         // Picker rows scroll with the list, on top of the filter; only the
         // header is fixed.
