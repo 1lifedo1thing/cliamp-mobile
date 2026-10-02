@@ -138,6 +138,35 @@ fun SettingsScreen(
             onChange = { vm.onEvent(SettingsViewModel.Event.SetResumeLocal(it)) },
         )
         ToggleRow(
+            title = "Stream over cellular",
+            checked = cellular,
+            onChange = { vm.onEvent(SettingsViewModel.Event.SetCellular(it)) },
+        )
+        ToggleRow(
+            title = "Mono downmix",
+            checked = mono,
+            onChange = { vm.onEvent(SettingsViewModel.Event.SetMono(it)) },
+        )
+        Column(
+            Modifier.padding(horizontal = Gutter, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Mono("Buffer", KleeampType.rowPrimary, p.ink)
+                Mono("${buffer}s", KleeampType.rowSecondary, p.accent)
+            }
+            MechSlider(
+                value = buffer.toFloat(),
+                onValueChange = { vm.onEvent(SettingsViewModel.Event.SetBuffer(it.roundToInt())) },
+                range = 5f..60f,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Mono("deeper buffers survive a bad tunnel, at the cost of latency", KleeampType.meta, p.inkFaint)
+        }
+        HairlineDivider()
+
+        SectionLabel("podcasts")
+        ToggleRow(
             title = "Auto-download episodes",
             checked = autoDownload,
             onChange = { vm.onEvent(SettingsViewModel.Event.SetAutoDownload(it)) },
@@ -165,32 +194,6 @@ fun SettingsScreen(
                 )
             }
             Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
-        }
-        ToggleRow(
-            title = "Stream over cellular",
-            checked = cellular,
-            onChange = { vm.onEvent(SettingsViewModel.Event.SetCellular(it)) },
-        )
-        ToggleRow(
-            title = "Mono downmix",
-            checked = mono,
-            onChange = { vm.onEvent(SettingsViewModel.Event.SetMono(it)) },
-        )
-        Column(
-            Modifier.padding(horizontal = Gutter, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Mono("Buffer", KleeampType.rowPrimary, p.ink)
-                Mono("${buffer}s", KleeampType.rowSecondary, p.accent)
-            }
-            MechSlider(
-                value = buffer.toFloat(),
-                onValueChange = { vm.onEvent(SettingsViewModel.Event.SetBuffer(it.roundToInt())) },
-                range = 5f..60f,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Mono("deeper buffers survive a bad tunnel, at the cost of latency", KleeampType.meta, p.inkFaint)
         }
         HairlineDivider()
 

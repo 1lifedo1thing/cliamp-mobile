@@ -195,7 +195,8 @@ internal fun PlayerStatusRow(
         ) { actions.onToggleShuffle() }
         // Repeat is a track-list concept like cliamp's: it governs list
         // boundaries and track ends, which live streams don't have. Shown
-        // for tracks (local, podcast, provider) and hidden for stations.
+        // for tracks (local, podcast, provider, cliamp channel tracks) and
+        // hidden for stations.
         if (model.shownStation?.isTrack == true) {
             RepeatAction(repeat = model.state.repeat) { actions.onCycleRepeat() }
         }

@@ -48,12 +48,23 @@ data class Station(
      * A finite thing with an end, as opposed to a live stream. Decides whether
      * the queue is handed to the player as a real playlist it can advance
      * through, and it is source-based rather than duration-based because the
-     * decision has to be made before anything has been probed.
+     * decision has to be made before anything has been probed. Channel tracks
+     * count: they are files from a channel's track list, unlike the
+     * channel's live stream.
      */
     val isTrack: Boolean
         get() = source == StationSource.Local ||
             source == StationSource.Provider ||
-            source == StationSource.Podcast
+            source == StationSource.Podcast ||
+            isChannelTrack
+
+    /**
+     * A cliamp channel's track: a seekable file from a channel's track list,
+     * not the channel's live stream. The track id carries both
+     * (`cliamp:channel:track`), while a live stream is just `cliamp:slug`.
+     */
+    val isChannelTrack: Boolean
+        get() = source == StationSource.Cliamp && id.count { it == ':' } >= 2
 
     val tagList: List<String>
         get() = tags.split(',', ' ')
