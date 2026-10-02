@@ -179,6 +179,14 @@ class DownloadStore(
         if (isDownloaded(url)) return
         synchronized(jobsLock) {
             if (jobs.containsKey(url)) return
+            // A stale entry (file gone outside the app) would render the
+            // same URL in both the queue and the finished list, and
+            // duplicate keys crash the list - so the lie goes before the
+            // fetch starts. Success writes a fresh entry anyway.
+            if (_entries.value[url]?.let { !File(it.path).exists() } == true) {
+                _entries.value = _entries.value - url
+                scope.launch { runCatching { prefs.removeDownload(url) } }
+            }
             if (!station.isTrack || !(url.startsWith("http://") || url.startsWith("https://"))) {
                 setState(url, DownloadState.Failed("not downloadable"))
                 return

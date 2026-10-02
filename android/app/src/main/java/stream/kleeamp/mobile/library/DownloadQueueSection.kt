@@ -35,7 +35,7 @@ fun LazyListScope.downloadQueueSection(
     item {
         DownloadQueueHeader(count = queue.size, onCancelAll = onCancelAllDownloads)
     }
-    items(queue, key = { it.url }, contentType = { "download-queue" }) { q ->
+    items(queue, key = { "dl:${it.url}" }, contentType = { "download-queue" }) { q ->
         DownloadQueueRow(
             item = q,
             onRetry = { onRetryDownload(q.station, q.auto) },
