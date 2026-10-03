@@ -43,3 +43,20 @@ internal fun atlasIdFor(code: String): String? =
     Alpha2ToNumeric[code.uppercase()].let { n ->
         if (n == null) null else n.toString().padStart(3, '0')
     }
+
+/**
+ * Device country from the locale, validated against the atlas map. No
+ * permission needed and works offline; unknown locales resolve to null
+ * rather than guessing.
+ */
+fun deviceCountryCode(): String? = resolveCountryCode(java.util.Locale.getDefault().country)
+
+internal fun resolveCountryCode(raw: String?): String? {
+    val code = raw?.trim()?.uppercase()
+    return if (code != null && code.length == 2 && Alpha2ToNumeric.containsKey(code)) code else null
+}
+
+/** English display name for an alpha-2 code, or the code itself. */
+internal fun countryDisplayName(code: String): String =
+    runCatching { java.util.Locale("", code).getDisplayCountry(java.util.Locale.ENGLISH) }
+        .getOrNull()?.takeIf { it.isNotBlank() } ?: code

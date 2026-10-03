@@ -114,6 +114,44 @@ fun StationsScreen(
     LaunchedEffect(Unit) {
         if (stats == null) vm.onEvent(StationsViewModel.Event.RefreshStats)
     }
+    // The channel currently on air: a live stream or one of its track-list
+    // files. Tracks carry their channel in slug, so the group row lights up
+    // together with the track itself.
+    val liveSlug = if (playing) {
+        current?.takeIf { it.source == StationSource.Cliamp }?.slug?.takeIf { it.isNotBlank() }
+    } else {
+        null
+    }
+    // Optimistic counts: the server only learns about this listener on the
+    // next poll, so the app adds one immediately and drops it on stop or
+    // switch. Null while nothing has landed yet; zero reads as quiet.
+    fun boostedCount(slug: String): Int? {
+        if (stats == null && slug != liveSlug) return null
+        return (stats?.listenersFor(slug) ?: 0) + (if (slug == liveSlug) 1 else 0)
+    }
+    // Optimistic location: the device country gains one in the ranking and
+    // on the globe, or joins them when absent. Leaving clears it back to
+    // server truth everywhere at once.
+    val liveCountry = if (liveSlug != null) deviceCountryCode() else null
+    val serverStats = stats
+    val viewStats = remember(serverStats, liveSlug, liveCountry) {
+        if (serverStats != null) {
+            serverStats.copy(
+                activeNow = serverStats.activeNow + (if (liveSlug != null) 1 else 0),
+                countries = boostCountryRows(serverStats.countries, liveCountry),
+            )
+        } else if (liveSlug != null) {
+            CliampStats(
+                activeNow = 1,
+                peak = 0,
+                countries = boostCountryRows(emptyList(), liveCountry),
+                perStation = mapOf(liveSlug to 1),
+                isLive = true,
+            )
+        } else {
+            null
+        }
+    }
     // Channels with songs open as track lists; the rest play the stream.
     // Matched by slug, which is the channel id on both sides.
     val channelBySlug = remember(ui.cliampChannels) {
@@ -254,7 +292,7 @@ fun StationsScreen(
             if (ui.listenerGlobe) {
                 item {
                     ListenerAnalytics(
-                        stats = stats,
+                        stats = viewStats,
                         hintSeen = ui.globeHintSeen,
                         onFirstSpin = { vm.onEvent(StationsViewModel.Event.MarkGlobeHintSeen) },
                         onRefresh = { vm.onEvent(StationsViewModel.Event.RefreshStats) },
@@ -265,7 +303,7 @@ fun StationsScreen(
             if (source == Source.All || source == Source.Cliamp) {
                 item {
                     SectionLabel("cliamp radio — ${cliamp.size}", gutter = 8.dp) {
-                        CliampStatsText(vm)
+                        CliampStatsText(vm, extra = if (liveSlug != null) 1 else 0)
                     }
                 }
                 if (cliampError != null) {
@@ -281,12 +319,16 @@ fun StationsScreen(
                         key = { "cl:${it.url}" },
                     ) { s ->
                         val channel = channelBySlug[s.slug]
+                        // A channel stays lit while any of its tracks plays,
+                        // so the row always shows where the music belongs.
+                        val rowActive = current?.url == s.url ||
+                            (current?.isChannelTrack == true && current.slug == s.slug)
                         StationRow(
                             station = s,
                             trackCount = if (channel?.hasTracks == true) channel.trackCount else 0,
-                            listenerCount = stats?.listenersFor(s.slug),
-                            active = current?.url == s.url,
-                            playing = playing && current?.url == s.url,
+                            listenerCount = boostedCount(s.slug),
+                            active = rowActive,
+                            playing = playing && rowActive,
                             onPlay = {
                                 if (channel?.hasTracks == true) onOpenChannel(s)
                                 else onPlay(s, cliamp)
@@ -503,9 +545,9 @@ private fun StationRow(
     /** Song count when this channel opens as a track list; 0 plays the stream. */
     trackCount: Int = 0,
     /**
-     * Live listeners on this channel, or null before stats land. Rendered as
-     * a centered informational line only: no click handler, no button
-     * semantics, no navigation. Peak is never shown in station rows.
+     * Live listeners on this channel, or null before anything lands.
+     * Rendered in the trailing slot, vertically centered: no click handler,
+     * no button semantics, no navigation. Peak is never shown in rows.
      */
     listenerCount: Int? = null,
 ) {
@@ -620,22 +662,22 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
 
 /**
  * Live "who's listening" line at the right end of the cliamp header, from
- * the same statistics document cliamp.stream renders. Informational only:
- * no tap handler, and peak is never shown in rows. Hidden until the first
- * fetch lands.
+ * the same statistics document cliamp.stream renders, plus this device's
+ * own optimistic listener. Informational only: no tap handler, and peak is
+ * never shown in rows. Hidden before anything lands; quiet at zero.
  */
 @Composable
-private fun CliampStatsText(vm: StationsViewModel) {
+private fun CliampStatsText(vm: StationsViewModel, extra: Int = 0) {
     val p = LocalPalette.current
     val stats by vm.cliampStats.collectAsState()
-    stats?.let {
-        Mono(
-            "${it.activeNow} listening now",
-            KleeampType.meta,
-            p.inkFaint,
-            maxLines = 1,
-        )
-    }
+    val total = (stats?.activeNow ?: 0) + extra
+    if (stats == null && extra == 0) return
+    Mono(
+        if (total > 0) "$total listening now" else "○ quiet right now",
+        KleeampType.meta,
+        p.inkFaint,
+        maxLines = 1,
+    )
 }
 
 /** A hand-added station: name plus stream URL, playable like anything else. */

@@ -39,6 +39,21 @@ data class CliampStats(
 fun CliampStats.listenersFor(slug: String): Int? =
     if (perStation.isEmpty()) null else perStation[slug] ?: 0
 
+/**
+ * Adds one optimistic listener for [code]: bumps the row when present,
+ * inserts it when absent. Rank order is restored by count, so the
+ * leaderboard, bars and globe markers all follow. Null code is a no-op.
+ */
+internal fun boostCountryRows(rows: List<CountryListeners>, code: String?): List<CountryListeners> {
+    if (code == null) return rows
+    val out = if (rows.any { it.code == code }) {
+        rows.map { if (it.code == code) it.copy(listeners = it.listeners + 1) else it }
+    } else {
+        rows + CountryListeners(code, countryDisplayName(code), 1)
+    }
+    return out.sortedByDescending { it.listeners }
+}
+
 suspend fun fetchCliampStats(): CliampStats? = withContext(Dispatchers.IO) {
     val main = runCatching {
         val req = Request.Builder().url(STATS_URL).header("User-Agent", Http.USER_AGENT).build()

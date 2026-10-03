@@ -54,6 +54,32 @@ class CliampStatsTest {
     }
 
     @Test
+    fun boostsOwnCountryInRankOrder() {
+        val rows = listOf(
+            CountryListeners("US", "United States", 5),
+            CountryListeners("DE", "Germany", 2),
+        )
+        // Present row gains one and re-sorts.
+        assertEquals(
+            listOf(CountryListeners("US", "United States", 5), CountryListeners("DE", "Germany", 3)),
+            boostCountryRows(rows, "DE"),
+        )
+        // Absent country joins with a locale display name.
+        val joined = boostCountryRows(rows, "IR")
+        assertEquals(3, joined.size)
+        assertEquals("IR", joined.last().code)
+        assertEquals(1, joined.last().listeners)
+        assertTrue(joined.last().name.isNotBlank())
+        // Null stays untouched; unknown codes never resolve.
+        assertEquals(rows, boostCountryRows(rows, null))
+        assertEquals(null, resolveCountryCode("XX"))
+        assertEquals(null, resolveCountryCode(""))
+        assertEquals(null, resolveCountryCode(null))
+        assertEquals("DE", resolveCountryCode("de"))
+        assertEquals("US", resolveCountryCode(" us "))
+    }
+
+    @Test
     fun fallsBackToAllTimeWithoutLiveListeners() {
         val stats = aggregateStats(
             """{"peak_listeners":280,"stations":{""" +
