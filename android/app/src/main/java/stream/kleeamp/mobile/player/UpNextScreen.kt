@@ -33,6 +33,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,6 +58,7 @@ import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.library.durationLabel
 import stream.kleeamp.mobile.player.vis.Visualizer
+import stream.kleeamp.mobile.playback.DurationProbe
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection
 import stream.kleeamp.mobile.chrome.rememberArt
@@ -99,6 +103,27 @@ fun UpNextScreen(
     val app = LocalContext.current.applicationContext as KleeampApp
     val visualizer by app.prefs.visualizer.collectAsState(initial = "spectrum")
     val generation by PlaybackBus.generation.collectAsState()
+    // Every played position, keyed by URL, carries the probed duration the
+    // file itself never told us - channel tracks learn their length here.
+    val progress by app.podcasts.progress.collectAsState(initial = emptyMap())
+    val savedDurations = remember(progress) { progress.mapValues { it.value.durationMs } }
+    val playerState by player.state.collectAsStateWithLifecycle()
+    // Fill unknown queue lengths in the background: the server never sends
+    // durations, so an unplayed channel track reads unknown until something
+    // probes its headers. One fetch per URL, results persist in the progress
+    // table, leaving the screen cancels the rest.
+    LaunchedEffect(upNext) {
+        withContext(Dispatchers.IO) {
+            upNext.filter { s ->
+                s.isTrack && s.durationMs <= 0 && (savedDurations[s.url] ?: 0L) <= 0 &&
+                    (s.url.startsWith("http://") || s.url.startsWith("https://"))
+            }.forEach { s ->
+                ensureActive()
+                val ms = DurationProbe.probeMs(s.url)
+                if (ms > 0) app.podcasts.saveDurationMs(s.url, ms)
+            }
+        }
+    }
     UpNextContent(
         upNext = upNext,
         activeIndex = upNextIndex.takeIf { upNext.getOrNull(it)?.url == current?.url } ?: -1,
@@ -106,6 +131,8 @@ fun UpNextScreen(
         playing = playing,
         visualizer = visualizer,
         generation = generation,
+        savedDurations = savedDurations,
+        liveDurationMs = playerState.durationMs,
         onPlay = { if (player.upNext.value == upNext) onPlay(it) },
         onClear = player::clearUpNext,
         canUndo = canUndo,
@@ -137,6 +164,8 @@ internal fun UpNextContent(
     onUndo: () -> Unit = {},
     visualizer: String = "spectrum",
     generation: Int = 0,
+    savedDurations: Map<String, Long> = emptyMap(),
+    liveDurationMs: Long = 0L,
 ) {
     val p = LocalPalette.current
     val listState = rememberLazyListState()
@@ -193,7 +222,7 @@ internal fun UpNextContent(
         }
 
         if (current != null && activeIndex >= 0) {
-            NowPlayingCard(current, playing, p, visualizer, generation)
+            NowPlayingCard(current, playing, p, visualizer, generation, savedDurations, liveDurationMs)
         }
 
         LazyColumn(
@@ -227,6 +256,12 @@ internal fun UpNextContent(
                     }
                     UpNextRow(
                         s = entry.station,
+                        duration = upNextDuration(
+                            entry.station,
+                            savedDurations,
+                            liveDurationMs,
+                            entry.upNextIndex == activeIndex,
+                        ),
                         dragging = dragging,
                         onPlay = { onPlay(entry.upNextIndex) },
                         onRemove = { onRemove(entry.upNextIndex) },
@@ -269,7 +304,15 @@ internal fun UpNextContent(
 }
 
 @Composable
-private fun NowPlayingCard(s: Station, playing: Boolean, p: KleeampPalette, visualizer: String, generation: Int = 0) {
+private fun NowPlayingCard(
+    s: Station,
+    playing: Boolean,
+    p: KleeampPalette,
+    visualizer: String,
+    generation: Int = 0,
+    savedDurations: Map<String, Long> = emptyMap(),
+    liveDurationMs: Long = 0L,
+) {
     Column(Modifier.fillMaxWidth().background(p.panel)) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 14.dp),
@@ -308,7 +351,11 @@ private fun NowPlayingCard(s: Station, playing: Boolean, p: KleeampPalette, visu
                     )
                 }
                 Mono(
-                    if (s.isTrack) "${sourceSubtitle(s)} · ${upNextDuration(s)}" else sourceSubtitle(s),
+                    if (s.isTrack) {
+                        "${sourceSubtitle(s)} · ${upNextDuration(s, savedDurations, liveDurationMs, isLive = true)}"
+                    } else {
+                        sourceSubtitle(s)
+                    },
                     KleeampType.meta, p.inkTertiary, maxLines = 1,
                 )
             }
@@ -343,6 +390,7 @@ private fun UpNextArtwork(station: Station, modifier: Modifier = Modifier) {
 @Composable
 private fun UpNextRow(
     s: Station,
+    duration: String,
     dragging: Boolean,
     onPlay: () -> Unit,
     onRemove: () -> Unit,
@@ -376,7 +424,7 @@ private fun UpNextRow(
                     LiveBadge(p)
                 } else {
                     Spacer(Modifier.width(12.dp))
-                    Mono(upNextDuration(s), KleeampType.timeSmall, p.inkFaint, maxLines = 1)
+                    Mono(duration, KleeampType.timeSmall, p.inkFaint, maxLines = 1)
                 }
             },
         ) {
@@ -398,8 +446,24 @@ private fun LiveBadge(p: KleeampPalette) {
     }
 }
 
-private fun upNextDuration(s: Station): String =
-    if (s.isTrack && s.durationMs > 0) durationLabel(s.durationMs) else "–:––"
+private fun upNextDuration(
+    s: Station,
+    saved: Map<String, Long> = emptyMap(),
+    liveMs: Long = 0L,
+    isLive: Boolean = false,
+): String {
+    // The file's own length first, then the live probe for what's playing,
+    // then a previous play's saved probe - and last the background fill,
+    // which lands in that same saved map. A track nobody probed yet reads
+    // unknown until its headers answer.
+    val ms = when {
+        s.durationMs > 0 -> s.durationMs
+        isLive && liveMs > 0 -> liveMs
+        (saved[s.url] ?: 0L) > 0 -> saved[s.url] ?: 0L
+        else -> 0L
+    }
+    return if (ms > 0) durationLabel(ms) else "–:––"
+}
 
 private fun sourceSubtitle(s: Station): String = when {
     !s.isTrack -> "live stream"

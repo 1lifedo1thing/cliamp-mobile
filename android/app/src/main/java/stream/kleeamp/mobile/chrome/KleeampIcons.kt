@@ -94,6 +94,13 @@ object KleeampIcons {
         "M14.5 2.5l1.5 1.5-1.5 1.5",
     )
 
+    /** Circular arrow: refetch this list. Spins while the fetch runs. */
+    val Refresh = stroked(
+        16f, 16f, 1.8f,
+        "M13.8 8a5.8 5.8 0 1 1-1.7-4.1",
+        "M13.8 1.4v3.2h-3.2",
+    )
+
     /** Looped arrows: two straight shafts with wedge heads, Shuffle-style. */
     val Repeat = stroked(
         18f, 14f, 1.8f,

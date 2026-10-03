@@ -31,8 +31,12 @@ sealed interface SearchHit {
         override val origin get() = if (fromProviders) "provider" else "radio"
         // Tags are the genre vocabulary of radio, so a station tagged "jazz"
         // surfaces when the query is "jazz" even though its name never says so.
+        // Artist and album ride along for cliamp channel tracks, which carry
+        // both - directory stations leave them blank, so nothing changes there.
         override val haystack get() =
-            (listOf(station.name) + station.tagList).joinToString(" ")
+            (listOf(station.name, station.artist, station.album) + station.tagList)
+                .filter { it.isNotBlank() }
+                .joinToString(" ")
     }
 
     data class Favorite(val station: Station) : SearchHit {

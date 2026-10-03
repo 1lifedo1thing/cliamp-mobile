@@ -68,11 +68,9 @@ import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.radio.DirectoryState
 import stream.kleeamp.mobile.podcasts.EpisodeProgress
 import stream.kleeamp.mobile.podcasts.DownloadQueueItem
-import stream.kleeamp.mobile.podcasts.DownloadState
 import stream.kleeamp.mobile.podcasts.downloadSizeLabel
 import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.podcasts.toStation
-import stream.kleeamp.mobile.podcasts.downloadSizeLabel
 import stream.kleeamp.mobile.servers.ProviderAccount
 import stream.kleeamp.mobile.servers.ProviderCatalog
 import stream.kleeamp.mobile.servers.displayName
@@ -90,7 +88,7 @@ import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
-import stream.kleeamp.mobile.chrome.DownloadBlocks
+import stream.kleeamp.mobile.chrome.LoadingNote
 import stream.kleeamp.mobile.chrome.OverflowButton
 import stream.kleeamp.mobile.chrome.ContextMenuSheet
 import stream.kleeamp.mobile.chrome.DestructiveAction
@@ -553,7 +551,9 @@ private fun SmartPlaylistDetail(
         }
     }
     var query by rememberSaveable(pl.key) { mutableStateOf("") }
-    val shown = remember(visible, query) { visible.matching(query) }
+    // One row per file: a repeated URL (re-downloaded episode, MediaStore
+    // duplicate) used to crash the list on a duplicate key. First wins.
+    val shown = remember(visible, query) { visible.matching(query).distinctBy { it.url } }
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
         // Picker rows scroll with the list, on top of the filter; only the
         // header is fixed.
@@ -600,63 +600,13 @@ private fun SmartPlaylistDetail(
         // The downloading view: every active, queued and failed fetch with
         // its status, ahead of the finished files. Retry and cancel ride
         // the rows; cancel all clears the whole queue.
-        if (pl.kind == SmartKind.Downloads && queue.isNotEmpty()) {
-            item {
-                SectionLabel("downloading — ${queue.size}") {
-                    Mono(
-                        "cancel all",
-                        KleeampType.meta,
-                        p.inkTertiary,
-                        Modifier.microPress(onClick = onCancelAllDownloads),
-                    )
-                }
-            }
-            items(queue, key = { it.url }, contentType = { "download-queue" }) { q ->
-                ListRow(
-                    onClick = null,
-                    verticalPadding = 9.dp,
-                    leading = { SongCover(s = q.station, current = null, playing = false) },
-                    trailing = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            if (q.state is DownloadState.Active) {
-                                DownloadBlocks(q.state.fraction)
-                            }
-                            if (q.state is DownloadState.Failed) {
-                                Mono(
-                                    "retry",
-                                    KleeampType.meta,
-                                    p.accent,
-                                    Modifier.microPress { onRetryDownload(q.station, q.auto) },
-                                )
-                            }
-                            Mono(
-                                "cancel",
-                                KleeampType.meta,
-                                p.inkTertiary,
-                                Modifier.microPress { onCancelDownload(q.url) },
-                            )
-                        }
-                    },
-                ) {
-                    Mono(q.station.name, KleeampType.rowPrimary, p.ink, maxLines = 1)
-                    Mono(
-                        when (val s = q.state) {
-                            is DownloadState.Active ->
-                                if (s.indeterminate) "fetching ${downloadSizeLabel(s.bytesRead)}"
-                                else "fetching ${(s.fraction * 100).toInt()}%"
-                            is DownloadState.Queued -> "queued"
-                            is DownloadState.Failed -> s.reason
-                            is DownloadState.Idle -> ""
-                        },
-                        KleeampType.rowSecondary,
-                        if (q.state is DownloadState.Failed) p.destructiveInk else p.inkTertiary,
-                        maxLines = 1,
-                    )
-                }
-            }
+        if (pl.kind == SmartKind.Downloads) {
+            downloadQueueSection(
+                queue = queue,
+                onRetryDownload = onRetryDownload,
+                onCancelDownload = onCancelDownload,
+                onCancelAllDownloads = onCancelAllDownloads,
+            )
         }
         if (shown.isEmpty()) {
             // Growable lists keep their + on empty too, like playlists do.
@@ -668,23 +618,28 @@ private fun SmartPlaylistDetail(
                 }
             }
             item {
-                Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
-                    Mono(
-                        when {
-                            query.isNotBlank() -> "nothing matches"
-                            pl.kind == SmartKind.Favorites && favScope == FavScope.Local -> "no local favourites yet"
-                            pl.kind == SmartKind.Favorites && favScope == FavScope.Stations ->
-                                "no station favourites yet"
-                            pl.kind == SmartKind.Favorites && favScope == FavScope.Pods -> "no podcast favourites yet"
-                            pl.kind == SmartKind.LocalSongs ->
-                                if (loading) "scanning for songs…" else "no songs on the phone yet"
-                            pl.kind == SmartKind.Downloads ->
-                                if (loading) "scanning for songs…" else "no downloads yet"
-                            pl.kind == SmartKind.Favorites -> "no favourites yet"
-                            else -> "nothing played recently"
-                        },
-                        KleeampType.rowSecondary, p.inkFaint,
-                    )
+                // Scanning wears the spinner; everything else is a plain note.
+                val scanning = query.isBlank() && loading &&
+                    (pl.kind == SmartKind.LocalSongs || pl.kind == SmartKind.Downloads)
+                if (scanning) {
+                    LoadingNote("scanning for songs…")
+                } else {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                        Mono(
+                            when {
+                                query.isNotBlank() -> "nothing matches"
+                                pl.kind == SmartKind.Favorites && favScope == FavScope.Local -> "no local favourites yet"
+                                pl.kind == SmartKind.Favorites && favScope == FavScope.Stations ->
+                                    "no station favourites yet"
+                                pl.kind == SmartKind.Favorites && favScope == FavScope.Pods -> "no podcast favourites yet"
+                                pl.kind == SmartKind.LocalSongs -> "no songs on the phone yet"
+                                pl.kind == SmartKind.Downloads -> "no downloads yet"
+                                pl.kind == SmartKind.Favorites -> "no favourites yet"
+                                else -> "nothing played recently"
+                            },
+                            KleeampType.rowSecondary, p.inkFaint,
+                        )
+                    }
                 }
             }
         } else {

@@ -22,6 +22,9 @@ import kotlinx.serialization.Serializable
 
 @Serializable data class PodcastShowRoute(val podcastId: String)
 
+/** One cliamp radio channel as its track list, by channel id. */
+@Serializable data class CliampChannelRoute(val channelId: String)
+
 @Serializable data object LibraryProviders
 /** Blank [accountId] shows every account with the picker; set locks to one. */
 @Serializable data class LibraryProviderSongs(val accountId: String = "")

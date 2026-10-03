@@ -45,6 +45,8 @@ import stream.kleeamp.mobile.chrome.RetryNote
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
+import stream.kleeamp.mobile.chrome.LoadingNote
+import stream.kleeamp.mobile.chrome.RefreshIcon
 import stream.kleeamp.mobile.chrome.microPress
 import stream.kleeamp.mobile.chrome.OverflowButton
 import stream.kleeamp.mobile.chrome.ContextMenuSheet
@@ -181,7 +183,7 @@ fun PodcastShowScreen(
             // screen a refresh runs silently behind them instead of pushing
             // a row in above and shifting everything when it lands.
             if (state.loading && queue.isEmpty()) {
-                item { EmptyNote("reading the feed…") }
+                item { LoadingNote("reading the feed…") }
             } else if (queue.isEmpty() && state.error == null) {
                 item { EmptyNote("no episodes in this feed") }
             }
@@ -189,11 +191,9 @@ fun PodcastShowScreen(
             if (queue.isNotEmpty()) {
                 item {
                     SectionLabel("episodes — ${queue.size}") {
-                        Mono(
-                            "refresh",
-                            KleeampType.meta,
-                            p.inkTertiary,
-                            Modifier.microPress { vm.onEvent(PodcastShowViewModel.Event.RefreshShow) },
+                        RefreshIcon(
+                            loading = state.loading,
+                            onRefresh = { vm.onEvent(PodcastShowViewModel.Event.RefreshShow) },
                         )
                     }
                 }

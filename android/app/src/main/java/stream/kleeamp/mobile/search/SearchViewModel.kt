@@ -89,7 +89,9 @@ class SearchViewModel(
             query.map { it.trim() }.distinctUntilChanged(),
             filter,
             repository.directory,
-            repository.cliamp,
+            // Channel tracks are whatever the user already opened: the channel
+            // pages load them, search only reads them from memory here.
+            combine(repository.cliamp, repository.cliampChannelTracks) { a, b -> a + b },
             repository.tags,
             ::DirectoryInputs,
         ),

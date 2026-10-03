@@ -50,6 +50,7 @@ import stream.kleeamp.mobile.chrome.ChipDropdown
 import stream.kleeamp.mobile.chrome.ChipOption
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.EmptyNote
+import stream.kleeamp.mobile.chrome.LoadingNote
 import stream.kleeamp.mobile.chrome.GridListToggle
 import stream.kleeamp.mobile.chrome.microPress
 import stream.kleeamp.mobile.chrome.Gutter
@@ -269,7 +270,7 @@ fun PodcastsScreen(
                                 prominent = directory.shows.isEmpty(),
                                 onRetry = { vm.onEvent(PodcastsViewModel.Event.Load(directory.query)) },
                             )
-                            directory.loading -> EmptyNote("loading more…")
+                            directory.loading -> LoadingNote("loading more…")
                             directory.exhausted -> EmptyNote("end of ${directory.query.label}")
                             else -> Spacer(Modifier.height(8.dp))
                         }

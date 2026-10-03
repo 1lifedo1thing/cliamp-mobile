@@ -60,12 +60,14 @@ import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection
 import stream.kleeamp.mobile.chrome.KleeampTabBar
 import stream.kleeamp.mobile.chrome.KleeampTabRail
+import stream.kleeamp.mobile.chrome.DownloadQueueButton
 import stream.kleeamp.mobile.chrome.QueueConfirmHost
 import stream.kleeamp.mobile.player.MiniPlayer
 import stream.kleeamp.mobile.player.NowPlayingSheet
 import stream.kleeamp.mobile.chrome.Tab
 import stream.kleeamp.mobile.search.SearchScreen
 import stream.kleeamp.mobile.library.FavScope
+import stream.kleeamp.mobile.library.DownloadQueueSheet
 import stream.kleeamp.mobile.library.LibraryPlaylistPane
 import stream.kleeamp.mobile.library.LibraryAddToPlaylistPane
 import stream.kleeamp.mobile.servers.LibraryProvidersPane
@@ -83,6 +85,8 @@ import stream.kleeamp.mobile.servers.ProviderWizard as ProviderWizardScreen
 import stream.kleeamp.mobile.settings.SettingsScreen
 import stream.kleeamp.mobile.radio.StationsScreen
 import stream.kleeamp.mobile.radio.StationsViewModel
+import stream.kleeamp.mobile.radio.CliampChannelScreen
+import stream.kleeamp.mobile.radio.CliampChannelViewModel
 import stream.kleeamp.mobile.podcasts.PodcastsViewModel
 import stream.kleeamp.mobile.podcasts.PodcastShowViewModel
 import stream.kleeamp.mobile.library.LocalViewModel
@@ -166,6 +170,9 @@ fun KleeampRoot(
     // backstack entry: the list stays composed underneath, so it shows
     // through the scrim instead of an empty page.
     var playerOpen by rememberSaveable { mutableStateOf(false) }
+    // The downloading queue is a sheet the same way: the floating fetch
+    // key opens it wherever the user is, and dismiss returns in place.
+    var downloadQueueOpen by rememberSaveable { mutableStateOf(false) }
     // Up Next and Scope stack over whatever opened them and peel back
     // to exactly that: sheets underneath stay open in place, never close
     // to reopen.
@@ -209,6 +216,17 @@ fun KleeampRoot(
     val play = PlayFromList { s, from ->
         player.play(s, from)
         repository.reportPlay(s)
+    }
+    // A cliamp channel opens its track list wherever it is tapped -
+    // favourites, recents, playlists - instead of playing one stream.
+    // Tracks never match: their urls are files, never the channel stream.
+    val cliampChannels by repository.cliampChannels.collectAsState()
+    val playOrOpenChannel: (Station, List<Station>) -> Unit = { s, from ->
+        val channel = cliampChannels.firstOrNull { c ->
+            c.id == s.slug && c.hasTracks && c.stream == s.url
+        }
+        if (channel != null) navController.navigate(CliampChannelRoute(channel.id))
+        else play(s, from)
     }
 
     // Move to a tab. Anything sitting above Home - a pane, Settings, Search -
@@ -397,6 +415,9 @@ fun KleeampRoot(
                                 },
                                 focusDirectory = focusDirectory,
                                 onDirectoryFocusConsumed = { focusDirectory = false },
+                                onOpenChannel = { s ->
+                                    navController.navigate(CliampChannelRoute(s.slug))
+                                },
                             )
                             Tab.Pods -> PodcastsScreen(
                                 vm = appViewModel { app ->
@@ -430,6 +451,25 @@ fun KleeampRoot(
             }
 
             // -- Tab panes (sit above the pager, keep the chrome) --
+            composable<CliampChannelRoute> { backStackEntry ->
+                val channelId = backStackEntry.toRoute<CliampChannelRoute>().channelId
+                Box(contentModifier) {
+                    CliampChannelScreen(
+                        vm = appViewModel { app ->
+                            CliampChannelViewModel(channelId, app.radio, app.prefs)
+                        },
+                        current = station,
+                        playing = playerState.playing,
+                        onBack = { navController.popBackStack() },
+                        onPlay = { s, from -> play(s, from) },
+                        onAddToUpNext = { player.addToUpNext(it) },
+                        onPlayNext = { player.playNext(it) },
+                        onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
+                        onOpenSearch = { navController.navigate(Search) },
+                        onOpenSettings = { navController.navigate(Settings) },
+                    )
+                }
+            }
             composable<PodcastShowRoute> {
                 Box(contentModifier) {
                     PodcastShowScreen(
@@ -505,7 +545,7 @@ fun KleeampRoot(
                         kindName = kind,
                         current = station,
                         playing = playerState.playing,
-                        onPlay = { s, from -> play(s, from) },
+                        onPlay = playOrOpenChannel,
                         onAddToQueue = { player.addToUpNext(it) },
                         favScope = favScope,
                         onFavScopeChange = { favScope = it },
@@ -536,7 +576,7 @@ fun KleeampRoot(
                         slug = slug,
                         current = station,
                         playing = playerState.playing,
-                        onPlay = { s, from -> play(s, from) },
+                        onPlay = playOrOpenChannel,
                         onAddToQueue = { player.addToUpNext(it) },
                         onBack = { navController.popBackStack() },
                         onOpenSearch = { navController.navigate(Search) },
@@ -753,6 +793,28 @@ fun KleeampRoot(
         ) {
             QueueConfirmHost()
         }
+
+        // The floating fetch key: a plain circle at the right edge above
+        // the chrome while anything is downloading. It overlays instead of
+        // measuring into the chrome, so tabs and pages never shift when it
+        // pops in; the queue sheet opens over whatever is underneath.
+        app?.downloads?.let { downloads ->
+            val queue by downloads.queue.collectAsState()
+            DownloadQueueButton(
+                count = queue.size,
+                onClick = { downloadQueueOpen = true },
+                modifier = Modifier.align(Alignment.BottomEnd)
+                    .padding(bottom = chromeBottom + 6.dp, end = contentEnd + 16.dp),
+            )
+        }
+        if (downloadQueueOpen) {
+            app?.downloads?.let { downloads ->
+                DownloadQueueSheet(
+                    downloads = downloads,
+                    onDismiss = { downloadQueueOpen = false },
+                )
+            }
+        }
     }
 }
 
@@ -860,6 +922,7 @@ private fun StationsTab(
     onOpenSettings: () -> Unit,
     focusDirectory: Boolean,
     onDirectoryFocusConsumed: () -> Unit,
+    onOpenChannel: (Station) -> Unit = {},
 ) {
     val favorites by prefs.favorites.collectAsState(initial = emptyList())
     StationsScreen(
@@ -874,5 +937,6 @@ private fun StationsTab(
         onOpenSettings = onOpenSettings,
         focusDirectory = focusDirectory,
         onDirectoryFocusConsumed = onDirectoryFocusConsumed,
+        onOpenChannel = onOpenChannel,
     )
 }

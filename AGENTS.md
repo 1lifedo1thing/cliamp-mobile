@@ -1,12 +1,12 @@
-# OpenCode
-
-This repo is the **Android app**. The player UI lives in **cliamp**, a separate Go project.
+This repo holds the clients. The player UI source of truth lives in **cliamp**, a separate Go project.
 
 ## Source map
 
 | Tree                                                | Role                                       |
 | --------------------------------------------------- | ------------------------------------------ |
-| this repository                                     | Kotlin / Compose Android client            |
+| `android/`                                          | Kotlin / Compose Android client            |
+| `desktop/`                                          | Rust desktop client                        |
+| `ios/`                                              | iOS client                                 |
 | [bjarneo/cliamp](https://github.com/bjarneo/cliamp) | TUI source of truth (Bubbletea, Lip Gloss) |
 
 Find cliamp without machine-specific paths:
@@ -33,16 +33,31 @@ One local skill owns product work. Everything else is generic language guidance.
 
 `using-chrisbanes-skills`, `compose-state-and-effects`, `compose-component-design`, `compose-performance`, `compose-animations`, `compose-focus-navigation`, `compose-ui-testing-patterns`, `kotlin-api-design`, `kotlin-concurrency-and-flow`, `kotlin-control-flow`, `gradle-run`
 
-**Go** — cliamp is Go. Load only when reading that source:
+**Go** — cliamp is Go. Load when a question needs checking cliamp (TUI):
 
 `go-skills-router`, `go-coding-standards`, `go-cli`, `go-architecture-review`, `go-concurrency-review`
+
+**Rust / Desktop** (`.agents/skills/`) — the `desktop/` client is Rust 2024:
+
+`rust-desktop`, `gpui-kit`, `rust-skills`
 
 Do not add git plugin entries to `opencode.jsonc`.
 
 ## Routing
 
-**Android cleanup**  
+**Android work**  
 Load `android-kotlin-modernize` plus the Kotlin/Compose set. Do not edit cliamp.
+
+**cliamp (TUI) questions**  
+Any question that needs checking cliamp loads the Go set first.
+
+**Desktop work**  
+Load the Rust/Desktop set (`rust-desktop`, `gpui-kit`, `rust-skills`).
+
+**Cross-folder info**  
+Working in one area but needing info from another loads that area's
+skills too: e.g. desktop work that references the Android client loads
+the Android set, Android work that checks TUI behavior loads the Go set.
 
 ## Commits
 

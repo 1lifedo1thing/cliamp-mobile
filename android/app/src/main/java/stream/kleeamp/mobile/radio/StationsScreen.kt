@@ -61,6 +61,7 @@ import stream.kleeamp.mobile.chrome.EmptyNote
 import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.ListRow
+import stream.kleeamp.mobile.chrome.LoadingNote
 import stream.kleeamp.mobile.chrome.OverflowButton
 import stream.kleeamp.mobile.chrome.ContextMenuSheet
 import stream.kleeamp.mobile.chrome.DestructiveAction
@@ -73,7 +74,7 @@ import stream.kleeamp.mobile.chrome.RetryNote
 
 import stream.kleeamp.mobile.chrome.MainLayout
 import stream.kleeamp.mobile.chrome.SectionLabel
-import stream.kleeamp.mobile.chrome.scrollToTop
+import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
@@ -96,6 +97,8 @@ fun StationsScreen(
     onOpenSettings: () -> Unit = {},
     focusDirectory: Boolean = false,
     onDirectoryFocusConsumed: () -> Unit = {},
+    /** A cliamp channel with songs opens as its track list instead of playing. */
+    onOpenChannel: (Station) -> Unit = {},
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -104,6 +107,56 @@ fun StationsScreen(
     val ui by vm.state.collectAsState()
     val cliamp = ui.cliamp
     val cliampError = ui.cliampError
+    // Live listener figures from the same documents cliamp.stream renders,
+    // fetched once per screen lifetime. Informational only: nothing here
+    // navigates, scrolls or focuses anywhere.
+    val stats by vm.cliampStats.collectAsState()
+    LaunchedEffect(Unit) {
+        if (stats == null) vm.onEvent(StationsViewModel.Event.RefreshStats)
+    }
+    // The channel currently on air: a live stream or one of its track-list
+    // files. Tracks carry their channel in slug, so the group row lights up
+    // together with the track itself.
+    val liveSlug = if (playing) {
+        current?.takeIf { it.source == StationSource.Cliamp }?.slug?.takeIf { it.isNotBlank() }
+    } else {
+        null
+    }
+    // Optimistic counts: the server only learns about this listener on the
+    // next poll, so the app adds one immediately and drops it on stop or
+    // switch. Null while nothing has landed yet; zero reads as quiet.
+    fun boostedCount(slug: String): Int? {
+        if (stats == null && slug != liveSlug) return null
+        return (stats?.listenersFor(slug) ?: 0) + (if (slug == liveSlug) 1 else 0)
+    }
+    // Optimistic location: the device country gains one in the ranking and
+    // on the globe, or joins them when absent. Leaving clears it back to
+    // server truth everywhere at once.
+    val liveCountry = if (liveSlug != null) deviceCountryCode() else null
+    val serverStats = stats
+    val viewStats = remember(serverStats, liveSlug, liveCountry) {
+        if (serverStats != null) {
+            serverStats.copy(
+                activeNow = serverStats.activeNow + (if (liveSlug != null) 1 else 0),
+                countries = boostCountryRows(serverStats.countries, liveCountry),
+            )
+        } else if (liveSlug != null) {
+            CliampStats(
+                activeNow = 1,
+                peak = 0,
+                countries = boostCountryRows(emptyList(), liveCountry),
+                perStation = mapOf(liveSlug to 1),
+                isLive = true,
+            )
+        } else {
+            null
+        }
+    }
+    // Channels with songs open as track lists; the rest play the stream.
+    // Matched by slug, which is the channel id on both sides.
+    val channelBySlug = remember(ui.cliampChannels) {
+        ui.cliampChannels.associateBy { it.id }
+    }
     val custom = ui.custom
     val directory = ui.directory
     val dirStats = ui.directoryStats
@@ -193,7 +246,10 @@ fun StationsScreen(
         title = "Stations",
         onOpenSearch = onOpenSearch,
         onOpenSettings = onOpenSettings,
-        onTitleClick = { scope.scrollToTop(listState) },
+        // Straight to the hero in one landing-exact flight: the pixel
+        // estimator undershoots past the tall globe card and then snaps,
+        // which reads as scroll-then-jump.
+        onTitleClick = { scope.launch { listState.animateScrollToItem(0) } },
         chips = {
             Source.entries.forEach { s ->
                 Chip(s.label, source == s, onClick = { source = s })
@@ -230,10 +286,24 @@ fun StationsScreen(
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
         ) {
 
+            // Page hero: the live listener globe sits above everything else,
+            // unfiltered by the source chips below it. The setting toggles
+            // the whole section - globe and top countries together.
+            if (ui.listenerGlobe) {
+                item {
+                    ListenerAnalytics(
+                        stats = viewStats,
+                        hintSeen = ui.globeHintSeen,
+                        onFirstSpin = { vm.onEvent(StationsViewModel.Event.MarkGlobeHintSeen) },
+                        onRefresh = { vm.onEvent(StationsViewModel.Event.RefreshStats) },
+                    )
+                }
+            }
+
             if (source == Source.All || source == Source.Cliamp) {
                 item {
                     SectionLabel("cliamp radio — ${cliamp.size}", gutter = 8.dp) {
-                        CliampStatsText(vm)
+                        CliampStatsText(vm, extra = if (liveSlug != null) 1 else 0)
                     }
                 }
                 if (cliampError != null) {
@@ -248,11 +318,21 @@ fun StationsScreen(
                         cliamp,
                         key = { "cl:${it.url}" },
                     ) { s ->
+                        val channel = channelBySlug[s.slug]
+                        // A channel stays lit while any of its tracks plays,
+                        // so the row always shows where the music belongs.
+                        val rowActive = current?.url == s.url ||
+                            (current?.isChannelTrack == true && current.slug == s.slug)
                         StationRow(
                             station = s,
-                            active = current?.url == s.url,
-                            playing = playing && current?.url == s.url,
-                            onPlay = { onPlay(s, cliamp) },
+                            trackCount = if (channel?.hasTracks == true) channel.trackCount else 0,
+                            listenerCount = boostedCount(s.slug),
+                            active = rowActive,
+                            playing = playing && rowActive,
+                            onPlay = {
+                                if (channel?.hasTracks == true) onOpenChannel(s)
+                                else onPlay(s, cliamp)
+                            },
                             onOpenMenu = { menuFor = s },
                         )
                     }
@@ -395,7 +475,7 @@ fun StationsScreen(
                                 )
                             },
                         )
-                        directory.loading -> EmptyNote("loading more…")
+                        directory.loading -> LoadingNote("loading more…")
                         directory.exhausted -> EmptyNote("end of ${directory.query.label}")
                         else -> Spacer(Modifier.height(8.dp))
                     }
@@ -411,9 +491,10 @@ fun StationsScreen(
         menuFor?.let { s ->
             val fav = favorites.any { it.url == s.url }
             val isCustom = custom.any { it.url == s.url }
+            val menuTracks = channelBySlug[s.slug]?.takeIf { it.hasTracks }?.trackCount ?: 0
             ContextMenuSheet(
                 title = s.name,
-                subtitle = stationMenuSubtitle(s),
+                subtitle = stationMenuSubtitle(s, menuTracks),
                 art = { StationMenuArt(s) },
                 actions = menuActions(
                     MenuSubject(
@@ -441,12 +522,16 @@ fun StationsScreen(
 }
 
 /** The sheet header line under the title: same words the row itself wears. */
-private fun stationMenuSubtitle(s: Station): String {
+private fun stationMenuSubtitle(s: Station, trackCount: Int = 0): String {
     if (s.source == StationSource.Custom) return "custom station"
     return buildList {
-        if (s.source == StationSource.Cliamp) add("cliamp radio")
-        s.meta.takeIf { it.isNotBlank() }?.let { add(it) }
-        s.tagList.take(2).forEach { add(it) }
+        if (trackCount > 0) add("$trackCount tracks")
+        else {
+            if (s.source != StationSource.Cliamp) {
+                s.meta.takeIf { it.isNotBlank() }?.let { add(it) }
+            }
+            s.tagList.take(2).forEach { add(it) }
+        }
     }.joinToString(" · ")
 }
 
@@ -457,6 +542,14 @@ private fun StationRow(
     playing: Boolean,
     onPlay: () -> Unit,
     onOpenMenu: () -> Unit,
+    /** Song count when this channel opens as a track list; 0 plays the stream. */
+    trackCount: Int = 0,
+    /**
+     * Live listeners on this channel, or null before anything lands.
+     * Rendered in the trailing slot, vertically centered: no click handler,
+     * no button semantics, no navigation. Peak is never shown in rows.
+     */
+    listenerCount: Int? = null,
 ) {
     val p = LocalPalette.current
     ListRow(
@@ -468,6 +561,18 @@ private fun StationRow(
         leading = { StationThumb(station, active, playing) },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Live count in the trailing slot, vertically centered like
+                // directory vote counts. Plain text: no handler, no button
+                // semantics, no navigation. Peak is never shown in rows.
+                if (listenerCount != null) {
+                    Mono(
+                        if (listenerCount > 0) "● $listenerCount listening now"
+                        else "○ quiet right now",
+                        KleeampType.meta,
+                        if (listenerCount > 0) p.accent else p.inkFaint,
+                        maxLines = 1,
+                    )
+                }
                 if (station.votes > 0) {
                     Mono(compact(station.votes), KleeampType.meta, p.inkFaint)
                 }
@@ -483,9 +588,16 @@ private fun StationRow(
         )
         Mono(
             buildList {
-                if (station.source == StationSource.Cliamp) add("cliamp radio")
-                station.meta.takeIf { it.isNotBlank() }?.let { add(it) }
-                station.tagList.take(2).forEach { add(it) }
+                // A channel with songs is just its count - the section
+                // header already says cliamp radio, and the codec adds
+                // nothing. Other rows keep their meta line.
+                if (trackCount > 0) add("$trackCount tracks")
+                else {
+                    if (station.source != StationSource.Cliamp) {
+                        station.meta.takeIf { it.isNotBlank() }?.let { add(it) }
+                    }
+                    station.tagList.take(2).forEach { add(it) }
+                }
             }.joinToString(" · "),
             KleeampType.rowSecondary,
             p.inkTertiary,
@@ -550,25 +662,22 @@ private fun StationThumb(station: Station, active: Boolean, playing: Boolean) {
 
 /**
  * Live "who's listening" line at the right end of the cliamp header, from
- * the same statistics document cliamp.stream renders. Fetches once per
- * screen lifetime; tapping refreshes. Hidden until the first fetch lands.
+ * the same statistics document cliamp.stream renders, plus this device's
+ * own optimistic listener. Informational only: no tap handler, and peak is
+ * never shown in rows. Hidden before anything lands; quiet at zero.
  */
 @Composable
-private fun CliampStatsText(vm: StationsViewModel) {
+private fun CliampStatsText(vm: StationsViewModel, extra: Int = 0) {
     val p = LocalPalette.current
     val stats by vm.cliampStats.collectAsState()
-    LaunchedEffect(Unit) {
-        if (stats == null) vm.onEvent(StationsViewModel.Event.RefreshStats)
-    }
-    stats?.let {
-        Mono(
-            "${it.activeNow} listening now · peak ${it.peak}",
-            KleeampType.meta,
-            p.inkFaint,
-            Modifier.microPress { vm.onEvent(StationsViewModel.Event.RefreshStats) },
-            maxLines = 1,
-        )
-    }
+    val total = (stats?.activeNow ?: 0) + extra
+    if (stats == null && extra == 0) return
+    Mono(
+        if (total > 0) "$total listening now" else "○ quiet right now",
+        KleeampType.meta,
+        p.inkFaint,
+        maxLines = 1,
+    )
 }
 
 /** A hand-added station: name plus stream URL, playable like anything else. */
