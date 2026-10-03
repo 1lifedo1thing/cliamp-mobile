@@ -48,4 +48,4 @@ Queue policy, palette parsing, and reconnect backoff are `#[test]` in `core` / `
 - `block_on` on the UI thread.
 - Clone a `String` to satisfy the borrow checker when a `&str` would do, except across a thread boundary.
 - Log a token, password, or private key.
-- Vendor kleeamp Kotlin. Reimplement from the design docs.
+- Vendor kleeamp Kotlin. Reimplement from the Android files; `android/` is the behavior spec.
