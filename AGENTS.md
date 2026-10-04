@@ -53,6 +53,7 @@ Any question that needs checking cliamp loads the Go set first.
 
 **Desktop work**  
 Load the Rust/Desktop set (`rust-desktop`, `gpui-kit`, `rust-skills`).
+`gpui-kit` is the UI toolkit.
 
 **Cross-folder info**  
 Working in one area but needing info from another loads that area's
