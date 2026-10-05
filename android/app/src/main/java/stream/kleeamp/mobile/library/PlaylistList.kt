@@ -253,7 +253,23 @@ private fun PlaylistRow(
         onClick = { onOpen(pl) },
         verticalPadding = 9.dp,
         leading = {
-            PlaylistGlyph(KleeampIcons.ListShort, pl.station.name)
+            // A set cover paints here; coverless playlists keep the static
+            // glyph. The thumbnail resolves from memory on the first frame,
+            // so rows stay instant like before.
+            val thumb = rememberStationThumbnail(pl.station)
+            if (thumb != null) {
+                Box(
+                    Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(KleeampShape.small))
+                        .border(1.dp, p.frameBorder, RoundedCornerShape(KleeampShape.small)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Image(thumb, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                }
+            } else {
+                PlaylistGlyph(KleeampIcons.ListShort, pl.station.name)
+            }
         },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
