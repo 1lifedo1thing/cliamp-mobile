@@ -80,6 +80,8 @@ class KleeampApp : Application() {
             scrobbleTick = { station, playing, durationMs, streamTitle ->
                 scrobbler.onTick(station, playing, durationMs, streamTitle)
             },
+            autoResume = prefs.autoResume,
+            resumeLocal = prefs.resumeLocal,
         )
 
     /** Delete-after-listening for a naturally finished episode, per scope. */

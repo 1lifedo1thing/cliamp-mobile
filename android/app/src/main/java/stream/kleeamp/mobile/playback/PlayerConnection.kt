@@ -19,7 +19,9 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -59,6 +61,9 @@ class PlayerConnection(
     private val progressSink: (suspend (Station, Long, Long) -> Unit)? = null,
     /** Receives (station, playing, duration, stream title) twice a second for scrobbling. */
     private val scrobbleTick: ((Station?, Boolean, Long, String) -> Unit)? = null,
+    /** Master resume switch and local-files opt-in, collected below. */
+    autoResume: Flow<Boolean> = flowOf(false),
+    resumeLocal: Flow<Boolean> = flowOf(false),
 ) {
     private var controller: MediaController? = null
 
@@ -148,9 +153,17 @@ class PlayerConnection(
         sync()
     }
 
+    /** Whether radio channel tracks resume; podcasts and provider tracks always do. */
+    private val _autoResume = MutableStateFlow(false)
+
     /** Whether local files resume (podcasts and provider tracks always do). */
     private val _resumeLocal = MutableStateFlow(false)
     private var pollJob: Job? = null
+
+    init {
+        scope.launch { autoResume.collect { _autoResume.value = it } }
+        scope.launch { resumeLocal.collect { _resumeLocal.value = it } }
+    }
 
     /** The list prev/next walks. Set whenever the user plays from a list. */
 
@@ -202,7 +215,8 @@ class PlayerConnection(
     /** Progress is writable only while a resumable track is audibly playing. */
     private fun shouldWriteProgress(playingNow: Station, playing: Boolean): Boolean =
         playingNow.isTrack && playing &&
-            (playingNow.source != StationSource.Local || _resumeLocal.value)
+            (playingNow.source != StationSource.Local || _resumeLocal.value) &&
+            (!playingNow.isChannelTrack || _autoResume.value)
 
     // Best-effort reconciliation: any failure is logged, never thrown, so the
     // hot poller survives unknown player states. Cancellation still propagates.
@@ -296,9 +310,11 @@ class PlayerConnection(
     }
     private suspend fun resumeAt(station: Station): Long {
         if (!station.isTrack) return 0L
-        // Local files only resume when the user asked them to; podcasts and
-        // provider tracks always do.
+        // Local files only resume when the user asked them to, radio channel
+        // tracks only when auto-resume is on; podcasts and provider tracks
+        // always do.
         if (station.source == StationSource.Local && !_resumeLocal.value) return 0L
+        if (station.isChannelTrack && !_autoResume.value) return 0L
         return resumeLookup?.invoke(station) ?: 0L
     }
 
