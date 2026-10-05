@@ -60,6 +60,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import stream.kleeamp.mobile.art.LocalArt
+import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.radio.RadioRepository
@@ -81,6 +82,7 @@ import stream.kleeamp.mobile.chrome.BackChevron
 import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.ChipDropdown
 import stream.kleeamp.mobile.chrome.ChipOption
+import stream.kleeamp.mobile.chrome.CollectionHeader
 import stream.kleeamp.mobile.chrome.FilterRow
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.KleeampTextField
@@ -555,6 +557,21 @@ private fun SmartPlaylistDetail(
     // duplicate) used to crash the list on a duplicate key. First wins.
     val shown = remember(visible, query) { visible.matching(query).distinctBy { it.url } }
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
+        item {
+            CollectionHeader(
+                title = pl.label,
+                meta = if (members.isEmpty()) "" else "${members.size} items",
+                art = {
+                    SeedPlate(
+                        key = pl.key,
+                        name = pl.label,
+                        icon = smartKindIcon(pl.kind),
+                        modifier = Modifier.fillMaxSize(),
+                        radius = KleeampShape.small,
+                    )
+                },
+            )
+        }
         // Picker rows scroll with the list, on top of the filter; only the
         // header is fixed.
         if (isFav) {

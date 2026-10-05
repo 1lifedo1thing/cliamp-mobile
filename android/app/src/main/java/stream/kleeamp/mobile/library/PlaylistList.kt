@@ -312,7 +312,7 @@ internal fun PlaylistGlyph(icon: ImageVector, contentDescription: String?) {
 }
 
 /** The smart playlist's identifying glyph. */
-private fun smartKindIcon(kind: SmartKind): ImageVector = when (kind) {
+internal fun smartKindIcon(kind: SmartKind): ImageVector = when (kind) {
     SmartKind.LocalSongs -> KleeampIcons.MusicNote
     SmartKind.Downloads -> KleeampIcons.Download
     SmartKind.Favorites -> KleeampIcons.Heart

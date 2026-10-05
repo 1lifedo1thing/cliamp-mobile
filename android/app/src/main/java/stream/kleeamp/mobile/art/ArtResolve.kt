@@ -33,6 +33,11 @@ object ArtResolve {
                 ?: LocalArt.bitmapForSmall(station.cover, resolver)
                 ?: station.localDir()?.let { LocalArt.folderSmall(it, resolver) }
         station.cover.startsWith("http") -> StationArtSource.bitmapForKnownSmall(station)
+        station.cover.isNotBlank() ->
+            // A picked file (a playlist cover): read it straight off the
+            // provider instead of scraping a homepage that does not exist.
+            LocalArt.bitmapForSmall(station.cover, resolver)
+                ?: StationArtSource.bitmapForSmall(station)
         else -> StationArtSource.bitmapForSmall(station)
     }
 
@@ -54,6 +59,9 @@ object ArtResolve {
             } else {
                 StationArtSource.bitmapForUrl(station.cover)
             }
+        station.cover.isNotBlank() ->
+            LocalArt.bitmapFor(station.cover, resolver)
+                ?: StationArtSource.bitmapFor(station)
         else -> StationArtSource.bitmapFor(station)
     }
 
@@ -81,7 +89,7 @@ object ArtResolve {
                 ?: station.localDir()?.let { LocalArt.cachedFolder(it) }
         station.cover.startsWith("http") ->
             StationArtSource.cachedUrl(station.cover) ?: StationArtSource.cached(station)
-        else -> StationArtSource.cached(station)
+        else -> LocalArt.cached(station.cover) ?: StationArtSource.cached(station)
     }
 
     /**

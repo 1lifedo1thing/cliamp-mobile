@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,10 +32,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.art.SeedPlate
+import stream.kleeamp.mobile.chrome.CollectionHeader
 import stream.kleeamp.mobile.chrome.ContextMenuSheet
 import stream.kleeamp.mobile.chrome.EmptyNote
 import stream.kleeamp.mobile.chrome.FilterRow
-import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.ListRow
 import stream.kleeamp.mobile.chrome.LoadingNote
@@ -115,8 +114,28 @@ fun CliampChannelScreen(
         onBack = onBack,
     ) {
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
-            item {
-                ChannelHeader(channel = channel)
+            channel?.let { ch ->
+                item {
+                    CollectionHeader(
+                        title = ch.name,
+                        meta = buildList {
+                            if (ch.trackCount > 0) add("${ch.trackCount} tracks")
+                            if (ch.genre.isNotBlank()) add(ch.genre.lowercase())
+                        }.joinToString(" · "),
+                        description = ch.description,
+                        art = {
+                            // Channels carry no artwork of their own, so the
+                            // header wears the same generated plate a
+                            // coverless track does.
+                            SeedPlate(
+                                key = ch.id,
+                                name = ch.name,
+                                modifier = Modifier.fillMaxSize(),
+                                radius = KleeampShape.small,
+                            )
+                        },
+                    )
+                }
             }
 
             ui.error?.let { message ->
@@ -186,44 +205,6 @@ fun CliampChannelScreen(
                 ),
                 onDismiss = { menuFor = null },
             )
-        }
-    }
-}
-
-@Composable
-private fun ChannelHeader(channel: CliampChannels.Channel?) {
-    val p = LocalPalette.current
-    if (channel == null) return
-    Column {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            // Channels carry no artwork of their own, so the header wears
-            // the same generated plate a coverless track does.
-            SeedPlate(
-                key = channel.id,
-                name = channel.name,
-                modifier = Modifier
-                    .size(140.dp)
-                    .border(1.dp, p.frameBorder, RoundedCornerShape(KleeampShape.small)),
-                radius = KleeampShape.small,
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Mono(channel.name, KleeampType.rowPrimaryMedium, p.ink, maxLines = 2)
-                val meta = buildList {
-                    if (channel.trackCount > 0) add("${channel.trackCount} tracks")
-                    if (channel.genre.isNotBlank()) add(channel.genre.lowercase())
-                }.joinToString(" · ")
-                if (meta.isNotBlank()) {
-                    Mono(meta, KleeampType.rowSecondary, p.inkSecondary, maxLines = 1)
-                }
-            }
-        }
-        if (channel.description.isNotBlank()) {
-            Box(Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, bottom = 14.dp)) {
-                Mono(channel.description, KleeampType.rowSecondary, p.inkTertiary, maxLines = 4)
-            }
         }
     }
 }
