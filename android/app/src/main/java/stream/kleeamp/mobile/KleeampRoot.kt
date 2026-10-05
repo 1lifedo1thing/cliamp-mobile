@@ -187,6 +187,7 @@ fun KleeampRoot(
     val station by PlaybackBus.station.collectAsState()
     val streamTitle by PlaybackBus.streamTitle.collectAsState()
     val reconnect by PlaybackBus.reconnectAttempt.collectAsState()
+    val shuffled by player.shuffle.collectAsState(initial = false)
 
     // The player's fallback queue follows history without subscribing
     // composition to it: a collect in scope, never a State read in the body.
@@ -467,6 +468,8 @@ fun KleeampRoot(
                         onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenSettings = { navController.navigate(Settings) },
+                        shuffled = shuffled,
+                        onToggleShuffle = { player.toggleShuffle() },
                     )
                 }
             }
@@ -485,6 +488,8 @@ fun KleeampRoot(
                         onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenSettings = { navController.navigate(Settings) },
+                        shuffled = shuffled,
+                        onToggleShuffle = { player.toggleShuffle() },
                     )
                 }
             }
@@ -555,6 +560,8 @@ fun KleeampRoot(
                         onOpenSettings = { navController.navigate(Settings) },
                         progress = progress,
                         onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
+                        shuffled = shuffled,
+                        onToggleShuffle = { player.toggleShuffle() },
                     )
                 }
             }
@@ -584,6 +591,8 @@ fun KleeampRoot(
                         onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
                         onInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
                         startAdding = route.pickSongs,
+                        shuffled = shuffled,
+                        onToggleShuffle = { player.toggleShuffle() },
                     )
                 }
             }

@@ -84,6 +84,7 @@ import stream.kleeamp.mobile.chrome.BackChevron
 import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.ChipDropdown
 import stream.kleeamp.mobile.chrome.ChipOption
+import stream.kleeamp.mobile.chrome.CollectionActions
 import stream.kleeamp.mobile.chrome.CollectionHeader
 import stream.kleeamp.mobile.chrome.FilterRow
 import stream.kleeamp.mobile.chrome.KleeampIcons
@@ -131,6 +132,8 @@ fun LibraryPlaylistPane(
     onInfo: ((Station) -> Unit)? = null,
     /** True when opened from a playlist row's add menu: lands in the song picker. */
     startAdding: Boolean = false,
+    shuffled: Boolean = false,
+    onToggleShuffle: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -200,6 +203,8 @@ fun LibraryPlaylistPane(
                         onOpenMenu = { menuFor = it },
                         adding = adding,
                         onBeginAdd = { adding = true },
+                        shuffled = shuffled,
+                        onToggleShuffle = onToggleShuffle,
                     )
                 }
 
@@ -269,6 +274,8 @@ private fun PlaylistDetailShown(
     adding: Boolean,
     onBeginAdd: () -> Unit = {},
     onOpenMenu: (Station) -> Unit = {},
+    shuffled: Boolean = false,
+    onToggleShuffle: () -> Unit = {},
 ) {
     val p = LocalPalette.current
 
@@ -295,6 +302,15 @@ private fun PlaylistDetailShown(
             CollectionHeader(
                 title = playlist.station.name,
                 meta = "${members.size} songs",
+                actions = {
+                    if (visible.isNotEmpty()) {
+                        CollectionActions(
+                            shuffled = shuffled,
+                            onPlayAll = { visible.firstOrNull()?.let { onPlay(it, visible) } },
+                            onToggleShuffle = onToggleShuffle,
+                        )
+                    }
+                },
                 art = {
                     if (cover != null) {
                         Image(cover, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)

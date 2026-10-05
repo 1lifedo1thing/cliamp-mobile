@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.art.SeedPlate
+import stream.kleeamp.mobile.chrome.CollectionActions
 import stream.kleeamp.mobile.chrome.CollectionHeader
 import stream.kleeamp.mobile.chrome.ContextMenuSheet
 import stream.kleeamp.mobile.chrome.EmptyNote
@@ -76,6 +77,8 @@ fun CliampChannelScreen(
     onAddToPlaylist: (Station) -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    shuffled: Boolean = false,
+    onToggleShuffle: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -123,6 +126,15 @@ fun CliampChannelScreen(
                             if (ch.genre.isNotBlank()) add(ch.genre.lowercase())
                         }.joinToString(" · "),
                         description = ch.description,
+                        actions = {
+                            if (shown.isNotEmpty()) {
+                                CollectionActions(
+                                    shuffled = shuffled,
+                                    onPlayAll = { shown.firstOrNull()?.let { onPlay(it, shown) } },
+                                    onToggleShuffle = onToggleShuffle,
+                                )
+                            }
+                        },
                         art = {
                             // Channels carry no artwork of their own, so the
                             // header wears the same generated plate a

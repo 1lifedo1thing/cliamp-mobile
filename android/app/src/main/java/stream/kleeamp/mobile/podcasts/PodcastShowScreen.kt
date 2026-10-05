@@ -56,6 +56,7 @@ import stream.kleeamp.mobile.chrome.StationMenuArt
 import stream.kleeamp.mobile.chrome.menuActions
 import stream.kleeamp.mobile.chrome.MainLayout
 import stream.kleeamp.mobile.chrome.SectionLabel
+import stream.kleeamp.mobile.chrome.ShuffleAction
 import stream.kleeamp.mobile.chrome.scrollToTop
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
@@ -86,6 +87,8 @@ fun PodcastShowScreen(
     onAddToPlaylist: (Station) -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    shuffled: Boolean = false,
+    onToggleShuffle: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -143,6 +146,8 @@ fun PodcastShowScreen(
                     onToggleSubscribe = {
                         show?.let { s -> vm.onEvent(PodcastShowViewModel.Event.ToggleSubscription(s)) }
                     },
+                    shuffled = shuffled,
+                    onToggleShuffle = onToggleShuffle,
                 )
             }
 
@@ -276,6 +281,8 @@ private fun ShowHeader(
     show: PodcastShow?,
     subscribed: Boolean,
     onToggleSubscribe: () -> Unit,
+    shuffled: Boolean = false,
+    onToggleShuffle: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     if (show == null) return
@@ -314,11 +321,20 @@ private fun ShowHeader(
                     Mono(show.meta, KleeampType.meta, p.inkTertiary, maxLines = 1)
                 }
                 Spacer(Modifier.height(3.dp))
-                Chip(
-                    if (subscribed) "subscribed" else "subscribe",
-                    selected = subscribed,
-                    onClick = onToggleSubscribe,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Chip(
+                        if (subscribed) "subscribed" else "subscribe",
+                        selected = subscribed,
+                        onClick = onToggleSubscribe,
+                    )
+                    ShuffleAction(
+                        shuffled = shuffled,
+                        onToggleShuffle = onToggleShuffle,
+                    )
+                }
             }
         }
         if (show.description.isNotBlank()) {

@@ -82,6 +82,7 @@ import stream.kleeamp.mobile.chrome.BackChevron
 import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.ChipDropdown
 import stream.kleeamp.mobile.chrome.ChipOption
+import stream.kleeamp.mobile.chrome.CollectionActions
 import stream.kleeamp.mobile.chrome.CollectionHeader
 import stream.kleeamp.mobile.chrome.FilterRow
 import stream.kleeamp.mobile.chrome.KleeampIcons
@@ -134,6 +135,8 @@ fun LibrarySmartPlaylistPane(
     /** Saved positions by station URL, for the resume readout on local rows. */
     progress: Map<String, EpisodeProgress> = emptyMap(),
     onAddToPlaylist: (Station) -> Unit = {},
+    shuffled: Boolean = false,
+    onToggleShuffle: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val ui by vm.state.collectAsState()
@@ -271,6 +274,8 @@ fun LibrarySmartPlaylistPane(
                         onBeginAdd = if (pl.kind == SmartKind.Favorites) {
                             { adding = true }
                         } else null,
+                        shuffled = shuffled,
+                        onToggleShuffle = onToggleShuffle,
                     )
                 }
             }
@@ -531,6 +536,8 @@ private fun SmartPlaylistDetail(
     onCancelAllDownloads: () -> Unit = {},
     /** Non-null on lists that can grow: renders the section + button. */
     onBeginAdd: (() -> Unit)? = null,
+    shuffled: Boolean = false,
+    onToggleShuffle: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     // Only the on-device smart lists sort; favourites and recent have their
@@ -561,6 +568,15 @@ private fun SmartPlaylistDetail(
             CollectionHeader(
                 title = pl.label,
                 meta = if (members.isEmpty()) "" else "${members.size} items",
+                actions = {
+                    if (shown.isNotEmpty()) {
+                        CollectionActions(
+                            shuffled = shuffled,
+                            onPlayAll = { shown.firstOrNull()?.let { onPlay(it, shown) } },
+                            onToggleShuffle = onToggleShuffle,
+                        )
+                    }
+                },
                 art = {
                     SeedPlate(
                         key = pl.key,
