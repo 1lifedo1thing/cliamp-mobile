@@ -236,6 +236,17 @@ class RedSectorFrame(columns: Int) : VisFrame(columns, TICK_FAST_NS) {
 
     override fun settle() = core.settle()
 }
+
+class YinYangFrame(columns: Int) : VisFrame(columns, TICK_FAST_NS) {
+    val core = YinYangCore()
+
+    override fun tick(bands: FloatArray?, stereo: StereoMetrics, dt: Float, t: Double) {
+        val src = bands ?: VisMath.silenceBands(columns)
+        core.advance(if (src.size == YinYangCore.BANDS) src else VisMath.resampleAverage(src, YinYangCore.BANDS))
+    }
+
+    override fun settle() = core.settle()
+}
 class BinaryFrame(columns: Int) : BandsSnapshotFrame(columns, BINARY_TICK_NS) {
 
     private companion object {
@@ -408,6 +419,7 @@ private val visFrameFactories: Map<Visualizer, (Int) -> VisFrame> = mapOf(
     Visualizer.Ascii to ::AsciiFrame,
     Visualizer.Mosaic to ::MosaicFrame,
     Visualizer.RedSector to ::RedSectorFrame,
+    Visualizer.YinYang to ::YinYangFrame,
 )
 
 private fun newVisFrame(mode: Visualizer, columns: Int): VisFrame =
@@ -476,6 +488,7 @@ fun VisualizerView(frame: VisFrame, modifier: Modifier = Modifier) {
         is AsciiFrame -> VisAscii(frame, modifier)
         is MosaicFrame -> VisMosaic(frame, modifier)
         is RedSectorFrame -> VisRedSector(frame, modifier)
+        is YinYangFrame -> VisYinYang(frame, modifier)
         is SamplesFrame -> error("trace frames dispatch by leaf")
         is BandsSnapshotFrame -> error("field frames dispatch by leaf")
     }
