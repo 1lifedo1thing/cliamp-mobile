@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -270,13 +271,17 @@ fun StationMenuArt(station: Station, modifier: Modifier = Modifier) {
             .background(p.panel),
         contentAlignment = Alignment.Center,
     ) {
+        // Fill, not width-only: the sheet hosts this in a fixed box, and a
+        // width-only plate has no intrinsic height, so coverless items
+        // collapsed to nothing. Fill also keeps portrait covers at tile size
+        // instead of stretching the header.
         if (art != null) {
-            Image(art, null, Modifier.fillMaxWidth(), contentScale = ContentScale.Crop)
+            Image(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
             SeedPlate(
                 key = station.id.ifBlank { station.url },
                 name = station.name,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxSize(),
                 radius = KleeampShape.small,
             )
         }
@@ -295,12 +300,12 @@ fun ShowMenuArt(artwork: String, key: String, name: String?, modifier: Modifier 
         contentAlignment = Alignment.Center,
     ) {
         if (art != null) {
-            Image(art, null, Modifier.fillMaxWidth(), contentScale = ContentScale.Crop)
+            Image(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
             SeedPlate(
                 key = key,
                 name = name,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxSize(),
                 radius = KleeampShape.small,
             )
         }
