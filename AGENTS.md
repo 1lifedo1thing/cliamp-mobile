@@ -63,5 +63,7 @@ the Android set, Android work that checks TUI behavior loads the Go set.
 ## Commits
 
 Every commit must have a description body, not just a subject line.
-Subject: `area: what changed (#n)` (50 chars or less). Body: what was wrong,
-what the fix does, and how it was verified (build, tests, emulator/phone).
+Subject: `platform: area: summary` (50 chars or less). Platform comes first
+(`android`, `desktop`, or `ios`), then the area, then the summary. Body: what
+was wrong, what the fix does, and how it was verified (build, tests,
+emulator/phone).
