@@ -14,12 +14,14 @@ import stream.kleeamp.mobile.playback.ResolvedStream
  * client bakes it into the signed URL and, like Jellyfin, the default playback
  * data source needs nothing extra.
  *
- * The browse screen is single-library, so the client quietly uses the first
- * music section it finds.
+ * Plex serves several music sections, but the browse screen shows one: the
+ * stored [library] section wins when it still exists, otherwise the first
+ * music section found (the legacy behaviour).
  */
 class PlexClient(
     rawUrl: String,
     private val token: String,
+    private val library: String = "",
 ) {
     private val base = SubsonicClient.normalise(rawUrl)
     private val auth = "X-Plex-Token=$token"
@@ -32,13 +34,27 @@ class PlexClient(
 
     private suspend fun sectionKey(): String {
         musicSection?.let { return it }
-        val body = Http.text(get("library/sections"), jsonHeaders)
-        val dirs = Http.json.decodeFromString<SectionContainer>(body).mediaContainer.directory
-        val key = dirs.firstOrNull { it.type == "artist" }?.key
-            ?: dirs.firstOrNull()?.key.orEmpty()
+        val dirs = sections()
+        val music = dirs.filter { it.type == "artist" }.ifEmpty { dirs }
+        val key = music.firstOrNull { it.key == library }?.key
+            ?: music.firstOrNull()?.key.orEmpty()
         if (key.isBlank()) error("no plex music library found")
         musicSection = key
         return key
+    }
+
+    /** Every music section, for the library picker. Empty when none exist. */
+    suspend fun libraries(): Result<List<ProviderLibrary>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val dirs = sections()
+            val music = dirs.filter { it.type == "artist" }.ifEmpty { dirs }
+            music.map { ProviderLibrary(it.key, it.title.ifBlank { "library ${it.key}" }) }
+        }
+    }
+
+    private suspend fun sections(): List<Section> {
+        val body = Http.text(get("library/sections"), jsonHeaders)
+        return Http.json.decodeFromString<SectionContainer>(body).mediaContainer.directory
     }
 
     suspend fun ping(): Result<ProviderIdentity> = withContext(Dispatchers.IO) {

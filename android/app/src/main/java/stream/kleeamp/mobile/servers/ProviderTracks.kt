@@ -18,6 +18,7 @@ fun ProviderAccount.jellyfin(): JellyfinClient = JellyfinClient(
 fun ProviderAccount.plex(): PlexClient = PlexClient(
     values["url"].orEmpty(),
     values["token"].orEmpty(),
+    values["library"].orEmpty(),
 )
 
 fun ProviderAccount.lyrion(): LyrionClient = LyrionClient(
@@ -31,4 +32,5 @@ fun ProviderAccount.audiobookshelf(): AudiobookshelfClient = AudiobookshelfClien
     values["token"].orEmpty(),
     values["user"].orEmpty(),
     values["password"].orEmpty(),
+    values["library"].orEmpty(),
 )

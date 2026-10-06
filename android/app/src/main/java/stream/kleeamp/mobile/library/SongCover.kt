@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -168,4 +169,87 @@ private fun CoverBadge(playing: Boolean) {
             tint = p.onAccent,
         )
     }
+}
+
+/**
+ * One tile per song, up to four: a single song fills the tile, two split
+ * it, three take a half plus a stacked pair, four grid it. Each cell wears
+ * its song's cover, or that song's plate when it has none. The picks are
+ * keyed by song id, so a changing group never mixes hook counts between
+ * compositions.
+ */
+@Composable
+internal fun CoverCollage(stations: List<Station>, modifier: Modifier = Modifier) {
+    val picks = remember(stations) { pickCollage(stations) }
+    key(picks.map { it.id }) {
+        Box(
+            modifier.clip(RoundedCornerShape(KleeampShape.small)),
+            contentAlignment = Alignment.Center,
+        ) {
+            when (picks.size) {
+                1 -> CollageCell(picks[0], Modifier.fillMaxSize())
+                2 -> Row(Modifier.fillMaxSize()) {
+                    picks.forEach { CollageCell(it, Modifier.weight(1f).fillMaxHeight()) }
+                }
+                3 -> Row(Modifier.fillMaxSize()) {
+                    CollageCell(picks[0], Modifier.weight(1f).fillMaxHeight())
+                    Column(Modifier.weight(1f).fillMaxHeight()) {
+                        CollageCell(picks[1], Modifier.weight(1f).fillMaxWidth())
+                        CollageCell(picks[2], Modifier.weight(1f).fillMaxWidth())
+                    }
+                }
+                else -> Column(Modifier.fillMaxSize()) {
+                    Row(Modifier.weight(1f).fillMaxWidth()) {
+                        CollageCell(picks[0], Modifier.weight(1f).fillMaxHeight())
+                        CollageCell(picks[1], Modifier.weight(1f).fillMaxHeight())
+                    }
+                    Row(Modifier.weight(1f).fillMaxWidth()) {
+                        CollageCell(picks[2], Modifier.weight(1f).fillMaxHeight())
+                        CollageCell(picks[3], Modifier.weight(1f).fillMaxHeight())
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CollageCell(station: Station, modifier: Modifier = Modifier) {
+    val art = rememberStationThumbnail(station)
+    Box(modifier, contentAlignment = Alignment.Center) {
+        if (art != null) {
+            Image(art, station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        } else {
+            // Square inner corners butt cleanly; the collage clips the edge.
+            SeedPlate(
+                key = station.id.ifBlank { station.url },
+                name = station.name,
+                modifier = Modifier.fillMaxSize(),
+                radius = 0.dp,
+            )
+        }
+    }
+}
+
+/**
+ * The songs a collage shows: everything when four or fewer, otherwise four
+ * with distinct covers first so one album's art cannot fill the tile alone.
+ * Pure for JVM tests.
+ */
+internal fun pickCollage(songs: List<Station>, max: Int = 4): List<Station> {
+    if (songs.size <= max) return songs.toList()
+    val picks = ArrayList<Station>(max)
+    val seen = HashSet<String>()
+    for (s in songs) {
+        if (picks.size == max) break
+        if (s.cover.isNotBlank() && seen.add(s.cover)) picks += s
+    }
+    if (picks.size < max) {
+        val ids = picks.map { it.id }.toHashSet()
+        for (s in songs) {
+            if (picks.size == max) break
+            if (s.id !in ids) picks += s
+        }
+    }
+    return picks
 }

@@ -20,6 +20,11 @@ class AudiobookshelfClient(
     private val token: String,
     private val user: String,
     private val password: String,
+    /**
+     * The picked library id. Blank keeps the legacy behaviour: the first
+     * library the server lists, whatever kind it is.
+     */
+    private val library: String = "",
 ) {
     private val base = SubsonicClient.normalise(rawUrl)
 
@@ -48,7 +53,7 @@ class AudiobookshelfClient(
     suspend fun albums(): Result<List<ProviderAlbum>> = withContext(Dispatchers.IO) {
         runCatching {
             ensureAuth()
-            val lib = firstLibrary()
+            val lib = resolveLibrary()
             val body = Http.text(
                 "$base/api/libraries/$lib/items?limit=200&page=0&sort=media.metadata.title",
                 headers(),
@@ -118,10 +123,24 @@ class AudiobookshelfClient(
         cachedToken[base] = t
     }
 
-    private suspend fun firstLibrary(): String {
+    /** Every library, for the library picker. Empty when none exist. */
+    suspend fun libraries(): Result<List<ProviderLibrary>> = withContext(Dispatchers.IO) {
+        runCatching {
+            ensureAuth()
+            fetchLibraries().map { ProviderLibrary(it.id, it.name.ifBlank { "library" }) }
+        }
+    }
+
+    private suspend fun resolveLibrary(): String {
+        val libs = fetchLibraries()
+        return libs.firstOrNull { it.id == library }?.id
+            ?: libs.firstOrNull()?.id.orEmpty()
+                .takeIf { it.isNotBlank() } ?: error("no audiobookshelf library found")
+    }
+
+    private suspend fun fetchLibraries(): List<LibraryBrief> {
         val body = Http.text("$base/api/libraries", headers())
-        return Http.json.decodeFromString<Libraries>(body).libraries.firstOrNull()?.id.orEmpty()
-            .takeIf { it.isNotBlank() } ?: error("no audiobookshelf library found")
+        return Http.json.decodeFromString<Libraries>(body).libraries
     }
 
     private fun enc(s: String): String = java.net.URLEncoder.encode(s, "UTF-8")
@@ -141,7 +160,7 @@ class AudiobookshelfClient(
 private data class Libraries(val libraries: List<LibraryBrief> = emptyList())
 
 @Serializable
-private data class LibraryBrief(val id: String = "", val name: String = "")
+private data class LibraryBrief(val id: String = "", val name: String = "", val mediaType: String = "")
 
 @Serializable
 private data class LoginResult(val user: LoginUser? = null)

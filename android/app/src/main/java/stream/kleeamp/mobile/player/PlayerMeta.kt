@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -57,6 +58,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -192,6 +194,7 @@ internal fun PlayerStatusRow(
             KleeampIcons.Shuffle,
             if (model.shuffled) "stop shuffling" else "shuffle",
             tint = if (model.shuffled) p.accent else p.inkSecondary,
+            dot = model.shuffled,
         ) { actions.onToggleShuffle() }
         // Repeat is a track-list concept like cliamp's: it governs list
         // boundaries and track ends, which live streams don't have. Shown
@@ -427,6 +430,7 @@ internal fun SmallAction(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
     tint: androidx.compose.ui.graphics.Color? = null,
+    dot: Boolean = false,
     onClick: () -> Unit,
 ) {
     val p = LocalPalette.current
@@ -438,6 +442,18 @@ internal fun SmallAction(
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, description, Modifier.size(15.dp), tint = tint ?: p.inkSecondary)
+        // On-state dot under the icon: overlay only, so the 40dp target
+        // never changes size. Same marker as the hero ShuffleAction.
+        if (dot) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 6.dp)
+                    .size(4.dp)
+                    .background(p.accent, CircleShape)
+                    .semantics { contentDescription = "shuffle on" },
+            )
+        }
     }
 }
 

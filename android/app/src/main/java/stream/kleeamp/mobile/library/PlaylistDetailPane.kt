@@ -1,6 +1,7 @@
 package stream.kleeamp.mobile.library
 
 import android.app.Activity
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -60,6 +61,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import stream.kleeamp.mobile.art.LocalArt
+import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.radio.RadioRepository
@@ -76,10 +78,14 @@ import stream.kleeamp.mobile.servers.displayName
 import stream.kleeamp.mobile.servers.ProviderSpec
 import stream.kleeamp.mobile.servers.SftpLibrary
 import stream.kleeamp.mobile.chrome.rememberStationThumbnail
+import stream.kleeamp.mobile.chrome.rememberArt
+import stream.kleeamp.mobile.chrome.ArtKind
 import stream.kleeamp.mobile.chrome.BackChevron
 import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.ChipDropdown
 import stream.kleeamp.mobile.chrome.ChipOption
+import stream.kleeamp.mobile.chrome.CollectionActions
+import stream.kleeamp.mobile.chrome.CollectionHeader
 import stream.kleeamp.mobile.chrome.FilterRow
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.KleeampTextField
@@ -126,9 +132,12 @@ fun LibraryPlaylistPane(
     onInfo: ((Station) -> Unit)? = null,
     /** True when opened from a playlist row's add menu: lands in the song picker. */
     startAdding: Boolean = false,
+    shuffled: Boolean = false,
+    onToggleShuffle: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var adding by rememberSaveable(slug) { mutableStateOf(startAdding) }
     var query by rememberSaveable(slug) { mutableStateOf("") }
     // The row menu's subject: set by the ⋮ trigger, cleared on dismiss.
@@ -142,10 +151,17 @@ fun LibraryPlaylistPane(
     val subscriptions = ui.subscribedShows
     val pl = ui.playlist
     val coverLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.OpenDocument()
     ) { uri ->
-        val cover = uri?.toString().orEmpty()
-        if (cover.isNotBlank()) vm.onEvent(PlaylistDetailViewModel.Event.SetCover(cover))
+        if (uri == null) return@rememberLauncherForActivityResult
+        // Keep read access past this process: a GetContent grant dies with
+        // it, which is what used to blank the cover on the next launch.
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+        vm.onEvent(PlaylistDetailViewModel.Event.SetCover(uri.toString()))
     }
     Box(Modifier.fillMaxSize().background(p.ground)) {
         val listState = rememberLazyListState()
@@ -157,7 +173,7 @@ fun LibraryPlaylistPane(
             onBack = onBack,
             chips = if (pl != null) {
                 @Composable {
-                    Chip("set cover", selected = false, onClick = { coverLauncher.launch("image/*") })
+                    Chip("set cover", selected = false, onClick = { coverLauncher.launch(arrayOf("image/*")) })
                 }
             } else null,
         ) {
@@ -187,6 +203,8 @@ fun LibraryPlaylistPane(
                         onOpenMenu = { menuFor = it },
                         adding = adding,
                         onBeginAdd = { adding = true },
+                        shuffled = shuffled,
+                        onToggleShuffle = onToggleShuffle,
                     )
                 }
 
@@ -256,6 +274,8 @@ private fun PlaylistDetailShown(
     adding: Boolean,
     onBeginAdd: () -> Unit = {},
     onOpenMenu: (Station) -> Unit = {},
+    shuffled: Boolean = false,
+    onToggleShuffle: () -> Unit = {},
 ) {
     val p = LocalPalette.current
 
@@ -277,6 +297,37 @@ private fun PlaylistDetailShown(
     }
 
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
+        item {
+            val cover = rememberArt(station = playlist.station, kind = ArtKind.Full)
+            CollectionHeader(
+                title = playlist.station.name,
+                meta = "${members.size} songs",
+                actions = {
+                    if (visible.isNotEmpty()) {
+                        CollectionActions(
+                            shuffled = shuffled,
+                            onPlayAll = { visible.firstOrNull()?.let { onPlay(it, visible) } },
+                            onShufflePlay = {
+                                if (!shuffled) onToggleShuffle()
+                                visible.randomOrNull()?.let { onPlay(it, visible) }
+                            },
+                        )
+                    }
+                },
+                art = {
+                    if (cover != null) {
+                        Image(cover, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    } else {
+                        SeedPlate(
+                            key = playlist.station.slug,
+                            name = playlist.station.name,
+                            modifier = Modifier.fillMaxSize(),
+                            radius = KleeampShape.small,
+                        )
+                    }
+                },
+            )
+        }
         if (members.isEmpty()) {
             item {
                 SectionLabel("songs — 0") {

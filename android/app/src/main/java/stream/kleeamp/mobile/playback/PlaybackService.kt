@@ -262,9 +262,9 @@ class PlaybackService : MediaSessionService() {
         // favouriting on the lockscreen where they belong.
         scope.launch {
             val conn = (application as KleeampApp).player
-            combine(prefs0.favorites, conn.shuffle) { favs, _ ->
+            combine(prefs0.favorites, conn.shuffle) { favs, shuffled ->
                 val url = PlaybackBus.station.value?.url
-                session?.setMediaButtonPreferences(buttons(favs.any { it.url == url }))
+                session?.setMediaButtonPreferences(buttons(favs.any { it.url == url }, shuffled))
             }.collect { }
         }
 
@@ -317,6 +317,7 @@ class PlaybackService : MediaSessionService() {
 
     private fun buttons(
         isFavourite: Boolean,
+        shuffled: Boolean,
     ): ImmutableList<CommandButton> = ImmutableList.of(
         CommandButton.Builder(CommandButton.ICON_PREVIOUS)
             .setDisplayName("Previous")
@@ -333,9 +334,14 @@ class PlaybackService : MediaSessionService() {
             .setIconUri(iconUri(if (isFavourite) R.drawable.ic_w_heart_filled else R.drawable.ic_w_heart))
             .setSessionCommand(SessionCommand(CMD_FAVOURITE, Bundle.EMPTY))
             .build(),
-        CommandButton.Builder(CommandButton.ICON_SHUFFLE_ON)
-            .setDisplayName("Shuffle")
-            .setIconUri(iconUri(R.drawable.ic_w_shuffle))
+        CommandButton.Builder(
+            if (shuffled) CommandButton.ICON_SHUFFLE_ON else CommandButton.ICON_SHUFFLE_OFF
+        )
+            .setDisplayName(if (shuffled) "Stop shuffling" else "Shuffle")
+            // Same Shuffle glyph as the in-app icon; the on variant carries
+            // the filled dot under it, mirroring the hero ShuffleAction.
+            .setIconResId(if (shuffled) R.drawable.ic_w_shuffle_on else R.drawable.ic_w_shuffle)
+            .setIconUri(iconUri(if (shuffled) R.drawable.ic_w_shuffle_on else R.drawable.ic_w_shuffle))
             .setSessionCommand(SessionCommand(CMD_SHUFFLE, Bundle.EMPTY))
             .build(),
         CommandButton.Builder(CommandButton.ICON_NEXT)
@@ -362,7 +368,7 @@ class PlaybackService : MediaSessionService() {
                 .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller)
                 .setAvailableSessionCommands(commands)
-                .setMediaButtonPreferences(buttons(false))
+                .setMediaButtonPreferences(buttons(false, false))
                 .build()
         }
 
@@ -523,9 +529,11 @@ class PlaybackService : MediaSessionService() {
         )
         scope.launch {
             val favs = prefs0.favorites.first()
+            val shuffled = (application as KleeampApp).player.shuffle.value
             session?.setMediaButtonPreferences(
                 buttons(
                     favs.any { it.url == station?.url },
+                    shuffled,
                 )
             )
             val names = upNext.map { it.name }

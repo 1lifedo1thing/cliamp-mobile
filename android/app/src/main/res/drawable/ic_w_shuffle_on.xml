@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shuffle-on for the notification slot: the same KleeampIcons.Shuffle glyph
+     as ic_w_shuffle, plus the filled on-state dot under the icon (bottom
+     centre), mirroring the hero ShuffleAction dot. White throughout. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp" android:height="18dp"
+    android:viewportWidth="18" android:viewportHeight="14">
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="1.8"
+        android:strokeLineCap="butt" android:strokeLineJoin="miter"
+        android:pathData="M1,3h4l8,8h3" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="1.8"
+        android:strokeLineCap="butt" android:strokeLineJoin="miter"
+        android:pathData="M14.5,9.5l1.5,1.5 -1.5,1.5" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="1.8"
+        android:strokeLineCap="butt" android:strokeLineJoin="miter"
+        android:pathData="M1,11h4l8,-8h3" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="1.8"
+        android:strokeLineCap="butt" android:strokeLineJoin="miter"
+        android:pathData="M14.5,2.5l1.5,1.5 -1.5,1.5" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M7.95,12.6a1.05,1.05 0 1,1 2.1,0a1.05,1.05 0 1,1 -2.1,0z" />
+</vector>
