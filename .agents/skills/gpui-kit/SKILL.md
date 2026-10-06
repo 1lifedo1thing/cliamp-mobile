@@ -1,177 +1,277 @@
 ---
 name: gpui-kit
-description: >
-  GPUI Kit rules for the kleeamp desktop app. Use when writing or reviewing
-  gpui-kit views, entities, actions, focus, lists, tables, or async UI work.
-  Trigger examples: "gpui-kit view", "kit pane", "keybinding", "virtual list",
-  "cx.notify", "entity", "Root", "Button", "Table", "blank window", "element
-  id". Not for audio, providers, or queue policy — those stay out of the UI
-  crate. Not for Compose or the raw gpui-ce fork.
-user-invocable: true
-license: Apache-2.0
-compatibility: Desktop app on gpui-kit 0.6 (Longbridge). Do not apply to Compose.
+description: 'How to build desktop applications with GPUI Kit, the Rust framework published as the gpui-kit crate (GPUI plus gpui_kit::component, gpui_kit::base, gpui_kit::assets). Use when setting up a gpui-kit app, choosing or using a component (Button, Input, Select, Dialog, Sheet, Tabs, Sidebar, List, DataTable, Tree, Chart, etc.), handling component state, theming, or window overlays, and for GPUI mechanics: actions and keybindings, async tasks, contexts, custom elements, entities, events, focus, global state, layout and styling, ElementId, and tests including UI integration testing. Holds the normative Coding Guides: read them before any architecture, state-ownership, public API, naming, or testing decision. Pairs with the gpui-kit-design-guides skill for the Design Guides.'
 ---
 
 # GPUI Kit
 
-One dependency builds the desktop UI: `gpui-kit = "0.6"`. It re-exports the
-matching GPUI snapshot (`gpui-pre`), `gpui-base`, the styled `gpui-component`
-library, and default icon assets. Application code imports GPUI through
-`use gpui_kit::*;` and components through `gpui_kit::component`. Never add
-`gpui`, `gpui-pre`, or `gpui-component` as their own dependencies.
+Applications depend on one crate, `gpui-kit`. GPUI is `use gpui_kit::*;`, and
+each layer is reachable by name: `gpui_kit::component` (styled components),
+`gpui_kit::base` (unstyled behavior), `gpui_kit::assets` (default icons),
+`gpui_kit::platform`.
 
-The site may be ahead of 0.6. When a doc sample fails to compile, the pinned
-crate wins. Stay on 0.6 until `desktop/` changes the version on purpose.
+Start with [component-family conventions](references/conventions.md) to choose the constructor, state owner, event, and layout contract for the task. Learn the family once, then verify the specific component supports the capability.
 
-Official map, in this order:
+For a complete compiled view with retained state, subscriptions, and overlay
+layers, read [the tested application recipe](references/recipes.md).
 
-1. <https://gpui-kit.com/docs/getting-started>
-2. <https://gpui-kit.com/docs/entity>, <https://gpui-kit.com/docs/context>, <https://gpui-kit.com/docs/render>
-3. <https://gpui-kit.com/docs/element_id>, <https://gpui-kit.com/docs/focus>, <https://gpui-kit.com/docs/action>, <https://gpui-kit.com/docs/keybinding>
-4. <https://gpui-kit.com/docs/task>, <https://gpui-kit.com/docs/window>
-5. Component pages under <https://gpui-kit.com/component> and base pages under <https://gpui-kit.com/base>
+## Read the Guides First
 
-Before the first view in a session, read [references/model.md](references/model.md).
-Before choosing a control, read [references/components.md](references/components.md).
-Zed blog posts and the gpui-ce fork describe a different crate graph. Use the
-pages above.
+Two guides hold the rules this skill assumes. They are requirements, not
+inspiration. Read the guide file itself; do not answer from this page, from a
+similar file in the codebase, or from training data.
 
-Only `crates/app` may import this crate. `core`, `playback`, and `providers`
-must compile with gpui-kit deleted. Crate rules live in the `rust-desktop` skill.
+| Guide                                                  | Read before                                                                                                                   |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| Design Guides, skill `gpui-kit-design-guides`          | Choosing components, layout, spacing, hierarchy, color, density, interaction states, overlays, motion, interface copy          |
+| [Coding Guides](references/coding-guides.md)           | Crate layering, `RenderOnce` vs `Entity<T>`, state ownership, `ElementId`, events, focus, async, public API, naming, testing |
 
-## Startup
+Read the Design Guides first when the change has a visible surface: code
+structure preserves product intent, it does not replace it. If the design
+skill is not installed, fetch `https://gpui-kit.com/docs/design-guides.md`.
+The coding guide is a verbatim copy of `https://gpui-kit.com/docs/coding-guides.md`,
+so its links to `./design-guides.md` and `./getting-started.md` mean the design
+skill and `https://gpui-kit.com/docs/getting-started.md`.
+
+### Coding Guides section map
+
+Read the whole guide for a new crate, module, or feature. For a narrow change,
+read "Architecture at a glance" and "Rules for coding agents" first, then the
+section for the change (`grep -n '^## ' references/coding-guides.md`).
+
+| Section                              | Read when                                                              |
+| ------------------------------------ | ---------------------------------------------------------------------- |
+| Architecture at a glance             | Always; crate layering, ownership boundary                             |
+| Bootstrap and root ownership         | `main`, `init`, `Root`, window creation, app-level state               |
+| Understand GPUI's phases and contexts | Anything touching `App`, `Window`, `Context<T>`, render vs update      |
+| Choose the right unit                | Deciding `RenderOnce` vs `Entity<T>` vs custom `Element`               |
+| State ownership                      | Where a piece of state lives, who mutates it, `Entity<State>` handles  |
+| Stable identity                      | `ElementId`, lists, repeated elements, keyed state                     |
+| Rendering and composition            | `render`, builder chains, `when`/`map`, child composition              |
+| Behavior and presentation boundary   | `gpui-base` vs `gpui-component` vs application code                    |
+| Theme and styling                    | `cx.theme()`, tokens, `Styled`, sizes, variants                        |
+| Events, actions, and focus           | `cx.emit`, `subscribe`, `actions!`, keybindings, `FocusHandle`         |
+| Async work and side effects          | `cx.spawn`, `background_spawn`, `Task`, I/O, timers                    |
+| Layout, measurement, and scrolling   | Flex layout, sizing, `overflow`, scroll handles, measuring             |
+| Lists, tables, and large data        | `VirtualList`, `List`, `DataTable`, delegates, large collections       |
+| Public API design                    | Anything `pub`: builders, private fields, setter and reader naming     |
+| Platform and capability boundaries   | macOS/Windows/Linux/wasm differences, feature gates                    |
+| File and naming conventions          | New files, modules, type and method names, `Kind` suffix, `Context`    |
+| Testing strategy                     | What to test, `#[gpui_kit::test]`, `TestAppContext`                    |
+| Performance rules                    | Render cost, allocation, re-render triggers                            |
+| Common failure modes                 | Before finishing; invented APIs, state in render, index ids            |
+| Rules for coding agents              | Always when an agent writes code                                       |
+| Implementation checklist             | Before finishing; run every item against the work                     |
+
+### Non-negotiables
+
+A floor, not a substitute for the guides.
+
+- **Never invent an API.** Search the current source for the real signature.
+  Do not translate a React, CSS, or older-GPUI example by analogy; a
+  plausible-looking method that does not exist is the most common failure.
+- **One dependency.** Applications depend on `gpui-kit` alone. GPUI is
+  `use gpui_kit::*;`; the layers are `gpui_kit::component`, `gpui_kit::base`,
+  `gpui_kit::assets`, `gpui_kit::platform`.
+- **Framework owns behavior, application owns presentation.** Do not put
+  colors, sizing, or layout in `gpui-base`; do not put interaction behavior in
+  application styling code.
+- **Stable identity.** Repeated elements need domain-derived `ElementId`s, not
+  list indexes.
+- **No `pub` fields across the seam.** Public data types use builders and
+  reader methods.
+- **Spell `Context` out.** `cx` is GPUI's; name anything else after what it
+  holds.
+
+## Documentation
+
+- **Find a task/component page**: use `https://gpui-kit.com/llms.txt`, then load its Markdown page.
+- **Full reference**: `https://gpui-kit.com/llms-full.txt` is available when broad reference is actually needed
+- **Per-component API**: fetch `https://gpui-kit.com/component/{name}.md`,
+  e.g. `button.md`, `input.md`, `select.md`, `dialog.md`, `data-table.md`
+- **Any site page** can be fetched as Markdown by appending `.md` to the URL
+
+## Quick Reference
+
+Setup and examples: [references/usage.md](references/usage.md).
 
 ```rust
 use gpui_kit::*;
 
-fn main() {
-    application()
-        .with_assets(assets::Assets)
-        .run(|cx| {
-            init(cx); // once, before any window or component
-            cx.bind_keys([
-                KeyBinding::new("space", TogglePlay, Some("Player")),
-                KeyBinding::new("ctrl-k", OpenSearch, Some("Workspace")),
-            ]);
-            open_window(WindowOptions::default(), cx, |_, cx| {
-                cx.new(|cx| Workspace::new(cx))
-            })
-            .expect("no GPU device for kleeamp window");
-        });
-}
+gpui_kit::application()
+    .with_assets(gpui_kit::assets::Assets)
+    .run(|cx| {
+        gpui_kit::init(cx);                       // first, before anything else
+        gpui_kit::open_window(options, cx, |window, cx| {
+            cx.new(|cx| AppView::new(window, cx))
+        })
+        .expect("failed to open window");
+    });
 ```
 
-`application()` creates the desktop app. `init(cx)` initializes the enabled
-layers, including component themes. `open_window` wraps the content view in a
-`Root` that owns dialogs, sheets, and notifications. Return the content view
-from the closure. A second `Root` fights the one the kit already installed.
+- **Stateless** (`RenderOnce`): build in `render`:
+  `Button::new("save").primary().label("Save").on_click(|_, _, _| {})`
+- **Stateful**: hold `Entity<State>` in the view, pass a reference in `render`:
+  `let input = cx.new(|cx| InputState::new(window, cx));` then `Input::new(&self.input)`
+- **Sizes**: `.xsmall()` `.small()` `.medium()` (default) `.large()`
+- **Theme**: `cx.theme().primary` · `.background` · `.foreground` · `.border` · `.muted`
+- **Overlays**: `window.open_dialog(...)`, `open_sheet(...)`, `push_notification(...)`
+  via `gpui_kit::component::WindowExt`
 
-Call `cx.bind_keys` during this setup, before `cx.set_menus` if the app has a
-native menu. A menu snapshots the keymap at the moment `set_menus` runs.
+## Component Catalog
 
-## Model
+Import paths are relative to `gpui_kit::component::`, so `input::{Input, InputState}`
+means `use gpui_kit::component::input::{Input, InputState};`. For the full API
+fetch the component's `.md` doc.
 
-```
-Workspace (Entity, Render)
-  ├─ Session (Entity, no Render)     queue, accounts, load state
-  ├─ Library / Stations / Podcasts   one Entity per pane
-  └─ element tree                    rebuilt every frame
-       └─ RenderOnce values          rows, plates, buttons
-```
+### Input & Form
 
-1. A view is an `Entity` whose type implements `Render`. `render` returns elements and returns. It does no HTTP, SQL, decode, or `block_on`.
-2. Mutate, then `cx.notify()` on that entity's context. A field write does not repaint.
-3. `read` borrows. The borrow ends when the statement ends. Copy out what a later update needs.
-4. Clicks go through `cx.listener` or a component `on_click`. Commands that also have a key go through an action.
-5. IO uses `cx.spawn` / `cx.spawn_in`. The task sends a result back with `WeakEntity::update`. It does not touch widgets.
+| Component     | Import                                          | Notes                                        |
+| ------------- | ----------------------------------------------- | -------------------------------------------- |
+| `Input`       | `input::{Input, InputState}`                    | Stateful. Text, password, mask, validation   |
+| `Textarea`    | `input::{Textarea, TextareaState}`              | Stateful. Multi-line text                    |
+| `Editor`      | `input::{Editor, EditorState}`                  | Stateful. Code editor, `tree-sitter` feature |
+| `NumberInput` | `input::{NumberInput, NumberInputEvent}`        | Stateful. Numeric with step                  |
+| `OtpInput`    | `input::OtpInput`                               | Stateful. One-time password                  |
+| `SpeechButton` | `speech::{SpeechButton, SpeechState}`          | Stateful. Dictation, `speech` feature        |
+| `Select`      | `select::{Select, SelectState}`                 | Stateful. Dropdown picker                    |
+| `Combobox`    | `combobox::{Combobox, ComboboxState}`           | Stateful. Searchable select                  |
+| `Checkbox`    | `checkbox::Checkbox`                            | Stateless. `on_click` receives `&bool`       |
+| `Switch`      | `switch::Switch`                                | Stateless. Toggle                            |
+| `Radio`       | `radio::{Radio, RadioGroup}`                    | Stateless.                                   |
+| `Slider`      | `slider::{Slider, SliderState}`                 | Stateful.                                    |
+| `Toggle`      | `button::Toggle`                                | Stateless.                                   |
+| `Rating`      | `rating::Rating`                                | Stateless.                                   |
+| `Stepper`     | `stepper::Stepper`                              | Stateless. Multi-step progress               |
+| `ColorPicker` | `color_picker::{ColorPicker, ColorPickerState}` | Stateful.                                    |
+| `DatePicker`  | `date_picker::{DatePicker, DatePickerState}`    | Stateful.                                    |
+| `TimeField`   | `time_field::{TimeField, TimeFieldState}`       | Stateful. Time of day, 24/12-hour            |
+| `Calendar`    | `calendar::{Calendar, CalendarState}`           | Stateful. Inline month view                  |
+| `Form`        | `form::{v_form, h_form, field}`                 | Layout container for form fields             |
 
-One entity per pane (`Session`, `LibraryView`, `Player`, `Settings`), not per row. Track tables use the kit virtualized table or virtual list. A hand-rolled `uniform_list` is the fallback when a component cannot take palette roles.
+### Display & Feedback
 
-Retained control state (`InputState`, focus handles, table state) is created in `new` and stored on the entity. Building it inside `render` resets the control every frame.
+| Component   | Import                                    | Notes                                 |
+| ----------- | ----------------------------------------- | ------------------------------------- |
+| `Button`    | `button::{Button, ButtonGroup}`           | Stateless. Primary UI action          |
+| `Icon`      | `{Icon, IconName}`                        | Stateless. Lucide icons               |
+| `Badge`     | `badge::Badge`                            | Stateless.                            |
+| `Tag`       | `tag::Tag`                                | Stateless. Closable tags              |
+| `Avatar`    | `avatar::Avatar`                          | Stateless.                            |
+| `Label`     | `label::Label`                            | Stateless. Form label                 |
+| `Kbd`       | `kbd::Kbd`                                | Stateless. Keyboard key display       |
+| `Alert`     | `alert::Alert`                            | Stateless. Info/success/warning/error |
+| `Spinner`   | `spinner::Spinner`                        | Stateless. Loading indicator          |
+| `Skeleton`  | `skeleton::Skeleton`                      | Stateless. Loading placeholder        |
+| `Shimmer`   | `shimmer::{ShimmerText, ShimmerStyle}`    | Stateless. Streaming-text shimmer     |
+| `Marker`    | `marker::{Marker, MarkerVariant}`         | Stateless. Inline status marker       |
+| `Progress`  | `progress::{Progress, ProgressCircle}`    | Stateless.                            |
+| `Tooltip`   | `tooltip::Tooltip`                        | Via `.tooltip()` on elements          |
+| `HoverCard` | `hover_card::{HoverCard, HoverCardState}` | Stateful.                             |
+| `Clipboard` | `clipboard::Clipboard`                    | Stateless. Copy button                |
+| `TextView`  | `text::TextView`                          | `TextView::markdown(id, text)`, HTML too |
+| Image       | `gpui_kit::{img, ImageSource, ObjectFit}` | GPUI's `img()` element                |
 
-`notify()` and `emit()` are different signals. `notify` invalidates renderers and observers. `emit` delivers a typed event to subscribers. A change that needs both calls both. Store every `Subscription` on the subscriber. A local subscription dropped at the end of `new` is cancelled.
+### Overlay & Popups
 
-## Element identity
+| Component        | Import                                            | Notes                                    |
+| ---------------- | ------------------------------------------------- | ---------------------------------------- |
+| `Dialog`         | `dialog::Dialog` + `WindowExt`                    | Via `window.open_dialog(...)`            |
+| `AlertDialog`    | `WindowExt`                                       | Via `window.open_alert_dialog(...)`      |
+| `Sheet`          | `sheet::Sheet` + `WindowExt`                      | Side panel, via `window.open_sheet(...)` |
+| `Notification`   | `notification::Notification` + `WindowExt`        | Via `window.push_notification(...)`      |
+| `Popover`        | `popover::Popover`                                | Floating overlay                         |
+| `Menu`           | `menu::{PopupMenu, DropdownMenu}`                 | Context menus                            |
+| `DropdownButton` | `button::DropdownButton`                          | Button with dropdown menu                |
+| `Command`        | `command::{Command, CommandState, CommandGroup}`  | Stateful. Command palette                |
+| Focus trap       | `FocusTrapElement`                                | `.focus_trap(id, &handle)` on a container; `Dialog` and `Sheet` have it built in |
 
-An `ElementId` is a local key. GPUI joins it with keyed ancestors and the view's `EntityId` into a `GlobalElementId`. Hover, click, focus, and `with_element_state` hang off that path.
+### Navigation & Layout
 
-- Call `.id(...)` once. A later `.id(...)` on the same element replaces the key.
-- Under one keyed parent, each repeated child needs its own id, taken from the domain id (`("row", track.id)`), never from the label and never from a loop index when the list can reorder.
-- Unkeyed wrappers do not create a new namespace. Two `div().id("item")` under the same keyed ancestor collide.
-- A shared id makes every row one element. Hover and click collapse onto the last row. `with_element_state` can panic because the same state is borrowed reentrantly.
+| Component         | Import                                                                   | Notes                     |
+| ----------------- | ------------------------------------------------------------------------ | ------------------------- |
+| `Tabs` / `TabBar` | `tab::{Tab, TabBar}`                                                     | Tabbed interface          |
+| `Sidebar`         | `sidebar::{Sidebar, SidebarMenu, ...}`                                   | App navigation panel      |
+| `TitleBar`        | `TitleBar`                                                               | Window title bar          |
+| `StatusBar`       | `status_bar::StatusBar`                                                  | Window status bar         |
+| `Breadcrumb`      | `breadcrumb::Breadcrumb`                                                 | Navigation breadcrumb     |
+| `Pagination`      | `pagination::Pagination`                                                 | Page navigation           |
+| `Accordion`       | `accordion::Accordion`                                                   | Collapsible sections      |
+| `Collapsible`     | `collapsible::Collapsible`                                               | Single collapsible        |
+| `GroupBox`        | `group_box::GroupBox`                                                    | Labeled container         |
+| `Resizable`       | `resizable::{h_resizable, v_resizable, resizable_panel, ResizableState}` | Draggable split panes     |
+| `Scrollbar`       | `scroll::Scrollbar`                                                      | Custom scrollbar          |
 
-Details and the row pattern: [references/model.md](references/model.md).
+### Data Display
 
-## Focus and actions
+| Component         | Import                                          | Notes                         |
+| ----------------- | ----------------------------------------------- | ----------------------------- |
+| `DataTable`       | `table::{DataTable, TableState, TableDelegate}` | Stateful. Full-featured table |
+| `Table`           | `table::{Table, ...}`                           | Simpler table                 |
+| `VirtualList`     | `{v_virtual_list, h_virtual_list}`              | High-perf large lists         |
+| `List`            | `list::{List, ListState, ListDelegate}`         | Stateful. Searchable list     |
+| `Tree`            | `tree::{Tree, TreeState, TreeItem, TreeEntry}`  | Stateful. Hierarchy           |
+| `DescriptionList` | `description_list::DescriptionList`             | Key-value pairs               |
+| `Settings`        | `setting::Settings`                             | Settings panel                |
 
-```rust
-actions!(player, [TogglePlay, SeekForward]);
-```
+### Chat & Messaging
 
-Retain a `FocusHandle` on the pane that owns the keys. Put it on the element with `.track_focus(&handle)`. A handle that is not tracked is not a keyboard target. Tab stops opt in with `.tab_stop(true)` when the handle is created.
+| Component         | Import                                                   | Notes                                 |
+| ----------------- | -------------------------------------------------------- | ------------------------------------- |
+| `Message`         | `message::{Message, MessageContent, MessageAlignment}`   | Stateless. Chat message row           |
+| `Bubble`          | `bubble::{Bubble, BubbleContent, BubbleVariant}`         | Stateless. Message bubble             |
+| `Attachment`      | `attachment::{Attachment, AttachmentContent, ...}`       | Stateless. File/media attachment card |
+| `MessageScroller` | `message_scroller::{MessageScroller, MessageScrollerState}` | Stateful. Auto-scrolling message list |
 
-Bind keys in app setup, with a context name (`"Player"`, `"Workspace"`). Give the matching pane `key_context`. Tab order is rail, center, player.
+### Charts
 
-A toolbar button, a menu item, and a key that do the same thing dispatch one action (`window.dispatch_action`) or call one method. Dispatch is deferred to the focused path. The handler lives on that path.
+| Component | Import                                                          | Notes                          |
+| --------- | --------------------------------------------------------------- | ------------------------------ |
+| `Chart`   | `chart::{AreaChart, BarChart, LineChart, PieChart, RadarChart}` | Bar, line, area, pie charts    |
+| `Plot`    | `plot::Plot`                                                    | `#[derive(IntoPlot)]` for data |
 
-`on_action` handlers take the action first and `window, cx` last.
+## Testing
 
-## Async
+**UI integration testing** means rendering real components in headless windows,
+simulating input, and checking state, focus, layout and owner callbacks. Use
+`#[gpui_kit::test]` to run tests and `gpui_kit::test` to operate and inspect the UI.
+When asked to add component interaction coverage, describe it as UI integration testing.
 
-```rust
-let this = cx.weak_entity();
-cx.spawn(async move |_, async_cx| {
-    let page = load_page().await;
-    this.update(async_cx, |pane, cx| {
-        pane.page = page;
-        cx.notify();
-    })
-    .ok();
-})
-.detach();
-```
+For unit tests, GPUI context tests or UI integration tests, read
+[Testing](references/gpui/test.md). It includes dependency setup, a complete
+runnable UI flow, scoped native interactions, frame/async handling and the
+limits of accessibility and geometry assertions. Use the production view and
+verify the action's outcome through normal Rust assertions.
 
-Hold the `Task` on the entity when closing the pane should cancel the work. `detach` when the work should finish anyway. A failed weak update after `await` means the view is gone.
+## GPUI References
 
-`cx.spawn_in(window, ...)` plus `update_in` is the form that also needs the `Window` (focus a field when the result arrives).
+Load the file for the mechanism the task touches. Each file starts with a
+contents line.
 
-GPUI's entity borrow is non-reentrant. `render` and `update` already hold it. `read` or `update` on that same entity from inside the borrow panics. Update a different entity, or finish this update and use the returned value.
+| Topic                       | File                                                   | Load when                                                       |
+| --------------------------- | ------------------------------------------------------ | --------------------------------------------------------------- |
+| Actions & keybindings       | [action.md](references/gpui/action.md)                 | `actions!`, `bind_keys`, `on_action`, `key_context`             |
+| Async & background tasks    | [async.md](references/gpui/async.md)                   | `cx.spawn`, `background_spawn`, `Task`, async I/O               |
+| Context management          | [context.md](references/gpui/context.md)               | `App`, `Window`, `Context<T>`, `AsyncApp`                       |
+| Custom elements (low-level) | [element.md](references/gpui/element.md)               | `Element` trait, `request_layout`, `prepaint`, `paint`          |
+| Entity state                | [entity.md](references/gpui/entity.md)                 | `Entity<T>`, `WeakEntity`, state management                     |
+| Events & subscriptions      | [event.md](references/gpui/event.md)                   | `cx.emit`, `cx.subscribe`, `cx.observe`                         |
+| Focus & keyboard nav        | [focus-handle.md](references/gpui/focus-handle.md)     | `FocusHandle`, `track_focus`, Tab navigation                    |
+| Global state                | [global.md](references/gpui/global.md)                 | `Global` trait, `cx.set_global`, app-wide config                |
+| Layout & styling            | [layout-style.md](references/gpui/layout-style.md)     | `div()`, `h_flex()`, `v_flex()`, flexbox, overflow, positioning |
+| ElementId                   | [element-id.md](references/gpui/element-id.md)         | `ElementId`, `.id()`, uniqueness rules, stateful elements       |
+| Testing                     | [test.md](references/gpui/test.md)                     | `#[gpui_kit::test]`, `TestAppContext`, `VisualTestContext`      |
 
-Do not wrap the session in `std::sync::Mutex` and lock it from `render`. Render already runs inside GPUI's context. A second lock of a non-reentrant mutex never returns, the first frame never finishes, and Wayland never gets a surface. Background threads enter through `AsyncApp` / `WeakEntity::update` only.
+Deep dives, for when the topic file is not enough:
 
-`cx.notify()` runs on the entity's context inside that update. Calling it from a worker thread is a use of the UI runtime off the UI runtime.
-
-## State the view may hold
-
-| Kind | Where |
-| --- | --- |
-| Palette roles, selection, `Load<T>` | the pane entity |
-| Queue, tracks, accounts | `core` types, owned by `Session` or `Player` |
-| Spectrum, position | last event from `playback`, copied into `Player` |
-| Secrets, sockets, SQL | never in a view |
-
-`Load<T>` is `Idle | Loading | Ready(T) | Failed(UserError)`. A failed refresh keeps the last `Ready` page and paints one fault line. Amber is reconnecting. Red is destructive only.
-
-## Styling
-
-Kleeamp surfaces use palette roles (`accent`, `hairline`, `inkFaint`). Map a role onto a kit prop at the call site. Kit components keep the kit theme for stock controls (dialogs, inputs, menus). Forking `Theme::global_mut` to recolor the whole kit is how the two systems get welded together and then both look wrong.
-
-Poppins for titles, rows, buttons. JetBrains Mono only for clocks, bitrate, sample rate, format, hosts. Gutter 22px. Rows and hairlines. A card is for an object with its own state (a configured host). Plates stand in for missing art. The role values live in `android/.../theme/KleeampPalette.kt`. The desktop port skill says how the window uses them.
-
-## Tests
-
-A pane test exists only when the interaction is the bug (`rust-desktop`). Headless checks use the `test-support` feature and `#[gpui_kit::test]`. See <https://gpui-kit.com/docs/test>. Query a repeated row with `window.within(("message", id)).find("archive")`, not a bare `find` that matches every row.
-
-## Do not
-
-- Block the UI thread (`block_on`, std filesystem, SSH, decode).
-- Build a retained element per track. Virtualize.
-- Call `cx.notify()` from a background thread.
-- `read` / `update` an entity that is already in `render` or `update`.
-- Lock a `Mutex` around app state from inside `render`.
-- Give two live siblings the same element id.
-- Create `InputState`, `FocusHandle`, or table state inside `render`.
-- Store a strong `Entity` from child back to parent. Store `WeakEntity`.
-- Override one GPUI package to a different version than the kit pins.
-- Put `unwrap` in a click handler. Map the error into `Load::Failed`.
-- Import gpui-kit from `core`, `playback`, or `providers`.
+- **Element trait**: [element-api.md](references/gpui/element-api.md) (complete API, hitbox, events) ·
+  [element-patterns.md](references/gpui/element-patterns.md) (text, interactive, container, composite) ·
+  [element-examples.md](references/gpui/element-examples.md) (full examples) ·
+  [element-best-practices.md](references/gpui/element-best-practices.md) (performance, state, pitfalls) ·
+  [element-advanced.md](references/gpui/element-advanced.md) (custom layouts, async updates, virtual lists)
+- **Entities**: [entity-api.md](references/gpui/entity-api.md) (complete API, lifecycle) ·
+  [entity-patterns.md](references/gpui/entity-patterns.md) (model-view, cross-entity, observer) ·
+  [entity-best-practices.md](references/gpui/entity-best-practices.md) (memory, performance) ·
+  [entity-advanced.md](references/gpui/entity-advanced.md) (collections, registry, debounce, state machines)
+- **Testing**: [test-examples.md](references/gpui/test-examples.md) (organization, setup, assertions, running tests) ·
+  [test-reference.md](references/gpui/test-reference.md) (re-entrancy, property tests, mocking)

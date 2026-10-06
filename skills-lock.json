@@ -61,6 +61,18 @@
       "skillPath": "skills/(workflow)/go-skills-router/SKILL.md",
       "computedHash": "5a49d2455097778f12e65c82c9c53949574ff460d7fa395ae08288eee9869c67"
     },
+    "gpui-kit": {
+      "source": "longbridge/gpui-kit",
+      "sourceType": "github",
+      "skillPath": "skills/gpui-kit/SKILL.md",
+      "computedHash": "fc9154a1bfadd2e8148a9229ea208d9f61b87385a195e54dda0534e1d829f9d8"
+    },
+    "gpui-kit-design-guides": {
+      "source": "longbridge/gpui-kit",
+      "sourceType": "github",
+      "skillPath": "skills/gpui-kit-design-guides/SKILL.md",
+      "computedHash": "f5e085823154439a093fbfb947d522213c40842e1d06ebc611e033a854127c0b"
+    },
     "gradle-run": {
       "source": "chrisbanes/skills",
       "sourceType": "github",

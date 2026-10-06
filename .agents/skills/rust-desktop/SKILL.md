@@ -4,8 +4,8 @@ description: >
   Rust workspace rules for the kleeamp desktop client. Use when adding a
   crate, writing a provider, playback, or error type, or reviewing Rust
   that is not UI. Trigger examples: "new crate", "thiserror", "provider
-  trait", "playback thread", "no unwrap". Not for gpui-kit views — use
-  gpui-kit. Not a substitute for clippy.
+  trait", "playback thread", "no unwrap". Not for GPUI views — use
+  build-gpui-apps. Not a substitute for clippy.
 user-invocable: true
 license: MIT
 compatibility: Rust 2024 edition workspace. Requires cargo, clippy, rustfmt.
