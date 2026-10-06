@@ -263,6 +263,35 @@ fun ProviderSongsPane(
                                 onClick = { scope.launch { SftpLibrary.rescan(selectedAccount) } },
                             )
                         }
+                        // Plex and Audiobookshelf serve several libraries but
+                        // browse one: the picker chooses which, trailing like
+                        // the folder picker on smart playlists.
+                        if (selectedAccount?.providerKey == "plex" ||
+                            selectedAccount?.providerKey == "abs"
+                        ) {
+                            val libs = ui.librariesByAccount[selected].orEmpty()
+                            if (libs.size > 1) {
+                                val stored = selectedAccount.values["library"]
+                                val current =
+                                    libs.firstOrNull { it.id == stored } ?: libs.first()
+                                ChipDropdown(
+                                    label = current.name,
+                                    selected = stored?.isNotBlank() == true,
+                                    options = libs.map { lib ->
+                                        ChipOption(lib.name) {
+                                            vm.onEvent(
+                                                ProviderSongsViewModel.Event.SetLibrary(
+                                                    selectedAccount.id, lib.id
+                                                )
+                                            )
+                                            query = ""
+                                            selectedArtist = null
+                                            selectedAlbum = null
+                                        }
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
                 item { FilterRow(value = query, onValue = { query = it }) }

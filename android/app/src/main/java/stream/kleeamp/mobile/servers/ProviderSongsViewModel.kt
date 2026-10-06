@@ -39,6 +39,7 @@ class ProviderSongsViewModel(
         val accounts: List<ProviderAccount> = emptyList(),
         val songsByAccount: Map<String, List<Station>> = emptyMap(),
         val albumYearsByAccount: Map<String, Map<String, Int>> = emptyMap(),
+        val librariesByAccount: Map<String, List<ProviderLibrary>> = emptyMap(),
         val loading: Boolean = false,
         val failures: Map<String, String> = emptyMap(),
         val favorites: List<Station> = emptyList(),
@@ -49,10 +50,12 @@ class ProviderSongsViewModel(
     sealed interface Event {
         data object Refresh : Event
         data class ToggleFavorite(val station: Station) : Event
+        data class SetLibrary(val accountId: String, val libraryId: String) : Event
     }
 
     private val songsByAccount = MutableStateFlow<Map<String, List<Station>>>(emptyMap())
     private val albumYearsByAccount = MutableStateFlow<Map<String, Map<String, Int>>>(emptyMap())
+    private val librariesByAccount = MutableStateFlow<Map<String, List<ProviderLibrary>>>(emptyMap())
     private val failures = MutableStateFlow<Map<String, String>>(emptyMap())
     private val loading = MutableStateFlow(false)
 
@@ -65,12 +68,14 @@ class ProviderSongsViewModel(
             loading,
             ::SongsState,
         ),
+        librariesByAccount,
         prefs.favorites,
-    ) { songs, favorites ->
+    ) { songs, libraries, favorites ->
         UiState(
             accounts = songs.accounts,
             songsByAccount = songs.songs,
             albumYearsByAccount = songs.albumYears,
+            librariesByAccount = libraries,
             loading = songs.loading,
             failures = songs.failures,
             favorites = favorites,
@@ -100,6 +105,15 @@ class ProviderSongsViewModel(
         when (e) {
             Event.Refresh -> viewModelScope.launch { load(store.read()) }
             is Event.ToggleFavorite -> viewModelScope.launch { prefs.toggleFavorite(e.station) }
+            // Evict before saving: the accounts flow re-triggers a load on
+            // the save, which must find an empty cache to refetch.
+            is Event.SetLibrary -> viewModelScope.launch {
+                val account = store.read().firstOrNull { it.id == e.accountId } ?: return@launch
+                songsByAccount.value = songsByAccount.value - e.accountId
+                albumYearsByAccount.value = albumYearsByAccount.value - e.accountId
+                failures.value = failures.value - e.accountId
+                store.save(account.copy(values = account.values + ("library" to e.libraryId)))
+            }
         }
     }
 
@@ -109,25 +123,39 @@ class ProviderSongsViewModel(
         val ids = accounts.map { it.id }.toSet()
         songsByAccount.value = songsByAccount.value.filterKeys { it in ids }
         albumYearsByAccount.value = albumYearsByAccount.value.filterKeys { it in ids }
+        librariesByAccount.value = librariesByAccount.value.filterKeys { it in ids }
         failures.value = failures.value.filterKeys { it in ids }
         val missing = accounts.filter { it.id !in songsByAccount.value }
-        if (missing.isEmpty()) return
+        val missingLibraries = accounts
+            .filter { it.providerKey == "plex" || it.providerKey == "abs" }
+            .filter { it.id !in librariesByAccount.value }
+        if (missing.isEmpty() && missingLibraries.isEmpty()) return
         loading.value = true
         try {
             supervisorScope {
-                missing.map { account ->
+                (missing + missingLibraries).distinct().map { account ->
                     async {
-                        runCatching { loadAccount(account) }
-                            .onSuccess { library ->
-                                songsByAccount.value = songsByAccount.value + (account.id to library.songs)
-                                albumYearsByAccount.value =
-                                    albumYearsByAccount.value + (account.id to library.albumYears)
-                                failures.value = failures.value - account.id
-                            }
-                            .onFailure { t ->
-                                failures.value = failures.value +
-                                    (account.id to (t.message ?: "could not load"))
-                            }
+                        if (account in missing) {
+                            runCatching { loadAccount(account) }
+                                .onSuccess { library ->
+                                    songsByAccount.value =
+                                        songsByAccount.value + (account.id to library.songs)
+                                    albumYearsByAccount.value =
+                                        albumYearsByAccount.value + (account.id to library.albumYears)
+                                    failures.value = failures.value - account.id
+                                }
+                                .onFailure { t ->
+                                    failures.value = failures.value +
+                                        (account.id to (t.message ?: "could not load"))
+                                }
+                        }
+                        if (account.providerKey == "plex" || account.providerKey == "abs") {
+                            runCatching { account.browseClient().libraries().getOrThrow() }
+                                .onSuccess { libs ->
+                                    librariesByAccount.value =
+                                        librariesByAccount.value + (account.id to libs)
+                                }
+                        }
                     }
                 }.forEach { it.await() }
             }

@@ -21,6 +21,9 @@ data class ProviderAlbum(
 
 data class ProviderArtist(val id: String, val name: String, val albumCount: Int = 0)
 
+/** One browsable music library on a multi-library server (a Plex section). */
+data class ProviderLibrary(val id: String, val name: String)
+
 /**
  * A provider that keeps its own index of the server rather than asking it a
  * question per screen. Only SSH does: a filesystem has no album endpoint, so
@@ -64,6 +67,12 @@ interface ProviderBrowseClient {
     /** Favourite/starred tracks; empty list when the provider has no such concept. */
     suspend fun starred(): Result<List<ProviderTrack>>
     fun trackCover(id: String): String
+    /**
+     * The account's music libraries for the library picker; empty when the
+     * provider has one implicit library. Plex and Audiobookshelf serve
+     * several, and browsing only ever saw the first until now.
+     */
+    suspend fun libraries(): Result<List<ProviderLibrary>> = Result.success(emptyList())
 
     /**
      * Non-null for providers whose library is a local index, so the screen can
@@ -152,6 +161,7 @@ private class PlexBrowseClient(
     override suspend fun albumTracks(albumId: String): Result<List<ProviderTrack>> =
         client.albumTracks(albumId)
     override suspend fun starred(): Result<List<ProviderTrack>> = Result.success(emptyList())
+    override suspend fun libraries(): Result<List<ProviderLibrary>> = client.libraries()
     /**
      * No per-track cover: the track id is the Part stream path, not a metadata
      * ratingKey, so building a thumb URL from it 404s. The row falls back to
@@ -183,6 +193,7 @@ private class AbsBrowseClient(
     override suspend fun albumTracks(albumId: String): Result<List<ProviderTrack>> =
         client.albumTracks(albumId)
     override suspend fun starred(): Result<List<ProviderTrack>> = Result.success(emptyList())
+    override suspend fun libraries(): Result<List<ProviderLibrary>> = client.libraries()
     override fun trackCover(id: String): String = client.coverUrl(id.substringBefore("::"))
 }
 
