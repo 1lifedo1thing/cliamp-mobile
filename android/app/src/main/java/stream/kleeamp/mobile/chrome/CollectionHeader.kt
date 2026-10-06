@@ -1,5 +1,6 @@
 package stream.kleeamp.mobile.chrome
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,12 +10,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
@@ -110,5 +114,17 @@ fun ShuffleAction(
             Modifier.size(15.dp),
             tint = if (shuffled) p.accent else p.inkSecondary,
         )
+        // On-state dot under the icon: overlay only, so the 40dp target
+        // never changes size when shuffle flips.
+        if (shuffled) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 6.dp)
+                    .size(4.dp)
+                    .background(p.accent, CircleShape)
+                    .semantics { contentDescription = "shuffle on" },
+            )
+        }
     }
 }
