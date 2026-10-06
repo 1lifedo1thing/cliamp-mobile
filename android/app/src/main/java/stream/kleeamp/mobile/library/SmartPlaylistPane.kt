@@ -560,6 +560,47 @@ private fun SmartPlaylistDetail(
         }
     }
     var query by rememberSaveable(pl.key) { mutableStateOf("") }
+    // Browse mode for Local Songs only: a plain chip like the rest that
+    // switches between the flat list and artists → albums → songs pages
+    // over the already-loaded members, like the providers pane. Every chip
+    // keeps its own state: the sorts always show the stored sort (which
+    // applies the moment browse mode leaves), browse shows the mode.
+    val browseable = pl.kind == SmartKind.LocalSongs
+    var browsing by rememberSaveable(pl.key) { mutableStateOf(false) }
+    var browseArtist by rememberSaveable(pl.key) { mutableStateOf<String?>(null) }
+    var browseAlbum by rememberSaveable(pl.key) { mutableStateOf<String?>(null) }
+    BackHandler(enabled = browseable && browsing) {
+        when {
+            browseAlbum != null -> { browseAlbum = null; query = "" }
+            browseArtist != null -> { browseArtist = null; query = "" }
+            else -> browsing = false
+        }
+    }
+    val drilling = browseable && browsing
+    val drillQuery = query.trim().lowercase()
+    val drillArtists = remember(members, drilling, query) {
+        if (!drilling) emptyList()
+        else members.groupBy { it.artist.ifBlank { "unknown artist" } }
+            .filterKeys { drillQuery.isBlank() || it.lowercase().contains(drillQuery) }
+            .toSortedMap(compareBy { it.lowercase() })
+            .map { (name, songs) -> name to songs }
+    }
+    val drillAlbums = remember(members, browseArtist, drilling, query) {
+        val artist = browseArtist
+        if (!drilling || artist == null) emptyList()
+        else members.filter { it.artist.ifBlank { "unknown artist" } == artist }
+            .groupBy { it.album.ifBlank { "unknown album" } }
+            .filterKeys { drillQuery.isBlank() || it.lowercase().contains(drillQuery) }
+            .toSortedMap(compareBy { it.lowercase() })
+            .map { (name, songs) -> name to songs }
+    }
+    val drillSongs = remember(members, browseArtist, browseAlbum, drilling, query) {
+        if (!drilling || browseArtist == null || browseAlbum == null) emptyList()
+        else members.filter {
+            it.artist.ifBlank { "unknown artist" } == browseArtist &&
+                it.album.ifBlank { "unknown album" } == browseAlbum
+        }.matching(query).distinctBy { it.url }
+    }
     // One row per file: a repeated URL (re-downloaded episode, MediaStore
     // duplicate) used to crash the list on a duplicate key. First wins.
     val shown = remember(visible, query) { visible.matching(query).distinctBy { it.url } }
@@ -614,18 +655,47 @@ private fun SmartPlaylistDetail(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    if (browseable) {
+                        // A normal chip like the rest: it switches between
+                        // the flat list and the browse pages. Picks reset on
+                        // the way in so the drill always opens on artists.
+                        Chip("browse", browsing, onClick = {
+                            browsing = !browsing
+                            browseArtist = null
+                            browseAlbum = null
+                            query = ""
+                        })
+                    }
+                    // Sorts share one active state with browse: exactly one
+                    // chip is lit. Tapping one applies it to the flat list,
+                    // which exits the drill so the result shows.
                     PlaylistSort.entries.forEach { t ->
-                        Chip(t.label, sort == t, onClick = { onSortChange(t) })
+                        Chip(t.label, sort == t && !drilling, onClick = {
+                            browsing = false
+                            browseArtist = null
+                            browseAlbum = null
+                            onSortChange(t)
+                        })
                     }
                     // Local songs only: the folder picker trails the sort row.
+                    // A folder change exits the drill, which was scoped to
+                    // the old folder's members.
                     if (pl.kind == SmartKind.LocalSongs && folders.isNotEmpty()) {
                         ChipDropdown(
                             label = folders.firstOrNull { it.path == folder }?.name ?: "all folders",
                             selected = folder != null,
                             options = listOf(
-                                ChipOption("all folders") { onFolder(null) },
+                                ChipOption("all folders") {
+                                    onFolder(null)
+                                    browseArtist = null
+                                    browseAlbum = null
+                                },
                             ) + folders.map { f ->
-                                ChipOption(f.name) { onFolder(f.path) }
+                                ChipOption(f.name) {
+                                    onFolder(f.path)
+                                    browseArtist = null
+                                    browseAlbum = null
+                                }
                             },
                         )
                     }
@@ -644,7 +714,73 @@ private fun SmartPlaylistDetail(
                 onCancelAllDownloads = onCancelAllDownloads,
             )
         }
-        if (shown.isEmpty()) {
+        if (drilling) {
+            when {
+                browseArtist == null -> {
+                    item { SectionLabel("artists — ${drillArtists.size}") }
+                    if (drillArtists.isEmpty()) {
+                        item { DrillEmptyNote(query = query, loading = loading, empty = members.isEmpty()) }
+                    } else {
+                        items(drillArtists, key = { it.first }) { (name, songs) ->
+                            ListRow(
+                                onClick = {
+                                    browseArtist = name
+                                    browseAlbum = null
+                                    query = ""
+                                },
+                                verticalPadding = 9.dp,
+                                leading = {
+                                    CoverCollage(songs, Modifier.size(40.dp))
+                                },
+                                trailing = { Mono("${songs.size}", KleeampType.meta, p.inkFaint) },
+                            ) {
+                                Mono(name, KleeampType.rowPrimary, p.ink, maxLines = 1)
+                            }
+                        }
+                    }
+                }
+                browseAlbum == null -> {
+                    item { SectionLabel("albums — ${drillAlbums.size}") }
+                    if (drillAlbums.isEmpty()) {
+                        item { DrillEmptyNote(query = query, loading = loading, empty = members.isEmpty()) }
+                    } else {
+                        items(drillAlbums, key = { it.first }) { (name, songs) ->
+                            ListRow(
+                                onClick = { browseAlbum = name; query = "" },
+                                verticalPadding = 9.dp,
+                                leading = {
+                                    CoverCollage(songs, Modifier.size(40.dp))
+                                },
+                                trailing = { Mono("${songs.size}", KleeampType.meta, p.inkFaint) },
+                            ) {
+                                Mono(name, KleeampType.rowPrimary, p.ink, maxLines = 1)
+                            }
+                        }
+                    }
+                }
+                else -> {
+                    item { SectionLabel("songs — ${drillSongs.size}") }
+                    if (drillSongs.isEmpty()) {
+                        item { DrillEmptyNote(query = query, loading = loading, empty = members.isEmpty()) }
+                    } else {
+                        items(drillSongs, key = { it.url }, contentType = { "local-song" }) { s ->
+                            SmartSongRow(
+                                s = s,
+                                current = current,
+                                playing = playing,
+                                queue = drillSongs,
+                                onPlay = onPlay,
+                                onOpenMenu = onOpenMenu,
+                                progress = progress,
+                                trackProgress = showResume,
+                                showBytes = false,
+                                fetchedBytes = fetchedBytes,
+                            )
+                        }
+                    }
+                }
+            }
+        } else if (shown.isEmpty()) {
             // Growable lists keep their + on empty too, like playlists do.
             if (onBeginAdd != null) {
                 item {
@@ -685,48 +821,99 @@ private fun SmartPlaylistDetail(
                 }
             }
             items(shown, key = { it.url }, contentType = { "local-song" }) { s ->
-                ListRow(
-                    rail = current?.url == s.url,
-                    onClick = { onPlay(s, shown) },
-                    verticalPadding = 9.dp,
-                    leading = {
-                        SongCover(s = s, current = current, playing = playing)
-                    },
-                    trailing = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            OverflowButton({ onOpenMenu(s) }, size = 16)
-                        }
-                    },
-                ) {
-                    Mono(s.name, KleeampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
-                    // Local rows wear their saved position like podcast
-                    // episodes do, but only while resume is switched on.
-                    val resumed = if (local && showResume) {
-                        progress[s.url]?.takeIf { !it.completed && it.positionMs > 0 }
-                    } else null
-                    Mono(
-                        buildList {
-                            when (s.source) {
-                                StationSource.Podcast -> add(s.artist.ifBlank { s.meta.ifBlank { "podcast" } })
-                                StationSource.Local -> add(s.artistAlbum.ifBlank { s.meta })
-                                else -> {
-                                    s.meta.takeIf { it.isNotBlank() }?.let { add(it) }
-                                    s.tagList.take(2).forEach { add(it) }
-                                }
-                            }
-                            resumed?.let { add("${(it.fraction * 100).toInt()}% in") }
-                            if (pl.kind == SmartKind.Downloads) {
-                                fetchedBytes[s.url]?.let { add(downloadSizeLabel(it)) }
-                            }
-                        }.joinToString(" · "),
-                        KleeampType.rowSecondary, if (resumed != null) p.amber else p.inkTertiary, maxLines = 1,
-                    )
-                }
+                SmartSongRow(
+                    s = s,
+                    current = current,
+                    playing = playing,
+                    queue = shown,
+                    onPlay = onPlay,
+                    onOpenMenu = onOpenMenu,
+                    progress = progress,
+                    trackProgress = local && showResume,
+                    showBytes = pl.kind == SmartKind.Downloads,
+                    fetchedBytes = fetchedBytes,
+                )
             }
         }
         item { Spacer(Modifier.height(20.dp)) }
+    }
+}
+
+/**
+ * One song row, shared by the flat list and the drill's song level so both
+ * read identically: cover, overflow menu, and the resume/size readouts the
+ * flat rows already wear.
+ */
+@Composable
+// Screen signature: state in, callbacks out; bundling would hide the data flow.
+@Suppress("LongParameterList")
+private fun SmartSongRow(
+    s: Station,
+    current: Station?,
+    playing: Boolean,
+    queue: List<Station>,
+    onPlay: (Station, List<Station>) -> Unit,
+    onOpenMenu: (Station) -> Unit,
+    progress: Map<String, EpisodeProgress>,
+    trackProgress: Boolean,
+    showBytes: Boolean,
+    fetchedBytes: Map<String, Long>,
+) {
+    val p = LocalPalette.current
+    ListRow(
+        rail = current?.url == s.url,
+        onClick = { onPlay(s, queue) },
+        verticalPadding = 9.dp,
+        leading = {
+            SongCover(s = s, current = current, playing = playing)
+        },
+        trailing = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OverflowButton({ onOpenMenu(s) }, size = 16)
+            }
+        },
+    ) {
+        Mono(s.name, KleeampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
+        // Local rows wear their saved position like podcast
+        // episodes do, but only while resume is switched on.
+        val resumed = if (trackProgress) {
+            progress[s.url]?.takeIf { !it.completed && it.positionMs > 0 }
+        } else null
+        Mono(
+            buildList {
+                when (s.source) {
+                    StationSource.Podcast -> add(s.artist.ifBlank { s.meta.ifBlank { "podcast" } })
+                    StationSource.Local -> add(s.artistAlbum.ifBlank { s.meta })
+                    else -> {
+                        s.meta.takeIf { it.isNotBlank() }?.let { add(it) }
+                        s.tagList.take(2).forEach { add(it) }
+                    }
+                }
+                resumed?.let { add("${(it.fraction * 100).toInt()}% in") }
+                if (showBytes) {
+                    fetchedBytes[s.url]?.let { add(downloadSizeLabel(it)) }
+                }
+            }.joinToString(" · "),
+            KleeampType.rowSecondary, if (resumed != null) p.amber else p.inkTertiary, maxLines = 1,
+        )
+    }
+}
+
+/** Empty note for a drill level: spinner while scanning, plain note after. */
+@Composable
+private fun DrillEmptyNote(query: String, loading: Boolean, empty: Boolean) {
+    val p = LocalPalette.current
+    if (empty && query.isBlank() && loading) {
+        LoadingNote("scanning for songs…")
+    } else {
+        Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+            Mono(
+                if (query.isNotBlank()) "nothing matches" else "no songs on the phone yet",
+                KleeampType.rowSecondary, p.inkFaint,
+            )
+        }
     }
 }
