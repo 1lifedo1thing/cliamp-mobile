@@ -573,7 +573,10 @@ private fun SmartPlaylistDetail(
                         CollectionActions(
                             shuffled = shuffled,
                             onPlayAll = { shown.firstOrNull()?.let { onPlay(it, shown) } },
-                            onToggleShuffle = onToggleShuffle,
+                            onShufflePlay = {
+                                if (!shuffled) onToggleShuffle()
+                                shown.randomOrNull()?.let { onPlay(it, shown) }
+                            },
                         )
                     }
                 },

@@ -307,7 +307,10 @@ private fun PlaylistDetailShown(
                         CollectionActions(
                             shuffled = shuffled,
                             onPlayAll = { visible.firstOrNull()?.let { onPlay(it, visible) } },
-                            onToggleShuffle = onToggleShuffle,
+                            onShufflePlay = {
+                                if (!shuffled) onToggleShuffle()
+                                visible.randomOrNull()?.let { onPlay(it, visible) }
+                            },
                         )
                     }
                 },

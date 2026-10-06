@@ -70,22 +70,23 @@ fun CollectionHeader(
 
 /**
  * The hero controls under a collection title: a play-all chip next to the
- * global shuffle key. The shuffle key mirrors the player toolbar — same
- * icon, same tints, same flag — so play-all starts shuffled exactly when
- * the toolbar shows shuffle on.
+ * shuffle key. The shuffle key shuffle-plays the page — a random start with
+ * shuffle left on — while the player toolbar keeps the only switch that
+ * turns shuffle back off. Play-all starts shuffled exactly when the toolbar
+ * shows shuffle on.
  */
 @Composable
 fun CollectionActions(
     shuffled: Boolean,
     onPlayAll: () -> Unit,
-    onToggleShuffle: () -> Unit,
+    onShufflePlay: () -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Chip("play all", selected = false, onClick = onPlayAll)
-        ShuffleAction(shuffled = shuffled, onToggleShuffle = onToggleShuffle)
+        ShuffleAction(shuffled = shuffled, onToggleShuffle = onShufflePlay)
     }
 }
 
