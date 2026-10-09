@@ -1,5 +1,6 @@
 package stream.kleeamp.mobile.library
 
+import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.chrome.SheetDragHandle
 import stream.kleeamp.mobile.chrome.SheetStatusBarIcons
@@ -51,12 +53,13 @@ fun DownloadQueueSheet(
         if (queue.isEmpty()) onDismiss()
     }
     val listState = rememberLazyListState()
+    val flingBehavior = ScrollableDefaults.flingBehavior()
     // Downward drags belong to the list while it can still scroll up: the
     // sheet's drag-to-dismiss must not steal them mid-list and peel away.
     // This runs before the sheet's own connection, scrolls the list by hand
     // and consumes only what moved, so a drag at the very top still falls
     // through and dismisses like every other sheet.
-    val listFirst = remember(listState) {
+    val listFirst = remember(listState, flingBehavior) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 if (source != NestedScrollSource.UserInput || available.y <= 0f) return Offset.Zero
@@ -67,6 +70,25 @@ fun DownloadQueueSheet(
                 }
                 val consumed = listState.dispatchRawDelta(-available.y)
                 return Offset(0f, -consumed)
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                // A fast downward flick must fling the list, not peel the
+                // sheet: same direction rule as drags. Consumes only what
+                // the list moved; the rest falls through and may dismiss.
+                if (available.y <= 0f) return Velocity.Zero
+                if (listState.firstVisibleItemIndex == 0 &&
+                    listState.firstVisibleItemScrollOffset == 0
+                ) {
+                    return Velocity.Zero
+                }
+                var remaining = 0f
+                with(listState) {
+                    scroll {
+                        with(flingBehavior) { remaining = performFling(-available.y) }
+                    }
+                }
+                return Velocity(0f, available.y + remaining)
             }
         }
     }
