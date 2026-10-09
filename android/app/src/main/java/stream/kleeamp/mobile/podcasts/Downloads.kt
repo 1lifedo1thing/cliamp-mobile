@@ -433,19 +433,39 @@ class DownloadStore(
 
     /**
      * Forget everything: stops the queue and deletes all fetched files.
-     * Backs the Downloads page trash key. Runs sequentially in one job:
-     * parallel removes read-modify-write the same maps and lose each
-     * other's deletions, leaving files behind.
+     * Backs the Downloads page trash key. Optimistic: the snapshot detaches
+     * and the lists empty on this frame, while the joins, file deletes and
+     * persist catch up in the background.
      */
     fun removeAll() {
-        scope.launch {
-            // Jobs, finished files and bare states (failures with no file):
-            // every URL the queue or the list could be holding.
+        // Jobs, finished files and bare states (failures with no file):
+        // every URL the queue or the list could be holding.
+        val snapshot: Map<String, String?>
+        val jobsToStop: List<Job>
+        synchronized(jobsLock) {
             val urls = (
-                synchronized(jobsLock) { jobs.keys.toList() } +
-                    _entries.value.keys + _states.value.keys
+                jobs.keys + _entries.value.keys + _states.value.keys
                 ).toSet()
-            urls.forEach { url -> removeNow(url) }
+            snapshot = urls.associateWith { _entries.value[it]?.path }
+            jobsToStop = jobs.values.toList()
+            jobs.clear()
+            paused.clear()
+            pausedProgress.clear()
+        }
+        jobsToStop.forEach { it.cancel() }
+        _entries.value = _entries.value - snapshot.keys
+        snapshot.keys.forEach { clearState(it); dropMeta(it) }
+        scope.launch {
+            // Join first: a delete landing mid-rename must never remove
+            // the file the writer just finished.
+            jobsToStop.forEach { runCatching { withTimeoutOrNull(5_000) { it.join() } } }
+            snapshot.forEach { (url, path) ->
+                // Skip URLs refetched since: their jobs clean up after
+                // themselves, and this must never eat a fresh file.
+                val busy = synchronized(jobsLock) { jobs.containsKey(url) } || _entries.value.containsKey(url)
+                if (!busy && path != null) runCatching { File(path).delete() }
+            }
+            prefs.setDownloads(_entries.value)
         }
     }
 
