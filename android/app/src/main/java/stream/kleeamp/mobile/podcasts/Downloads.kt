@@ -432,26 +432,46 @@ class DownloadStore(
     }
 
     /**
+     * Forget everything: stops the queue and deletes all fetched files.
+     * Backs the Downloads page trash key. Runs sequentially in one job:
+     * parallel removes read-modify-write the same maps and lose each
+     * other's deletions, leaving files behind.
+     */
+    fun removeAll() {
+        scope.launch {
+            // Jobs, finished files and bare states (failures with no file):
+            // every URL the queue or the list could be holding.
+            val urls = (
+                synchronized(jobsLock) { jobs.keys.toList() } +
+                    _entries.value.keys + _states.value.keys
+                ).toSet()
+            urls.forEach { url -> removeNow(url) }
+        }
+    }
+
+    /**
      * Forget a fetch: stops it, deletes the file, untracks the URL. The
      * writer is joined before the delete so a remove landing mid-rename can
      * never delete the file the writer just finished - cancel alone is async
      * and the rename would win the race.
      */
     fun remove(url: String) {
+        scope.launch { removeNow(url) }
+    }
+
+    private suspend fun removeNow(url: String) {
         val job = synchronized(jobsLock) {
             paused.remove(url)
             pausedProgress.remove(url)
             jobs.remove(url)
         }
-        scope.launch {
-            job?.cancel()
-            runCatching { withTimeoutOrNull(5_000) { job?.join() } }
-            _entries.value[url]?.let { runCatching { File(it.path).delete() } }
-            _entries.value = _entries.value - url
-            clearState(url)
-            dropMeta(url)
-            prefs.removeDownload(url)
-        }
+        job?.cancel()
+        runCatching { withTimeoutOrNull(5_000) { job?.join() } }
+        _entries.value[url]?.let { runCatching { File(it.path).delete() } }
+        _entries.value = _entries.value - url
+        clearState(url)
+        dropMeta(url)
+        prefs.removeDownload(url)
     }
 
     /**

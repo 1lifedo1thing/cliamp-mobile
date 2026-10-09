@@ -419,11 +419,25 @@ class Prefs(private val context: Context) {
     suspend fun removeCustom(s: Station) = db.customStations().remove(s.url)
 
     suspend fun addDownload(entry: DownloadEntry) {
-        put(K.downloads, Http.json.encodeToString((downloads.first() + (entry.url to entry))))
+        // Read-modify-write inside the edit transaction: parallel finishes
+        // must not overwrite each other's entries.
+        context.settingsStore.edit { p ->
+            val current = p[K.downloads]?.let { raw ->
+                runCatching { Http.json.decodeFromString<Map<String, DownloadEntry>>(raw) }.getOrNull()
+            } ?: emptyMap()
+            p[K.downloads] = Http.json.encodeToString(current + (entry.url to entry))
+        }
     }
 
     suspend fun removeDownload(url: String) {
-        put(K.downloads, Http.json.encodeToString((downloads.first() - url)))
+        // Read-modify-write inside the edit transaction: parallel removes
+        // must not overwrite each other's deletions.
+        context.settingsStore.edit { p ->
+            val current = p[K.downloads]?.let { raw ->
+                runCatching { Http.json.decodeFromString<Map<String, DownloadEntry>>(raw) }.getOrNull()
+            } ?: emptyMap()
+            p[K.downloads] = Http.json.encodeToString(current - url)
+        }
     }
 
     suspend fun setDownloads(map: Map<String, DownloadEntry>) {

@@ -71,6 +71,7 @@ class SmartPlaylistViewModel(
         data class PauseDownload(val url: String) : Event
         data class ResumeDownload(val url: String) : Event
         data object CancelAllDownloads : Event
+        data object RemoveAllDownloads : Event
         data class SetSort(val sort: PlaylistSort) : Event
         data class OpenShow(val show: PodcastShow) : Event
     }
@@ -174,6 +175,7 @@ class SmartPlaylistViewModel(
             is Event.PauseDownload -> downloads.pause(e.url)
             is Event.ResumeDownload -> downloads.resume(e.url)
             is Event.CancelAllDownloads -> downloads.cancelAll()
+            is Event.RemoveAllDownloads -> downloads.removeAll()
             is Event.SetSort -> prefs.setPlaylistSort(sortKey, e.sort)
             is Event.OpenShow -> podcasts.openShow(e.show)
         }

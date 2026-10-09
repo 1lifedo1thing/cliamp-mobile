@@ -277,6 +277,9 @@ fun LibrarySmartPlaylistPane(
                         onCancelAllDownloads = {
                             vm.onEvent(SmartPlaylistViewModel.Event.CancelAllDownloads)
                         },
+                        onRemoveAllDownloads = {
+                            vm.onEvent(SmartPlaylistViewModel.Event.RemoveAllDownloads)
+                        },
                         onBeginAdd = if (pl.kind == SmartKind.Favorites) {
                             { adding = true }
                         } else null,
@@ -499,9 +502,28 @@ internal fun PodcastGroups(
     }
 }
 
+/** The hero remove-all key: same 40dp target and 15dp icon as the shuffle key. */
+@Composable
+private fun RemoveAllAction(onClick: () -> Unit) {
+    val p = LocalPalette.current
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(KleeampShape.small))
+            .microPress(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            KleeampIcons.Trash,
+            "remove all downloads",
+            Modifier.size(15.dp),
+            tint = p.inkSecondary,
+        )
+    }
+}
+
 /** The sheet header line under the title: same words the smart rows wear. */
-private fun smartMenuSubtitle(s: Station): String = buildList {
-    when (s.source) {
+private fun smartMenuSubtitle(s: Station): String = buildList {    when (s.source) {
         StationSource.Podcast -> add(s.artist.ifBlank { s.meta.ifBlank { "podcast" } })
         StationSource.Local -> add(s.artistAlbum.ifBlank { s.meta })
         else -> {
@@ -542,6 +564,7 @@ private fun SmartPlaylistDetail(
     onResumeDownload: (String) -> Unit = {},
     onCancelDownload: (String) -> Unit = {},
     onCancelAllDownloads: () -> Unit = {},
+    onRemoveAllDownloads: () -> Unit = {},
     /** Non-null on lists that can grow: renders the section + button. */
     onBeginAdd: (() -> Unit)? = null,
     shuffled: Boolean = false,
@@ -618,15 +641,25 @@ private fun SmartPlaylistDetail(
                 title = pl.label,
                 meta = if (members.isEmpty()) "" else "${members.size} items",
                 actions = {
-                    if (shown.isNotEmpty()) {
-                        CollectionActions(
-                            shuffled = shuffled,
-                            onPlayAll = { shown.firstOrNull()?.let { onPlay(it, shown) } },
-                            onShufflePlay = {
-                                if (!shuffled) onToggleShuffle()
-                                shown.randomOrNull()?.let { onPlay(it, shown) }
-                            },
-                        )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        if (shown.isNotEmpty()) {
+                            CollectionActions(
+                                shuffled = shuffled,
+                                onPlayAll = { shown.firstOrNull()?.let { onPlay(it, shown) } },
+                                onShufflePlay = {
+                                    if (!shuffled) onToggleShuffle()
+                                    shown.randomOrNull()?.let { onPlay(it, shown) }
+                                },
+                            )
+                        }
+                        // Downloads only: a trash key beside shuffle that
+                        // drops every fetched file in one tap.
+                        if (pl.kind == SmartKind.Downloads && members.isNotEmpty()) {
+                            RemoveAllAction(onClick = onRemoveAllDownloads)
+                        }
                     }
                 },
                 art = {

@@ -1,9 +1,14 @@
 package stream.kleeamp.mobile.library
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +31,7 @@ import stream.kleeamp.mobile.theme.Mono
  * every active, queued, paused and failed fetch with its status. Retry,
  * pause, resume and cancel ride the rows; cancel all clears the whole queue.
  */
+@OptIn(ExperimentalFoundationApi::class)
 fun LazyListScope.downloadQueueSection(
     queue: List<DownloadQueueItem>,
     onRetryDownload: (Station, Boolean) -> Unit,
@@ -35,7 +41,9 @@ fun LazyListScope.downloadQueueSection(
     onCancelAllDownloads: () -> Unit,
 ) {
     if (queue.isEmpty()) return
-    item {
+    // Pinned, not scrolled away: on a long queue the title and the
+    // cancel-all chip stay in reach instead of riding to the very top.
+    stickyHeader {
         DownloadQueueHeader(count = queue.size, onCancelAll = onCancelAllDownloads)
     }
     items(queue, key = { "dl:${it.url}" }, contentType = { "download-queue" }) { q ->
@@ -51,8 +59,14 @@ fun LazyListScope.downloadQueueSection(
 
 @Composable
 private fun DownloadQueueHeader(count: Int, onCancelAll: () -> Unit) {
-    SectionLabel("downloading — $count") {
-        Chip("cancel all", selected = false, onClick = onCancelAll)
+    // Opaque: rows slide underneath the pinned header, never through it.
+    // The offset drops it a little below the sheet's drag handle instead
+    // of riding its very top edge.
+    Column(Modifier.background(LocalPalette.current.ground)) {
+        Spacer(Modifier.height(8.dp))
+        SectionLabel("downloading — $count") {
+            Chip("cancel all", selected = false, onClick = onCancelAll)
+        }
     }
 }
 
