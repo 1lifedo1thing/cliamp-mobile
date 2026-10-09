@@ -9,7 +9,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
@@ -68,9 +67,11 @@ fun DownloadQueueButton(
                 if (count > 99) "99" else count.toString(),
                 KleeampType.chip,
                 p.accent,
+                // Tucked inside the key's own corner, over the circle's
+                // uniform fill: hanging it off the edge tangled the ring
+                // with whatever row scrolled underneath.
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 2.dp, y = (-2).dp)
+                    .align(Alignment.BottomEnd)
                     .border(1.dp, p.accent, CircleShape)
                     .background(p.panel, CircleShape)
                     .sizeIn(minWidth = 20.dp, minHeight = 20.dp)
