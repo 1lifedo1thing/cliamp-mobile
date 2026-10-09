@@ -7,6 +7,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -134,6 +135,16 @@ class DownloadStore(
     /** Last emitted progress per parked URL, for the Paused row state. */
     private val pausedProgress = mutableMapOf<String, Pair<Long, Long>>()
     /**
+     * Strict start order: every queued fetch takes a ticket, and each job
+     * reaches the slots only after the previous ticket arrived. Fresh
+     * launches hit the dispatcher in whatever order, so without this the
+     * first fetches would start randomly; the semaphore grants FIFO, so
+     * ordered arrivals mean ordered starts. All guarded by [jobsLock].
+     */
+    private var nextTicket = 0L
+    private var lastArrival: CompletableDeferred<Unit>? = null
+    private val arrivals = mutableMapOf<String, CompletableDeferred<Unit>>()
+    /**
      * Fetch slots, sized from the parallel-downloads setting. Recreated when
      * the setting changes; in-flight fetches keep their old slot reference
      * and release it, so a change never strands a permit.
@@ -238,8 +249,30 @@ class DownloadStore(
             // Capture the current slots: the setting may swap the instance
             // mid-fetch, and this job must release the one it acquired.
             val gate = synchronized(jobsLock) { slots }
+            // Take the next arrival ticket: this job reaches the slots only
+            // after the previous ticket arrived, so starts follow queue
+            // order no matter how the dispatcher interleaves launches.
+            val prev: CompletableDeferred<Unit>?
+            val mine: CompletableDeferred<Unit>
+            synchronized(jobsLock) {
+                nextTicket++
+                prev = lastArrival
+                mine = CompletableDeferred<Unit>()
+                lastArrival = mine
+                arrivals[url] = mine
+            }
             jobs[url] = scope.launch(Dispatchers.IO) {
                 setState(url, initial ?: DownloadState.Queued)
+                try {
+                    prev?.await()
+                } finally {
+                    // Arrival handoff, not completion: the next ticket may
+                    // line up while this fetch still waits for a slot.
+                    // Idempotent with the cancel/remove path completing a
+                    // job that never started.
+                    mine.complete(Unit)
+                    synchronized(jobsLock) { arrivals.remove(url) }
+                }
                 gate.acquire()
                 try {
                     if (!prefs.cellular.first() && !unmetered()) {
@@ -337,6 +370,9 @@ class DownloadStore(
         val job = synchronized(jobsLock) {
             paused.remove(url)
             pausedProgress.remove(url)
+            // A queued fetch cancelled before its first run never reaches
+            // its arrival handoff: complete it here or the chain stalls.
+            arrivals.remove(url)?.complete(Unit)
             jobs.remove(url)
         }
         job?.cancel()
@@ -365,6 +401,9 @@ class DownloadStore(
             }
             paused.add(url)
             pausedProgress[url] = progress
+            // Same stall guard as cancel: a queued fetch parked before its
+            // first run never reaches its arrival handoff.
+            arrivals.remove(url)?.complete(Unit)
             running
         }
         job.cancel()
@@ -380,8 +419,8 @@ class DownloadStore(
 
     /**
      * Continue a parked fetch from its partial file, showing its kept
-     * percent from the first frame. A no-op unless the URL is paused and
-     * its episode is still known.
+     * percent from the first frame. Re-queued at the end of the line.
+     * A no-op unless the URL is paused and its episode is still known.
      */
     fun resume(url: String) {
         val station: Station
@@ -451,6 +490,8 @@ class DownloadStore(
             jobs.clear()
             paused.clear()
             pausedProgress.clear()
+            arrivals.values.forEach { it.complete(Unit) }
+            arrivals.clear()
         }
         jobsToStop.forEach { it.cancel() }
         _entries.value = _entries.value - snapshot.keys
@@ -483,6 +524,7 @@ class DownloadStore(
         val job = synchronized(jobsLock) {
             paused.remove(url)
             pausedProgress.remove(url)
+            arrivals.remove(url)?.complete(Unit)
             jobs.remove(url)
         }
         job?.cancel()
