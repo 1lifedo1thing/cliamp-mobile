@@ -422,7 +422,7 @@ fun KleeampRoot(
                             )
                             Tab.Pods -> PodcastsScreen(
                                 vm = appViewModel { app ->
-                                    PodcastsViewModel(app.podcasts, app.prefs, app.radio.countries)
+                                    PodcastsViewModel(app.podcasts, app.prefs, app.downloads, app.radio.countries)
                                 },
                                 onOpenShow = { show: PodcastShow ->
                                     podcasts.openShow(show)

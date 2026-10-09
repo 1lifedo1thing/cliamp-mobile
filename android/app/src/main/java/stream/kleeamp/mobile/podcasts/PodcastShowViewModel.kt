@@ -33,7 +33,10 @@ class PodcastShowViewModel(
         data class ClearProgress(val station: Station) : Event
         data class Download(val station: Station) : Event
         data class CancelDownload(val url: String) : Event
+        data class PauseDownload(val url: String) : Event
+        data class ResumeDownload(val url: String) : Event
         data class RemoveDownload(val url: String) : Event
+        data object DownloadAll : Event
         data object AutoDownload : Event
     }
 
@@ -102,7 +105,16 @@ class PodcastShowViewModel(
             }
             is Event.Download -> downloads.download(e.station)
             is Event.CancelDownload -> downloads.cancel(e.url)
+            is Event.PauseDownload -> downloads.pause(e.url)
+            is Event.ResumeDownload -> downloads.resume(e.url)
             is Event.RemoveDownload -> downloads.remove(e.url)
+            is Event.DownloadAll -> {
+                // The feed is already in hand: no fetch, the whole episode
+                // list queues exactly like the show menu's Download-all.
+                val s = state.value
+                val show = s.showState.show ?: return
+                downloads.downloadAll(show, s.showState.episodes)
+            }
             is Event.AutoDownload -> {
                 val s = state.value
                 val show = s.showState.show ?: return

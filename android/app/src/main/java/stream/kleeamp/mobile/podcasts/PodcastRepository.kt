@@ -447,6 +447,16 @@ private var chartCursor: List<String> = emptyList()
         return out
     }
 
+    /**
+     * Every episode of [show]: the cached snapshot when opened before, else
+     * the live feed. Backs the show menu's Download-all, so one tap queues
+     * the whole show even when its feed was never opened.
+     */
+    suspend fun allEpisodes(show: PodcastShow): List<PodcastEpisode> {
+        cachedEpisodes(show).map { it.second }.takeIf { it.isNotEmpty() }?.let { return it }
+        return retryFetch { loadFeed(show) }.getOrNull()?.episodes ?: emptyList()
+    }
+
     /** One subscribed show's cached episodes, empty on any miss or bad payload. */
     private suspend fun cachedEpisodes(show: PodcastShow): List<Pair<PodcastShow, PodcastEpisode>> {
         val row = cache.getFeed(show.feedUrl) ?: return emptyList()

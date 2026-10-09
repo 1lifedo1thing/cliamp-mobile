@@ -146,6 +146,7 @@ fun PodcastShowScreen(
                     },
                     shuffled = shuffled,
                     onToggleShuffle = onToggleShuffle,
+                    onDownloadAll = { vm.onEvent(PodcastShowViewModel.Event.DownloadAll) },
                 )
             }
 
@@ -219,6 +220,7 @@ fun PodcastShowScreen(
                             favorite = s.url in ui.favorites,
                             downloaded = (dlEntries[s.url]?.bytes ?: 0L) > 0L,
                             downloading = mdl is DownloadState.Active || mdl is DownloadState.Queued,
+                            downloadPaused = mdl is DownloadState.Paused,
                             downloadFailed = mdl is DownloadState.Failed,
                             playedDone = done,
                             onPlayNext = { onPlayNext(s) },
@@ -229,6 +231,12 @@ fun PodcastShowScreen(
                             onAddToPlaylist = { onAddToPlaylist(s) },
                             onDownload = {
                                 vm.onEvent(PodcastShowViewModel.Event.Download(s))
+                            },
+                            onPauseDownload = {
+                                vm.onEvent(PodcastShowViewModel.Event.PauseDownload(s.url))
+                            },
+                            onResumeDownload = {
+                                vm.onEvent(PodcastShowViewModel.Event.ResumeDownload(s.url))
                             },
                             onCancelDownload = {
                                 vm.onEvent(PodcastShowViewModel.Event.CancelDownload(s.url))
@@ -258,6 +266,7 @@ private fun ShowHeader(
     onToggleSubscribe: () -> Unit,
     shuffled: Boolean = false,
     onToggleShuffle: () -> Unit = {},
+    onDownloadAll: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     if (show == null) return
@@ -309,6 +318,7 @@ private fun ShowHeader(
                         shuffled = shuffled,
                         onToggleShuffle = onToggleShuffle,
                     )
+                    DownloadAllAction(onDownloadAll = onDownloadAll)
                 }
             }
         }
@@ -318,6 +328,26 @@ private fun ShowHeader(
             }
         }
         HairlineDivider()
+    }
+}
+
+/** The hero download-all key: same 40dp target and 15dp icon as the shuffle key. */
+@Composable
+private fun DownloadAllAction(onDownloadAll: () -> Unit) {
+    val p = LocalPalette.current
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(KleeampShape.small))
+            .microPress(onClick = onDownloadAll),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            KleeampIcons.Download,
+            "download all episodes",
+            Modifier.size(15.dp),
+            tint = p.inkSecondary,
+        )
     }
 }
 
@@ -401,6 +431,8 @@ private fun EpisodeRow(
                 if (dlState is DownloadState.Active) DownloadBlocks(dlState.fraction)
                 else if (dlState is DownloadState.Queued) {
                     Mono("queued", KleeampType.meta, p.inkTertiary)
+                } else if (dlState is DownloadState.Paused) {
+                    Mono("paused", KleeampType.meta, p.inkTertiary)
                 }
                 OverflowButton(onOpenMenu)
             }
@@ -428,6 +460,10 @@ private fun EpisodeRow(
                         else "fetching ${(d.fraction * 100).toInt()}%"
                     )
                     is DownloadState.Queued -> add("queued")
+                    is DownloadState.Paused -> add(
+                        if (d.totalBytes > 0) "paused · ${(d.bytesRead.toFloat() / d.totalBytes * 100).toInt()}%"
+                        else "paused · ${downloadSizeLabel(d.bytesRead)}"
+                    )
                     is DownloadState.Failed -> add(d.reason)
                     is DownloadState.Idle -> {}
                 }

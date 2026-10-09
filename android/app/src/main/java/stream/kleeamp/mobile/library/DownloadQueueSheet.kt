@@ -55,6 +55,8 @@ fun DownloadQueueSheet(
             downloadQueueSection(
                 queue = queue,
                 onRetryDownload = { station, auto -> downloads.download(station, auto) },
+                onPauseDownload = { downloads.pause(it) },
+                onResumeDownload = { downloads.resume(it) },
                 onCancelDownload = { downloads.cancel(it) },
                 onCancelAllDownloads = { downloads.cancelAll() },
             )

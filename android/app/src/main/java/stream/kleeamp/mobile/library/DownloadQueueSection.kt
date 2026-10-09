@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.DownloadBlocks
 import stream.kleeamp.mobile.chrome.ListRow
 import stream.kleeamp.mobile.chrome.SectionLabel
@@ -22,12 +23,14 @@ import stream.kleeamp.mobile.theme.Mono
 
 /**
  * The downloading view, shared by the downloads list and the queue sheet:
- * every active, queued and failed fetch with its status. Retry and cancel
- * ride the rows; cancel all clears the whole queue.
+ * every active, queued, paused and failed fetch with its status. Retry,
+ * pause, resume and cancel ride the rows; cancel all clears the whole queue.
  */
 fun LazyListScope.downloadQueueSection(
     queue: List<DownloadQueueItem>,
     onRetryDownload: (Station, Boolean) -> Unit,
+    onPauseDownload: (String) -> Unit,
+    onResumeDownload: (String) -> Unit,
     onCancelDownload: (String) -> Unit,
     onCancelAllDownloads: () -> Unit,
 ) {
@@ -39,6 +42,8 @@ fun LazyListScope.downloadQueueSection(
         DownloadQueueRow(
             item = q,
             onRetry = { onRetryDownload(q.station, q.auto) },
+            onPause = { onPauseDownload(q.url) },
+            onResume = { onResumeDownload(q.url) },
             onCancel = { onCancelDownload(q.url) },
         )
     }
@@ -46,14 +51,8 @@ fun LazyListScope.downloadQueueSection(
 
 @Composable
 private fun DownloadQueueHeader(count: Int, onCancelAll: () -> Unit) {
-    val p = LocalPalette.current
     SectionLabel("downloading — $count") {
-        Mono(
-            "cancel all",
-            KleeampType.meta,
-            p.inkTertiary,
-            Modifier.microPress(onClick = onCancelAll),
-        )
+        Chip("cancel all", selected = false, onClick = onCancelAll)
     }
 }
 
@@ -61,6 +60,8 @@ private fun DownloadQueueHeader(count: Int, onCancelAll: () -> Unit) {
 private fun DownloadQueueRow(
     item: DownloadQueueItem,
     onRetry: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
     onCancel: () -> Unit,
 ) {
     val p = LocalPalette.current
@@ -84,6 +85,22 @@ private fun DownloadQueueRow(
                         Modifier.microPress(onClick = onRetry),
                     )
                 }
+                if (item.state is DownloadState.Active || item.state is DownloadState.Queued) {
+                    Mono(
+                        "pause",
+                        KleeampType.meta,
+                        p.inkTertiary,
+                        Modifier.microPress(onClick = onPause),
+                    )
+                }
+                if (item.state is DownloadState.Paused) {
+                    Mono(
+                        "resume",
+                        KleeampType.meta,
+                        p.accent,
+                        Modifier.microPress(onClick = onResume),
+                    )
+                }
                 Mono(
                     "cancel",
                     KleeampType.meta,
@@ -100,6 +117,9 @@ private fun DownloadQueueRow(
                     if (s.indeterminate) "fetching ${downloadSizeLabel(s.bytesRead)}"
                     else "fetching ${(s.fraction * 100).toInt()}%"
                 is DownloadState.Queued -> "queued"
+                is DownloadState.Paused ->
+                    if (s.totalBytes > 0) "paused · ${(s.bytesRead.toFloat() / s.totalBytes * 100).toInt()}%"
+                    else "paused · ${downloadSizeLabel(s.bytesRead)}"
                 is DownloadState.Failed -> s.reason
                 is DownloadState.Idle -> ""
             },

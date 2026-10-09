@@ -81,6 +81,7 @@ data class MenuSubject(
     val subscribed: Boolean = false,
     val downloaded: Boolean = false,
     val downloading: Boolean = false,
+    val downloadPaused: Boolean = false,
     val downloadFailed: Boolean = false,
     val playedDone: Boolean = false,
     val infoAvailable: Boolean = false,
@@ -90,12 +91,15 @@ data class MenuSubject(
     val onToggleFavorite: (() -> Unit)? = null,
     val onAddToPlaylist: (() -> Unit)? = null,
     val onDownload: (() -> Unit)? = null,
+    val onPauseDownload: (() -> Unit)? = null,
+    val onResumeDownload: (() -> Unit)? = null,
     val onCancelDownload: (() -> Unit)? = null,
     val onRemoveDownload: (() -> Unit)? = null,
     val onMarkPlayed: (() -> Unit)? = null,
     val onForgetPlayed: (() -> Unit)? = null,
     val onInfo: (() -> Unit)? = null,
     val onToggleSubscribe: (() -> Unit)? = null,
+    val onDownloadAll: (() -> Unit)? = null,
 )
 
 /**
@@ -117,6 +121,18 @@ fun menuActions(s: MenuSubject): List<MenuAction> {
                         icon = if (s.subscribed) KleeampIcons.Xmark else KleeampIcons.Plus,
                         tint = if (s.subscribed) null else p.accent,
                         onClick = toggle,
+                    ),
+                )
+            }
+            s.onDownloadAll?.let { downloadAll ->
+                add(
+                    MenuAction(
+                        id = "download-all",
+                        label = "Download All",
+                        subtitle = "queue every episode offline",
+                        icon = KleeampIcons.Download,
+                        tint = p.accent,
+                        onClick = downloadAll,
                     ),
                 )
             }
@@ -170,9 +186,9 @@ fun menuActions(s: MenuSubject): List<MenuAction> {
                 ),
             )
         }
-        // Episodes gain exactly one download row for their current state:
-        // remove a fetched file, cancel a running fetch, retry a failed
-        // one, or fetch it offline.
+        // Episodes gain download rows for their current state: remove a
+        // fetched file, pause or cancel a running fetch, resume or cancel
+        // a parked one, retry a failed one, or fetch it offline.
         if (s.kind == MenuKind.EPISODE) {
             when {
                 s.downloaded && s.onRemoveDownload != null -> add(
@@ -184,15 +200,55 @@ fun menuActions(s: MenuSubject): List<MenuAction> {
                         onClick = s.onRemoveDownload,
                     ),
                 )
-                s.downloading && s.onCancelDownload != null -> add(
-                    MenuAction(
-                        id = "cancel-download",
-                        label = "Cancel Download",
-                        subtitle = "stop this download",
-                        icon = KleeampIcons.Xmark,
-                        onClick = s.onCancelDownload,
-                    ),
-                )
+                s.downloadPaused && (s.onResumeDownload != null || s.onCancelDownload != null) -> {
+                    s.onResumeDownload?.let {
+                        add(
+                            MenuAction(
+                                id = "resume-download",
+                                label = "Resume Download",
+                                subtitle = "continue where it stopped",
+                                icon = KleeampIcons.Download,
+                                tint = p.accent,
+                                onClick = it,
+                            ),
+                        )
+                    }
+                    s.onCancelDownload?.let {
+                        add(
+                            MenuAction(
+                                id = "cancel-download",
+                                label = "Cancel Download",
+                                subtitle = "drop the partial file",
+                                icon = KleeampIcons.Xmark,
+                                onClick = it,
+                            ),
+                        )
+                    }
+                }
+                s.downloading && (s.onPauseDownload != null || s.onCancelDownload != null) -> {
+                    s.onPauseDownload?.let {
+                        add(
+                            MenuAction(
+                                id = "pause-download",
+                                label = "Pause Download",
+                                subtitle = "keep the progress",
+                                icon = KleeampIcons.Pause,
+                                onClick = it,
+                            ),
+                        )
+                    }
+                    s.onCancelDownload?.let {
+                        add(
+                            MenuAction(
+                                id = "cancel-download",
+                                label = "Cancel Download",
+                                subtitle = "stop this download",
+                                icon = KleeampIcons.Xmark,
+                                onClick = it,
+                            ),
+                        )
+                    }
+                }
                 s.downloadFailed && s.onDownload != null -> add(
                     MenuAction(
                         id = "download",

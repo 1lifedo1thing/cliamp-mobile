@@ -29,6 +29,18 @@ class DownloadQueueTest {
         assertEquals(listOf("a", "q", "f"), ordered)
     }
 
+    @Test fun queueOrdersPausedBetweenQueuedAndFailed() {
+        val ordered = orderQueueItems(
+            listOf(
+                item("f", DownloadState.Failed("http 500")),
+                item("p", DownloadState.Paused(10L, 20L)),
+                item("q", DownloadState.Queued),
+                item("a", DownloadState.Active(0.5f, 10L, 20L)),
+            ),
+        ).map { it.url }
+        assertEquals(listOf("a", "q", "p", "f"), ordered)
+    }
+
     @Test fun queueKeepsArrivalOrderWithinAState() {
         val ordered = orderQueueItems(
             listOf(
