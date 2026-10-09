@@ -73,28 +73,30 @@ class PodcastsViewModel(
                 podcasts.toggleSubscription(e.show)
             }
             is Event.DownloadAll -> viewModelScope.launch {
-                // In hand first: the open show or a cached feed queues
-                // immediately. An unloaded show loads its feed first and
-                // queues whatever lands, instead of silently doing nothing.
-                val live = podcasts.show.value.let {
-                    if (it.show?.feedUrl == e.show.feedUrl) it.episodes else emptyList()
-                }
-                if (live.isNotEmpty()) {
-                    downloads.downloadAll(e.show, live)
-                    return@launch
-                }
-                val cached = podcasts.allEpisodes(e.show)
-                if (cached.isNotEmpty()) {
-                    downloads.downloadAll(e.show, cached)
-                    return@launch
-                }
-                podcasts.openShow(e.show)
-                val landed = withTimeoutOrNull(30_000) {
-                    podcasts.show.first {
-                        it.show?.feedUrl == e.show.feedUrl && (!it.loading || it.episodes.isNotEmpty())
+                downloads.trackResolving {
+                    // In hand first: the open show or a cached feed queues
+                    // immediately. An unloaded show loads its feed first and
+                    // queues whatever lands, instead of silently doing nothing.
+                    val live = podcasts.show.value.let {
+                        if (it.show?.feedUrl == e.show.feedUrl) it.episodes else emptyList()
                     }
-                }?.episodes.orEmpty()
-                if (landed.isNotEmpty()) downloads.downloadAll(e.show, landed)
+                    if (live.isNotEmpty()) {
+                        downloads.downloadAll(e.show, live)
+                        return@trackResolving
+                    }
+                    val cached = podcasts.allEpisodes(e.show)
+                    if (cached.isNotEmpty()) {
+                        downloads.downloadAll(e.show, cached)
+                        return@trackResolving
+                    }
+                    podcasts.openShow(e.show)
+                    val landed = withTimeoutOrNull(30_000) {
+                        podcasts.show.first {
+                            it.show?.feedUrl == e.show.feedUrl && (!it.loading || it.episodes.isNotEmpty())
+                        }
+                    }?.episodes.orEmpty()
+                    if (landed.isNotEmpty()) downloads.downloadAll(e.show, landed)
+                }
             }
         }
     }

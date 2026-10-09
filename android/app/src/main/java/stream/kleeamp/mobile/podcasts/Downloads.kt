@@ -163,6 +163,25 @@ class DownloadStore(
     internal val meta: StateFlow<Map<String, DlMeta>> = _meta.asStateFlow()
 
     /**
+     * Load-then-queue operations in flight (show Download-all resolving a
+     * feed before its episodes exist). The floating key wears a working
+     * state while this is non-zero with an empty queue, instead of a
+     * number that has nothing behind it yet.
+     */
+    private val _resolving = MutableStateFlow(0)
+    val resolving: StateFlow<Int> = _resolving.asStateFlow()
+
+    /** Runs [block], counting it in [resolving] until it returns. */
+    suspend fun <T> trackResolving(block: suspend () -> T): T {
+        _resolving.value += 1
+        try {
+            return block()
+        } finally {
+            _resolving.value -= 1
+        }
+    }
+
+    /**
      * The downloading view's rows: every active, queued, paused or failed
      * fetch with its episode, active first. Completed fetches leave the queue
      * for the downloads list; cancelled ones vanish.
