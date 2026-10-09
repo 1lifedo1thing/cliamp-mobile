@@ -36,6 +36,7 @@ class SettingsViewModel(
         val autoDownload: Boolean = false,
         val autoCellular: Boolean = false,
         val cleanupPlayed: CleanupScope = CleanupScope.Off,
+        val parallelDownloads: Int = 3,
         val resumeLocal: Boolean = false,
         val listenBrainzOn: Boolean = false,
         val scrobbleRadio: Boolean = false,
@@ -54,6 +55,7 @@ class SettingsViewModel(
         data class SetAutoDownload(val v: Boolean) : Event
         data class SetAutoCellular(val v: Boolean) : Event
         data class SetCleanupPlayed(val v: CleanupScope) : Event
+        data class SetParallelDownloads(val v: Int) : Event
         data class SetCellular(val v: Boolean) : Event
         data class SetMono(val v: Boolean) : Event
         data class SetBuffer(val seconds: Int) : Event
@@ -87,6 +89,7 @@ class SettingsViewModel(
         val autoDownload: Boolean = false,
         val autoCellular: Boolean = false,
         val cleanupPlayed: CleanupScope = CleanupScope.Off,
+        val parallelDownloads: Int = 3,
     )
 
     /** Library counts, scrobble flag and directory stats. */
@@ -130,8 +133,9 @@ class SettingsViewModel(
             ),
             prefs.autoCellular,
             prefs.cleanupPlayed,
-        ) { playback, cell, clean ->
-            playback.copy(autoCellular = cell, cleanupPlayed = clean)
+            prefs.parallelDownloads,
+        ) { playback, cell, clean, parallel ->
+            playback.copy(autoCellular = cell, cleanupPlayed = clean, parallelDownloads = parallel)
         },
         combine(
             prefs.resumeLocal,
@@ -163,6 +167,7 @@ class SettingsViewModel(
             autoDownload = playback.autoDownload,
             autoCellular = playback.autoCellular,
             cleanupPlayed = playback.cleanupPlayed,
+            parallelDownloads = playback.parallelDownloads,
             resumeLocal = library.resumeLocal,
             listenBrainzOn = library.listenBrainzToken.isNotBlank(),
             scrobbleRadio = scrobbleBox.radio,
@@ -184,6 +189,7 @@ class SettingsViewModel(
             is Event.SetAutoDownload -> viewModelScope.launch { prefs.setAutoDownload(e.v) }
             is Event.SetAutoCellular -> viewModelScope.launch { prefs.setAutoCellular(e.v) }
             is Event.SetCleanupPlayed -> viewModelScope.launch { prefs.setCleanupPlayed(e.v) }
+            is Event.SetParallelDownloads -> viewModelScope.launch { prefs.setParallelDownloads(e.v) }
             is Event.SetCellular -> viewModelScope.launch { prefs.setCellular(e.v) }
             is Event.SetMono -> viewModelScope.launch { prefs.setMono(e.v) }
             is Event.SetBuffer -> viewModelScope.launch { prefs.setBufferSeconds(e.seconds) }

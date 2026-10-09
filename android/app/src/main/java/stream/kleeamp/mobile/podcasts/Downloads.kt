@@ -25,8 +25,9 @@ import stream.kleeamp.mobile.net.Http
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.prefs.Prefs
 
-    /** Auto-download keeps this many latest episodes per subscribed show. */
-internal const val DEFAULT_AUTO_KEEP = 3
+    /** Parallel fetch choices offered in settings. */
+const val DEFAULT_PARALLEL_DOWNLOADS = 3
+val PARALLEL_DOWNLOAD_CHOICES = listOf(1, 3, 5)
 
 /**
  * One fetched file: where it lives plus the station snapshot that plays it.
@@ -48,7 +49,7 @@ data class DownloadEntry(
 /** Transient per-URL fetch state; anything permanent lives in [DownloadEntry]. */
 sealed interface DownloadState {
     data object Idle : DownloadState
-    /** Waiting for one of the 3 fetch slots; cancellable while parked. */
+    /** Waiting for a fetch slot; cancellable while parked. */
     data object Queued : DownloadState
     data class Active(val fraction: Float, val bytesRead: Long, val totalBytes: Long) : DownloadState {
         /** Negative while the server hides its length; the row then reads bytes. */
@@ -119,12 +120,14 @@ class DownloadStore(
     private val dir = File(context.filesDir, "episode-downloads").apply { mkdirs() }
     private val jobs = mutableMapOf<String, Job>()
     private val jobsLock = Any()
-    /** At most this many fetches at once; the rest wait, cancellable. */
-    private val slots = Semaphore(3)
+    /**
+     * Fetch slots, sized from the parallel-downloads setting. Recreated when
+     * the setting changes; in-flight fetches keep their old slot reference
+     * and release it, so a change never strands a permit.
+     */
+    private var slots = Semaphore(DEFAULT_PARALLEL_DOWNLOADS)
     /** Refuse to start below this free space; episodes are tens of MB. */
     private val minFreeBytes = 100L * 1024 * 1024
-    /** Global backstop on auto fetches; manual downloads are never swept. */
-    private val maxAutoTotal = 60
 
     private val _entries = MutableStateFlow<Map<String, DownloadEntry>>(emptyMap())
     val entries: StateFlow<Map<String, DownloadEntry>> = _entries.asStateFlow()
@@ -155,6 +158,18 @@ class DownloadStore(
         }.stateInUi(scope, emptyList())
 
     init {
+        scope.launch {
+            prefs.parallelDownloads.collect { v ->
+                val n = if (v == 1 || v == 5) v else DEFAULT_PARALLEL_DOWNLOADS
+                synchronized(jobsLock) {
+                    // In-flight fetches captured the old instance in a local
+                    // and release that one, so swapping here never strands a
+                    // permit. A change mid-fetch may briefly overshoot the new
+                    // limit; the next fetches settle on it.
+                    slots = Semaphore(n)
+                }
+            }
+        }
         scope.launch {
             dir.listFiles { f -> f.extension == "tmp" }?.forEach { runCatching { it.delete() } }
             val stored = prefs.downloads.first()
@@ -196,9 +211,12 @@ class DownloadStore(
                 return
             }
             _meta.value = _meta.value + (url to DlMeta(station, auto))
+            // Capture the current slots: the setting may swap the instance
+            // mid-fetch, and this job must release the one it acquired.
+            val gate = synchronized(jobsLock) { slots }
             jobs[url] = scope.launch(Dispatchers.IO) {
                 setState(url, DownloadState.Queued)
-                slots.acquire()
+                gate.acquire()
                 try {
                     if (!prefs.cellular.first() && !unmetered()) {
                         setState(url, DownloadState.Failed("wifi only"))
@@ -259,7 +277,7 @@ class DownloadStore(
                 } catch (e: Exception) {
                     setState(url, DownloadState.Failed(e.message?.lowercase()?.take(42) ?: "download failed"))
                 } finally {
-                    slots.release()
+                    gate.release()
                     synchronized(jobsLock) { jobs.remove(url) }
                     runCatching { File(dir, fileName(url) + ".tmp").delete() }
                 }
@@ -306,10 +324,10 @@ class DownloadStore(
     }
 
     /**
-     * Auto-download for one subscribed show: the latest [keep] full,
-     * unplayed episodes fetch themselves, and older auto fetches for the
-     * show are swept. Manual downloads are never touched. Idempotent, so a
-     * feed refresh re-firing it is free.
+     * Auto-download for one subscribed show: every full, unplayed episode
+     * fetches itself. Nothing is ever swept: offline episodes stay until the
+     * user removes them or the delete-after-listening scope covers them.
+     * Idempotent, so a feed refresh re-firing it is free.
      *
      * Auto fetches are wifi-only unless the cellular opt-in is on; manual
      * taps keep their own [Prefs.cellular] gate inside [download].
@@ -318,31 +336,17 @@ class DownloadStore(
         show: PodcastShow,
         episodes: List<PodcastEpisode>,
         completedUrls: Set<String>,
-        keep: Int = DEFAULT_AUTO_KEEP,
     ) {
         scope.launch {
             if (!prefs.autoDownload.first()) return@launch
             if (!prefs.autoCellular.first() && !unmetered()) return@launch
-            val fresh = episodes
+            episodes
                 .filter { it.isFull && it.audioUrl.isNotBlank() && it.audioUrl !in completedUrls }
-                .take(keep.coerceAtLeast(1))
-            fresh.forEach { ep ->
-                if (!isDownloaded(ep.audioUrl) && !jobs.containsKey(ep.audioUrl)) {
-                    download(ep.toStation(show), auto = true)
+                .forEach { ep ->
+                    if (!isDownloaded(ep.audioUrl) && !jobs.containsKey(ep.audioUrl)) {
+                        download(ep.toStation(show), auto = true)
+                    }
                 }
-            }
-            // Retention: keep the newest [keep] auto fetches of this show.
-            val mine = _entries.value.values
-                .filter { it.auto && it.station.slug == show.id }
-                .sortedByDescending { it.downloadedAt }
-            mine.drop(keep.coerceAtLeast(1)).forEach { remove(it.url) }
-            // Global backstop: auto fetches across many shows still add up.
-            // Manual downloads are never swept.
-            _entries.value.values
-                .filter { it.auto }
-                .sortedByDescending { it.downloadedAt }
-                .drop(maxAutoTotal)
-                .forEach { remove(it.url) }
         }
     }
 

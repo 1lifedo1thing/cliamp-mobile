@@ -90,7 +90,6 @@ fun PodcastShowScreen(
     shuffled: Boolean = false,
     onToggleShuffle: () -> Unit = {},
 ) {
-    val p = LocalPalette.current
     val scope = rememberCoroutineScope()
     val ui by vm.state.collectAsState()
     val dlStates = ui.dlStates
@@ -104,7 +103,6 @@ fun PodcastShowScreen(
     val subscribed = remember(subscriptions, show?.feedUrl) {
         show != null && subscriptions.any { it.feedUrl == show.feedUrl }
     }
-    val keep = show?.let { ui.autoKeep[it.id] } ?: DEFAULT_AUTO_KEEP
 
     // Mapped once per feed load, not per row: a 300 episode list would
     // otherwise rebuild every Station on every recomposition.
@@ -158,29 +156,6 @@ fun PodcastShowScreen(
                         prominent = true,
                         onRetry = { vm.onEvent(PodcastShowViewModel.Event.RefreshShow) },
                     )
-                }
-            }
-
-            // Per-show auto-download depth, next to the episodes it governs:
-            // how many latest full episodes this show keeps offline.
-            if (subscribed && show != null && queue.isNotEmpty()) {
-                item {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Mono("keep offline", KleeampType.meta, p.inkTertiary)
-                        AUTO_KEEP_CHOICES.forEach { n ->
-                            Chip(
-                                "$n",
-                                keep == n,
-                                onClick = {
-                                    vm.onEvent(PodcastShowViewModel.Event.SetAutoKeep(show.id, n))
-                                },
-                            )
-                        }
-                    }
                 }
             }
 
@@ -470,9 +445,6 @@ private fun EpisodeRow(
 
 private val dayMonth = DateTimeFormatter.ofPattern("d MMM", Locale.US)
 private val dayMonthYear = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.US)
-
-/** Per-show auto-download depths offered on the show page. */
-private val AUTO_KEEP_CHOICES = listOf(3, 5, 10)
 
 /** `3 sep` this year, `3 sep 2024` before that. Null when the feed omitted it. */
 private fun shortDate(epochMillis: Long): String? {

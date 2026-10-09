@@ -96,7 +96,7 @@ class Prefs(private val context: Context) {
         val autoDownload = booleanPreferencesKey("auto_download")
         val autoCellular = booleanPreferencesKey("auto_cellular")
         val cleanupPlayed = stringPreferencesKey("cleanup_played")
-        val autoKeep = stringPreferencesKey("auto_keep")
+        val parallelDownloads = intPreferencesKey("parallel_downloads")
         val resumeLocal = booleanPreferencesKey("resume_local")
         val scrobbleRadio = booleanPreferencesKey("scrobble_radio")
         val listenerGlobe = booleanPreferencesKey("listener_globe")
@@ -139,6 +139,10 @@ class Prefs(private val context: Context) {
     /** Which played downloads are deleted: off, auto-downloads only, or all. */
     val cleanupPlayed: Flow<CleanupScope> = context.settingsStore.data.map {
         CleanupScope.of(it[K.cleanupPlayed].orEmpty())
+    }
+    /** How many episode fetches run at once. One of 1, 3, 5; 3 by default. */
+    val parallelDownloads: Flow<Int> = context.settingsStore.data.map {
+        (it[K.parallelDownloads] ?: 3).let { v -> if (v == 1 || v == 5) v else 3 }
     }
     /** Local files reopen where they stopped. Off by default: songs restart. */
     val resumeLocal: Flow<Boolean> = context.settingsStore.data.map { it[K.resumeLocal] ?: false }
@@ -311,15 +315,7 @@ class Prefs(private val context: Context) {
     suspend fun setAutoDownload(v: Boolean) = put(K.autoDownload, v)
     suspend fun setAutoCellular(v: Boolean) = put(K.autoCellular, v)
     suspend fun setCleanupPlayed(v: CleanupScope) = put(K.cleanupPlayed, v.key)
-    /** Per-show auto-download keep count, by show id. Absent means the default. */
-    val autoKeep: Flow<Map<String, Int>> = context.settingsStore.data.map { p ->
-        p[K.autoKeep]?.let { raw ->
-            runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
-        } ?: emptyMap()
-    }
-    suspend fun setAutoKeep(showId: String, keep: Int) {
-        put(K.autoKeep, Http.json.encodeToString(autoKeep.first() + (showId to keep)))
-    }
+    suspend fun setParallelDownloads(v: Int) = put(K.parallelDownloads, if (v == 1 || v == 5) v else 3)
     suspend fun setResumeLocal(v: Boolean) = put(K.resumeLocal, v)
     suspend fun setScrobbleRadio(v: Boolean) = put(K.scrobbleRadio, v)
     suspend fun setVolume(v: Float) = put(K.volume, v)
