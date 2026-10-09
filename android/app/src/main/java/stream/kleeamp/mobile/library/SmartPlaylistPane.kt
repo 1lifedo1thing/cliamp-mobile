@@ -265,11 +265,20 @@ fun LibrarySmartPlaylistPane(
                         onRetryDownload = { s, auto ->
                             vm.onEvent(SmartPlaylistViewModel.Event.RetryDownload(s, auto))
                         },
+                        onPauseDownload = {
+                            vm.onEvent(SmartPlaylistViewModel.Event.PauseDownload(it))
+                        },
+                        onResumeDownload = {
+                            vm.onEvent(SmartPlaylistViewModel.Event.ResumeDownload(it))
+                        },
                         onCancelDownload = {
                             vm.onEvent(SmartPlaylistViewModel.Event.CancelDownload(it))
                         },
                         onCancelAllDownloads = {
                             vm.onEvent(SmartPlaylistViewModel.Event.CancelAllDownloads)
+                        },
+                        onRemoveAllDownloads = {
+                            vm.onEvent(SmartPlaylistViewModel.Event.RemoveAllDownloads)
                         },
                         onBeginAdd = if (pl.kind == SmartKind.Favorites) {
                             { adding = true }
@@ -493,9 +502,28 @@ internal fun PodcastGroups(
     }
 }
 
+/** The hero remove-all key: same 40dp target and 15dp icon as the shuffle key. */
+@Composable
+private fun RemoveAllAction(onClick: () -> Unit) {
+    val p = LocalPalette.current
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(KleeampShape.small))
+            .microPress(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            KleeampIcons.Trash,
+            "remove all downloads",
+            Modifier.size(15.dp),
+            tint = p.inkSecondary,
+        )
+    }
+}
+
 /** The sheet header line under the title: same words the smart rows wear. */
-private fun smartMenuSubtitle(s: Station): String = buildList {
-    when (s.source) {
+private fun smartMenuSubtitle(s: Station): String = buildList {    when (s.source) {
         StationSource.Podcast -> add(s.artist.ifBlank { s.meta.ifBlank { "podcast" } })
         StationSource.Local -> add(s.artistAlbum.ifBlank { s.meta })
         else -> {
@@ -529,11 +557,14 @@ private fun SmartPlaylistDetail(
     showResume: Boolean = false,
     sort: PlaylistSort = PlaylistSort.Title,
     fetchedBytes: Map<String, Long> = emptyMap(),
-    /** Active, queued and failed fetches; shown as a section on downloads. */
+    /** Active, queued, paused and failed fetches; shown as a section on downloads. */
     queue: List<DownloadQueueItem> = emptyList(),
     onRetryDownload: (Station, Boolean) -> Unit = { _, _ -> },
+    onPauseDownload: (String) -> Unit = {},
+    onResumeDownload: (String) -> Unit = {},
     onCancelDownload: (String) -> Unit = {},
     onCancelAllDownloads: () -> Unit = {},
+    onRemoveAllDownloads: () -> Unit = {},
     /** Non-null on lists that can grow: renders the section + button. */
     onBeginAdd: (() -> Unit)? = null,
     shuffled: Boolean = false,
@@ -610,15 +641,25 @@ private fun SmartPlaylistDetail(
                 title = pl.label,
                 meta = if (members.isEmpty()) "" else "${members.size} items",
                 actions = {
-                    if (shown.isNotEmpty()) {
-                        CollectionActions(
-                            shuffled = shuffled,
-                            onPlayAll = { shown.firstOrNull()?.let { onPlay(it, shown) } },
-                            onShufflePlay = {
-                                if (!shuffled) onToggleShuffle()
-                                shown.randomOrNull()?.let { onPlay(it, shown) }
-                            },
-                        )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        if (shown.isNotEmpty()) {
+                            CollectionActions(
+                                shuffled = shuffled,
+                                onPlayAll = { shown.firstOrNull()?.let { onPlay(it, shown) } },
+                                onShufflePlay = {
+                                    if (!shuffled) onToggleShuffle()
+                                    shown.randomOrNull()?.let { onPlay(it, shown) }
+                                },
+                            )
+                        }
+                        // Downloads only: a trash key beside shuffle that
+                        // drops every fetched file in one tap.
+                        if (pl.kind == SmartKind.Downloads && members.isNotEmpty()) {
+                            RemoveAllAction(onClick = onRemoveAllDownloads)
+                        }
                     }
                 },
                 art = {
@@ -703,13 +744,15 @@ private fun SmartPlaylistDetail(
             }
         }
         item { FilterRow(value = query, onValue = { query = it }) }
-        // The downloading view: every active, queued and failed fetch with
-        // its status, ahead of the finished files. Retry and cancel ride
-        // the rows; cancel all clears the whole queue.
+        // The downloading view: every active, queued, paused and failed
+        // fetch with its status, ahead of the finished files. Retry, pause,
+        // resume and cancel ride the rows; cancel all clears the whole queue.
         if (pl.kind == SmartKind.Downloads) {
             downloadQueueSection(
                 queue = queue,
                 onRetryDownload = onRetryDownload,
+                onPauseDownload = onPauseDownload,
+                onResumeDownload = onResumeDownload,
                 onCancelDownload = onCancelDownload,
                 onCancelAllDownloads = onCancelAllDownloads,
             )

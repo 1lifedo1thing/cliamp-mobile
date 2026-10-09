@@ -12,6 +12,7 @@ import stream.kleeamp.mobile.prefs.Prefs
 class PodcastsViewModel(
     private val podcasts: PodcastRepository,
     private val prefs: Prefs,
+    private val downloads: DownloadStore,
     countries: StateFlow<List<CountryCount>>,
 ) : ViewModel() {
     data class UiState(
@@ -28,6 +29,7 @@ class PodcastsViewModel(
         data object NextPage : Event
         data class Load(val query: PodcastQuery) : Event
         data class ToggleSubscription(val show: PodcastShow) : Event
+        data class DownloadAll(val show: PodcastShow) : Event
     }
 
     val state: StateFlow<UiState> = combine(
@@ -67,6 +69,9 @@ class PodcastsViewModel(
             is Event.Load -> podcasts.load(e.query, reset = true)
             is Event.ToggleSubscription -> viewModelScope.launch {
                 podcasts.toggleSubscription(e.show)
+            }
+            is Event.DownloadAll -> viewModelScope.launch {
+                downloads.downloadAll(e.show, podcasts.allEpisodes(e.show))
             }
         }
     }

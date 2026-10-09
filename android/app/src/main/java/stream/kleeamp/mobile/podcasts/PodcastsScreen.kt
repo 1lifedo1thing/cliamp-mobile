@@ -296,6 +296,9 @@ fun PodcastsScreen(
                             onToggleSubscribe = {
                                 vm.onEvent(PodcastsViewModel.Event.ToggleSubscription(show))
                             },
+                            onDownloadAll = {
+                                vm.onEvent(PodcastsViewModel.Event.DownloadAll(show))
+                            },
                         ),
                     ),
                     onDismiss = { menuShow = null },

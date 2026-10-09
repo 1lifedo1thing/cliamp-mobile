@@ -29,10 +29,10 @@ import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Mono
 
 /**
- * The floating fetch key: a plain accent circle with the download glyph
- * and a count badge, nothing else. It rides while the queue is non-empty
- * and pops the downloading sheet; the badge names how many rows wait
- * inside.
+ * The floating fetch key: a secondary-surface circle with the download
+ * glyph and a count badge, nothing else. It rides while the queue is
+ * non-empty and pops the downloading sheet; the badge names how many rows
+ * wait inside.
  */
 @Composable
 fun DownloadQueueButton(
@@ -58,10 +58,11 @@ fun DownloadQueueButton(
                 Modifier
                     .size(46.dp)
                     .clip(CircleShape)
-                    .background(p.accent),
+                    .background(p.panel)
+                    .border(1.dp, p.chipBorder, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(KleeampIcons.Download, "open downloads", Modifier.size(20.dp), tint = p.onAccent)
+                Icon(KleeampIcons.Download, "open downloads", Modifier.size(20.dp), tint = p.accent)
             }
             Mono(
                 if (count > 99) "99" else count.toString(),
@@ -71,7 +72,7 @@ fun DownloadQueueButton(
                     .align(Alignment.TopEnd)
                     .offset(x = 2.dp, y = (-2).dp)
                     .border(1.dp, p.accent, CircleShape)
-                    .background(p.ground, CircleShape)
+                    .background(p.panel, CircleShape)
                     .sizeIn(minWidth = 20.dp, minHeight = 20.dp)
                     .padding(horizontal = 4.dp)
                     .wrapContentSize(Alignment.Center),

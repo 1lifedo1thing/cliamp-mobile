@@ -19,7 +19,6 @@ class PodcastShowViewModel(
         val dlStates: Map<String, DownloadState>,
         val dlEntries: Map<String, DownloadEntry>,
         val autoDownload: Boolean,
-        val autoKeep: Map<String, Int>,
         val showState: ShowState,
         val progress: Map<String, EpisodeProgress>,
         val subscriptions: List<PodcastShow>,
@@ -34,9 +33,11 @@ class PodcastShowViewModel(
         data class ClearProgress(val station: Station) : Event
         data class Download(val station: Station) : Event
         data class CancelDownload(val url: String) : Event
+        data class PauseDownload(val url: String) : Event
+        data class ResumeDownload(val url: String) : Event
         data class RemoveDownload(val url: String) : Event
+        data object DownloadAll : Event
         data object AutoDownload : Event
-        data class SetAutoKeep(val showId: String, val keep: Int) : Event
     }
 
     /** Show feed plus the sets rows read: subscriptions and favourited episode urls. */
@@ -51,12 +52,11 @@ class PodcastShowViewModel(
         val states: Map<String, DownloadState> = emptyMap(),
         val entries: Map<String, DownloadEntry> = emptyMap(),
         val autoDownload: Boolean = false,
-        val autoKeep: Map<String, Int> = emptyMap(),
     )
 
     val state: StateFlow<UiState> = combine(
-        combine(downloads.states, downloads.entries, prefs.autoDownload, prefs.autoKeep) { a, b, c, d ->
-            DlBits(a, b, c, d)
+        combine(downloads.states, downloads.entries, prefs.autoDownload) { a, b, c ->
+            DlBits(a, b, c)
         },
         combine(
             podcasts.show,
@@ -71,7 +71,6 @@ class PodcastShowViewModel(
             dlStates = x.states,
             dlEntries = x.entries,
             autoDownload = x.autoDownload,
-            autoKeep = x.autoKeep,
             showState = y.show,
             progress = y.progress,
             subscriptions = y.subscriptions,
@@ -83,7 +82,6 @@ class PodcastShowViewModel(
             dlStates = downloads.states.value,
             dlEntries = downloads.entries.value,
             autoDownload = false,
-            autoKeep = emptyMap(),
             showState = podcasts.show.value,
             progress = emptyMap(),
             subscriptions = emptyList(),
@@ -107,9 +105,15 @@ class PodcastShowViewModel(
             }
             is Event.Download -> downloads.download(e.station)
             is Event.CancelDownload -> downloads.cancel(e.url)
+            is Event.PauseDownload -> downloads.pause(e.url)
+            is Event.ResumeDownload -> downloads.resume(e.url)
             is Event.RemoveDownload -> downloads.remove(e.url)
-            is Event.SetAutoKeep -> viewModelScope.launch {
-                prefs.setAutoKeep(e.showId, e.keep)
+            is Event.DownloadAll -> {
+                // The feed is already in hand: no fetch, the whole episode
+                // list queues exactly like the show menu's Download-all.
+                val s = state.value
+                val show = s.showState.show ?: return
+                downloads.downloadAll(show, s.showState.episodes)
             }
             is Event.AutoDownload -> {
                 val s = state.value
@@ -120,7 +124,6 @@ class PodcastShowViewModel(
                         show,
                         s.showState.episodes,
                         s.progress.filterValues { it.completed }.keys,
-                        keep = s.autoKeep[show.id] ?: DEFAULT_AUTO_KEEP,
                     )
                 }
             }

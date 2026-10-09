@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import java.io.File
+import java.io.FileOutputStream
 import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -25,8 +26,9 @@ import stream.kleeamp.mobile.net.Http
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.prefs.Prefs
 
-    /** Auto-download keeps this many latest episodes per subscribed show. */
-internal const val DEFAULT_AUTO_KEEP = 3
+    /** Parallel fetch choices offered in settings. */
+const val DEFAULT_PARALLEL_DOWNLOADS = 3
+val PARALLEL_DOWNLOAD_CHOICES = listOf(1, 3, 5)
 
 /**
  * One fetched file: where it lives plus the station snapshot that plays it.
@@ -48,12 +50,14 @@ data class DownloadEntry(
 /** Transient per-URL fetch state; anything permanent lives in [DownloadEntry]. */
 sealed interface DownloadState {
     data object Idle : DownloadState
-    /** Waiting for one of the 3 fetch slots; cancellable while parked. */
+    /** Waiting for a fetch slot; cancellable while parked. */
     data object Queued : DownloadState
     data class Active(val fraction: Float, val bytesRead: Long, val totalBytes: Long) : DownloadState {
         /** Negative while the server hides its length; the row then reads bytes. */
         val indeterminate: Boolean get() = fraction < 0f
     }
+    /** Parked by the user: the partial file stays and resume continues it. */
+    data class Paused(val bytesRead: Long, val totalBytes: Long) : DownloadState
     data class Failed(val reason: String) : DownloadState
 }
 
@@ -82,7 +86,7 @@ internal data class DlMeta(val station: Station, val auto: Boolean)
 data class DownloadQueueItem(val url: String, val station: Station, val state: DownloadState, val auto: Boolean)
 
 /**
- * Queue order, stable: active fetches first, then queued, then failures.
+ * Queue order, stable: active fetches first, then queued, paused, failures.
  * Pure so the row order is unit-tested on the JVM.
  */
 internal fun orderQueueItems(items: List<DownloadQueueItem>): List<DownloadQueueItem> =
@@ -91,7 +95,8 @@ internal fun orderQueueItems(items: List<DownloadQueueItem>): List<DownloadQueue
             { when (it.state) {
                 is DownloadState.Active -> 0
                 is DownloadState.Queued -> 1
-                else -> 2
+                is DownloadState.Paused -> 2
+                else -> 3
             } },
         ),
     )
@@ -119,12 +124,23 @@ class DownloadStore(
     private val dir = File(context.filesDir, "episode-downloads").apply { mkdirs() }
     private val jobs = mutableMapOf<String, Job>()
     private val jobsLock = Any()
-    /** At most this many fetches at once; the rest wait, cancellable. */
-    private val slots = Semaphore(3)
+    /**
+     * URLs the user parked: their jobs are cancelled but the partial `.tmp`
+     * stays, so resume continues it with a Range request. Guarded by
+     * [jobsLock] with [jobs]; the fetch job's cancel/finish paths read it to
+     * decide between keeping and deleting the partial file.
+     */
+    private val paused = mutableSetOf<String>()
+    /** Last emitted progress per parked URL, for the Paused row state. */
+    private val pausedProgress = mutableMapOf<String, Pair<Long, Long>>()
+    /**
+     * Fetch slots, sized from the parallel-downloads setting. Recreated when
+     * the setting changes; in-flight fetches keep their old slot reference
+     * and release it, so a change never strands a permit.
+     */
+    private var slots = Semaphore(DEFAULT_PARALLEL_DOWNLOADS)
     /** Refuse to start below this free space; episodes are tens of MB. */
     private val minFreeBytes = 100L * 1024 * 1024
-    /** Global backstop on auto fetches; manual downloads are never swept. */
-    private val maxAutoTotal = 60
 
     private val _entries = MutableStateFlow<Map<String, DownloadEntry>>(emptyMap())
     val entries: StateFlow<Map<String, DownloadEntry>> = _entries.asStateFlow()
@@ -136,16 +152,18 @@ class DownloadStore(
     internal val meta: StateFlow<Map<String, DlMeta>> = _meta.asStateFlow()
 
     /**
-     * The downloading view's rows: every active, queued or failed fetch with
-     * its episode, active first. Completed fetches leave the queue for the
-     * downloads list; cancelled ones vanish.
+     * The downloading view's rows: every active, queued, paused or failed
+     * fetch with its episode, active first. Completed fetches leave the queue
+     * for the downloads list; cancelled ones vanish.
      */
     val queue: StateFlow<List<DownloadQueueItem>> =
         combine(_states, _meta) { states, meta ->
             orderQueueItems(
                 states.mapNotNull { (url, st) ->
                     val m = meta[url] ?: return@mapNotNull null
-                    if (st is DownloadState.Active || st is DownloadState.Queued || st is DownloadState.Failed) {
+                    if (st is DownloadState.Active || st is DownloadState.Queued ||
+                        st is DownloadState.Paused || st is DownloadState.Failed
+                    ) {
                         DownloadQueueItem(url, m.station, st, m.auto)
                     } else {
                         null
@@ -155,6 +173,18 @@ class DownloadStore(
         }.stateInUi(scope, emptyList())
 
     init {
+        scope.launch {
+            prefs.parallelDownloads.collect { v ->
+                val n = if (v == 1 || v == 5) v else DEFAULT_PARALLEL_DOWNLOADS
+                synchronized(jobsLock) {
+                    // In-flight fetches captured the old instance in a local
+                    // and release that one, so swapping here never strands a
+                    // permit. A change mid-fetch may briefly overshoot the new
+                    // limit; the next fetches settle on it.
+                    slots = Semaphore(n)
+                }
+            }
+        }
         scope.launch {
             dir.listFiles { f -> f.extension == "tmp" }?.forEach { runCatching { it.delete() } }
             val stored = prefs.downloads.first()
@@ -173,12 +203,21 @@ class DownloadStore(
     /** Queue a fetch; a no-op when already held or already running. */
     // Any fetch failure lands in the Failed state by design; the slot,
     // persist and state transitions stay in one state machine on purpose.
+    // A fetch started over a paused partial file resumes it: the `.tmp`
+    // length becomes a Range request, honoured (206, append) or not (200,
+    // restart) depending on the server.
+    // [initial] is the optimistic progress a resume shows from the first
+    // frame instead of flashing 0%: the byte stream corrects it on emit.
     @Suppress("TooGenericExceptionCaught", "LongMethod", "CyclomaticComplexMethod")
-    fun download(station: Station, auto: Boolean = false) {
+    fun download(station: Station, auto: Boolean = false, initial: DownloadState.Active? = null) {
         val url = station.url
         if (isDownloaded(url)) return
         synchronized(jobsLock) {
             if (jobs.containsKey(url)) return
+            // A fresh fetch owns the URL again: a retry of a parked one
+            // resumes its partial file below instead of idling paused.
+            paused.remove(url)
+            pausedProgress.remove(url)
             // A stale entry (file gone outside the app) would render the
             // same URL in both the queue and the finished list, and
             // duplicate keys crash the list - so the lie goes before the
@@ -196,31 +235,45 @@ class DownloadStore(
                 return
             }
             _meta.value = _meta.value + (url to DlMeta(station, auto))
+            // Capture the current slots: the setting may swap the instance
+            // mid-fetch, and this job must release the one it acquired.
+            val gate = synchronized(jobsLock) { slots }
             jobs[url] = scope.launch(Dispatchers.IO) {
-                setState(url, DownloadState.Queued)
-                slots.acquire()
+                setState(url, initial ?: DownloadState.Queued)
+                gate.acquire()
                 try {
                     if (!prefs.cellular.first() && !unmetered()) {
                         setState(url, DownloadState.Failed("wifi only"))
                         return@launch
                     }
-                    setState(url, DownloadState.Active(0f, 0L, -1L))
-                    val req = Request.Builder().url(url).header("User-Agent", Http.USER_AGENT).build()
-                    Http.streamClient.newCall(req).execute().use { resp ->
+                    setState(url, initial ?: DownloadState.Active(0f, 0L, -1L))
+                    val tmp = File(dir, fileName(url) + ".tmp")
+                    val resumeFrom = tmp.takeIf { it.exists() }?.length() ?: 0L
+                    val reqBuilder = Request.Builder().url(url).header("User-Agent", Http.USER_AGENT)
+                    if (resumeFrom > 0) reqBuilder.header("Range", "bytes=$resumeFrom-")
+                    Http.streamClient.newCall(reqBuilder.build()).execute().use { resp ->
                         if (!resp.isSuccessful) {
                             setState(url, DownloadState.Failed("http ${resp.code}"))
                             return@launch
                         }
-                        val total = resp.body.contentLength()
+                        val resumed = resp.code == 206 && resumeFrom > 0
+                        val remaining = resp.body.contentLength()
+                        val total = when {
+                            resumed && remaining > 0 -> resumeFrom + remaining
+                            !resumed -> remaining
+                            else -> -1L
+                        }
                         if (total > 0 && total > dir.usableSpace) {
                             setState(url, DownloadState.Failed("not enough space"))
                             return@launch
                         }
-                        val tmp = File(dir, fileName(url) + ".tmp")
-                        var read = 0L
+                        // The server ignored the Range: the partial file is a
+                        // prefix of nothing, so restart instead of appending.
+                        if (!resumed) runCatching { tmp.delete() }
+                        var read = if (resumed) resumeFrom else 0L
                         var lastEmit = 0L
                         resp.body.byteStream().use { input ->
-                            tmp.outputStream().use { output ->
+                            FileOutputStream(tmp, resumed).use { output ->
                                 val buf = ByteArray(64 * 1024)
                                 while (true) {
                                     ensureActive()
@@ -254,35 +307,145 @@ class DownloadStore(
                         dropMeta(url)
                     }
                 } catch (e: CancellationException) {
-                    setState(url, DownloadState.Idle)
+                    // A pause parks the fetch with its partial file; any
+                    // other cancellation reads idle again.
+                    val parked = synchronized(jobsLock) { url in paused }
+                    if (parked) {
+                        val (read, total) = synchronized(jobsLock) {
+                            pausedProgress[url] ?: (0L to -1L)
+                        }
+                        setState(url, DownloadState.Paused(read, total))
+                    } else {
+                        setState(url, DownloadState.Idle)
+                    }
                     throw e
                 } catch (e: Exception) {
                     setState(url, DownloadState.Failed(e.message?.lowercase()?.take(42) ?: "download failed"))
                 } finally {
-                    slots.release()
-                    synchronized(jobsLock) { jobs.remove(url) }
-                    runCatching { File(dir, fileName(url) + ".tmp").delete() }
+                    gate.release()
+                    val keepPartial = synchronized(jobsLock) {
+                        jobs.remove(url)
+                        url in paused
+                    }
+                    if (!keepPartial) runCatching { File(dir, fileName(url) + ".tmp").delete() }
                 }
             }
         }
     }
 
     fun cancel(url: String) {
-        synchronized(jobsLock) { jobs.remove(url) }?.cancel()
+        val job = synchronized(jobsLock) {
+            paused.remove(url)
+            pausedProgress.remove(url)
+            jobs.remove(url)
+        }
+        job?.cancel()
+        runCatching { File(dir, fileName(url) + ".tmp").delete() }
         if (!isDownloaded(url)) setState(url, DownloadState.Idle)
         dropMeta(url)
     }
 
     /**
+     * Park an active or queued fetch: the job stops but the partial file
+     * stays, and the row reads paused with its progress. [resume] continues
+     * it with a Range request. A no-op unless the URL is fetching.
+     */
+    fun pause(url: String) {
+        val job = synchronized(jobsLock) {
+            val running = jobs[url] ?: return
+            val cur = _states.value[url]
+            val progress = when (cur) {
+                is DownloadState.Active -> cur.bytesRead to cur.totalBytes
+                // Queued but already holding a partial file from an earlier
+                // park: resume offset comes from the file itself.
+                else -> {
+                    val have = runCatching { File(dir, fileName(url) + ".tmp").length() }.getOrDefault(0L)
+                    have to -1L
+                }
+            }
+            paused.add(url)
+            pausedProgress[url] = progress
+            running
+        }
+        job.cancel()
+        // The job's cancellation path publishes the Paused state; set it
+        // here too so a queued fetch parked before acquiring a slot reads
+        // paused immediately instead of until its (uncancellable) acquire
+        // notices. Both write the same value.
+        val (read, total) = synchronized(jobsLock) {
+            pausedProgress[url] ?: (0L to -1L)
+        }
+        if (!isDownloaded(url)) setState(url, DownloadState.Paused(read, total))
+    }
+
+    /**
+     * Continue a parked fetch from its partial file, showing its kept
+     * percent from the first frame. A no-op unless the URL is paused and
+     * its episode is still known.
+     */
+    fun resume(url: String) {
+        val station: Station
+        val auto: Boolean
+        val read: Long
+        val total: Long
+        synchronized(jobsLock) {
+            if (url !in paused) return
+            val m = _meta.value[url] ?: run {
+                paused.remove(url)
+                pausedProgress.remove(url)
+                return
+            }
+            station = m.station
+            auto = m.auto
+            val progress = pausedProgress[url]
+                ?: (_states.value[url] as? DownloadState.Paused)?.let { it.bytesRead to it.totalBytes }
+                ?: (0L to -1L)
+            read = progress.first
+            total = progress.second
+        }
+        val f = if (total > 0) (read.toFloat() / total).coerceIn(0f, 1f) else -1f
+        download(station, auto, DownloadState.Active(f, read, total))
+    }
+
+    /**
+     * Queue every full episode of [show]: the whole show offline in one tap.
+     * Manual fetches, so each keeps its own cellular gate in [download].
+     */
+    fun downloadAll(show: PodcastShow, episodes: List<PodcastEpisode>) {
+        episodes
+            .filter { it.isFull && it.audioUrl.isNotBlank() }
+            .forEach { download(it.toStation(show)) }
+    }
+
+    /**
      * Stop everything and clear the queue: active fetches stop, queued ones
-     * never start, and failures leave the view. Completed downloads stay.
+     * never start, parked ones are dropped with their partial files, and
+     * failures leave the view. Completed downloads stay.
      */
     fun cancelAll() {
-        val urls = synchronized(jobsLock) { jobs.keys.toList() }
+        val urls = synchronized(jobsLock) { jobs.keys.toList() + paused.toList() }
         urls.forEach { cancel(it) }
         _states.value.keys.filter { !isDownloaded(it) }.forEach {
             clearState(it)
             dropMeta(it)
+        }
+    }
+
+    /**
+     * Forget everything: stops the queue and deletes all fetched files.
+     * Backs the Downloads page trash key. Runs sequentially in one job:
+     * parallel removes read-modify-write the same maps and lose each
+     * other's deletions, leaving files behind.
+     */
+    fun removeAll() {
+        scope.launch {
+            // Jobs, finished files and bare states (failures with no file):
+            // every URL the queue or the list could be holding.
+            val urls = (
+                synchronized(jobsLock) { jobs.keys.toList() } +
+                    _entries.value.keys + _states.value.keys
+                ).toSet()
+            urls.forEach { url -> removeNow(url) }
         }
     }
 
@@ -293,23 +456,29 @@ class DownloadStore(
      * and the rename would win the race.
      */
     fun remove(url: String) {
-        val job = synchronized(jobsLock) { jobs.remove(url) }
-        scope.launch {
-            job?.cancel()
-            runCatching { withTimeoutOrNull(5_000) { job?.join() } }
-            _entries.value[url]?.let { runCatching { File(it.path).delete() } }
-            _entries.value = _entries.value - url
-            clearState(url)
-            dropMeta(url)
-            prefs.removeDownload(url)
+        scope.launch { removeNow(url) }
+    }
+
+    private suspend fun removeNow(url: String) {
+        val job = synchronized(jobsLock) {
+            paused.remove(url)
+            pausedProgress.remove(url)
+            jobs.remove(url)
         }
+        job?.cancel()
+        runCatching { withTimeoutOrNull(5_000) { job?.join() } }
+        _entries.value[url]?.let { runCatching { File(it.path).delete() } }
+        _entries.value = _entries.value - url
+        clearState(url)
+        dropMeta(url)
+        prefs.removeDownload(url)
     }
 
     /**
-     * Auto-download for one subscribed show: the latest [keep] full,
-     * unplayed episodes fetch themselves, and older auto fetches for the
-     * show are swept. Manual downloads are never touched. Idempotent, so a
-     * feed refresh re-firing it is free.
+     * Auto-download for one subscribed show: every full, unplayed episode
+     * fetches itself. Nothing is ever swept: offline episodes stay until the
+     * user removes them or the delete-after-listening scope covers them.
+     * Idempotent, so a feed refresh re-firing it is free.
      *
      * Auto fetches are wifi-only unless the cellular opt-in is on; manual
      * taps keep their own [Prefs.cellular] gate inside [download].
@@ -318,31 +487,17 @@ class DownloadStore(
         show: PodcastShow,
         episodes: List<PodcastEpisode>,
         completedUrls: Set<String>,
-        keep: Int = DEFAULT_AUTO_KEEP,
     ) {
         scope.launch {
             if (!prefs.autoDownload.first()) return@launch
             if (!prefs.autoCellular.first() && !unmetered()) return@launch
-            val fresh = episodes
+            episodes
                 .filter { it.isFull && it.audioUrl.isNotBlank() && it.audioUrl !in completedUrls }
-                .take(keep.coerceAtLeast(1))
-            fresh.forEach { ep ->
-                if (!isDownloaded(ep.audioUrl) && !jobs.containsKey(ep.audioUrl)) {
-                    download(ep.toStation(show), auto = true)
+                .forEach { ep ->
+                    if (!isDownloaded(ep.audioUrl) && !jobs.containsKey(ep.audioUrl)) {
+                        download(ep.toStation(show), auto = true)
+                    }
                 }
-            }
-            // Retention: keep the newest [keep] auto fetches of this show.
-            val mine = _entries.value.values
-                .filter { it.auto && it.station.slug == show.id }
-                .sortedByDescending { it.downloadedAt }
-            mine.drop(keep.coerceAtLeast(1)).forEach { remove(it.url) }
-            // Global backstop: auto fetches across many shows still add up.
-            // Manual downloads are never swept.
-            _entries.value.values
-                .filter { it.auto }
-                .sortedByDescending { it.downloadedAt }
-                .drop(maxAutoTotal)
-                .forEach { remove(it.url) }
         }
     }
 

@@ -67,6 +67,7 @@ import stream.kleeamp.mobile.theme.OmarchyThemeKeys
 import stream.kleeamp.mobile.theme.Mono
 import stream.kleeamp.mobile.player.UpNextSwipeToRemove
 import stream.kleeamp.mobile.podcasts.CleanupScope
+import stream.kleeamp.mobile.podcasts.PARALLEL_DOWNLOAD_CHOICES
 import kotlin.math.roundToInt
 
 @Composable
@@ -95,6 +96,7 @@ fun SettingsScreen(
     val autoDownload = uiState.autoDownload
     val autoCellular = uiState.autoCellular
     val cleanupPlayed = uiState.cleanupPlayed
+    val parallelDownloads = uiState.parallelDownloads
     val resumeLocal = uiState.resumeLocal
     val listenBrainzOn = uiState.listenBrainzOn
     val scrobbleRadio = uiState.scrobbleRadio
@@ -190,6 +192,25 @@ fun SettingsScreen(
                     options = CleanupScope.entries.map { scope ->
                         ChipOption(cleanupLabel(scope)) {
                             vm.onEvent(SettingsViewModel.Event.SetCleanupPlayed(scope))
+                        }
+                    },
+                )
+            }
+            Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
+        }
+        Column {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Mono("Parallel downloads", KleeampType.rowPrimary, p.ink, Modifier.weight(1f))
+                ChipDropdown(
+                    label = "$parallelDownloads",
+                    selected = true,
+                    options = PARALLEL_DOWNLOAD_CHOICES.map { n ->
+                        ChipOption("$n") {
+                            vm.onEvent(SettingsViewModel.Event.SetParallelDownloads(n))
                         }
                     },
                 )
