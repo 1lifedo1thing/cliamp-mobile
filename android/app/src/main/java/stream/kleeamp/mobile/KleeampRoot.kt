@@ -809,11 +809,13 @@ fun KleeampRoot(
         // pops in; the queue sheet opens over whatever is underneath.
         app?.downloads?.let { downloads ->
             val queue by downloads.queue.collectAsState()
+            val resolving by downloads.resolving.collectAsState()
             DownloadQueueButton(
                 count = queue.size,
                 onClick = { downloadQueueOpen = true },
                 modifier = Modifier.align(Alignment.BottomEnd)
                     .padding(bottom = chromeBottom + 6.dp, end = contentEnd + 16.dp),
+                resolving = resolving > 0,
             )
         }
         if (downloadQueueOpen) {
