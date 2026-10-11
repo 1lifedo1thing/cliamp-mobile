@@ -107,6 +107,7 @@ import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.scrollToTop
 import stream.kleeamp.mobile.chrome.ArtGlow
 import stream.kleeamp.mobile.chrome.MainLayout
+import stream.kleeamp.mobile.chrome.NoticeBus
 import stream.kleeamp.mobile.chrome.microPress
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
@@ -204,6 +205,22 @@ fun LibraryPlaylistPane(
         }
         vm.onEvent(PlaylistDetailViewModel.Event.SetCover(uri.toString()))
     }
+    // Exported M3U text waiting for the save picker: generated on tap,
+    // written when the user picks a destination.
+    var pendingExport by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("audio/x-mpegurl")
+    ) { uri ->
+        val pending = pendingExport
+        pendingExport = null
+        if (uri == null || pending == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.openOutputStream(uri)?.use {
+                it.write(pending.second.toByteArray())
+            } ?: error("no stream")
+        }.onSuccess { NoticeBus.show("saved ${pending.first}.m3u") }
+            .onFailure { NoticeBus.show("export failed", error = true) }
+    }
     Box(Modifier.fillMaxSize().background(p.ground)) {
         val listState = rememberLazyListState()
         MainLayout(
@@ -221,19 +238,11 @@ fun LibraryPlaylistPane(
                             selected = false,
                             onClick = {
                                 scope.launch {
-                                    vm.exportM3u()?.let { text ->
-                                        context.startActivity(
-                                            android.content.Intent.createChooser(
-                                                android.content.Intent(
-                                                    android.content.Intent.ACTION_SEND
-                                                ).setType("text/plain").putExtra(
-                                                    android.content.Intent.EXTRA_TEXT,
-                                                    text,
-                                                ),
-                                                "share playlist",
-                                            )
-                                        )
-                                    }
+                                    val text = vm.exportM3u() ?: return@launch
+                                    val name = pl.station.name.ifBlank { "playlist" }
+                                        .replace('/', '_')
+                                    pendingExport = name to text
+                                    exportLauncher.launch("$name.m3u")
                                 }
                             },
                         )
