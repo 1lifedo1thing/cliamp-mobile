@@ -375,6 +375,45 @@ private fun PlaylistDetailShown(
 ) {
     val p = LocalPalette.current
 
+    // Browse drill over the members, like local songs: artists → albums →
+    // songs over the already-loaded members. The chip only ever opens it;
+    // back or a sort tap leaves.
+    var browsing by rememberSaveable(playlist.station.slug) { mutableStateOf(false) }
+    var browseArtist by rememberSaveable(playlist.station.slug) { mutableStateOf<String?>(null) }
+    var browseAlbum by rememberSaveable(playlist.station.slug) { mutableStateOf<String?>(null) }
+    BackHandler(enabled = browsing) {
+        when {
+            browseAlbum != null -> { browseAlbum = null; onQuery("") }
+            browseArtist != null -> { browseArtist = null; onQuery("") }
+            else -> browsing = false
+        }
+    }
+    val drilling = browsing
+    val drillQuery = query.trim().lowercase()
+    val drillArtists = remember(members, drilling, query) {
+        if (!drilling) emptyList()
+        else members.groupBy { it.artist.ifBlank { "unknown artist" } }
+            .filterKeys { drillQuery.isBlank() || it.lowercase().contains(drillQuery) }
+            .toSortedMap(compareBy { it.lowercase() })
+            .map { (name, songs) -> name to songs }
+    }
+    val drillAlbums = remember(members, browseArtist, drilling, query) {
+        val artist = browseArtist
+        if (!drilling || artist == null) emptyList()
+        else members.filter { it.artist.ifBlank { "unknown artist" } == artist }
+            .groupBy { it.album.ifBlank { "unknown album" } }
+            .filterKeys { drillQuery.isBlank() || it.lowercase().contains(drillQuery) }
+            .toSortedMap(compareBy { it.lowercase() })
+            .map { (name, songs) -> name to songs }
+    }
+    val drillSongs = remember(members, browseArtist, browseAlbum, drilling, query) {
+        if (!drilling || browseArtist == null || browseAlbum == null) emptyList()
+        else members.filter {
+            it.artist.ifBlank { "unknown artist" } == browseArtist &&
+                it.album.ifBlank { "unknown album" } == browseAlbum
+        }.matching(query).distinctBy { it.url }
+    }
+
     // Members can be any source now, so they resolve against the live local
     // library plus the persisted snapshot stations (radio/podcast members).
     // Resolved in PlaylistDetailViewModel so the pane stays dumb.
@@ -444,12 +483,103 @@ private fun PlaylistDetailShown(
                         .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
+                    // Lit while browsing, but never untapped: a re-tap
+                    // is a no-op. Only a sort tap leaves the drill.
+                    Chip("browse", drilling, onClick = {
+                        if (!drilling) {
+                            browsing = true
+                            browseArtist = null
+                            browseAlbum = null
+                            onQuery("")
+                        }
+                    })
+                    // Sorts share one active state with browse: a tap applies
+                    // the sort to the flat list and exits the drill.
                     PlaylistSort.entries.forEach { t ->
-                        Chip(t.label, sort == t, onClick = { onSortChange(t) })
+                        Chip(t.label, sort == t && !drilling, onClick = {
+                            browsing = false
+                            browseArtist = null
+                            browseAlbum = null
+                            onSortChange(t)
+                        })
                     }
                 }
             }
             item { FilterRow(value = query, onValue = onQuery) }
+            if (drilling) {
+                when {
+                    browseArtist == null -> {
+                        item { SectionLabel("artists — ${drillArtists.size}") }
+                        if (drillArtists.isEmpty()) {
+                            item {
+                                Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                                    Mono("nothing matches", KleeampType.rowSecondary, p.inkFaint)
+                                }
+                            }
+                        } else {
+                            items(drillArtists, key = { it.first }) { (name, songs) ->
+                                ListRow(
+                                    onClick = {
+                                        browseArtist = name
+                                        browseAlbum = null
+                                        onQuery("")
+                                    },
+                                    verticalPadding = 9.dp,
+                                    leading = {
+                                        CoverCollage(songs, Modifier.size(40.dp))
+                                    },
+                                    trailing = { Mono("${songs.size}", KleeampType.meta, p.inkFaint) },
+                                ) {
+                                    Mono(name, KleeampType.rowPrimary, p.ink, maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                    browseAlbum == null -> {
+                        item { SectionLabel("albums — ${drillAlbums.size}") }
+                        if (drillAlbums.isEmpty()) {
+                            item {
+                                Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                                    Mono("nothing matches", KleeampType.rowSecondary, p.inkFaint)
+                                }
+                            }
+                        } else {
+                            items(drillAlbums, key = { it.first }) { (name, songs) ->
+                                ListRow(
+                                    onClick = { browseAlbum = name; onQuery("") },
+                                    verticalPadding = 9.dp,
+                                    leading = {
+                                        CoverCollage(songs, Modifier.size(40.dp))
+                                    },
+                                    trailing = { Mono("${songs.size}", KleeampType.meta, p.inkFaint) },
+                                ) {
+                                    Mono(name, KleeampType.rowPrimary, p.ink, maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                    else -> {
+                        item { SectionLabel("songs — ${drillSongs.size}") }
+                        if (drillSongs.isEmpty()) {
+                            item {
+                                Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                                    Mono("nothing matches", KleeampType.rowSecondary, p.inkFaint)
+                                }
+                            }
+                        }
+                        items(drillSongs, key = { it.id }) { s ->
+                            PlaylistMemberRow(
+                                s = s,
+                                current = current,
+                                playing = playing,
+                                queue = drillSongs,
+                                onPlay = onPlay,
+                                onOpenMenu = onOpenMenu,
+                            )
+                        }
+                    }
+                }
+            } else {
             item {
                 SectionLabel("songs — ${visible.size}") {
                     AddSongsButton(onClick = onBeginAdd)
@@ -463,37 +593,62 @@ private fun PlaylistDetailShown(
                 }
             }
             items(visible, key = { it.id }) { s ->
-                ListRow(
-                    rail = current?.url == s.url,
-                    onClick = { onPlay(s, visible) },
-                    verticalPadding = 9.dp,
-                    leading = {
-                        SongCover(s = s, current = current, playing = playing)
-                    },
-                    trailing = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            OverflowButton({ onOpenMenu(s) }, size = 16)
-                        }
-                    },
-                ) {
-                    Mono(s.name, KleeampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
-                    Mono(
-                        s.artistAlbum.ifBlank {
-                            when {
-                                s.source == StationSource.Local -> durationLabel(s.durationMs)
-                                s.source == StationSource.Podcast -> "podcast"
-                                else -> s.meta
-                            }
-                        },
-                        KleeampType.rowSecondary, p.inkTertiary, maxLines = 1,
-                    )
-                }
+                PlaylistMemberRow(
+                    s = s,
+                    current = current,
+                    playing = playing,
+                    queue = visible,
+                    onPlay = onPlay,
+                    onOpenMenu = onOpenMenu,
+                )
+            }
             }
         }
         item { Spacer(Modifier.height(20.dp)) }
+    }
+}
+
+/**
+ * One playlist member row, shared by the flat list and the drill's song
+ * level so both read identically.
+ */
+@Composable
+private fun PlaylistMemberRow(
+    s: Station,
+    current: Station?,
+    playing: Boolean,
+    queue: List<Station>,
+    onPlay: (Station, List<Station>) -> Unit,
+    onOpenMenu: (Station) -> Unit,
+) {
+    val p = LocalPalette.current
+    ListRow(
+        rail = current?.url == s.url,
+        onClick = { onPlay(s, queue) },
+        verticalPadding = 9.dp,
+        leading = {
+            SongCover(s = s, current = current, playing = playing)
+        },
+        trailing = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OverflowButton({ onOpenMenu(s) }, size = 16)
+            }
+        },
+    ) {
+        Mono(s.name, KleeampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
+        Mono(
+            s.artistAlbum.ifBlank {
+                when {
+                    s.source == StationSource.Local -> durationLabel(s.durationMs)
+                    s.source == StationSource.Podcast -> "podcast"
+                    else -> s.meta
+                }
+            },
+            KleeampType.rowSecondary, p.inkTertiary, maxLines = 1,
+        )
     }
 }
 

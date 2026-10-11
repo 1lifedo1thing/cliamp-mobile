@@ -697,14 +697,15 @@ private fun SmartPlaylistDetail(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (browseable) {
-                        // A normal chip like the rest: it switches between
-                        // the flat list and the browse pages. Picks reset on
-                        // the way in so the drill always opens on artists.
+                        // Lit while browsing, but never untapped: a re-tap
+                        // is a no-op. Only a sort tap leaves the drill.
                         Chip("browse", browsing, onClick = {
-                            browsing = !browsing
-                            browseArtist = null
-                            browseAlbum = null
-                            query = ""
+                            if (!browsing) {
+                                browsing = true
+                                browseArtist = null
+                                browseAlbum = null
+                                query = ""
+                            }
                         })
                     }
                     // Sorts share one active state with browse: exactly one
