@@ -112,6 +112,7 @@ class Prefs(private val context: Context) {
         val downloads = stringPreferencesKey("downloads")
         val customTheme = stringPreferencesKey("custom_theme")
         val playlistSorts = stringPreferencesKey("playlist_sorts")  // slug -> PlaylistSort.ordinal
+        val playlistBrowse = stringPreferencesKey("playlist_browse")  // slugs opened in browse
         val playlistBookmarks = stringPreferencesKey("playlist_bookmarks")  // slug -> member index
         val subsGrid = booleanPreferencesKey("subs_grid")           // podcasts: subscribed shows as tiles
         val podDirectoryGrid = booleanPreferencesKey("pod_directory_grid") // podcasts: directory as tiles
@@ -255,6 +256,10 @@ class Prefs(private val context: Context) {
     // DataStore file is only the restore-after-boot source.
     private val sortOverrides = MutableStateFlow<Map<String, Int>>(emptyMap())
     private var sortPersist: Job? = null
+    // Browse rides the same shape as sorts: in memory for the tap's own
+    // frame, merged into one DataStore set for restore-after-boot.
+    private val browseOverrides = MutableStateFlow<Set<String>>(emptySet())
+    private var browsePersist: Job? = null
     // Bookmarks ride the same shape as sorts: in memory for the tap's own
     // frame, merged into one DataStore map for restore-after-boot.
     private val bookmarkOverrides = MutableStateFlow<Map<String, Int>>(emptyMap())
@@ -278,6 +283,9 @@ class Prefs(private val context: Context) {
         sortOverrides.value = p[K.playlistSorts]?.let { raw ->
             runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
         } ?: emptyMap()
+        browseOverrides.value = p[K.playlistBrowse]?.let { raw ->
+            runCatching { Http.json.decodeFromString<Set<String>>(raw) }.getOrNull()
+        } ?: emptySet()
         bookmarkOverrides.value = p[K.playlistBookmarks]?.let { raw ->
             runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
         } ?: emptyMap()
@@ -294,6 +302,13 @@ class Prefs(private val context: Context) {
     /** The sort choice today, for the first frame of a freshly opened list. */
     fun playlistSortValue(slug: String): PlaylistSort =
         sortOverrides.value[slug]?.let { PlaylistSort.entries.getOrNull(it) } ?: PlaylistSort.Title
+
+    /** Whether one list opens in browse, defaulting to the flat list. */
+    fun playlistBrowse(slug: String): Flow<Boolean> =
+        browseOverrides.map { slug in it }
+
+    /** Browse today, for the first frame of a freshly opened list. */
+    fun playlistBrowseValue(slug: String): Boolean = slug in browseOverrides.value
 
     val lastStation: Flow<Station?> = context.settingsStore.data.map { p ->
         p[K.lastStation]?.let { raw -> runCatching { Http.json.decodeFromString<Station>(raw) }.getOrNull() }
@@ -336,6 +351,20 @@ class Prefs(private val context: Context) {
     suspend fun setPodDirectoryGrid(v: Boolean) {
         podDirectoryGridFlag.value = v
         put(K.podDirectoryGrid, v)
+    }
+
+    /** Remember a playlist's browse flag; edits merge so other playlists are untouched. */
+    fun setPlaylistBrowse(slug: String, browsing: Boolean) {
+        browseOverrides.value = if (browsing) browseOverrides.value + slug else browseOverrides.value - slug
+        browsePersist?.cancel()
+        browsePersist = persist.launch {
+            context.settingsStore.edit { p ->
+                val current = p[K.playlistBrowse]?.let { raw ->
+                    runCatching { Http.json.decodeFromString<Set<String>>(raw) }.getOrNull()
+                } ?: emptySet()
+                p[K.playlistBrowse] = Http.json.encodeToString(current + browseOverrides.value)
+            }
+        }
     }
 
     /** Remember a playlist's sort; edits merge so other playlists are untouched. */
