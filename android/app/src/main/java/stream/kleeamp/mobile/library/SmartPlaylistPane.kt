@@ -135,6 +135,7 @@ fun LibrarySmartPlaylistPane(
     /** Saved positions by station URL, for the resume readout on local rows. */
     progress: Map<String, EpisodeProgress> = emptyMap(),
     onAddToPlaylist: (Station) -> Unit = {},
+    onOpenArtist: (String) -> Unit = {},
     shuffled: Boolean = false,
     onToggleShuffle: () -> Unit = {},
 ) {
@@ -260,6 +261,9 @@ fun LibrarySmartPlaylistPane(
                         progress = progress,
                         showResume = showResume,
                         sort = detailSort,
+                        browse = ui.detailBrowse,
+                        onBrowseChange = { vm.onEvent(SmartPlaylistViewModel.Event.SetBrowse(it)) },
+                        onOpenArtist = onOpenArtist,
                         fetchedBytes = fetched.mapValues { it.value.bytes },
                         queue = ui.queue,
                         onRetryDownload = { s, auto ->
@@ -556,6 +560,9 @@ private fun SmartPlaylistDetail(
     progress: Map<String, EpisodeProgress> = emptyMap(),
     showResume: Boolean = false,
     sort: PlaylistSort = PlaylistSort.Title,
+    browse: Boolean = false,
+    onBrowseChange: (Boolean) -> Unit = {},
+    onOpenArtist: (String) -> Unit = {},
     fetchedBytes: Map<String, Long> = emptyMap(),
     /** Active, queued, paused and failed fetches; shown as a section on downloads. */
     queue: List<DownloadQueueItem> = emptyList(),
@@ -591,24 +598,21 @@ private fun SmartPlaylistDetail(
         }
     }
     var query by rememberSaveable(pl.key) { mutableStateOf("") }
-    // Browse for Local Songs only: the same songs regrouped under artist
-    // sections in one flat scroll — no pages, no back handling. The whole
-    // chip row answers on the tap frame: browse is local state, and the
-    // sorts show a local override until the stored sort round-trips back.
+    // Browse for Local Songs only: the same songs under album rows in one
+    // flat scroll — no pages, no back handling. The whole chip row answers
+    // on the tap frame: browse is stored per list, and the sorts show a
+    // local override until the stored sort round-trips back.
     val browseable = pl.kind == SmartKind.LocalSongs
-    var browsing by rememberSaveable(pl.key) { mutableStateOf(false) }
     var sortOverride by remember(pl.key) { mutableStateOf<PlaylistSort?>(null) }
     LaunchedEffect(sort) { sortOverride = null }
     val shownSort = sortOverride ?: sort
     // One row per file: a repeated URL (re-downloaded episode, MediaStore
     // duplicate) used to crash the list on a duplicate key. First wins.
     val shown = remember(visible, query) { visible.matching(query).distinctBy { it.url } }
-    // Browse regroups the filtered songs under artist sections, cheapest
-    // last so the flat list never waits for it.
-    val grouped = remember(shown, browsing) {
-        if (!browsing) emptyMap()
-        else shown.groupBy { it.artist.ifBlank { "unknown artist" } }
-            .toSortedMap(compareBy { it.lowercase() })
+    // Browse lists artists only — one row per artist, tap opens their
+    // page — cheapest last so the flat list never waits for it.
+    val artists = remember(shown, browse) {
+        if (!browse) emptyList() else artistsOf(shown)
     }
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
         item {
@@ -674,9 +678,9 @@ private fun SmartPlaylistDetail(
                     if (browseable) {
                         // Lit while browsing, but never untapped: a re-tap
                         // is a no-op. Only a sort tap switches back.
-                        Chip("browse", browsing, onClick = {
-                            if (!browsing) {
-                                browsing = true
+                        Chip("browse", browse, onClick = {
+                            if (!browse) {
+                                onBrowseChange(true)
                                 query = ""
                             }
                         })
@@ -684,8 +688,8 @@ private fun SmartPlaylistDetail(
                     // Sorts share one active state with browse: exactly one
                     // chip is lit. Tapping one applies it to the flat list.
                     PlaylistSort.entries.forEach { t ->
-                        Chip(t.label, shownSort == t && !browsing, onClick = {
-                            browsing = false
+                        Chip(t.label, shownSort == t && !browse, onClick = {
+                            onBrowseChange(false)
                             sortOverride = t
                             onSortChange(t)
                         })
@@ -723,22 +727,25 @@ private fun SmartPlaylistDetail(
                 onCancelAllDownloads = onCancelAllDownloads,
             )
         }
-        if (browsing && shown.isNotEmpty()) {
-            grouped.forEach { (artist, songs) ->
-                item { SectionLabel("$artist — ${songs.size}") }
-                items(songs, key = { it.url }, contentType = { "local-song" }) { s ->
-                    SmartSongRow(
-                        s = s,
-                        current = current,
-                        playing = playing,
-                        queue = shown,
-                        onPlay = onPlay,
-                        onOpenMenu = onOpenMenu,
-                        progress = progress,
-                        trackProgress = local && showResume,
-                        showBytes = false,
-                        fetchedBytes = fetchedBytes,
-                    )
+        if (browse && shown.isNotEmpty()) {
+            items(artists, key = { it.name }) { group ->
+                ListRow(
+                    onClick = { onOpenArtist(group.name) },
+                    verticalPadding = 9.dp,
+                    leading = {
+                        QuadCollage(group.songs, Modifier.size(40.dp))
+                    },
+                    trailing = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Mono("${group.songs.size}", KleeampType.meta, p.inkFaint)
+                            Icon(KleeampIcons.CaretRight, "open", Modifier.size(9.dp), tint = p.inkFaint)
+                        }
+                    },
+                ) {
+                    Mono(group.name, KleeampType.rowPrimary, p.ink, maxLines = 1)
                 }
             }
         } else if (shown.isEmpty()) {

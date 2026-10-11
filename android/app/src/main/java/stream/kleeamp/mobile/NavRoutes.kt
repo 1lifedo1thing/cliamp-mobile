@@ -30,5 +30,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class LibraryProviderSongs(val accountId: String = "")
 @Serializable data class LibrarySmartPlaylist(val kind: String)
 @Serializable data class LibraryPlaylist(val slug: String, val pickSongs: Boolean = false)
+/** One artist's tracks. Context is the list they were opened from: a playlist slug or "local-songs". */
+@Serializable data class LibraryArtist(val name: String, val context: String)
 @Serializable data class LibrarySongInfo(val stationUrl: String)
 @Serializable data class LibraryAddToPlaylist(val stationUrl: String)

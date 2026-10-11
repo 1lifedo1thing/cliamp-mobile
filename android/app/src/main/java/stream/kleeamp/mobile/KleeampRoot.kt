@@ -76,6 +76,8 @@ import stream.kleeamp.mobile.servers.LibraryProvidersPane
 import stream.kleeamp.mobile.library.LibrarySmartPlaylistPane
 import stream.kleeamp.mobile.library.LibrarySongInfoPane
 import stream.kleeamp.mobile.library.LibraryScreen
+import stream.kleeamp.mobile.library.LibraryArtistPane
+import stream.kleeamp.mobile.library.ArtistViewModel
 import stream.kleeamp.mobile.podcasts.PodcastShowScreen
 import stream.kleeamp.mobile.podcasts.PodcastsScreen
 import stream.kleeamp.mobile.player.UpNextSheet
@@ -562,6 +564,7 @@ fun KleeampRoot(
                         onOpenSettings = { navController.navigate(Settings) },
                         progress = progress,
                         onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
+                        onOpenArtist = { name -> navController.navigate(LibraryArtist(name, "local-songs")) },
                         shuffled = shuffled,
                         onToggleShuffle = { player.toggleShuffle() },
                     )
@@ -592,7 +595,36 @@ fun KleeampRoot(
                         onOpenSettings = { navController.navigate(Settings) },
                         onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
                         onInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
+                        onOpenArtist = { name -> navController.navigate(LibraryArtist(name, slug)) },
                         startAdding = route.pickSongs,
+                        shuffled = shuffled,
+                        onToggleShuffle = { player.toggleShuffle() },
+                    )
+                }
+            }
+            composable<LibraryArtist> { entry ->
+                val route = entry.toRoute<LibraryArtist>()
+                Box(contentModifier) {
+                    LibraryArtistPane(
+                        vm = appViewModel(key = "artist:${route.context}:${route.name}") { app ->
+                            ArtistViewModel(
+                                route.name,
+                                route.context,
+                                app.localLibrary,
+                                app.playlists,
+                                app.prefs,
+                            )
+                        },
+                        artist = route.name,
+                        current = station,
+                        playing = playerState.playing,
+                        onPlay = playOrOpenChannel,
+                        onAddToQueue = { player.addToUpNext(it) },
+                        onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
+                        onInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
+                        onBack = { navController.popBackStack() },
+                        onOpenSearch = { navController.navigate(Search) },
+                        onOpenSettings = { navController.navigate(Settings) },
                         shuffled = shuffled,
                         onToggleShuffle = { player.toggleShuffle() },
                     )
