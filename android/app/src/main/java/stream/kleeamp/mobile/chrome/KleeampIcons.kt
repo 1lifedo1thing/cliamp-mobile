@@ -278,6 +278,19 @@ object KleeampIcons {
         "M3.5 3.5L4.6 14.5h6.8L12.5 3.5",
         "M7 6.5v5.5M10 6.5v5.5",
     )
+    /** A pushpin: round head, shaft, tip. Pin to the top / unpin. */
+    val Pin = solid(
+        16f, 16f,
+        circle(8f, 4f, 2.6f),
+        rect(7.2f, 6.2f, 1.6f, 5f),
+        "M7.2 11.2h1.6L8 15z",
+    )
+    /** A diagonal pencil: rename / edit name. */
+    val Pencil = stroked(
+        16f, 16f, 1.7f,
+        "M11.5 2.5l2 2L6 12l-2.7.7L4 10z",
+        "M10 4l2 2",
+    )
     /** Vertical ellipsis: row overflow menu. */
     val More = solid(16f, 16f, circle(8f, 3f, 2.2f), circle(8f, 8f, 2.2f), circle(8f, 13f, 2.2f))
     val Lines = solid(16f, 14f, rect(0f, 0f, 16f, 2f), rect(0f, 6f, 16f, 2f), rect(0f, 12f, 16f, 2f))

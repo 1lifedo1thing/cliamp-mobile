@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -51,9 +50,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -78,16 +75,15 @@ import stream.kleeamp.mobile.chrome.BackChevron
 import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.ChipDropdown
 import stream.kleeamp.mobile.chrome.ChipOption
+import stream.kleeamp.mobile.chrome.ContextMenuSheet
 import stream.kleeamp.mobile.chrome.FilterRow
+import stream.kleeamp.mobile.chrome.MenuAction
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.KleeampTextField
 import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.Gutter
-import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
 import stream.kleeamp.mobile.chrome.OverflowButton
-import stream.kleeamp.mobile.chrome.OverflowItem
-import stream.kleeamp.mobile.chrome.OverflowMenu
 import stream.kleeamp.mobile.chrome.ScreenHeader
 import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.scrollToTop
@@ -127,6 +123,8 @@ internal fun PlaylistList(
     onOpenSmart: (SmartPlaylist) -> Unit,
 ) {
     val p = LocalPalette.current
+    // The playlist menu's subject: set by the row ⋮ trigger, cleared on dismiss.
+    var menuPl by remember { mutableStateOf<Pair<PlaylistStore.Playlist, Boolean>?>(null) }
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -194,10 +192,7 @@ internal fun PlaylistList(
                         pl = pl,
                         pinned = true,
                         onOpen = onOpen,
-                        onEdit = { onBeginRename(pl.station.slug) },
-                        onDelete = { onDelete(pl.station.slug) },
-                        onAddSongs = { onAddSongs(pl.station.slug) },
-                        onPin = { onPin(pl.station.slug, false) },
+                        onOpenMenu = { menuPl = pl to true },
                     )
                 }
             }
@@ -223,16 +218,72 @@ internal fun PlaylistList(
                         pl = pl,
                         pinned = false,
                         onOpen = onOpen,
-                        onEdit = { onBeginRename(pl.station.slug) },
-                        onDelete = { onDelete(pl.station.slug) },
-                        onAddSongs = { onAddSongs(pl.station.slug) },
-                        onPin = { onPin(pl.station.slug, true) },
+                        onOpenMenu = { menuPl = pl to false },
                     )
                 }
             }
             item { Spacer(Modifier.height(20.dp)) }
         }
         Spacer(Modifier.height(8.dp))
+        // The playlist menu as a bottom sheet: pin, add songs, rename and
+        // remove, like the show and episode menus.
+        menuPl?.let { (pl, pinned) ->
+            val thumb = rememberStationThumbnail(pl.station)
+            ContextMenuSheet(
+                title = pl.station.name,
+                subtitle = "${pl.songIds.size} songs",
+                art = {
+                    if (thumb != null) {
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(KleeampShape.small))
+                                .border(1.dp, p.frameBorder, RoundedCornerShape(KleeampShape.small)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Image(thumb, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        }
+                    } else {
+                        PlaylistGlyph(KleeampIcons.ListShort, pl.station.name)
+                    }
+                },
+                actions = listOf(
+                    MenuAction(
+                        id = "pin",
+                        label = if (pinned) "unpin" else "pin",
+                        subtitle = if (pinned) "remove from pinned" else "keep at the top",
+                        icon = KleeampIcons.Pin,
+                        tint = p.accent,
+                        onClick = { onPin(pl.station.slug, !pinned) },
+                    ),
+                    MenuAction(
+                        id = "add",
+                        label = "add songs",
+                        subtitle = "pick from the phone, stations and podcasts",
+                        icon = KleeampIcons.Plus,
+                        tint = p.accent,
+                        onClick = { onAddSongs(pl.station.slug) },
+                    ),
+                    MenuAction(
+                        id = "rename",
+                        label = "rename",
+                        subtitle = "change the playlist name",
+                        icon = KleeampIcons.Pencil,
+                        tint = p.accent,
+                        onClick = { onBeginRename(pl.station.slug) },
+                    ),
+                    MenuAction(
+                        id = "remove",
+                        label = "remove playlist",
+                        subtitle = "songs stay on the phone",
+                        icon = KleeampIcons.Trash,
+                        destructive = true,
+                        onClick = { onDelete(pl.station.slug) },
+                    ),
+                ),
+                onDismiss = { menuPl = null },
+            )
+        }
     }
 }
 
@@ -243,10 +294,7 @@ private fun PlaylistRow(
     pl: PlaylistStore.Playlist,
     pinned: Boolean,
     onOpen: (PlaylistStore.Playlist) -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onAddSongs: () -> Unit,
-    onPin: () -> Unit,
+    onOpenMenu: () -> Unit,
 ) {
     val p = LocalPalette.current
     ListRow(
@@ -274,13 +322,7 @@ private fun PlaylistRow(
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Mono("${pl.songIds.size} songs", KleeampType.meta, p.inkFaint)
-                PlaylistMenu(
-                    pinned = pinned,
-                    onAddSongs = onAddSongs,
-                    onEdit = onEdit,
-                    onDelete = onDelete,
-                    onPin = onPin,
-                )
+                OverflowButton(onOpenMenu, size = 16)
             }
         },
     ) {
@@ -333,66 +375,6 @@ internal fun smartKindIcon(kind: SmartKind): ImageVector = when (kind) {
     SmartKind.Downloads -> KleeampIcons.Download
     SmartKind.Favorites -> KleeampIcons.Heart
     SmartKind.RecentlyPlayed -> KleeampIcons.Clock
-}
-
-/** The ⋮ overflow menu on a playlist row: pin/unpin, edit the name, or remove the playlist. */
-
-@Composable
-private fun PlaylistMenu(
-    pinned: Boolean,
-    onAddSongs: () -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onPin: () -> Unit,
-) {
-    val p = LocalPalette.current
-    var open by remember { mutableStateOf(false) }
-    Box {
-        Box(
-            Modifier.size(36.dp).clip(RoundedCornerShape(KleeampShape.small)).microPress { open = true },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                KleeampIcons.More, "menu",
-                Modifier.size(17.dp),
-                tint = p.inkTertiary,
-            )
-        }
-        if (open) {
-            Popup(
-                onDismissRequest = { open = false },
-                alignment = Alignment.TopEnd,
-                offset = IntOffset(0, 8),
-            ) {
-                Column(
-                    Modifier.width(170.dp).clip(RoundedCornerShape(KleeampShape.small))
-                        .background(p.ground).border(1.dp, p.hairlineRegion, RoundedCornerShape(KleeampShape.small)),
-                ) {
-                    MenuItem(if (pinned) "unpin" else "pin", p.ink, onPin) { open = false }
-                    HairlineDivider(region = true)
-                    MenuItem("add", p.ink, onAddSongs) { open = false }
-                    HairlineDivider(region = true)
-                    MenuItem("edit name", p.ink, onEdit) { open = false }
-                    HairlineDivider(region = true)
-                    MenuItem("remove playlist", p.destructiveInk, onDelete) { open = false }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MenuItem(label: String, color: androidx.compose.ui.graphics.Color, action: () -> Unit, close: () -> Unit) {
-    val p = LocalPalette.current
-    Row(
-        Modifier.fillMaxWidth().microPress {
-            close()
-            action()
-        }.padding(horizontal = 16.dp, vertical = 13.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Mono(label, KleeampType.chip, color)
-    }
 }
 
 /** A monospace, palette-styled input row for naming playlists. It never grabs
