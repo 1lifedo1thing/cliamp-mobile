@@ -396,16 +396,49 @@ fun SettingsScreen(
         SectionLabel("storage")
         InfoRow("Favourites", "${uiState.favoritesCount} stations")
         InfoRow("History", "${uiState.historyCount} entries")
+        var purgeOpen by remember { mutableStateOf(false) }
         Row(
             Modifier
                 .fillMaxWidth()
-                .microPress { vm.onEvent(SettingsViewModel.Event.ClearHistory) }
+                .microPress { purgeOpen = true }
                 .padding(horizontal = Gutter, vertical = 13.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Mono("Purge history", KleeampType.rowPrimary, p.destructiveInk)
             Mono("▸", KleeampType.rowPrimary, p.destructiveInk)
+        }
+        if (purgeOpen) {
+            MenuSheetShell(
+                onDismiss = { purgeOpen = false },
+                header = {
+                    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Mono("Purge history?", KleeampType.trackTitleCompact, p.ink, maxLines = 1)
+                        Mono(
+                            "${uiState.historyCount} entries will be removed for good",
+                            KleeampType.rowSecondary,
+                            p.inkTertiary,
+                            maxLines = 2,
+                        )
+                    }
+                },
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().microPress {
+                        vm.onEvent(SettingsViewModel.Event.ClearHistory)
+                        purgeOpen = false
+                    }.padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Mono("Purge", KleeampType.rowPrimary, p.destructiveInk)
+                }
+                Row(
+                    Modifier.fillMaxWidth().microPress { purgeOpen = false }.padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Mono("Cancel", KleeampType.rowPrimary, p.ink)
+                }
+            }
         }
         HairlineDivider()
         InfoRow(
