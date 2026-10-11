@@ -375,43 +375,20 @@ private fun PlaylistDetailShown(
 ) {
     val p = LocalPalette.current
 
-    // Browse drill over the members, like local songs: artists → albums →
-    // songs over the already-loaded members. The chip only ever opens it;
-    // back or a sort tap leaves.
+    // Browse regroups the members under artist sections in one flat
+    // scroll — no pages, no back handling. The sorts show a local override
+    // until the stored sort round-trips back, so the whole row answers on
+    // the tap.
     var browsing by rememberSaveable(playlist.station.slug) { mutableStateOf(false) }
-    var browseArtist by rememberSaveable(playlist.station.slug) { mutableStateOf<String?>(null) }
-    var browseAlbum by rememberSaveable(playlist.station.slug) { mutableStateOf<String?>(null) }
-    BackHandler(enabled = browsing) {
-        when {
-            browseAlbum != null -> { browseAlbum = null; onQuery("") }
-            browseArtist != null -> { browseArtist = null; onQuery("") }
-            else -> browsing = false
-        }
-    }
-    val drilling = browsing
-    val drillQuery = query.trim().lowercase()
-    val drillArtists = remember(members, drilling, query) {
-        if (!drilling) emptyList()
-        else members.groupBy { it.artist.ifBlank { "unknown artist" } }
-            .filterKeys { drillQuery.isBlank() || it.lowercase().contains(drillQuery) }
+    var sortOverride by remember(playlist.station.slug) { mutableStateOf<PlaylistSort?>(null) }
+    LaunchedEffect(sort) { sortOverride = null }
+    val shownSort = sortOverride ?: sort
+    // Browse regroups the filtered members; cheapest last so the flat list
+    // never waits for it.
+    val grouped = remember(visible, browsing) {
+        if (!browsing) emptyMap()
+        else visible.groupBy { it.artist.ifBlank { "unknown artist" } }
             .toSortedMap(compareBy { it.lowercase() })
-            .map { (name, songs) -> name to songs }
-    }
-    val drillAlbums = remember(members, browseArtist, drilling, query) {
-        val artist = browseArtist
-        if (!drilling || artist == null) emptyList()
-        else members.filter { it.artist.ifBlank { "unknown artist" } == artist }
-            .groupBy { it.album.ifBlank { "unknown album" } }
-            .filterKeys { drillQuery.isBlank() || it.lowercase().contains(drillQuery) }
-            .toSortedMap(compareBy { it.lowercase() })
-            .map { (name, songs) -> name to songs }
-    }
-    val drillSongs = remember(members, browseArtist, browseAlbum, drilling, query) {
-        if (!drilling || browseArtist == null || browseAlbum == null) emptyList()
-        else members.filter {
-            it.artist.ifBlank { "unknown artist" } == browseArtist &&
-                it.album.ifBlank { "unknown album" } == browseAlbum
-        }.matching(query).distinctBy { it.url }
     }
 
     // Members can be any source now, so they resolve against the live local
@@ -484,99 +461,37 @@ private fun PlaylistDetailShown(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
                     // Lit while browsing, but never untapped: a re-tap
-                    // is a no-op. Only a sort tap leaves the drill.
-                    Chip("browse", drilling, onClick = {
-                        if (!drilling) {
+                    // is a no-op. Only a sort tap switches back.
+                    Chip("browse", browsing, onClick = {
+                        if (!browsing) {
                             browsing = true
-                            browseArtist = null
-                            browseAlbum = null
                             onQuery("")
                         }
                     })
                     // Sorts share one active state with browse: a tap applies
-                    // the sort to the flat list and exits the drill.
+                    // the sort to the flat list.
                     PlaylistSort.entries.forEach { t ->
-                        Chip(t.label, sort == t && !drilling, onClick = {
+                        Chip(t.label, shownSort == t && !browsing, onClick = {
                             browsing = false
-                            browseArtist = null
-                            browseAlbum = null
+                            sortOverride = t
                             onSortChange(t)
                         })
                     }
                 }
             }
             item { FilterRow(value = query, onValue = onQuery) }
-            if (drilling) {
-                when {
-                    browseArtist == null -> {
-                        item { SectionLabel("artists — ${drillArtists.size}") }
-                        if (drillArtists.isEmpty()) {
-                            item {
-                                Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
-                                    Mono("nothing matches", KleeampType.rowSecondary, p.inkFaint)
-                                }
-                            }
-                        } else {
-                            items(drillArtists, key = { it.first }) { (name, songs) ->
-                                ListRow(
-                                    onClick = {
-                                        browseArtist = name
-                                        browseAlbum = null
-                                        onQuery("")
-                                    },
-                                    verticalPadding = 9.dp,
-                                    leading = {
-                                        CoverCollage(songs, Modifier.size(40.dp))
-                                    },
-                                    trailing = { Mono("${songs.size}", KleeampType.meta, p.inkFaint) },
-                                ) {
-                                    Mono(name, KleeampType.rowPrimary, p.ink, maxLines = 1)
-                                }
-                            }
-                        }
-                    }
-                    browseAlbum == null -> {
-                        item { SectionLabel("albums — ${drillAlbums.size}") }
-                        if (drillAlbums.isEmpty()) {
-                            item {
-                                Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
-                                    Mono("nothing matches", KleeampType.rowSecondary, p.inkFaint)
-                                }
-                            }
-                        } else {
-                            items(drillAlbums, key = { it.first }) { (name, songs) ->
-                                ListRow(
-                                    onClick = { browseAlbum = name; onQuery("") },
-                                    verticalPadding = 9.dp,
-                                    leading = {
-                                        CoverCollage(songs, Modifier.size(40.dp))
-                                    },
-                                    trailing = { Mono("${songs.size}", KleeampType.meta, p.inkFaint) },
-                                ) {
-                                    Mono(name, KleeampType.rowPrimary, p.ink, maxLines = 1)
-                                }
-                            }
-                        }
-                    }
-                    else -> {
-                        item { SectionLabel("songs — ${drillSongs.size}") }
-                        if (drillSongs.isEmpty()) {
-                            item {
-                                Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
-                                    Mono("nothing matches", KleeampType.rowSecondary, p.inkFaint)
-                                }
-                            }
-                        }
-                        items(drillSongs, key = { it.id }) { s ->
-                            PlaylistMemberRow(
-                                s = s,
-                                current = current,
-                                playing = playing,
-                                queue = drillSongs,
-                                onPlay = onPlay,
-                                onOpenMenu = onOpenMenu,
-                            )
-                        }
+            if (browsing && visible.isNotEmpty()) {
+                grouped.forEach { (artist, songs) ->
+                    item { SectionLabel("$artist — ${songs.size}") }
+                    items(songs, key = { it.id }) { s ->
+                        PlaylistMemberRow(
+                            s = s,
+                            current = current,
+                            playing = playing,
+                            queue = visible,
+                            onPlay = onPlay,
+                            onOpenMenu = onOpenMenu,
+                        )
                     }
                 }
             } else {
@@ -609,8 +524,8 @@ private fun PlaylistDetailShown(
 }
 
 /**
- * One playlist member row, shared by the flat list and the drill's song
- * level so both read identically.
+ * One playlist member row, shared by the flat list and the browse sections
+ * so both read identically.
  */
 @Composable
 private fun PlaylistMemberRow(
