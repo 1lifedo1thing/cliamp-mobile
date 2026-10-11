@@ -94,6 +94,28 @@ class PlaylistFilesTest {
     }
 
     @Test
+    fun matchFindsPlainFilenameAgainstEncodedLibraryUrl() {
+        // Library urls arrive percent-encoded from Uri.fromFile, while
+        // playlist files carry plain filenames — the user's exact case.
+        val lib = listOf(
+            localSong("/storage/emulated/0/Music/21 Rooz Bad Mehdi Yarrahi.mp3").copy(
+                url = "file:///storage/emulated/0/Music/21%20Rooz%20Bad%20Mehdi%20Yarrahi.mp3",
+            ),
+        )
+        val match = matchEntries(listOf(PlaylistEntry("21 Rooz Bad Mehdi Yarrahi.mp3")), lib)
+        assertEquals(1, match.matched.size)
+        assertEquals(0, match.missing)
+    }
+
+    @Test
+    fun matchFindsEncodedEntryPathAgainstPlainLibrary() {
+        val lib = listOf(localSong("/music/a b.mp3"))
+        val match = matchEntries(listOf(PlaylistEntry("/music/a%20b.mp3")), lib)
+        assertEquals(1, match.matched.size)
+        assertEquals(0, match.missing)
+    }
+
+    @Test
     fun dedupeKeepsFirst() {
         val (ids, dropped) = dedupeIds(listOf("a", "b", "a", "c", "b"))
         assertEquals(listOf("a", "b", "c"), ids)

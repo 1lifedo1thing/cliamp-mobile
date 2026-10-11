@@ -112,10 +112,14 @@ fun renderM3u(stations: List<Station>): String = buildString {
  * absolute path first, then by unique filename; http(s) entries become
  * playable URL stations like hand-added customs. Anything else counts as
  * missing instead of failing the import.
+ *
+ * Both sides are percent-decoded first: library urls arrive encoded from
+ * Uri.fromFile (spaces as %20), while playlist files usually carry plain
+ * filenames — comparing either side raw misses every name with a space.
  */
 fun matchEntries(entries: List<PlaylistEntry>, localSongs: List<Station>): PlaylistMatch {
     val byPath = localSongs.associateBy { decodePath(it.url.removePrefix("file://")) }
-    val byName = localSongs.groupBy { File(it.url.removePrefix("file://")).name }
+    val byName = localSongs.groupBy { File(decodePath(it.url.removePrefix("file://"))).name }
     val matched = entries.mapNotNull { matchOne(it, byPath, byName) }
     return PlaylistMatch(matched, entries.size - matched.size)
 }
@@ -126,10 +130,10 @@ private fun matchOne(
     byPath: Map<String, Station>,
     byName: Map<String, List<Station>>,
 ): Station? {
-    val loc = entry.location.trim()
+    val loc = decodePath(entry.location.trim())
     return when {
         loc.isEmpty() -> null
-        looksLikeUrl(loc) -> urlStation(loc, entry.title)
+        looksLikeUrl(loc) -> urlStation(entry.location.trim(), entry.title)
         else -> {
             val direct = byPath[loc] ?: byPath[File(loc).path]
             direct ?: byName[File(loc).name]?.takeIf { it.size == 1 }?.get(0)
