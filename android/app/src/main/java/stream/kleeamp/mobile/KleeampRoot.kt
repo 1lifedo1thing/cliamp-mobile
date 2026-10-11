@@ -13,6 +13,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -61,6 +62,7 @@ import stream.kleeamp.mobile.playback.PlayerConnection
 import stream.kleeamp.mobile.chrome.KleeampTabBar
 import stream.kleeamp.mobile.chrome.KleeampTabRail
 import stream.kleeamp.mobile.chrome.DownloadQueueButton
+import stream.kleeamp.mobile.chrome.NoticeHost
 import stream.kleeamp.mobile.chrome.QueueConfirmHost
 import stream.kleeamp.mobile.player.MiniPlayer
 import stream.kleeamp.mobile.player.NowPlayingSheet
@@ -792,15 +794,16 @@ fun KleeampRoot(
             )
         }
 
-        // The queue-add confirmation, topmost and centered above the chrome:
-        // every menu "Add to Up Next" lands here since the swipe pill died
-        // with the swipe gesture. After the NavHost so opaque pages never
-        // cover it.
-        Box(
+        // The transient confirmations, topmost and centered above the chrome:
+        // every menu "Add to Up Next" and every import result lands here.
+        // After the NavHost so opaque pages never cover them.
+        Column(
             Modifier.align(Alignment.BottomCenter).padding(bottom = chromeBottom + 14.dp),
-            contentAlignment = Alignment.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             QueueConfirmHost()
+            NoticeHost()
         }
 
         // The floating fetch key: a plain circle at the right edge above

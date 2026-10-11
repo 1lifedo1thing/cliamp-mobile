@@ -53,10 +53,13 @@ class LocalViewModel(
         val imported: Int,
         val missing: Int,
         val recognized: Boolean = true,
+        /** Bumped per import so identical repeats still retrigger collectors. */
+        val seq: Long = 0,
     )
 
     private val _importReport = MutableStateFlow<ImportReport?>(null)
     val importReport: StateFlow<ImportReport?> = _importReport.asStateFlow()
+    private var importSeq = 0L
 
     private data class DeviceState(
         val songs: List<Station> = emptyList(),
@@ -135,7 +138,7 @@ class LocalViewModel(
             is Event.Import -> viewModelScope.launch(NonCancellable) {
                 val kind = detectPlaylistKind(e.filename, e.text)
                 if (kind == null) {
-                    _importReport.value = ImportReport("", 0, 0, recognized = false)
+                    _importReport.value = ImportReport("", 0, 0, recognized = false, seq = ++importSeq)
                     return@launch
                 }
                 val entries = when (kind) {
@@ -147,9 +150,9 @@ class LocalViewModel(
                     .substringBeforeLast('.').ifBlank { "imported" }
                 val slug = playlists.importPlaylist(name, match.matched)
                 _importReport.value = if (slug == null) {
-                    ImportReport("", 0, match.missing + match.matched.size)
+                    ImportReport("", 0, match.missing + match.matched.size, seq = ++importSeq)
                 } else {
-                    ImportReport(slug, match.matched.size, match.missing)
+                    ImportReport(slug, match.matched.size, match.missing, seq = ++importSeq)
                 }
             }
         }

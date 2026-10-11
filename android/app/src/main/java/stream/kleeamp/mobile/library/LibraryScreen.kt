@@ -96,6 +96,7 @@ import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.scrollToTop
 import stream.kleeamp.mobile.chrome.ArtGlow
 import stream.kleeamp.mobile.chrome.MainLayout
+import stream.kleeamp.mobile.chrome.NoticeBus
 import stream.kleeamp.mobile.chrome.microPress
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
@@ -161,8 +162,8 @@ fun LibraryScreen(
     var haveAudio by remember { mutableStateOf(LocalLibrary.hasAudioPermission(context)) }
 
     // Playlist-file import: pick an .m3u/.pls, parse and match it, land on
-    // the new playlist. Unrecognized files and total misses report inline
-    // under the header instead of failing silently.
+    // the new playlist. Every outcome confirms through the transient
+    // bottom-center notice; nothing sticks in the header.
     val report by vm.importReport.collectAsState()
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -184,12 +185,20 @@ fun LibraryScreen(
         }
     }
     LaunchedEffect(report) {
-        report?.let {
-            if (it.slug.isNotEmpty()) {
-                onOpenPlaylist(it.slug)
-                vm.onEvent(LocalViewModel.Event.ClearImportReport)
-            }
+        val current = report ?: return@LaunchedEffect
+        if (current.slug.isNotEmpty()) {
+            NoticeBus.show(
+                if (current.missing > 0) "imported ${current.imported} · ${current.missing} missing"
+                else "imported ${current.imported}",
+            )
+            onOpenPlaylist(current.slug)
+        } else {
+            NoticeBus.show(
+                if (!current.recognized) "not a playlist file" else "nothing matched",
+                error = true,
+            )
         }
+        vm.onEvent(LocalViewModel.Event.ClearImportReport)
     }
 
     // The media permission is requested once at app launch. Recheck it whenever
@@ -261,15 +270,6 @@ fun LibraryScreen(
             onTitleClick = { scope.scrollToTop(listState) },
             chips = {
                 Chip("import", selected = false, onClick = { importLauncher.launch("*/*") })
-                report?.takeIf { it.slug.isEmpty() }?.let {
-                    Mono(
-                        if (!it.recognized) "not a playlist file"
-                        else "nothing matched",
-                        KleeampType.meta,
-                        p.destructiveInk,
-                        maxLines = 1,
-                    )
-                }
             },
         ) {
 
