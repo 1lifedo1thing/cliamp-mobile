@@ -233,9 +233,9 @@ private fun CollageCell(station: Station, modifier: Modifier = Modifier) {
 
 /**
  * A fixed 2x2 tile of the first four songs' covers for browse artist rows.
- * Always four cells: covers where songs have them, a letterless plate
- * where a song has no cover or where no song fills the cell, so the tile
- * never shows flat empty ground.
+ * Always four cells: covers where songs have them, the song's own plate
+ * where it has no cover, and a letterless plate where no song fills the
+ * cell, so the tile never shows flat empty ground.
  */
 @Composable
 internal fun QuadCollage(stations: List<Station>, modifier: Modifier = Modifier) {
@@ -281,11 +281,11 @@ private fun QuadCell(station: Station?, modifier: Modifier = Modifier, fallbackK
         }
         return
     }
-    // Song without cover: letterless plate instead of empty ground.
+    // Song without cover: its own plate, like CollageCell and SongCover.
     // Square inner corners butt cleanly; the collage clips the edge.
     SeedPlate(
         key = station.id.ifBlank { station.url },
-        name = null,
+        name = station.name,
         modifier = modifier,
         radius = 0.dp,
     )
