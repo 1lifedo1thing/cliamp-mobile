@@ -161,7 +161,14 @@ fun KleeampRoot(
     // False only while a search-widget launch sits on Search with no tab seen
     // yet, so the strip reads as having none selected, the way it always did.
     var tabVisited by rememberSaveable { mutableStateOf(openSearchTick == 0) }
-    val tab: Tab? = if (tabVisited) Tab.entries[pagerState.currentPage] else null
+    // Fractional page position for the tab-strip indicator: current page
+    // plus its drag offset, so the line travels with the finger mid-swipe
+    // instead of jumping on settle. Read inside the strip/rail only (never
+    // in this body), so scroll frames recompose just the chrome. Null
+    // while no tab was seen yet: the strip shows none selected.
+    val tabPosition: () -> Float? = {
+        if (tabVisited) pagerState.currentPage + pagerState.currentPageOffsetFraction else null
+    }
     // Search state survives rotation like its neighbours below: a rotate
     // with Search open keeps the query and the pending tag focus.
     var focusDirectory by rememberSaveable { mutableStateOf(false) }
@@ -354,14 +361,14 @@ fun KleeampRoot(
 
             if (!rail) {
                 KleeampTabBar(
-                    current = tab,
+                    position = tabPosition,
                     onSelect = switchTab,
                 )
             }
         }
         if (rail) {
             KleeampTabRail(
-                current = tab,
+                position = tabPosition,
                 onSelect = switchTab,
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
                     .onSizeChanged { chromeEnd = with(density) { it.width.toDp() } },
