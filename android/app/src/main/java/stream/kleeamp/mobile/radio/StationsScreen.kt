@@ -53,8 +53,7 @@ import stream.kleeamp.mobile.chrome.rememberArt
 import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.chrome.compact
 import stream.kleeamp.mobile.chrome.Chip
-import stream.kleeamp.mobile.chrome.ChipDropdown
-import stream.kleeamp.mobile.chrome.ChipOption
+import stream.kleeamp.mobile.chrome.CountrySheet
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.KleeampTextField
 import stream.kleeamp.mobile.chrome.EmptyNote
@@ -203,6 +202,8 @@ fun StationsScreen(
     // The row menu's subject: set by the ⋮ trigger, cleared on dismiss.
     // The sheet itself is emitted after the list below.
     var menuFor by remember { mutableStateOf<Station?>(null) }
+    // The country picker: a bottom sheet, not the old dropdown menu.
+    var countrySheet by remember { mutableStateOf(false) }
     // NOTE: no scroll reset on query/source change. A filter keeps its
     // scroll position while the repository swaps content underneath
     // (stale rows stay until the live page lands), and returning from
@@ -256,23 +257,10 @@ fun StationsScreen(
             }
             Spacer(Modifier.width(4.dp))
             val countryQuery = directory.query as? DirectoryQuery.Country
-            ChipDropdown(
-                label = countryQuery?.countryName ?: "all countries",
+            Chip(
+                countryQuery?.countryName ?: "all countries",
                 selected = countryQuery != null,
-                options = listOf(
-                    ChipOption("all countries") {
-                        vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.TopVoted, reset = true))
-                    },
-                ) + countries.map { c ->
-                    ChipOption(c.name) {
-                        vm.onEvent(
-                            StationsViewModel.Event.LoadDirectory(
-                                DirectoryQuery.Country(c.iso31661, c.name),
-                                reset = true,
-                            )
-                        )
-                    }
-                },
+                onClick = { countrySheet = true },
             )
         },
     ) {
@@ -488,6 +476,25 @@ fun StationsScreen(
         // The row menu as a bottom sheet: one reusable component fed by the
         // subject below, so stations never hardcode their own action list.
         // No info entry: radio needs none.
+        if (countrySheet) {
+            CountrySheet(
+                countries = countries,
+                selectedIso = (directory.query as? DirectoryQuery.Country)?.code?.takeIf { it.isNotEmpty() },
+                onPick = { c ->
+                    vm.onEvent(
+                        if (c == null) {
+                            StationsViewModel.Event.LoadDirectory(DirectoryQuery.TopVoted, reset = true)
+                        } else {
+                            StationsViewModel.Event.LoadDirectory(
+                                DirectoryQuery.Country(c.iso31661, c.name),
+                                reset = true,
+                            )
+                        },
+                    )
+                },
+                onDismiss = { countrySheet = false },
+            )
+        }
         menuFor?.let { s ->
             val fav = favorites.any { it.url == s.url }
             val isCustom = custom.any { it.url == s.url }
