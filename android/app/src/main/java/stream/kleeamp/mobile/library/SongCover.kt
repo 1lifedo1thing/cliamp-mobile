@@ -233,45 +233,62 @@ private fun CollageCell(station: Station, modifier: Modifier = Modifier) {
 
 /**
  * A fixed 2x2 tile of the first four songs' covers for browse artist rows.
- * Always four cells: covers where songs have them, empty ground on cells
- * with no song, so the tile never shifts shape or repeats a song.
+ * Always four cells: covers where songs have them, a letterless plate
+ * where a song has no cover or where no song fills the cell, so the tile
+ * never shows flat empty ground.
  */
 @Composable
 internal fun QuadCollage(stations: List<Station>, modifier: Modifier = Modifier) {
-    val p = LocalPalette.current
     val picks = remember(stations) { stations.take(4) }
+    val seed = remember(picks) {
+        picks.firstOrNull()?.id?.ifBlank { picks.firstOrNull()?.url }.orEmpty()
+    }
     key(picks.map { it.id }) {
         Column(
             modifier.clip(RoundedCornerShape(KleeampShape.small)),
         ) {
             Row(Modifier.weight(1f).fillMaxWidth()) {
-                QuadCell(picks.getOrNull(0), Modifier.weight(1f).fillMaxHeight())
-                QuadCell(picks.getOrNull(1), Modifier.weight(1f).fillMaxHeight())
+                QuadCell(picks.getOrNull(0), Modifier.weight(1f).fillMaxHeight(), "$seed-0")
+                QuadCell(picks.getOrNull(1), Modifier.weight(1f).fillMaxHeight(), "$seed-1")
             }
             Row(Modifier.weight(1f).fillMaxWidth()) {
-                QuadCell(picks.getOrNull(2), Modifier.weight(1f).fillMaxHeight())
-                QuadCell(picks.getOrNull(3), Modifier.weight(1f).fillMaxHeight())
+                QuadCell(picks.getOrNull(2), Modifier.weight(1f).fillMaxHeight(), "$seed-2")
+                QuadCell(picks.getOrNull(3), Modifier.weight(1f).fillMaxHeight(), "$seed-3")
             }
         }
     }
 }
 
 @Composable
-private fun QuadCell(station: Station?, modifier: Modifier = Modifier) {
-    val p = LocalPalette.current
+private fun QuadCell(station: Station?, modifier: Modifier = Modifier, fallbackKey: String = "") {
     if (station == null) {
-        Box(modifier.background(p.ground))
+        // No song for this cell: letterless plate, never flat ground.
+        SeedPlate(
+            key = fallbackKey,
+            name = null,
+            modifier = modifier,
+            radius = 0.dp,
+        )
         return
     }
     val art = rememberStationThumbnail(station)
-    Box(
-        modifier.background(if (art != null) p.panel else p.ground),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (art != null) {
+    if (art != null) {
+        Box(
+            modifier,
+            contentAlignment = Alignment.Center,
+        ) {
             Image(art, station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         }
+        return
     }
+    // Song without cover: letterless plate instead of empty ground.
+    // Square inner corners butt cleanly; the collage clips the edge.
+    SeedPlate(
+        key = station.id.ifBlank { station.url },
+        name = null,
+        modifier = modifier,
+        radius = 0.dp,
+    )
 }
 
 /**
