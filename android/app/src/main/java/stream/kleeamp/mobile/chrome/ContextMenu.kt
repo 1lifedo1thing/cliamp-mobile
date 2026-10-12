@@ -447,8 +447,10 @@ internal fun SheetStatusBarIcons() {
  * scrim, drag handle, fixed header, scrolling body. One component, so a
  * timer or speed sheet can never drift from the menu look. [halfHeight]
  * fixes the body at three-fifths of the screen instead of shrinking to
- * fit: constant like a menu, roomier for long pickers. A drag up has
- * nowhere to expand to, so the list inside scrolls.
+ * fit: constant like a menu, roomier for long pickers. [bodyFraction]
+ * fixes any other fraction; [scrollBody] goes false when the body hosts
+ * its own scrolling lists, which must never sit inside another scroll.
+ * A drag up has nowhere to expand to, so the list inside scrolls.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -456,6 +458,8 @@ fun MenuSheetShell(
     onDismiss: () -> Unit,
     header: @Composable () -> Unit,
     halfHeight: Boolean = false,
+    bodyFraction: Float? = null,
+    scrollBody: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val p = LocalPalette.current
@@ -478,10 +482,13 @@ fun MenuSheetShell(
             Column(
                 Modifier
                     .then(
-                        if (halfHeight) Modifier.fillMaxHeight(0.6f)
-                        else Modifier.weight(1f, fill = false)
+                        when {
+                            bodyFraction != null -> Modifier.fillMaxHeight(bodyFraction)
+                            halfHeight -> Modifier.fillMaxHeight(0.6f)
+                            else -> Modifier.weight(1f, fill = false)
+                        }
                     )
-                    .verticalScroll(rememberScrollState()),
+                    .then(if (scrollBody) Modifier.verticalScroll(rememberScrollState()) else Modifier),
             ) {
                 content()
             }

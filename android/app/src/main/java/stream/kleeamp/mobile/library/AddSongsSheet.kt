@@ -1,28 +1,15 @@
 package stream.kleeamp.mobile.library
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import stream.kleeamp.mobile.chrome.Gutter
-import stream.kleeamp.mobile.chrome.HairlineDivider
-import stream.kleeamp.mobile.chrome.SheetDragHandle
-import stream.kleeamp.mobile.chrome.SheetStatusBarIcons
+import stream.kleeamp.mobile.chrome.MenuSheetShell
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.podcasts.PodcastShow
 import stream.kleeamp.mobile.podcasts.ShowState
@@ -33,7 +20,7 @@ import stream.kleeamp.mobile.theme.Mono
 /**
  * Which list the add-songs sheet grows: a user playlist by slug, or the
  * favourites smart list. The sheet opens over whatever context asked —
- * library list, playlist detail, smart detail — and dismiss returns in
+ * library list, playlist detail, favourites detail — and dismiss returns in
  * place. Every tap writes through immediately, so there is no done
  * control; the ticked boxes mirror live membership.
  */
@@ -44,11 +31,10 @@ sealed interface AddSongsTarget {
 
 /**
  * The song picker as a bottom sheet: local songs, stations and podcast
- * episodes in sub-tabs with one shared selection. Same chrome as every
- * other menu sheet; the tall fixed body (not the shrinking shell) hosts
- * the picker's own scrolling lists.
+ * episodes in sub-tabs with one shared selection. Rides the shared menu
+ * shell with a tall fixed body and no shell scroll — the picker's own
+ * lists scroll themselves, and a scroll inside a scroll would break them.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 // Screen signature: state in, callbacks out; bundling would hide the data flow.
 @Suppress("LongParameterList")
@@ -63,21 +49,11 @@ fun AddSongsSheet(
     onToggle: (Station) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val p = LocalPalette.current
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = p.panelRaised,
-        contentColor = p.ink,
-        scrimColor = Color.Black.copy(alpha = 0.55f),
-        dragHandle = {
-            SheetStatusBarIcons()
-            SheetDragHandle()
-        },
-    ) {
-        SheetStatusBarIcons()
-        Column(Modifier.fillMaxWidth().padding(horizontal = Gutter)) {
+    MenuSheetShell(
+        onDismiss = onDismiss,
+        bodyFraction = 0.72f,
+        scrollBody = false,
+        header = {
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -93,21 +69,18 @@ fun AddSongsSheet(
                     )
                 }
             }
-            HairlineDivider(region = true)
-            Box(Modifier.fillMaxWidth().fillMaxHeight(0.72f)) {
-                AddSongsPicker(
-                    selected = selected,
-                    playlistName = playlistName,
-                    showTitle = false,
-                    localSongs = localSongs,
-                    radioStations = radioStations,
-                    subscribedShows = subscribedShows,
-                    showState = showState,
-                    onOpenShow = onOpenShow,
-                    onToggle = onToggle,
-                )
-            }
-            Spacer(Modifier.navigationBarsPadding().height(14.dp))
-        }
+        },
+    ) {
+        AddSongsPicker(
+            selected = selected,
+            playlistName = playlistName,
+            showTitle = false,
+            localSongs = localSongs,
+            radioStations = radioStations,
+            subscribedShows = subscribedShows,
+            showState = showState,
+            onOpenShow = onOpenShow,
+            onToggle = onToggle,
+        )
     }
 }
