@@ -612,10 +612,22 @@ private fun SmartPlaylistDetail(
     // One row per file: a repeated URL (re-downloaded episode, MediaStore
     // duplicate) used to crash the list on a duplicate key. First wins.
     val shown = remember(visible, query) { visible.matching(query).distinctBy { it.url } }
+    // Same tap-frame ordering as user playlists — but only the on-device
+    // lists wear sorts; favourites and recent keep their fixed orders.
+    // Re-sorting the already-sorted shown list is idempotent on round-trip.
+    val ordered = remember(shown, shownSort, local) {
+        if (local) sortedStations(shown, shownSort) else shown
+    }
     // Browse lists artists only — one row per artist, tap opens their
     // page — cheapest last so the flat list never waits for it.
-    val artists = remember(shown, shownBrowse) {
-        if (!shownBrowse) emptyList() else artistsOf(shown)
+    val artists = remember(ordered, shownBrowse) {
+        if (!shownBrowse) emptyList() else artistsOf(ordered)
+    }
+    // Artists and songs are different content under one scroll state: a
+    // kept index would land mid-list after the switch, so the mode switch
+    // snaps back to the top. Sort taps keep their position.
+    LaunchedEffect(shownBrowse) {
+        listState.scrollToItem(0)
     }
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
         item {
@@ -627,13 +639,13 @@ private fun SmartPlaylistDetail(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        if (shown.isNotEmpty()) {
+                        if (ordered.isNotEmpty()) {
                             CollectionActions(
                                 shuffled = shuffled,
-                                onPlayAll = { shown.firstOrNull()?.let { onPlay(it, shown) } },
+                                onPlayAll = { ordered.firstOrNull()?.let { onPlay(it, ordered) } },
                                 onShufflePlay = {
                                     if (!shuffled) onToggleShuffle()
-                                    shown.randomOrNull()?.let { onPlay(it, shown) }
+                                    ordered.randomOrNull()?.let { onPlay(it, ordered) }
                                 },
                             )
                         }
@@ -729,7 +741,7 @@ private fun SmartPlaylistDetail(
                 onCancelAllDownloads = onCancelAllDownloads,
             )
         }
-        if (shownBrowse && shown.isNotEmpty()) {
+        if (shownBrowse && ordered.isNotEmpty()) {
             items(artists, key = { it.name }) { group ->
                 ListRow(
                     onClick = { onOpenArtist(group.name) },
@@ -750,7 +762,7 @@ private fun SmartPlaylistDetail(
                     Mono(group.name, KleeampType.rowPrimary, p.ink, maxLines = 1)
                 }
             }
-        } else if (shown.isEmpty()) {
+        } else if (ordered.isEmpty()) {
             // Growable lists keep their + on empty too, like playlists do.
             if (onBeginAdd != null) {
                 item {
@@ -786,16 +798,16 @@ private fun SmartPlaylistDetail(
             }
         } else {
             item {
-                SectionLabel("${pl.label} — ${shown.size}") {
+                SectionLabel("${pl.label} — ${ordered.size}") {
                     onBeginAdd?.let { AddSongsButton(onClick = it) }
                 }
             }
-            items(shown, key = { it.url }, contentType = { "local-song" }) { s ->
+            items(ordered, key = { it.url }, contentType = { "local-song" }) { s ->
                 SmartSongRow(
                     s = s,
                     current = current,
                     playing = playing,
-                    queue = shown,
+                    queue = ordered,
                     onPlay = onPlay,
                     onOpenMenu = onOpenMenu,
                     progress = progress,

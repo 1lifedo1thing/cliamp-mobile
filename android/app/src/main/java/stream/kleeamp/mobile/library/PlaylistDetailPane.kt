@@ -392,10 +392,22 @@ private fun PlaylistDetailShown(
     LaunchedEffect(browse) { browseOverride = null }
     val shownSort = sortOverride ?: sort
     val shownBrowse = browseOverride ?: browse
+    // The tapped sort applies on the tap frame: the stored sort lands a
+    // beat later through the ViewModel, and waiting for it flashes the old
+    // order under the newly lit chip — worst when leaving browse, where
+    // the artists give way to the wrong order first. Re-sorting the
+    // already-sorted visible list is idempotent once it round-trips.
+    val ordered = remember(visible, shownSort) { sortedStations(visible, shownSort) }
     // Browse lists artists only — one row per artist, tap opens their
     // page — cheapest last so the flat list never waits for it.
-    val artists = remember(visible, shownBrowse) {
-        if (!shownBrowse) emptyList() else artistsOf(visible)
+    val artists = remember(ordered, shownBrowse) {
+        if (!shownBrowse) emptyList() else artistsOf(ordered)
+    }
+    // Artists and songs are different content under one scroll state: a
+    // kept index would land mid-list after the switch, so the mode switch
+    // snaps back to the top. Sort taps keep their position.
+    LaunchedEffect(shownBrowse) {
+        listState.scrollToItem(0)
     }
 
     // Members can be any source now, so they resolve against the live local
@@ -422,13 +434,13 @@ private fun PlaylistDetailShown(
                 title = playlist.station.name,
                 meta = "${members.size} songs",
                 actions = {
-                    if (visible.isNotEmpty()) {
+                    if (ordered.isNotEmpty()) {
                         CollectionActions(
                             shuffled = shuffled,
-                            onPlayAll = { visible.firstOrNull()?.let { onPlay(it, visible) } },
+                            onPlayAll = { ordered.firstOrNull()?.let { onPlay(it, ordered) } },
                             onShufflePlay = {
                                 if (!shuffled) onToggleShuffle()
-                                visible.randomOrNull()?.let { onPlay(it, visible) }
+                                ordered.randomOrNull()?.let { onPlay(it, ordered) }
                             },
                         )
                     }
@@ -486,7 +498,7 @@ private fun PlaylistDetailShown(
                 }
             }
             item { FilterRow(value = query, onValue = onQuery) }
-            if (shownBrowse && visible.isNotEmpty()) {
+            if (shownBrowse && ordered.isNotEmpty()) {
                 items(artists, key = { it.name }) { group ->
                     ListRow(
                         onClick = { onOpenArtist(group.name) },
@@ -509,23 +521,23 @@ private fun PlaylistDetailShown(
                 }
             } else {
             item {
-                SectionLabel("songs — ${visible.size}") {
+                SectionLabel("songs — ${ordered.size}") {
                     AddSongsButton(onClick = onBeginAdd)
                 }
             }
-            if (visible.isEmpty()) {
+            if (ordered.isEmpty()) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
                         Mono("nothing matches", KleeampType.rowSecondary, p.inkFaint)
                     }
                 }
             }
-            items(visible, key = { it.id }) { s ->
+            items(ordered, key = { it.id }) { s ->
                 PlaylistMemberRow(
                     s = s,
                     current = current,
                     playing = playing,
-                    queue = visible,
+                    queue = ordered,
                     onPlay = onPlay,
                     onOpenMenu = onOpenMenu,
                 )
