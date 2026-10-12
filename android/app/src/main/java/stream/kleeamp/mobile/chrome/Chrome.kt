@@ -57,6 +57,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Brush
@@ -70,7 +71,9 @@ import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Mono
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.sin
 
 /** Screen gutter, fixed at 22dp everywhere in the concept. */
 val Gutter = 22.dp
@@ -402,11 +405,20 @@ fun KleeampTabBar(position: () -> Float?, onSelect: (Tab) -> Unit, modifier: Mod
                 // First frame, before anything is measured: no line yet.
                 if (r0.width <= 0f || r1.width <= 0f) return@drawBehind
                 // 2px accent top border, pulled up 1dp so it sits on the
-                // divider — one line, travelling, never two fading.
-                drawRect(
+                // divider — one line, travelling, never two fading. It
+                // stretches mid-flight (widest halfway over) and lands
+                // exact, so taps and swipes read elastic, not rigid.
+                val c0 = r0.left + r0.width / 2f
+                val c1 = r1.left + r1.width / 2f
+                val center = lerp(c0, c1, f)
+                val half = lerp(r0.width, r1.width, f) / 2f +
+                    abs(c1 - c0) * 0.12f * sin(PI.toFloat() * f)
+                drawLine(
                     color = p.accent,
-                    topLeft = Offset(lerp(r0.left, r1.left, f), lerp(r0.top, r1.top, f) - 1.dp.toPx()),
-                    size = Size(lerp(r0.width, r1.width, f), 2.dp.toPx()),
+                    start = Offset(center - half, lerp(r0.top, r1.top, f)),
+                    end = Offset(center + half, lerp(r0.top, r1.top, f)),
+                    strokeWidth = 2.dp.toPx(),
+                    cap = StrokeCap.Round,
                 )
             }
         ) {
@@ -494,11 +506,20 @@ fun KleeampTabRail(
                     val r1 = rects[hi]
                     if (r0.height <= 0f || r1.height <= 0f) return@drawBehind
                     // 2px accent side border on the item's own right edge —
-                    // one line, travelling, never two fading.
-                    drawRect(
+                    // one line, travelling, never two fading. Same elastic
+                    // stretch as the strip, rotated.
+                    val cy0 = r0.top + r0.height / 2f
+                    val cy1 = r1.top + r1.height / 2f
+                    val center = lerp(cy0, cy1, f)
+                    val half = lerp(r0.height, r1.height, f) / 2f +
+                        abs(cy1 - cy0) * 0.12f * sin(PI.toFloat() * f)
+                    val x = lerp(r0.right, r1.right, f) - 1.dp.toPx()
+                    drawLine(
                         color = p.accent,
-                        topLeft = Offset(lerp(r0.right, r1.right, f) - 2.dp.toPx(), lerp(r0.top, r1.top, f)),
-                        size = Size(2.dp.toPx(), lerp(r0.height, r1.height, f)),
+                        start = Offset(x, center - half),
+                        end = Offset(x, center + half),
+                        strokeWidth = 2.dp.toPx(),
+                        cap = StrokeCap.Round,
                     )
                 },
             horizontalAlignment = Alignment.CenterHorizontally,
