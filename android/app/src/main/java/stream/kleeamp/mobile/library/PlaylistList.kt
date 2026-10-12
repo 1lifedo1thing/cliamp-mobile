@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -109,8 +110,6 @@ internal fun PlaylistList(
     playlists: List<PlaylistStore.Playlist>,
     creating: Boolean,
     renamingSlug: String?,
-    editText: String,
-    onEditTextChange: (String) -> Unit,
     onCreate: (String) -> Unit,
     onBeginCreate: () -> Unit,
     onCancel: () -> Unit,
@@ -135,30 +134,20 @@ internal fun PlaylistList(
             val pinnedCount = smart.size + 1 + pinnedPlaylists.size
             item {
                 SectionLabel("pinned — $pinnedCount") {
-                    if (!creating) {
-                        Box(
-                            Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(KleeampShape.small))
-                                .background(if (p.dark) p.keyFace else p.ground)
-                                .border(1.dp, p.keyBorder, RoundedCornerShape(KleeampShape.small))
-                                .microPress(onClick = onBeginCreate),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(KleeampIcons.Plus, "new playlist", Modifier.size(16.dp), tint = p.accent)
-                        }
+                    // Always rendered: hiding it while naming shrank the
+                    // header and jumped the list. The dialog scrim eats taps
+                    // behind it, so it cannot double-fire.
+                    Box(
+                        Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(KleeampShape.small))
+                            .background(if (p.dark) p.keyFace else p.ground)
+                            .border(1.dp, p.keyBorder, RoundedCornerShape(KleeampShape.small))
+                            .microPress(onClick = onBeginCreate),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(KleeampIcons.Plus, "new playlist", Modifier.size(16.dp), tint = p.accent)
                     }
-                }
-            }
-            if (creating) {
-                item {
-                    InlineNameField(
-                        text = editText,
-                        onTextChange = onEditTextChange,
-                        placeholder = "name this playlist",
-                        onDone = onCreate,
-                        onCancel = onCancel,
-                    )
                 }
             }
             // Providers sits second: recently played keeps the top spot for
@@ -179,22 +168,12 @@ internal fun PlaylistList(
                 pinnedPlaylists,
                 key = { it.station.slug },
             ) { pl ->
-                if (pl.station.slug == renamingSlug) {
-                    InlineNameField(
-                        text = editText,
-                        onTextChange = onEditTextChange,
-                        placeholder = "rename playlist",
-                        onDone = { onRename(pl.station.slug, it) },
-                        onCancel = onCancel,
-                    )
-                } else {
-                    PlaylistRow(
-                        pl = pl,
-                        pinned = true,
-                        onOpen = onOpen,
-                        onOpenMenu = { menuPl = pl to true },
-                    )
-                }
+                PlaylistRow(
+                    pl = pl,
+                    pinned = true,
+                    onOpen = onOpen,
+                    onOpenMenu = { menuPl = pl to true },
+                )
             }
             if (playlists.isNotEmpty()) {
                 item {
@@ -205,26 +184,36 @@ internal fun PlaylistList(
                 playlists,
                 key = { it.station.slug },
             ) { pl ->
-                if (pl.station.slug == renamingSlug) {
-                    InlineNameField(
-                        text = editText,
-                        onTextChange = onEditTextChange,
-                        placeholder = "rename playlist",
-                        onDone = { onRename(pl.station.slug, it) },
-                        onCancel = onCancel,
-                    )
-                } else {
-                    PlaylistRow(
-                        pl = pl,
-                        pinned = false,
-                        onOpen = onOpen,
-                        onOpenMenu = { menuPl = pl to false },
-                    )
-                }
+                PlaylistRow(
+                    pl = pl,
+                    pinned = false,
+                    onOpen = onOpen,
+                    onOpenMenu = { menuPl = pl to false },
+                )
             }
             item { Spacer(Modifier.height(20.dp)) }
         }
         Spacer(Modifier.height(8.dp))
+        // Naming floats centered over everything: the list never shifts.
+        if (creating) {
+            PlaylistNameDialog(
+                title = "new playlist",
+                placeholder = "name this playlist",
+                onDone = onCreate,
+                onDismiss = onCancel,
+            )
+        }
+        renamingSlug?.let { slug ->
+            val current = (pinnedPlaylists + playlists)
+                .firstOrNull { it.station.slug == slug }?.station?.name.orEmpty()
+            PlaylistNameDialog(
+                title = "rename playlist",
+                placeholder = "name this playlist",
+                initial = current,
+                onDone = { onRename(slug, it) },
+                onDismiss = onCancel,
+            )
+        }
         // The playlist menu as a bottom sheet: pin, add songs, rename and
         // remove, like the show and episode menus.
         menuPl?.let { (pl, pinned) ->
@@ -378,42 +367,53 @@ internal fun smartKindIcon(kind: SmartKind): ImageVector = when (kind) {
     SmartKind.RecentlyPlayed -> KleeampIcons.Clock
 }
 
-/** A monospace, palette-styled input row for naming playlists. It never grabs
- * focus on its own: the keyboard only comes up when the user taps the field.
- * The platform IME handles entry. */
+/** A playlist naming dialog, centered over everything: naming never pushes
+ * the list around the way the old inline row did. Same field, same
+ * SAVE/CANCEL, same 48 characters; the store still trims and ignores blanks.
+ * It never grabs focus on its own; the keyboard only comes up when the user
+ * taps the field. */
 @Composable
-private fun InlineNameField(
-    text: String,
+internal fun PlaylistNameDialog(
+    title: String,
     placeholder: String,
-    onTextChange: (String) -> Unit,
+    initial: String = "",
     onDone: (String) -> Unit,
-    onCancel: () -> Unit,
+    onDismiss: () -> Unit,
 ) {
     val p = LocalPalette.current
-    Row(
-        Modifier.fillMaxWidth().padding(Gutter)
-            .clip(RoundedCornerShape(KleeampShape.small))
-            .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small))
-            .background(p.panel).padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        KleeampTextField(
-            value = text,
-            onValueChange = { onTextChange(it.take(48)) },
-            modifier = Modifier.weight(1f),
-            placeholder = placeholder,
-            textStyle = KleeampType.rowPrimary,
-            onAction = { onDone(text) },
-        )
-        Mono("SAVE", KleeampType.tabLabel, p.accent,
-            Modifier.clip(RoundedCornerShape(KleeampShape.tiny)).background(p.accent.copy(alpha = 0.14f))
-                .microPress { onDone(text) }.padding(horizontal = 9.dp, vertical = 7.dp))
-        Mono("CANCEL", KleeampType.tabLabel, p.inkTertiary,
-            Modifier
-                .clip(RoundedCornerShape(KleeampShape.tiny))
-                .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny))
-                .microPress(onClick = onCancel).padding(horizontal = 9.dp, vertical = 7.dp))
+    var text by remember { mutableStateOf(initial) }
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(KleeampShape.small))
+                .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small))
+                .background(p.panel).padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Mono(title, KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
+            KleeampTextField(
+                value = text,
+                onValueChange = { text = it.take(48) },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = placeholder,
+                textStyle = KleeampType.rowPrimary,
+                onAction = { onDone(text) },
+            )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Mono("SAVE", KleeampType.tabLabel, p.accent,
+                    Modifier.clip(RoundedCornerShape(KleeampShape.tiny)).background(p.accent.copy(alpha = 0.14f))
+                        .microPress { onDone(text) }.padding(horizontal = 9.dp, vertical = 7.dp))
+                Mono("CANCEL", KleeampType.tabLabel, p.inkTertiary,
+                    Modifier
+                        .clip(RoundedCornerShape(KleeampShape.tiny))
+                        .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny))
+                        .microPress(onClick = onDismiss).padding(horizontal = 9.dp, vertical = 7.dp))
+            }
+        }
     }
 }
 

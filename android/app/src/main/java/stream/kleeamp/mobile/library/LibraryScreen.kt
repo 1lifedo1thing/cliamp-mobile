@@ -146,12 +146,10 @@ fun LibraryScreen(
 
     var creatingName by rememberSaveable { mutableStateOf(false) }
     var renamingSlug by rememberSaveable { mutableStateOf<String?>(null) }
-    var nameText by rememberSaveable { mutableStateOf("") }
 
     val ui by vm.state.collectAsState()
     val songs = ui.songs
     val libError = ui.error
-    val allPlaylists = ui.allPlaylists
     val pinnedPlaylists = ui.pinnedPlaylists
     val unpinnedPlaylists = ui.unpinnedPlaylists
     val favorites = ui.favorites
@@ -204,9 +202,9 @@ fun LibraryScreen(
     // The media permission is requested once at app launch. Recheck it whenever
     // this screen resumes, so granting it in system Settings (without another
     // in-app dialog) is picked up here.
-    // The naming field never survives a page change: leaving for another tab
-    // or pushing anything above hides it (and drops its text), so coming back
-    // always lands on the plain list.
+    // The naming dialog never survives a page change: leaving for another tab
+    // or pushing anything above hides it, so coming back always lands on
+    // the plain list.
     LaunchedEffect(visible) {
         if (!visible) {
             creatingName = false
@@ -286,10 +284,8 @@ fun LibraryScreen(
                     playlists = unpinnedPlaylists,
                     creating = creatingName,
                     renamingSlug = renamingSlug,
-                    editText = nameText,
-                    onEditTextChange = { nameText = it },
                     onCreate = { name -> vm.onEvent(LocalViewModel.Event.Create(name)); creatingName = false },
-                    onBeginCreate = { creatingName = true; nameText = "" },
+                    onBeginCreate = { creatingName = true },
                     onCancel = { creatingName = false; renamingSlug = null },
                     onRename = { slug, name ->
                         vm.onEvent(LocalViewModel.Event.Rename(slug, name))
@@ -297,7 +293,6 @@ fun LibraryScreen(
                     },
                     onBeginRename = { slug ->
                         renamingSlug = slug
-                        nameText = allPlaylists.firstOrNull { it.station.slug == slug }?.station?.name.orEmpty()
                     },
                     onDelete = { slug ->
                         vm.onEvent(LocalViewModel.Event.Delete(slug))

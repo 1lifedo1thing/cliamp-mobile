@@ -59,7 +59,6 @@ fun LibraryAddToPlaylistPane(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     var creating by rememberSaveable { mutableStateOf(false) }
-    var nameText by rememberSaveable { mutableStateOf("") }
 
     Box(Modifier.fillMaxSize().background(p.ground)) {
         MainLayout(
@@ -86,9 +85,7 @@ fun LibraryAddToPlaylistPane(
                         onToggleFavorites = { vm.onEvent(AddToPlaylistViewModel.Event.ToggleFavorites) },
                         onToggle = { vm.onEvent(AddToPlaylistViewModel.Event.Toggle(it)) },
                         creating = creating,
-                        nameText = nameText,
-                        onNameChange = { nameText = it },
-                        onBeginCreate = { creating = true; nameText = "" },
+                        onBeginCreate = { creating = true },
                         onCancelCreate = { creating = false },
                         onCreate = { name ->
                             vm.onEvent(AddToPlaylistViewModel.Event.Create(name))
@@ -122,8 +119,6 @@ private fun PickerList(
     onToggleFavorites: () -> Unit,
     onToggle: (String) -> Unit,
     creating: Boolean,
-    nameText: String,
-    onNameChange: (String) -> Unit,
     onBeginCreate: () -> Unit,
     onCancelCreate: () -> Unit,
     onCreate: (String) -> Unit,
@@ -166,30 +161,19 @@ private fun PickerList(
             }
             item {
                 SectionLabel("playlists — ${playlists.size}") {
-                    if (!creating) {
-                        Box(
-                            Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(KleeampShape.small))
-                                .background(if (p.dark) p.keyFace else p.ground)
-                                .border(1.dp, p.keyBorder, RoundedCornerShape(KleeampShape.small))
-                                .microPress(onClick = onBeginCreate),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(KleeampIcons.Plus, "new playlist", Modifier.size(16.dp), tint = p.accent)
-                        }
+                    // Always rendered, same reason as the library list: the
+                    // dialog scrim eats taps behind it.
+                    Box(
+                        Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(KleeampShape.small))
+                            .background(if (p.dark) p.keyFace else p.ground)
+                            .border(1.dp, p.keyBorder, RoundedCornerShape(KleeampShape.small))
+                            .microPress(onClick = onBeginCreate),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(KleeampIcons.Plus, "new playlist", Modifier.size(16.dp), tint = p.accent)
                     }
-                }
-            }
-            if (creating) {
-                item {
-                    PlaylistNameField(
-                        text = nameText,
-                        onTextChange = onNameChange,
-                        placeholder = "name this playlist",
-                        onDone = onCreate,
-                        onCancel = onCancelCreate,
-                    )
                 }
             }
             items(playlists, key = { it.station.slug }) { pl ->
@@ -219,46 +203,14 @@ private fun PickerList(
             }
             item { Spacer(Modifier.height(20.dp)) }
         }
-    }
-}
-
-/**
- * The inline playlist naming row, the same shape as the library list's: a
- * field plus SAVE/CANCEL. It never grabs focus on its own; the keyboard only
- * comes up when the user taps the field.
- */
-@Composable
-private fun PlaylistNameField(
-    text: String,
-    placeholder: String,
-    onTextChange: (String) -> Unit,
-    onDone: (String) -> Unit,
-    onCancel: () -> Unit,
-) {
-    val p = LocalPalette.current
-    Row(
-        Modifier.fillMaxWidth().padding(Gutter)
-            .clip(RoundedCornerShape(KleeampShape.small))
-            .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small))
-            .background(p.panel).padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        KleeampTextField(
-            value = text,
-            onValueChange = { onTextChange(it.take(48)) },
-            modifier = Modifier.weight(1f),
-            placeholder = placeholder,
-            textStyle = KleeampType.rowPrimary,
-            onAction = { onDone(text) },
-        )
-        Mono("SAVE", KleeampType.tabLabel, p.accent,
-            Modifier.clip(RoundedCornerShape(KleeampShape.tiny)).background(p.accent.copy(alpha = 0.14f))
-                .microPress { onDone(text) }.padding(horizontal = 9.dp, vertical = 7.dp))
-        Mono("CANCEL", KleeampType.tabLabel, p.inkTertiary,
-            Modifier
-                .clip(RoundedCornerShape(KleeampShape.tiny))
-                .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny))
-                .microPress(onClick = onCancel).padding(horizontal = 9.dp, vertical = 7.dp))
+        // Naming floats centered over everything: the list never shifts.
+        if (creating) {
+            PlaylistNameDialog(
+                title = "new playlist",
+                placeholder = "name this playlist",
+                onDone = onCreate,
+                onDismiss = onCancelCreate,
+            )
+        }
     }
 }
