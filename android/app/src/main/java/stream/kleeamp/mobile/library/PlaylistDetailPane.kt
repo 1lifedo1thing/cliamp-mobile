@@ -383,16 +383,19 @@ private fun PlaylistDetailShown(
     val p = LocalPalette.current
 
     // Browse regroups the members under album rows in one flat scroll —
-    // no pages, no back handling. The sorts show a local override until
-    // the stored sort round-trips back, so the whole row answers on
-    // the tap.
+    // no pages, no back handling. Browse and the sorts share one active
+    // state with a local override each until the stored value round-trips
+    // back, so every chip answers on the tap frame exactly like the rest.
     var sortOverride by remember(playlist.station.slug) { mutableStateOf<PlaylistSort?>(null) }
+    var browseOverride by remember(playlist.station.slug) { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(sort) { sortOverride = null }
+    LaunchedEffect(browse) { browseOverride = null }
     val shownSort = sortOverride ?: sort
+    val shownBrowse = browseOverride ?: browse
     // Browse lists artists only — one row per artist, tap opens their
     // page — cheapest last so the flat list never waits for it.
-    val artists = remember(visible, browse) {
-        if (!browse) emptyList() else artistsOf(visible)
+    val artists = remember(visible, shownBrowse) {
+        if (!shownBrowse) emptyList() else artistsOf(visible)
     }
 
     // Members can be any source now, so they resolve against the live local
@@ -464,18 +467,17 @@ private fun PlaylistDetailShown(
                         .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
-                    // Lit while browsing, but never untapped: a re-tap
-                    // is a no-op. Only a sort tap switches back.
-                    Chip("browse", browse, onClick = {
-                        if (!browse) {
-                            onBrowseChange(true)
-                            onQuery("")
-                        }
+                    // Every chip taps the same way: it selects itself and
+                    // nothing else. Browse keeps the filter like the sorts do.
+                    Chip("browse", shownBrowse, onClick = {
+                        browseOverride = true
+                        onBrowseChange(true)
                     })
                     // Sorts share one active state with browse: a tap applies
                     // the sort to the flat list.
                     PlaylistSort.entries.forEach { t ->
-                        Chip(t.label, shownSort == t && !browse, onClick = {
+                        Chip(t.label, shownSort == t && !shownBrowse, onClick = {
+                            browseOverride = false
                             onBrowseChange(false)
                             sortOverride = t
                             onSortChange(t)
@@ -484,7 +486,7 @@ private fun PlaylistDetailShown(
                 }
             }
             item { FilterRow(value = query, onValue = onQuery) }
-            if (browse && visible.isNotEmpty()) {
+            if (shownBrowse && visible.isNotEmpty()) {
                 items(artists, key = { it.name }) { group ->
                     ListRow(
                         onClick = { onOpenArtist(group.name) },

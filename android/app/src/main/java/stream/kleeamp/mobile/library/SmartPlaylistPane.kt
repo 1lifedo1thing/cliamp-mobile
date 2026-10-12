@@ -599,20 +599,23 @@ private fun SmartPlaylistDetail(
     }
     var query by rememberSaveable(pl.key) { mutableStateOf("") }
     // Browse for Local Songs only: the same songs under album rows in one
-    // flat scroll — no pages, no back handling. The whole chip row answers
-    // on the tap frame: browse is stored per list, and the sorts show a
-    // local override until the stored sort round-trips back.
+    // flat scroll — no pages, no back handling. Browse and the sorts share
+    // one active state with a local override each until the stored value
+    // round-trips back, so every chip answers on the tap frame alike.
     val browseable = pl.kind == SmartKind.LocalSongs
     var sortOverride by remember(pl.key) { mutableStateOf<PlaylistSort?>(null) }
+    var browseOverride by remember(pl.key) { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(sort) { sortOverride = null }
+    LaunchedEffect(browse) { browseOverride = null }
     val shownSort = sortOverride ?: sort
+    val shownBrowse = browseOverride ?: browse
     // One row per file: a repeated URL (re-downloaded episode, MediaStore
     // duplicate) used to crash the list on a duplicate key. First wins.
     val shown = remember(visible, query) { visible.matching(query).distinctBy { it.url } }
     // Browse lists artists only — one row per artist, tap opens their
     // page — cheapest last so the flat list never waits for it.
-    val artists = remember(shown, browse) {
-        if (!browse) emptyList() else artistsOf(shown)
+    val artists = remember(shown, shownBrowse) {
+        if (!shownBrowse) emptyList() else artistsOf(shown)
     }
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
         item {
@@ -676,19 +679,18 @@ private fun SmartPlaylistDetail(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (browseable) {
-                        // Lit while browsing, but never untapped: a re-tap
-                        // is a no-op. Only a sort tap switches back.
-                        Chip("browse", browse, onClick = {
-                            if (!browse) {
-                                onBrowseChange(true)
-                                query = ""
-                            }
+                        // Every chip taps the same way: it selects itself
+                        // and nothing else. Browse keeps the filter too.
+                        Chip("browse", shownBrowse, onClick = {
+                            browseOverride = true
+                            onBrowseChange(true)
                         })
                     }
                     // Sorts share one active state with browse: exactly one
                     // chip is lit. Tapping one applies it to the flat list.
                     PlaylistSort.entries.forEach { t ->
-                        Chip(t.label, shownSort == t && !browse, onClick = {
+                        Chip(t.label, shownSort == t && !shownBrowse, onClick = {
+                            browseOverride = false
                             onBrowseChange(false)
                             sortOverride = t
                             onSortChange(t)
@@ -727,7 +729,7 @@ private fun SmartPlaylistDetail(
                 onCancelAllDownloads = onCancelAllDownloads,
             )
         }
-        if (browse && shown.isNotEmpty()) {
+        if (shownBrowse && shown.isNotEmpty()) {
             items(artists, key = { it.name }) { group ->
                 ListRow(
                     onClick = { onOpenArtist(group.name) },
