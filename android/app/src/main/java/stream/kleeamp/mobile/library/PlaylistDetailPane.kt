@@ -3,7 +3,6 @@ package stream.kleeamp.mobile.library
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -173,25 +172,18 @@ fun LibraryPlaylistPane(
     onAddToQueue: (Station) -> Unit = {},
     onInfo: ((Station) -> Unit)? = null,
     onOpenArtist: (String) -> Unit = {},
-    /** True when opened from a playlist row's add menu: lands in the song picker. */
-    startAdding: Boolean = false,
+    /** Opens the add-songs sheet over this page; the sheet writes per tap. */
+    onOpenAddSongs: () -> Unit = {},
     shuffled: Boolean = false,
     onToggleShuffle: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    var adding by rememberSaveable(slug) { mutableStateOf(startAdding) }
     var query by rememberSaveable(slug) { mutableStateOf("") }
     // The row menu's subject: set by the ⋮ trigger, cleared on dismiss.
     var menuFor by remember { mutableStateOf<Station?>(null) }
     val ui by vm.state.collectAsState()
-    // Back closes the picker first; writes already landed per tap, so there
-    // is nothing to save — a second back leaves the page.
-    BackHandler(enabled = adding) { adding = false }
-    val songs = ui.localSongs
-    val radioStations = ui.radioStations
-    val subscriptions = ui.subscribedShows
     val pl = ui.playlist
     val coverLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -281,7 +273,6 @@ fun LibraryPlaylistPane(
                     PlaylistDetailShown(
                         listState = listState,
                         playlist = pl,
-                        songIds = pl.songIds,
                         members = ui.members,
                         visible = remember(ui.visible, query) { ui.visible.matching(query) },
                         query = query,
@@ -291,18 +282,11 @@ fun LibraryPlaylistPane(
                         browse = ui.browse,
                         onBrowseChange = { vm.onEvent(PlaylistDetailViewModel.Event.SetBrowse(it)) },
                         onOpenArtist = onOpenArtist,
-                        localSongs = songs,
-                        radioStations = radioStations,
-                        subscribedShows = subscriptions,
-                        showState = ui.showState,
-                        onOpenShow = { vm.onEvent(PlaylistDetailViewModel.Event.OpenShow(it)) },
                         current = current,
                         playing = playing,
                         onPlay = onPlay,
-                        onToggle = { vm.onEvent(PlaylistDetailViewModel.Event.ToggleMember(it)) },
                         onOpenMenu = { menuFor = it },
-                        adding = adding,
-                        onBeginAdd = { adding = true },
+                        onBeginAdd = onOpenAddSongs,
                         shuffled = shuffled,
                         onToggleShuffle = onToggleShuffle,
                     )
@@ -355,7 +339,6 @@ fun LibraryPlaylistPane(
 private fun PlaylistDetailShown(
     listState: LazyListState,
     playlist: PlaylistStore.Playlist,
-    songIds: List<String>,
     members: List<Station>,
     visible: List<Station>,
     query: String,
@@ -365,16 +348,9 @@ private fun PlaylistDetailShown(
     browse: Boolean = false,
     onBrowseChange: (Boolean) -> Unit = {},
     onOpenArtist: (String) -> Unit = {},
-    localSongs: List<Station>,
-    radioStations: List<Station>,
-    subscribedShows: List<PodcastShow>,
-    showState: ShowState,
-    onOpenShow: (PodcastShow) -> Unit,
     current: Station?,
     playing: Boolean,
     onPlay: (Station, List<Station>) -> Unit,
-    onToggle: (Station) -> Unit,
-    adding: Boolean,
     onBeginAdd: () -> Unit = {},
     onOpenMenu: (Station) -> Unit = {},
     shuffled: Boolean = false,
@@ -413,20 +389,7 @@ private fun PlaylistDetailShown(
     // Members can be any source now, so they resolve against the live local
     // library plus the persisted snapshot stations (radio/podcast members).
     // Resolved in PlaylistDetailViewModel so the pane stays dumb.
-    if (adding) {
-        AddSongsPicker(
-            selected = songIds.toSet(),
-            playlistName = playlist.station.name,
-            localSongs = localSongs,
-            radioStations = radioStations,
-            subscribedShows = subscribedShows,
-            showState = showState,
-            onOpenShow = onOpenShow,
-            onToggle = onToggle,
-        )
-        return
-    }
-
+    // Adding lives in the add-songs sheet, never as page content.
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
         item {
             val cover = rememberArt(station = playlist.station, kind = ArtKind.Full)
@@ -578,6 +541,7 @@ internal fun AddSongsButton(onClick: () -> Unit) {
 internal fun AddSongsPicker(
     selected: Set<String>,
     playlistName: String,
+    showTitle: Boolean = true,
     localSongs: List<Station>,
     radioStations: List<Station>,
     subscribedShows: List<PodcastShow>,
@@ -596,13 +560,15 @@ internal fun AddSongsPicker(
     // from elsewhere can never desync the boxes from the database.
 
     Column(Modifier.fillMaxSize()) {
-        Mono(
-            playlistName, KleeampType.chip, p.accent, maxLines = 1,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp),
-        )
+        if (showTitle) {
+            Mono(
+                playlistName, KleeampType.chip, p.accent, maxLines = 1,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp),
+            )
+        }
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                .padding(start = Gutter, end = Gutter, bottom = 4.dp),
+                .padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             AddTab.entries.forEach { t -> Chip(t.label, tab == t, onClick = { tab = t; query = "" }) }

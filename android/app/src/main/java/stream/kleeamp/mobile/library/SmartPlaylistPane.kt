@@ -138,6 +138,8 @@ fun LibrarySmartPlaylistPane(
     progress: Map<String, EpisodeProgress> = emptyMap(),
     onAddToPlaylist: (Station) -> Unit = {},
     onOpenArtist: (String) -> Unit = {},
+    /** Opens the add-songs sheet over this page; the sheet writes per tap. */
+    onOpenAddSongs: () -> Unit = {},
     shuffled: Boolean = false,
     onToggleShuffle: () -> Unit = {},
 ) {
@@ -219,10 +221,6 @@ fun LibrarySmartPlaylistPane(
     Box(Modifier.fillMaxSize().background(p.ground)) {
         val scope = rememberCoroutineScope()
         val listState = rememberLazyListState()
-        // Favorites grows through the same song picker playlists use; back
-        // closes it, writes already landed per tap.
-        var adding by rememberSaveable(pl?.key ?: "playlist") { mutableStateOf(false) }
-        BackHandler(enabled = adding) { adding = false }
         MainLayout(
             title = pl?.label ?: "playlist",
             onOpenSearch = onOpenSearch,
@@ -233,17 +231,6 @@ fun LibrarySmartPlaylistPane(
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (pl == null) {
                     CenterNote("no such playlist", p.inkTertiary)
-                } else if (adding && pl.kind == SmartKind.Favorites) {
-                    AddSongsPicker(
-                        selected = favorites.map { it.id }.toSet(),
-                        playlistName = pl.label,
-                        localSongs = songs,
-                        radioStations = ui.radioStations,
-                        subscribedShows = ui.subscribedShows,
-                        showState = ui.showState,
-                        onOpenShow = { vm.onEvent(SmartPlaylistViewModel.Event.OpenShow(it)) },
-                        onToggle = { vm.onEvent(SmartPlaylistViewModel.Event.ToggleFavorite(it)) },
-                    )
                 } else {
                     SmartPlaylistDetail(
                         listState = listState,
@@ -288,7 +275,7 @@ fun LibrarySmartPlaylistPane(
                             vm.onEvent(SmartPlaylistViewModel.Event.RemoveDownloads(urls))
                         },
                         onBeginAdd = if (pl.kind == SmartKind.Favorites) {
-                            { adding = true }
+                            onOpenAddSongs
                         } else null,
                         shuffled = shuffled,
                         onToggleShuffle = onToggleShuffle,

@@ -29,7 +29,7 @@ import kotlinx.serialization.Serializable
 /** Blank [accountId] shows every account with the picker; set locks to one. */
 @Serializable data class LibraryProviderSongs(val accountId: String = "")
 @Serializable data class LibrarySmartPlaylist(val kind: String)
-@Serializable data class LibraryPlaylist(val slug: String, val pickSongs: Boolean = false)
+@Serializable data class LibraryPlaylist(val slug: String)
 /** One artist's tracks, scoped strictly to that list: a playlist slug or "local-songs". */
 @Serializable data class LibraryArtist(val name: String, val context: String)
 @Serializable data class LibrarySongInfo(val stationUrl: String)
