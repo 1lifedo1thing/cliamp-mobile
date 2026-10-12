@@ -1,5 +1,6 @@
 package stream.kleeamp.mobile.podcasts
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -58,6 +59,7 @@ import stream.kleeamp.mobile.chrome.MainLayout
 import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.ShuffleAction
 import stream.kleeamp.mobile.chrome.scrollToTop
+import stream.kleeamp.mobile.library.PickBox
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
@@ -117,6 +119,17 @@ fun PodcastShowScreen(
     // The episode menu's index into the parallel queue/episodes lists, set
     // by the ⋮ trigger and cleared on dismiss.
     var menuIndex by remember { mutableStateOf<Int?>(null) }
+    // The download picker: the hero key arms it, rows keep their covers
+    // with the box trailing, and done fetches exactly the checked episodes.
+    var picking by remember { mutableStateOf(false) }
+    var picked by remember { mutableStateOf(setOf<String>()) }
+    BackHandler(enabled = picking) {
+        picking = false
+        picked = emptySet()
+    }
+    val urls = remember(queue) { queue.map { it.url }.toSet() }
+    val livePicked = remember(picked, urls) { picked intersect urls }
+    val allChecked = urls.isNotEmpty() && livePicked.size == urls.size
 
     // Subscribed + auto-download on: the latest episodes fetch themselves
     // whenever the feed lands. Idempotent, so refreshes re-firing it cost
@@ -146,7 +159,15 @@ fun PodcastShowScreen(
                     },
                     shuffled = shuffled,
                     onToggleShuffle = onToggleShuffle,
-                    onDownloadAll = { vm.onEvent(PodcastShowViewModel.Event.DownloadAll) },
+                    picking = picking,
+                    onToggleDownloadPicker = {
+                        if (picking) {
+                            picking = false
+                            picked = emptySet()
+                        } else {
+                            picking = true
+                        }
+                    },
                 )
             }
 
@@ -170,18 +191,60 @@ fun PodcastShowScreen(
             }
 
             if (queue.isNotEmpty()) {
-                item {
-                    SectionLabel("episodes — ${queue.size}") {
-                        RefreshIcon(
-                            loading = state.loading,
-                            onRefresh = { vm.onEvent(PodcastShowViewModel.Event.RefreshShow) },
-                        )
+                // Picking swaps the count header for the picker header: an
+                // unchecked-until-tapped all box, then the done chip that
+                // fetches exactly the checked episodes.
+                if (picking) {
+                    item {
+                        SectionLabel("download — ${livePicked.size}") {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                PickBox(
+                                    checked = allChecked,
+                                    description = if (allChecked) "uncheck all" else "check all",
+                                    onToggle = { picked = if (allChecked) emptySet() else urls },
+                                )
+                                Mono(
+                                    "all",
+                                    KleeampType.chip,
+                                    LocalPalette.current.inkTertiary,
+                                    maxLines = 1,
+                                    modifier = Modifier.microPress(onClick = {
+                                        picked = if (allChecked) emptySet() else urls
+                                    }),
+                                )
+                                Chip(
+                                    "done",
+                                    selected = livePicked.isNotEmpty(),
+                                    onClick = {
+                                        if (livePicked.isNotEmpty()) {
+                                            val stations = queue.filter { it.url in livePicked }
+                                            vm.onEvent(PodcastShowViewModel.Event.DownloadStations(stations))
+                                        }
+                                        picking = false
+                                        picked = emptySet()
+                                    },
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    item {
+                        SectionLabel("episodes — ${queue.size}") {
+                            RefreshIcon(
+                                loading = state.loading,
+                                onRefresh = { vm.onEvent(PodcastShowViewModel.Event.RefreshShow) },
+                            )
+                        }
                     }
                 }
                 items(queue.indices.toList(), key = { i -> "ep:${queue[i].url}" }) { i ->
                     val station = queue[i]
                     val dl = dlStates[station.url] ?: DownloadState.Idle
                     val fetched = dlEntries[station.url]
+                    val isPicked = station.url in livePicked
                     EpisodeRow(
                         episode = state.episodes[i],
                         station = station,
@@ -192,6 +255,11 @@ fun PodcastShowScreen(
                         downloadedBytes = fetched?.bytes ?: 0L,
                         onPlay = { onPlay(station, queue) },
                         onOpenMenu = { menuIndex = i },
+                        picking = picking,
+                        picked = isPicked,
+                        onTogglePick = {
+                            picked = if (isPicked) picked - station.url else picked + station.url
+                        },
                     )
                 }
             }
@@ -266,7 +334,8 @@ private fun ShowHeader(
     onToggleSubscribe: () -> Unit,
     shuffled: Boolean = false,
     onToggleShuffle: () -> Unit = {},
-    onDownloadAll: () -> Unit = {},
+    picking: Boolean = false,
+    onToggleDownloadPicker: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     if (show == null) return
@@ -318,7 +387,7 @@ private fun ShowHeader(
                         shuffled = shuffled,
                         onToggleShuffle = onToggleShuffle,
                     )
-                    DownloadAllAction(onDownloadAll = onDownloadAll)
+                    DownloadPickAction(picking = picking, onClick = onToggleDownloadPicker)
                 }
             }
         }
@@ -331,22 +400,22 @@ private fun ShowHeader(
     }
 }
 
-/** The hero download-all key: same 40dp target and 15dp icon as the shuffle key. */
+/** The hero download key: same 40dp target and 15dp icon as the shuffle key. It arms the episode picker instead of fetching everything. */
 @Composable
-private fun DownloadAllAction(onDownloadAll: () -> Unit) {
+private fun DownloadPickAction(picking: Boolean, onClick: () -> Unit) {
     val p = LocalPalette.current
     Box(
         Modifier
             .size(40.dp)
             .clip(RoundedCornerShape(KleeampShape.small))
-            .microPress(onClick = onDownloadAll),
+            .microPress(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             KleeampIcons.Download,
-            "download all episodes",
+            if (picking) "close the download picker" else "choose episodes to download",
             Modifier.size(15.dp),
-            tint = p.inkSecondary,
+            tint = if (picking) p.accent else p.inkSecondary,
         )
     }
 }
@@ -364,13 +433,16 @@ private fun EpisodeRow(
     onOpenMenu: () -> Unit = {},
     dlState: DownloadState = DownloadState.Idle,
     downloadedBytes: Long = 0L,
+    picking: Boolean = false,
+    picked: Boolean = false,
+    onTogglePick: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val done = progress?.completed == true
     val fetched = downloadedBytes > 0L
     ListRow(
         rail = active,
-        onClick = onPlay,
+        onClick = { if (picking) onTogglePick() else onPlay() },
         verticalPadding = 11.dp,
         leading = {
             // The resolved station cover already falls back to the show's own
@@ -423,18 +495,29 @@ private fun EpisodeRow(
             }
         },
         trailing = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                // The fetch meter rides the row: blocks while fetching,
-                // nothing once the file is offline or the fetch died (the
-                // subtitle below still names those states). Fetch actions
-                // live in the ⋮ menu.
-                if (dlState is DownloadState.Active) DownloadBlocks(dlState.fraction)
-                else if (dlState is DownloadState.Queued) {
-                    Mono("queued", KleeampType.meta, p.inkTertiary)
-                } else if (dlState is DownloadState.Paused) {
-                    Mono("paused", KleeampType.meta, p.inkTertiary)
+            // Picking keeps the cover like the real row; the box rides the
+            // trailing end where the overflow menu was, and the row tap
+            // toggles instead of playing.
+            if (picking) {
+                PickBox(
+                    checked = picked,
+                    description = if (picked) "uncheck ${station.name}" else "check ${station.name}",
+                    onToggle = onTogglePick,
+                )
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // The fetch meter rides the row: blocks while fetching,
+                    // nothing once the file is offline or the fetch died (the
+                    // subtitle below still names those states). Fetch actions
+                    // live in the ⋮ menu.
+                    if (dlState is DownloadState.Active) DownloadBlocks(dlState.fraction)
+                    else if (dlState is DownloadState.Queued) {
+                        Mono("queued", KleeampType.meta, p.inkTertiary)
+                    } else if (dlState is DownloadState.Paused) {
+                        Mono("paused", KleeampType.meta, p.inkTertiary)
+                    }
+                    OverflowButton(onOpenMenu)
                 }
-                OverflowButton(onOpenMenu)
             }
         },
     ) {

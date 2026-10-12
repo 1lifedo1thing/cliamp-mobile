@@ -36,7 +36,7 @@ class PodcastShowViewModel(
         data class PauseDownload(val url: String) : Event
         data class ResumeDownload(val url: String) : Event
         data class RemoveDownload(val url: String) : Event
-        data object DownloadAll : Event
+        data class DownloadStations(val stations: List<Station>) : Event
         data object AutoDownload : Event
     }
 
@@ -108,13 +108,9 @@ class PodcastShowViewModel(
             is Event.PauseDownload -> downloads.pause(e.url)
             is Event.ResumeDownload -> downloads.resume(e.url)
             is Event.RemoveDownload -> downloads.remove(e.url)
-            is Event.DownloadAll -> {
-                // The feed is already in hand: no fetch, the whole episode
-                // list queues exactly like the show menu's Download-all.
-                val s = state.value
-                val show = s.showState.show ?: return
-                downloads.downloadAll(show, s.showState.episodes)
-            }
+            // The picker's done chip: one fire per checked episode. Already
+            // fetched URLs are no-ops store-side, so no filtering here.
+            is Event.DownloadStations -> e.stations.forEach { downloads.download(it) }
             is Event.AutoDownload -> {
                 val s = state.value
                 val show = s.showState.show ?: return
