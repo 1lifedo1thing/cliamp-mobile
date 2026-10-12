@@ -31,7 +31,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,11 +46,11 @@ import stream.kleeamp.mobile.BuildConfig
 import stream.kleeamp.mobile.R
 import stream.kleeamp.mobile.player.vis.Visualizer
 import stream.kleeamp.mobile.chrome.Chip
-import stream.kleeamp.mobile.chrome.ChipDropdown
-import stream.kleeamp.mobile.chrome.ChipOption
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.KleeampToggle
 import stream.kleeamp.mobile.chrome.Gutter
+import stream.kleeamp.mobile.chrome.MenuSheetShell
+import stream.kleeamp.mobile.chrome.SheetOptionRow
 import stream.kleeamp.mobile.chrome.scrollToTop
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.MainLayout
@@ -179,43 +182,85 @@ fun SettingsScreen(
             checked = autoCellular,
             onChange = { vm.onEvent(SettingsViewModel.Event.SetAutoCellular(it)) },
         )
-        Column {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+        var cleanupOpen by remember { mutableStateOf(false) }
+        var parallelOpen by remember { mutableStateOf(false) }
+        MenuRow(
+            title = "Delete played episodes",
+            value = cleanupLabel(cleanupPlayed),
+            valueActive = cleanupPlayed != CleanupScope.Off,
+            onClick = { cleanupOpen = true },
+        )
+        MenuRow(
+            title = "Parallel downloads",
+            value = "$parallelDownloads",
+            valueActive = true,
+            onClick = { parallelOpen = true },
+        )
+        if (cleanupOpen) {
+            MenuSheetShell(
+                onDismiss = { cleanupOpen = false },
+                header = {
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Mono("Delete played episodes", KleeampType.trackTitleCompact, p.ink, maxLines = 1)
+                            Mono(
+                                "currently ${cleanupLabel(cleanupPlayed)}",
+                                KleeampType.rowSecondary,
+                                p.inkTertiary,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                },
             ) {
-                Mono("Delete played episodes", KleeampType.rowPrimary, p.ink, Modifier.weight(1f))
-                ChipDropdown(
-                    label = cleanupLabel(cleanupPlayed),
-                    selected = cleanupPlayed != CleanupScope.Off,
-                    options = CleanupScope.entries.map { scope ->
-                        ChipOption(cleanupLabel(scope)) {
+                CleanupScope.entries.forEach { scope ->
+                    SheetOptionRow(
+                        label = cleanupLabel(scope),
+                        selected = scope == cleanupPlayed,
+                        onClick = {
                             vm.onEvent(SettingsViewModel.Event.SetCleanupPlayed(scope))
-                        }
-                    },
-                )
+                            cleanupOpen = false
+                        },
+                    )
+                }
             }
-            Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
         }
-        Column {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Mono("Parallel downloads", KleeampType.rowPrimary, p.ink, Modifier.weight(1f))
-                ChipDropdown(
-                    label = "$parallelDownloads",
-                    selected = true,
-                    options = PARALLEL_DOWNLOAD_CHOICES.map { n ->
-                        ChipOption("$n") {
-                            vm.onEvent(SettingsViewModel.Event.SetParallelDownloads(n))
+        if (parallelOpen) {
+            MenuSheetShell(
+                onDismiss = { parallelOpen = false },
+                header = {
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Mono("Parallel downloads", KleeampType.trackTitleCompact, p.ink, maxLines = 1)
+                            Mono(
+                                "currently $parallelDownloads at a time",
+                                KleeampType.rowSecondary,
+                                p.inkTertiary,
+                                maxLines = 1,
+                            )
                         }
-                    },
-                )
+                    }
+                },
+            ) {
+                PARALLEL_DOWNLOAD_CHOICES.forEach { n ->
+                    SheetOptionRow(
+                        label = "$n",
+                        selected = n == parallelDownloads,
+                        onClick = {
+                            vm.onEvent(SettingsViewModel.Event.SetParallelDownloads(n))
+                            parallelOpen = false
+                        },
+                    )
+                }
             }
-            Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
         }
         HairlineDivider()
 
@@ -351,16 +396,49 @@ fun SettingsScreen(
         SectionLabel("storage")
         InfoRow("Favourites", "${uiState.favoritesCount} stations")
         InfoRow("History", "${uiState.historyCount} entries")
+        var purgeOpen by remember { mutableStateOf(false) }
         Row(
             Modifier
                 .fillMaxWidth()
-                .microPress { vm.onEvent(SettingsViewModel.Event.ClearHistory) }
+                .microPress { purgeOpen = true }
                 .padding(horizontal = Gutter, vertical = 13.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Mono("Purge history", KleeampType.rowPrimary, p.destructiveInk)
             Mono("▸", KleeampType.rowPrimary, p.destructiveInk)
+        }
+        if (purgeOpen) {
+            MenuSheetShell(
+                onDismiss = { purgeOpen = false },
+                header = {
+                    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Mono("Purge history?", KleeampType.trackTitleCompact, p.ink, maxLines = 1)
+                        Mono(
+                            "${uiState.historyCount} entries will be removed for good",
+                            KleeampType.rowSecondary,
+                            p.inkTertiary,
+                            maxLines = 2,
+                        )
+                    }
+                },
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().microPress {
+                        vm.onEvent(SettingsViewModel.Event.ClearHistory)
+                        purgeOpen = false
+                    }.padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Mono("Purge", KleeampType.rowPrimary, p.destructiveInk)
+                }
+                Row(
+                    Modifier.fillMaxWidth().microPress { purgeOpen = false }.padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Mono("Cancel", KleeampType.rowPrimary, p.ink)
+                }
+            }
         }
         HairlineDivider()
         InfoRow(
@@ -408,9 +486,36 @@ private fun cleanupLabel(scope: CleanupScope): String = when (scope) {
     CleanupScope.Off -> "off"
 }
 
+/**
+ * A settings row that opens a bottom-sheet picker, like the podcast menus:
+ * title left, current value plus caret right, whole row tappable.
+ */
 @Composable
-private fun ToggleRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun MenuRow(title: String, value: String, valueActive: Boolean, onClick: () -> Unit) {
     val p = LocalPalette.current
+    Column {
+        Row(
+            Modifier.fillMaxWidth().microPress(onClick = onClick)
+                .padding(horizontal = Gutter, vertical = 13.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Mono(title, KleeampType.rowPrimaryMedium, p.ink, Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Mono(
+                    value,
+                    KleeampType.meta,
+                    if (valueActive) p.accent else p.inkFaint,
+                )
+                Icon(KleeampIcons.CaretRight, "open", Modifier.size(11.dp), tint = p.inkTertiary)
+            }
+        }
+        Box(Modifier.padding(start = Gutter)) { HairlineDivider() }
+    }
+}
+
+@Composable
+private fun ToggleRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {    val p = LocalPalette.current
     Column {
         // The whole row toggles, not just the 44dp pill: tapping the
         // label must work too, or users "enable" it with no effect and

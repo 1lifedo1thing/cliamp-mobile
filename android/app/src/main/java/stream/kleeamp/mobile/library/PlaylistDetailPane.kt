@@ -94,6 +94,8 @@ import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
 import stream.kleeamp.mobile.chrome.OverflowButton
+import stream.kleeamp.mobile.chrome.OverflowItem
+import stream.kleeamp.mobile.chrome.OverflowMenu
 import stream.kleeamp.mobile.chrome.ContextMenuSheet
 import stream.kleeamp.mobile.chrome.DestructiveAction
 import stream.kleeamp.mobile.chrome.MenuKind
@@ -105,6 +107,7 @@ import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.scrollToTop
 import stream.kleeamp.mobile.chrome.ArtGlow
 import stream.kleeamp.mobile.chrome.MainLayout
+import stream.kleeamp.mobile.chrome.NoticeBus
 import stream.kleeamp.mobile.chrome.microPress
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
@@ -112,6 +115,45 @@ import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Mono
 import stream.kleeamp.mobile.prefs.PlaylistSort
 import stream.kleeamp.mobile.prefs.sortedStations
+
+/** Playlist maintenance: dedupe, missing-file purge and position bookmark. */
+@Composable
+private fun PlaylistToolsMenu(
+    state: PlaylistToolsState,
+    onDedupe: () -> Unit,
+    onPurgeMissing: () -> Unit,
+    onBookmarkCurrent: () -> Unit,
+    onGoBookmark: () -> Unit,
+    onClearBookmark: () -> Unit,
+) {
+    val p = LocalPalette.current
+    val items = buildList {
+        if (state.dupCount > 0) {
+            add(OverflowItem("remove ${state.dupCount} duplicates", onDedupe, p.ink))
+        }
+        if (state.missingCount > 0) {
+            add(OverflowItem("remove ${state.missingCount} missing", onPurgeMissing, p.ink))
+        }
+        if (state.canBookmark) add(OverflowItem("bookmark current", onBookmarkCurrent, p.ink))
+        if (state.bookmarkIndex != null) {
+            add(OverflowItem("go to bookmark", onGoBookmark, p.accent))
+            add(OverflowItem("clear bookmark", onClearBookmark, p.ink))
+        }
+    }
+    if (items.isEmpty()) return
+    OverflowMenu(
+        trigger = { open -> OverflowButton(open, size = 16) },
+        items = items,
+    )
+}
+
+/** Inputs for [PlaylistToolsMenu], read off the detail state. */
+private data class PlaylistToolsState(
+    val dupCount: Int,
+    val missingCount: Int,
+    val bookmarkIndex: Int?,
+    val canBookmark: Boolean,
+)
 
 /** One user playlist as a navigation pane, with add-songs and cover editing. */
 
@@ -163,6 +205,22 @@ fun LibraryPlaylistPane(
         }
         vm.onEvent(PlaylistDetailViewModel.Event.SetCover(uri.toString()))
     }
+    // Exported M3U text waiting for the save picker: generated on tap,
+    // written when the user picks a destination.
+    var pendingExport by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("audio/x-mpegurl")
+    ) { uri ->
+        val pending = pendingExport
+        pendingExport = null
+        if (uri == null || pending == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.openOutputStream(uri)?.use {
+                it.write(pending.second.toByteArray())
+            } ?: error("no stream")
+        }.onSuccess { NoticeBus.show("saved ${pending.first}.m3u") }
+            .onFailure { NoticeBus.show("export failed", error = true) }
+    }
     Box(Modifier.fillMaxSize().background(p.ground)) {
         val listState = rememberLazyListState()
         MainLayout(
@@ -174,6 +232,44 @@ fun LibraryPlaylistPane(
             chips = if (pl != null) {
                 @Composable {
                     Chip("set cover", selected = false, onClick = { coverLauncher.launch(arrayOf("image/*")) })
+                    if (ui.members.isNotEmpty()) {
+                        Chip(
+                            "export",
+                            selected = false,
+                            onClick = {
+                                scope.launch {
+                                    val text = vm.exportM3u() ?: return@launch
+                                    val name = pl.station.name.ifBlank { "playlist" }
+                                        .replace('/', '_')
+                                    pendingExport = name to text
+                                    exportLauncher.launch("$name.m3u")
+                                }
+                            },
+                        )
+                    }
+                    PlaylistToolsMenu(
+                        state = PlaylistToolsState(
+                            dupCount = ui.dupCount,
+                            missingCount = ui.missingCount,
+                            bookmarkIndex = ui.bookmarkIndex,
+                            canBookmark = current != null &&
+                                ui.members.indexOfFirst { it.url == current.url } >= 0,
+                        ),
+                        onDedupe = { vm.onEvent(PlaylistDetailViewModel.Event.Dedupe) },
+                        onPurgeMissing = { vm.onEvent(PlaylistDetailViewModel.Event.PurgeMissing) },
+                        onBookmarkCurrent = {
+                            val at = ui.members.indexOfFirst { it.url == current?.url }
+                            if (at >= 0) vm.onEvent(PlaylistDetailViewModel.Event.Bookmark(at))
+                        },
+                        onGoBookmark = {
+                            ui.bookmarkIndex?.let { idx ->
+                                ui.members.getOrNull(idx)?.let { onPlay(it, ui.members) }
+                            }
+                        },
+                        onClearBookmark = {
+                            vm.onEvent(PlaylistDetailViewModel.Event.Bookmark(null))
+                        },
+                    )
                 }
             } else null,
         ) {
@@ -279,6 +375,22 @@ private fun PlaylistDetailShown(
 ) {
     val p = LocalPalette.current
 
+    // Browse regroups the members under artist sections in one flat
+    // scroll — no pages, no back handling. The sorts show a local override
+    // until the stored sort round-trips back, so the whole row answers on
+    // the tap.
+    var browsing by rememberSaveable(playlist.station.slug) { mutableStateOf(false) }
+    var sortOverride by remember(playlist.station.slug) { mutableStateOf<PlaylistSort?>(null) }
+    LaunchedEffect(sort) { sortOverride = null }
+    val shownSort = sortOverride ?: sort
+    // Browse regroups the filtered members; cheapest last so the flat list
+    // never waits for it.
+    val grouped = remember(visible, browsing) {
+        if (!browsing) emptyMap()
+        else visible.groupBy { it.artist.ifBlank { "unknown artist" } }
+            .toSortedMap(compareBy { it.lowercase() })
+    }
+
     // Members can be any source now, so they resolve against the live local
     // library plus the persisted snapshot stations (radio/podcast members).
     // Resolved in PlaylistDetailViewModel so the pane stays dumb.
@@ -348,12 +460,41 @@ private fun PlaylistDetailShown(
                         .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
+                    // Lit while browsing, but never untapped: a re-tap
+                    // is a no-op. Only a sort tap switches back.
+                    Chip("browse", browsing, onClick = {
+                        if (!browsing) {
+                            browsing = true
+                            onQuery("")
+                        }
+                    })
+                    // Sorts share one active state with browse: a tap applies
+                    // the sort to the flat list.
                     PlaylistSort.entries.forEach { t ->
-                        Chip(t.label, sort == t, onClick = { onSortChange(t) })
+                        Chip(t.label, shownSort == t && !browsing, onClick = {
+                            browsing = false
+                            sortOverride = t
+                            onSortChange(t)
+                        })
                     }
                 }
             }
             item { FilterRow(value = query, onValue = onQuery) }
+            if (browsing && visible.isNotEmpty()) {
+                grouped.forEach { (artist, songs) ->
+                    item { SectionLabel("$artist — ${songs.size}") }
+                    items(songs, key = { it.id }) { s ->
+                        PlaylistMemberRow(
+                            s = s,
+                            current = current,
+                            playing = playing,
+                            queue = visible,
+                            onPlay = onPlay,
+                            onOpenMenu = onOpenMenu,
+                        )
+                    }
+                }
+            } else {
             item {
                 SectionLabel("songs — ${visible.size}") {
                     AddSongsButton(onClick = onBeginAdd)
@@ -367,37 +508,62 @@ private fun PlaylistDetailShown(
                 }
             }
             items(visible, key = { it.id }) { s ->
-                ListRow(
-                    rail = current?.url == s.url,
-                    onClick = { onPlay(s, visible) },
-                    verticalPadding = 9.dp,
-                    leading = {
-                        SongCover(s = s, current = current, playing = playing)
-                    },
-                    trailing = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            OverflowButton({ onOpenMenu(s) }, size = 16)
-                        }
-                    },
-                ) {
-                    Mono(s.name, KleeampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
-                    Mono(
-                        s.artistAlbum.ifBlank {
-                            when {
-                                s.source == StationSource.Local -> durationLabel(s.durationMs)
-                                s.source == StationSource.Podcast -> "podcast"
-                                else -> s.meta
-                            }
-                        },
-                        KleeampType.rowSecondary, p.inkTertiary, maxLines = 1,
-                    )
-                }
+                PlaylistMemberRow(
+                    s = s,
+                    current = current,
+                    playing = playing,
+                    queue = visible,
+                    onPlay = onPlay,
+                    onOpenMenu = onOpenMenu,
+                )
+            }
             }
         }
         item { Spacer(Modifier.height(20.dp)) }
+    }
+}
+
+/**
+ * One playlist member row, shared by the flat list and the browse sections
+ * so both read identically.
+ */
+@Composable
+private fun PlaylistMemberRow(
+    s: Station,
+    current: Station?,
+    playing: Boolean,
+    queue: List<Station>,
+    onPlay: (Station, List<Station>) -> Unit,
+    onOpenMenu: (Station) -> Unit,
+) {
+    val p = LocalPalette.current
+    ListRow(
+        rail = current?.url == s.url,
+        onClick = { onPlay(s, queue) },
+        verticalPadding = 9.dp,
+        leading = {
+            SongCover(s = s, current = current, playing = playing)
+        },
+        trailing = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OverflowButton({ onOpenMenu(s) }, size = 16)
+            }
+        },
+    ) {
+        Mono(s.name, KleeampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
+        Mono(
+            s.artistAlbum.ifBlank {
+                when {
+                    s.source == StationSource.Local -> durationLabel(s.durationMs)
+                    s.source == StationSource.Podcast -> "podcast"
+                    else -> s.meta
+                }
+            },
+            KleeampType.rowSecondary, p.inkTertiary, maxLines = 1,
+        )
     }
 }
 

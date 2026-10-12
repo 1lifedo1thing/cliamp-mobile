@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -95,6 +96,7 @@ import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.scrollToTop
 import stream.kleeamp.mobile.chrome.ArtGlow
 import stream.kleeamp.mobile.chrome.MainLayout
+import stream.kleeamp.mobile.chrome.NoticeBus
 import stream.kleeamp.mobile.chrome.microPress
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
@@ -158,6 +160,46 @@ fun LibraryScreen(
     val fetched = ui.fetched
 
     var haveAudio by remember { mutableStateOf(LocalLibrary.hasAudioPermission(context)) }
+
+    // Playlist-file import: pick an .m3u/.pls, parse and match it, land on
+    // the new playlist. Every outcome confirms through the transient
+    // bottom-center notice; nothing sticks in the header.
+    val report by vm.importReport.collectAsState()
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch(Dispatchers.IO) {
+            val name = runCatching {
+                context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                    if (c.moveToFirst()) {
+                        val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (idx >= 0) c.getString(idx) else null
+                    } else null
+                }
+            }.getOrNull() ?: uri.lastPathSegment.orEmpty()
+            val text = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+            }.getOrNull()
+            if (text != null) vm.onEvent(LocalViewModel.Event.Import(name, text))
+        }
+    }
+    LaunchedEffect(report) {
+        val current = report ?: return@LaunchedEffect
+        if (current.slug.isNotEmpty()) {
+            NoticeBus.show(
+                if (current.missing > 0) "imported ${current.imported} · ${current.missing} missing"
+                else "imported ${current.imported}",
+            )
+            onOpenPlaylist(current.slug)
+        } else {
+            NoticeBus.show(
+                if (!current.recognized) "not a playlist file" else "nothing matched",
+                error = true,
+            )
+        }
+        vm.onEvent(LocalViewModel.Event.ClearImportReport)
+    }
 
     // The media permission is requested once at app launch. Recheck it whenever
     // this screen resumes, so granting it in system Settings (without another
@@ -226,6 +268,9 @@ fun LibraryScreen(
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
+            chips = {
+                Chip("import", selected = false, onClick = { importLauncher.launch("*/*") })
+            },
         ) {
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
