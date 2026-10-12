@@ -256,12 +256,6 @@ fun StationsScreen(
                 Chip(s.label, source == s, onClick = { source = s })
             }
             Spacer(Modifier.width(4.dp))
-            val countryQuery = directory.query as? DirectoryQuery.Country
-            Chip(
-                countryQuery?.countryName ?: "all countries",
-                selected = countryQuery != null,
-                onClick = { countrySheet = true },
-            )
         },
     ) {
 
@@ -383,7 +377,18 @@ fun StationsScreen(
                             ?: if (directory.error != null) "unreachable" else "loading"),
                         gutter = 8.dp,
                     ) {
-                        Mono(directory.query.label, KleeampType.meta, p.inkTertiary)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Mono(directory.query.label, KleeampType.meta, p.inkTertiary)
+                            val countryQuery = directory.query as? DirectoryQuery.Country
+                            Chip(
+                                countryQuery?.countryName ?: "all countries",
+                                selected = countryQuery != null,
+                                onClick = { countrySheet = true },
+                            )
+                        }
                     }
                 }
                 // The directory's filters, one row: the order controls (top /

@@ -136,14 +136,6 @@ fun PodcastsScreen(
         chips = {
             Pane.entries.forEach { s -> Chip(s.label, pane == s, onClick = { pane = s }) }
             Spacer(Modifier.width(4.dp))
-            val topQuery = directory.query as? PodcastQuery.Top
-            Chip(
-                topQuery?.country?.takeIf { it.isNotEmpty() }?.let { c ->
-                    countryList.firstOrNull { it.iso31661.equals(c, ignoreCase = true) }?.name ?: c
-                } ?: "all countries",
-                selected = topQuery != null && topQuery.country.isNotEmpty(),
-                onClick = { countrySheet = true },
-            )
         },
     ) {
 
@@ -219,6 +211,13 @@ fun PodcastsScreen(
                             // The order control leads the filters: the current
                             // chart order, then the genres that narrow it.
                             val topQuery = directory.query as? PodcastQuery.Top
+                            Chip(
+                                topQuery?.country?.takeIf { it.isNotEmpty() }?.let { c ->
+                                    countryList.firstOrNull { it.iso31661.equals(c, ignoreCase = true) }?.name ?: c
+                                } ?: "all countries",
+                                selected = topQuery != null && topQuery.country.isNotEmpty(),
+                                onClick = { countrySheet = true },
+                            )
                             Chip(
                                 "top",
                                 topQuery != null,
