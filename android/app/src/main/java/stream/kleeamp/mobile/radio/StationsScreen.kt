@@ -381,7 +381,11 @@ fun StationsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Mono(directory.query.label, KleeampType.meta, p.inkTertiary)
+                            // The default top order needs no announcement;
+                            // every other query names itself.
+                            if (directory.query != DirectoryQuery.TopVoted) {
+                                Mono(directory.query.label, KleeampType.meta, p.inkTertiary)
+                            }
                             val countryQuery = directory.query as? DirectoryQuery.Country
                             Chip(
                                 countryQuery?.countryName ?: "all countries",
@@ -391,8 +395,9 @@ fun StationsScreen(
                         }
                     }
                 }
-                // The directory's filters, one row: the order controls (top /
-                // trending) lead it, then the tags that narrow the list.
+                // The directory's filters, one row: trending leads it, then
+                // the tags that narrow the list. Top is the default order
+                // and stays reachable through "all countries".
                 // Gutter-compensated like rows and labels: list padding
                 // plus this lands exactly on the shared gutter.
                 item {
@@ -401,18 +406,6 @@ fun StationsScreen(
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
-                        Chip(
-                            "top",
-                            directory.query == DirectoryQuery.TopVoted,
-                            onClick = {
-                                vm.onEvent(
-                                    StationsViewModel.Event.LoadDirectory(
-                                        DirectoryQuery.TopVoted,
-                                        reset = true,
-                                    )
-                                )
-                            },
-                        )
                         Chip(
                             "trending",
                             directory.query == DirectoryQuery.Trending,

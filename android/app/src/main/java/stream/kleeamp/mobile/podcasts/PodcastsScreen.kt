@@ -195,7 +195,19 @@ fun PodcastsScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
-                                Mono(directory.query.label, KleeampType.meta, p.inkTertiary)
+                                // The default top chart needs no announcement;
+                                // every other query names itself.
+                                if (directory.query !is PodcastQuery.Top) {
+                                    Mono(directory.query.label, KleeampType.meta, p.inkTertiary)
+                                }
+                                val topQuery = directory.query as? PodcastQuery.Top
+                                Chip(
+                                    topQuery?.country?.takeIf { it.isNotEmpty() }?.let { c ->
+                                        countryList.firstOrNull { it.iso31661.equals(c, ignoreCase = true) }?.name ?: c
+                                    } ?: "all countries",
+                                    selected = topQuery != null && topQuery.country.isNotEmpty(),
+                                    onClick = { countrySheet = true },
+                                )
                                 GridListToggle(podDirectoryGrid) {
                                     vm.onEvent(PodcastsViewModel.Event.TogglePodDirectoryGrid)
                                 }
@@ -208,21 +220,8 @@ fun PodcastsScreen(
                                 .padding(horizontal = 8.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(7.dp),
                         ) {
-                            // The order control leads the filters: the current
-                            // chart order, then the genres that narrow it.
-                            val topQuery = directory.query as? PodcastQuery.Top
-                            Chip(
-                                topQuery?.country?.takeIf { it.isNotEmpty() }?.let { c ->
-                                    countryList.firstOrNull { it.iso31661.equals(c, ignoreCase = true) }?.name ?: c
-                                } ?: "all countries",
-                                selected = topQuery != null && topQuery.country.isNotEmpty(),
-                                onClick = { countrySheet = true },
-                            )
-                            Chip(
-                                "top",
-                                topQuery != null,
-                                onClick = { vm.onEvent(PodcastsViewModel.Event.Load(PodcastQuery.Top())) },
-                            )
+                            // The genres narrow the chart; the country chart
+                            // rides the section header by the grid toggle.
                             PodcastDirectory.genres.forEach { g ->
                                 val q = directory.query
                                 Chip(
