@@ -17,11 +17,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.common.stateInUi
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
+import okhttp3.Call
 import okhttp3.Request
 import stream.kleeamp.mobile.net.Http
 import stream.kleeamp.mobile.model.Station
@@ -126,6 +129,20 @@ class DownloadStore(
     private val jobs = mutableMapOf<String, Job>()
     private val jobsLock = Any()
     /**
+     * Live sockets by URL: coroutine cancel alone never interrupts a
+     * thread blocked in a socket read, so every stop path closes the
+     * socket too and the fetch dies on this frame instead of at the
+     * next chunk. Guarded by [jobsLock] with [jobs].
+     */
+    private val calls = mutableMapOf<String, Call>()
+    /**
+     * URLs the user stopped by hand (cancel, pause, remove): auto-download
+     * never refetches them, so a stop sticks past the next feed refresh.
+     * An explicit fetch clears the flag. Session-only: a restart forgets
+     * stops and auto may offer the episodes again. Guarded by [jobsLock].
+     */
+    private val manualStop = mutableSetOf<String>()
+    /**
      * URLs the user parked: their jobs are cancelled but the partial `.tmp`
      * stays, so resume continues it with a Range request. Guarded by
      * [jobsLock] with [jobs]; the fetch job's cancel/finish paths read it to
@@ -173,11 +190,11 @@ class DownloadStore(
 
     /** Runs [block], counting it in [resolving] until it returns. */
     suspend fun <T> trackResolving(block: suspend () -> T): T {
-        _resolving.value += 1
+        _resolving.update { it + 1 }
         try {
             return block()
         } finally {
-            _resolving.value -= 1
+            _resolving.update { it - 1 }
         }
     }
 
@@ -253,7 +270,7 @@ class DownloadStore(
             // duplicate keys crash the list - so the lie goes before the
             // fetch starts. Success writes a fresh entry anyway.
             if (_entries.value[url]?.let { !File(it.path).exists() } == true) {
-                _entries.value = _entries.value - url
+                _entries.update { it - url }
                 scope.launch { runCatching { prefs.removeDownload(url) } }
             }
             if (!station.isTrack || !(url.startsWith("http://") || url.startsWith("https://"))) {
@@ -264,10 +281,13 @@ class DownloadStore(
                 setState(url, DownloadState.Failed("storage full"))
                 return
             }
-            _meta.value = _meta.value + (url to DlMeta(station, auto))
+            _meta.update { it + (url to DlMeta(station, auto)) }
             // Capture the current slots: the setting may swap the instance
             // mid-fetch, and this job must release the one it acquired.
             val gate = synchronized(jobsLock) { slots }
+            // An explicit fetch lifts the hand-stop flag; auto fetches
+            // never clear it, so a cancel sticks past the next refresh.
+            if (!auto) synchronized(jobsLock) { manualStop.remove(url) }
             // Take the next arrival ticket: this job reaches the slots only
             // after the previous ticket arrived, so starts follow queue
             // order no matter how the dispatcher interleaves launches.
@@ -293,6 +313,7 @@ class DownloadStore(
                     synchronized(jobsLock) { arrivals.remove(url) }
                 }
                 gate.acquire()
+                var call: Call? = null
                 try {
                     if (!prefs.cellular.first() && !unmetered()) {
                         setState(url, DownloadState.Failed("wifi only"))
@@ -303,7 +324,13 @@ class DownloadStore(
                     val resumeFrom = tmp.takeIf { it.exists() }?.length() ?: 0L
                     val reqBuilder = Request.Builder().url(url).header("User-Agent", Http.USER_AGENT)
                     if (resumeFrom > 0) reqBuilder.header("Range", "bytes=$resumeFrom-")
-                    Http.streamClient.newCall(reqBuilder.build()).execute().use { resp ->
+                    // Registered before the socket opens so a stop landing
+                    // mid-connect still closes it; unregistered in finally.
+                    val started = synchronized(jobsLock) {
+                        Http.streamClient.newCall(reqBuilder.build()).also { calls[url] = it }
+                    }
+                    call = started
+                    started.execute().use { resp ->
                         if (!resp.isSuccessful) {
                             setState(url, DownloadState.Failed("http ${resp.code}"))
                             return@launch
@@ -354,7 +381,7 @@ class DownloadStore(
                             auto = auto,
                         )
                         prefs.addDownload(entry)
-                        _entries.value = _entries.value + (url to entry)
+                        _entries.update { it + (url to entry) }
                         clearState(url)
                         dropMeta(url)
                     }
@@ -372,11 +399,19 @@ class DownloadStore(
                     }
                     throw e
                 } catch (e: Exception) {
-                    setState(url, DownloadState.Failed(e.message?.lowercase()?.take(42) ?: "download failed"))
+                    // A socket closed by a stop lands here, not in the
+                    // cancellation path: a dead job reads idle, never failed.
+                    if (isActive) {
+                        setState(url, DownloadState.Failed(e.message?.lowercase()?.take(42) ?: "download failed"))
+                    } else {
+                        setState(url, DownloadState.Idle)
+                    }
                 } finally {
                     gate.release()
+                    val c = call
                     val keepPartial = synchronized(jobsLock) {
                         jobs.remove(url)
+                        if (c != null && calls[url] === c) calls.remove(url)
                         url in paused
                     }
                     if (!keepPartial) runCatching { File(dir, fileName(url) + ".tmp").delete() }
@@ -386,15 +421,24 @@ class DownloadStore(
     }
 
     fun cancel(url: String) {
-        val job = synchronized(jobsLock) {
+        val job: Job?
+        val call: Call?
+        synchronized(jobsLock) {
             paused.remove(url)
             pausedProgress.remove(url)
             // A queued fetch cancelled before its first run never reaches
             // its arrival handoff: complete it here or the chain stalls.
             arrivals.remove(url)?.complete(Unit)
-            jobs.remove(url)
+            manualStop.add(url)
+            call = calls.remove(url)
+            job = jobs.remove(url)
         }
+        // The job flag first: when the socket close lands the job already
+        // reads dead and settles idle instead of failed. The socket second:
+        // a thread blocked in a read dies on this frame instead of draining
+        // the chunk, and no further progress emission can overwrite the idle.
         job?.cancel()
+        call?.cancel()
         runCatching { File(dir, fileName(url) + ".tmp").delete() }
         if (!isDownloaded(url)) setState(url, DownloadState.Idle)
         dropMeta(url)
@@ -406,7 +450,9 @@ class DownloadStore(
      * it with a Range request. A no-op unless the URL is fetching.
      */
     fun pause(url: String) {
-        val job = synchronized(jobsLock) {
+        val job: Job?
+        val call: Call?
+        synchronized(jobsLock) {
             val running = jobs[url] ?: return
             val cur = _states.value[url]
             val progress = when (cur) {
@@ -423,9 +469,15 @@ class DownloadStore(
             // Same stall guard as cancel: a queued fetch parked before its
             // first run never reaches its arrival handoff.
             arrivals.remove(url)?.complete(Unit)
-            running
+            manualStop.add(url)
+            // Parked fetches resume by hand, never by auto. Job flag before
+            // the socket close, same as cancel: the dying read settles
+            // paused through the cancellation path, never failed.
+            call = calls.remove(url)
+            job = running
         }
-        job.cancel()
+        job?.cancel()
+        call?.cancel()
         // The job's cancellation path publishes the Paused state; set it
         // here too so a queued fetch parked before acquiring a slot reads
         // paused immediately instead of until its (uncancellable) acquire
@@ -455,6 +507,9 @@ class DownloadStore(
             }
             station = m.station
             auto = m.auto
+            // An explicit resume lifts the hand-stop flag whatever started
+            // the fetch: the user asked for this one back.
+            manualStop.remove(url)
             val progress = pausedProgress[url]
                 ?: (_states.value[url] as? DownloadState.Paused)?.let { it.bytesRead to it.totalBytes }
                 ?: (0L to -1L)
@@ -501,6 +556,7 @@ class DownloadStore(
         // every URL the queue or the list could be holding.
         val snapshot: Map<String, String?>
         val jobsToStop: List<Job>
+        val callsToStop: List<Call>
         synchronized(jobsLock) {
             val urls = (
                 jobs.keys + _entries.value.keys + _states.value.keys
@@ -512,9 +568,15 @@ class DownloadStore(
             pausedProgress.clear()
             arrivals.values.forEach { it.complete(Unit) }
             arrivals.clear()
+            callsToStop = calls.values.toList()
+            calls.clear()
+            manualStop.addAll(urls)
         }
+        // Job flags before the socket closes, same as cancel: dying reads
+        // settle idle instead of failed while the files delete behind them.
         jobsToStop.forEach { it.cancel() }
-        _entries.value = _entries.value - snapshot.keys
+        callsToStop.forEach { it.cancel() }
+        _entries.update { it - snapshot.keys }
         snapshot.keys.forEach { clearState(it); dropMeta(it) }
         scope.launch {
             // Join first: a delete landing mid-rename must never remove
@@ -541,16 +603,22 @@ class DownloadStore(
     }
 
     private suspend fun removeNow(url: String) {
-        val job = synchronized(jobsLock) {
+        val job: Job?
+        val call: Call?
+        synchronized(jobsLock) {
             paused.remove(url)
             pausedProgress.remove(url)
             arrivals.remove(url)?.complete(Unit)
-            jobs.remove(url)
+            job = jobs.remove(url)
+            manualStop.add(url)
+            call = calls.remove(url)
         }
+        // Job flag before the socket close, same as cancel.
         job?.cancel()
+        call?.cancel()
         runCatching { withTimeoutOrNull(5_000) { job?.join() } }
         _entries.value[url]?.let { runCatching { File(it.path).delete() } }
-        _entries.value = _entries.value - url
+        _entries.update { it - url }
         clearState(url)
         dropMeta(url)
         prefs.removeDownload(url)
@@ -560,7 +628,9 @@ class DownloadStore(
      * Auto-download for one subscribed show: every full, unplayed episode
      * fetches itself. Nothing is ever swept: offline episodes stay until the
      * user removes them or the delete-after-listening scope covers them.
-     * Idempotent, so a feed refresh re-firing it is free.
+     * Idempotent, so a feed refresh re-firing it is free. Episodes the user
+     * stopped by hand are never refetched: only an explicit tap or resume
+     * lifts that flag.
      *
      * Auto fetches are wifi-only unless the cellular opt-in is on; manual
      * taps keep their own [Prefs.cellular] gate inside [download].
@@ -576,23 +646,29 @@ class DownloadStore(
             episodes
                 .filter { it.isFull && it.audioUrl.isNotBlank() && it.audioUrl !in completedUrls }
                 .forEach { ep ->
-                    if (!isDownloaded(ep.audioUrl) && !jobs.containsKey(ep.audioUrl)) {
+                    val skip = synchronized(jobsLock) {
+                        ep.audioUrl in manualStop || jobs.containsKey(ep.audioUrl)
+                    }
+                    if (!skip && !isDownloaded(ep.audioUrl)) {
                         download(ep.toStation(show), auto = true)
                     }
                 }
         }
     }
 
+    // Every map write below is an atomic update, never read-modify-write:
+    // fetch jobs publish progress from IO threads, so two jobs emitting on
+    // the same frame used to overwrite each other and rows went missing.
     private fun setState(url: String, s: DownloadState) {
-        _states.value = _states.value + (url to s)
+        _states.update { it + (url to s) }
     }
 
     private fun clearState(url: String) {
-        _states.value = _states.value - url
+        _states.update { it - url }
     }
 
     private fun dropMeta(url: String) {
-        _meta.value = _meta.value - url
+        _meta.update { it - url }
     }
 
     private fun unmetered(): Boolean {
