@@ -71,7 +71,7 @@ import stream.kleeamp.mobile.search.SearchScreen
 import stream.kleeamp.mobile.library.FavScope
 import stream.kleeamp.mobile.library.DownloadQueueSheet
 import stream.kleeamp.mobile.library.LibraryPlaylistPane
-import stream.kleeamp.mobile.library.LibraryAddToPlaylistPane
+import stream.kleeamp.mobile.library.AddToPlaylistSheet
 import stream.kleeamp.mobile.servers.LibraryProvidersPane
 import stream.kleeamp.mobile.library.LibrarySmartPlaylistPane
 import stream.kleeamp.mobile.library.LibrarySongInfoPane
@@ -182,6 +182,11 @@ fun KleeampRoot(
     // to reopen.
     var upNextOpen by rememberSaveable { mutableStateOf(false) }
     var scopeOpen by rememberSaveable { mutableStateOf(false) }
+    // The add-to-playlist picker is a bottom sheet over whatever opened it,
+    // not a page: the tapped song arrives as the Station itself, so there is
+    // no re-resolve and no "song gone". Holds the song only (not saveable:
+    // Station is not parcelable); dismiss returns in place.
+    var addToPlaylistStation by remember { mutableStateOf<Station?>(null) }
 
     // Playback-global state stays at the root: the chrome and every screen
     // read current/playing. Prefs, provider and progress flows are collected
@@ -411,7 +416,7 @@ fun KleeampRoot(
                                 playing = playerState.playing,
                                 onPlay = { s, from -> play(s, from) },
                                 onAddToQueue = { player.addToUpNext(it) },
-                                onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
+                                onAddToPlaylist = { s -> addToPlaylistStation = s },
                                 onOpenSearch = {
                                     navController.navigate(Search)
                                 },
@@ -469,7 +474,7 @@ fun KleeampRoot(
                         onPlay = { s, from -> play(s, from) },
                         onAddToUpNext = { player.addToUpNext(it) },
                         onPlayNext = { player.playNext(it) },
-                        onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
+                        onAddToPlaylist = { s -> addToPlaylistStation = s },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenSettings = { navController.navigate(Settings) },
                         shuffled = shuffled,
@@ -489,7 +494,7 @@ fun KleeampRoot(
                         onPlay = { s, from -> play(s, from) },
                         onAddToUpNext = { player.addToUpNext(it) },
                         onPlayNext = { player.playNext(it) },
-                        onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
+                        onAddToPlaylist = { s -> addToPlaylistStation = s },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenSettings = { navController.navigate(Settings) },
                         shuffled = shuffled,
@@ -528,7 +533,7 @@ fun KleeampRoot(
                         playing = playerState.playing,
                         onPlay = { s, from -> play(s, from) },
                         onAddToQueue = { player.addToUpNext(it) },
-                        onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
+                        onAddToPlaylist = { s -> addToPlaylistStation = s },
                         onInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
                         onBack = { navController.popBackStack() },
                         onOpenSearch = { navController.navigate(Search) },
@@ -563,7 +568,7 @@ fun KleeampRoot(
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenSettings = { navController.navigate(Settings) },
                         progress = progress,
-                        onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
+                        onAddToPlaylist = { s -> addToPlaylistStation = s },
                         onOpenArtist = { name -> navController.navigate(LibraryArtist(name, "local-songs")) },
                         shuffled = shuffled,
                         onToggleShuffle = { player.toggleShuffle() },
@@ -593,7 +598,7 @@ fun KleeampRoot(
                         onBack = { navController.popBackStack() },
                         onOpenSearch = { navController.navigate(Search) },
                         onOpenSettings = { navController.navigate(Settings) },
-                        onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
+                        onAddToPlaylist = { s -> addToPlaylistStation = s },
                         onInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
                         onOpenArtist = { name -> navController.navigate(LibraryArtist(name, slug)) },
                         startAdding = route.pickSongs,
@@ -620,7 +625,7 @@ fun KleeampRoot(
                         playing = playerState.playing,
                         onPlay = playOrOpenChannel,
                         onAddToQueue = { player.addToUpNext(it) },
-                        onAddToPlaylist = { s -> navController.navigate(LibraryAddToPlaylist(s.url)) },
+                        onAddToPlaylist = { s -> addToPlaylistStation = s },
                         onInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
                         onBack = { navController.popBackStack() },
                         onOpenSearch = { navController.navigate(Search) },
@@ -640,25 +645,6 @@ fun KleeampRoot(
                         stationUrl = stationUrl,
                         repository = repository,
                         onBack = { navController.popBackStack() },
-                    )
-                }
-            }
-            composable<LibraryAddToPlaylist> { entry ->
-                val stationUrl = entry.toRoute<LibraryAddToPlaylist>().stationUrl
-                Box(contentModifier) {
-                    LibraryAddToPlaylistPane(
-                        vm = appViewModel(key = "add:$stationUrl") { app ->
-                            AddToPlaylistViewModel(
-                                stationUrl,
-                                app.localLibrary,
-                                app.playlists,
-                                app.prefs,
-                                app.radio,
-                            )
-                        },
-                        onBack = { navController.popBackStack() },
-                        onOpenSearch = { navController.navigate(Search) },
-                        onOpenSettings = { navController.navigate(Settings) },
                     )
                 }
             }
@@ -824,6 +810,19 @@ fun KleeampRoot(
                 playing = playerState.playing,
                 onDismiss = { scopeOpen = false },
             )
+        }
+        // The add-to-playlist picker stacks over whatever opened it and
+        // peels back to exactly that: the song stays composed underneath.
+        addToPlaylistStation?.let { picked ->
+            app?.let { kleeamp ->
+                AddToPlaylistSheet(
+                    song = picked,
+                    vm = appViewModel(key = "add:${picked.id}") { _ ->
+                        AddToPlaylistViewModel(picked, kleeamp.playlists, kleeamp.prefs)
+                    },
+                    onDismiss = { addToPlaylistStation = null },
+                )
+            }
         }
 
         // The transient confirmations, topmost and centered above the chrome:

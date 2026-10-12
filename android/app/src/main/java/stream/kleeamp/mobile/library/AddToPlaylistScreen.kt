@@ -1,215 +1,113 @@
 package stream.kleeamp.mobile.library
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.chrome.KleeampIcons
-import stream.kleeamp.mobile.chrome.KleeampTextField
-import stream.kleeamp.mobile.chrome.Gutter
-import stream.kleeamp.mobile.chrome.ListRow
-import stream.kleeamp.mobile.chrome.MainLayout
-import stream.kleeamp.mobile.chrome.SectionLabel
+import stream.kleeamp.mobile.chrome.MenuSheetShell
+import stream.kleeamp.mobile.chrome.StationMenuArt
 import stream.kleeamp.mobile.chrome.microPress
-import stream.kleeamp.mobile.chrome.scrollToTop
-import stream.kleeamp.mobile.theme.KleeampShape
+import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Mono
 
 /**
- * The add-to-playlist page: one song, favourites plus every user playlist.
- * There is no Done — every tap adds or removes immediately, and back just
- * leaves. A ticked row means the song is in there right now.
+ * The add-to-playlist picker as a bottom sheet: the song stays underneath,
+ * favourites plus every user playlist with its cover (or glyph when
+ * coverless). Every tap adds or removes immediately and the sheet stays open
+ * for multi-pick; swipe-down or scrim tap dismisses. A ticked row means the
+ * song is in there right now.
  */
 @Composable
-fun LibraryAddToPlaylistPane(
-    vm: AddToPlaylistViewModel,
-    onBack: () -> Unit,
-    onOpenSearch: () -> Unit = {},
-    onOpenSettings: () -> Unit = {},
-) {
-    val p = LocalPalette.current
-    val ui by vm.state.collectAsState()
-    val scope = rememberCoroutineScope()
-    val listState = rememberLazyListState()
-    var creating by rememberSaveable { mutableStateOf(false) }
-
-    Box(Modifier.fillMaxSize().background(p.ground)) {
-        MainLayout(
-            title = "add to playlist",
-            onOpenSearch = onOpenSearch,
-            onOpenSettings = onOpenSettings,
-            onTitleClick = { scope.scrollToTop(listState) },
-            onBack = onBack,
-        ) {
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                val song = ui.song
-                when {
-                    !ui.songReady -> Note("finding that song…")
-                    song == null -> Note("song gone")
-                    // The picker always renders, even with no playlists yet:
-                    // the + button is how the first one gets made.
-                    else -> PickerList(
-                        listState = listState,
-                        song = song,
-                        playlists = ui.allPlaylists,
-                        memberOf = ui.memberOf,
-                        favoritesCount = ui.favoritesCount,
-                        isFavorite = ui.isFavorite,
-                        onToggleFavorites = { vm.onEvent(AddToPlaylistViewModel.Event.ToggleFavorites) },
-                        onToggle = { vm.onEvent(AddToPlaylistViewModel.Event.Toggle(it)) },
-                        creating = creating,
-                        onBeginCreate = { creating = true },
-                        onCancelCreate = { creating = false },
-                        onCreate = { name ->
-                            vm.onEvent(AddToPlaylistViewModel.Event.Create(name))
-                            creating = false
-                        },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun Note(text: String) {
-    val p = LocalPalette.current
-    Box(Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
-        Mono(text, KleeampType.rowSecondary, p.inkFaint)
-    }
-}
-
-@Composable
-// Screen signature: state in, callbacks out; bundling would hide the data flow.
-@Suppress("LongParameterList")
-private fun PickerList(
-    listState: androidx.compose.foundation.lazy.LazyListState,
+fun AddToPlaylistSheet(
     song: Station,
-    playlists: List<PlaylistStore.Playlist>,
-    memberOf: Set<String>,
-    favoritesCount: Int,
-    isFavorite: Boolean,
-    onToggleFavorites: () -> Unit,
-    onToggle: (String) -> Unit,
-    creating: Boolean,
-    onBeginCreate: () -> Unit,
-    onCancelCreate: () -> Unit,
-    onCreate: (String) -> Unit,
+    vm: AddToPlaylistViewModel,
+    onDismiss: () -> Unit,
+) {
+    val ui by vm.state.collectAsState()
+
+    MenuSheetShell(
+        onDismiss = onDismiss,
+        halfHeight = true,
+        header = {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Box(Modifier.size(52.dp)) { StationMenuArt(song) }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Mono("add to playlist", KleeampType.rowSecondary, LocalPalette.current.inkTertiary, maxLines = 1)
+                    Mono(song.name.ifBlank { "unknown" }, KleeampType.trackTitleCompact, LocalPalette.current.ink, maxLines = 2)
+                }
+            }
+        },
+    ) {
+        PickerRow(
+            label = "favorites",
+            countLabel = if (ui.favoritesCount == 0) "empty" else "${ui.favoritesCount} items",
+            checked = ui.isFavorite,
+            checkDescription = if (ui.isFavorite) "remove from favorites" else "add to favorites",
+            leading = { PlaylistGlyph(KleeampIcons.Heart, "favorites") },
+            onClick = { vm.onEvent(AddToPlaylistViewModel.Event.ToggleFavorites) },
+        )
+        if (ui.allPlaylists.isEmpty()) {
+            Box(Modifier.fillMaxWidth().padding(vertical = 20.dp), contentAlignment = Alignment.Center) {
+                Mono("no playlists yet", KleeampType.rowSecondary, LocalPalette.current.inkFaint)
+            }
+        } else {
+            ui.allPlaylists.forEach { pl ->
+                val slug = pl.station.slug
+                val isMember = slug in ui.memberOf
+                PickerRow(
+                    label = pl.station.name,
+                    countLabel = "${pl.songIds.size} songs",
+                    checked = isMember,
+                    checkDescription = if (isMember) "remove from ${pl.station.name}" else "add to ${pl.station.name}",
+                    leading = { PlaylistLeading(pl) },
+                    onClick = { vm.onEvent(AddToPlaylistViewModel.Event.Toggle(slug)) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PickerRow(
+    label: String,
+    countLabel: String,
+    checked: Boolean,
+    checkDescription: String,
+    leading: @Composable () -> Unit,
+    onClick: () -> Unit,
 ) {
     val p = LocalPalette.current
-    Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Mono(song.name, KleeampType.chip, p.accent, maxLines = 1, modifier = Modifier.weight(1f))
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 56.dp)
+            .microPress(onClick = onClick)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) { leading() }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Mono(label, KleeampType.rowPrimary, p.ink, maxLines = 1)
+            Mono(countLabel, KleeampType.rowSecondary, p.inkTertiary, maxLines = 1)
         }
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
-            item {
-                // The real favourites row, plus the picker box trailing:
-                // glyph leading, title, count, then the box.
-                ListRow(
-                    onClick = onToggleFavorites,
-                    verticalPadding = 9.dp,
-                    leading = {
-                        PlaylistGlyph(KleeampIcons.Heart, "favorites")
-                    },
-                    trailing = {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Mono(
-                                if (favoritesCount == 0) "empty" else "$favoritesCount items",
-                                KleeampType.meta, p.inkFaint,
-                            )
-                            PickBox(
-                                checked = isFavorite,
-                                description = if (isFavorite) "remove from favorites" else "add to favorites",
-                                onToggle = onToggleFavorites,
-                            )
-                        }
-                    },
-                ) {
-                    Mono("favorites", KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
-                }
-            }
-            item {
-                SectionLabel("playlists — ${playlists.size}") {
-                    // Always rendered, same reason as the library list: the
-                    // dialog scrim eats taps behind it.
-                    Box(
-                        Modifier
-                            .size(34.dp)
-                            .clip(RoundedCornerShape(KleeampShape.small))
-                            .background(if (p.dark) p.keyFace else p.ground)
-                            .border(1.dp, p.keyBorder, RoundedCornerShape(KleeampShape.small))
-                            .microPress(onClick = onBeginCreate),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(KleeampIcons.Plus, "new playlist", Modifier.size(16.dp), tint = p.accent)
-                    }
-                }
-            }
-            items(playlists, key = { it.station.slug }) { pl ->
-                val slug = pl.station.slug
-                val isMember = slug in memberOf
-                // The real playlist row, plus the picker box trailing: set
-                // cover or glyph leading, title, count, then the box.
-                ListRow(
-                    onClick = { onToggle(slug) },
-                    verticalPadding = 9.dp,
-                    leading = {
-                        PlaylistLeading(pl)
-                    },
-                    trailing = {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Mono("${pl.songIds.size} songs", KleeampType.meta, p.inkFaint)
-                            PickBox(
-                                checked = isMember,
-                                description = if (isMember) "remove from ${pl.station.name}" else "add to ${pl.station.name}",
-                                onToggle = { onToggle(slug) },
-                            )
-                        }
-                    },
-                ) {
-                    Mono(pl.station.name, KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
-                }
-            }
-            item { Spacer(Modifier.height(20.dp)) }
-        }
-        // Naming floats centered over everything: the list never shifts.
-        if (creating) {
-            PlaylistNameDialog(
-                placeholder = "name this playlist",
-                onDone = onCreate,
-                onDismiss = onCancelCreate,
-            )
-        }
+        PickBox(checked = checked, description = checkDescription, onToggle = onClick)
     }
 }

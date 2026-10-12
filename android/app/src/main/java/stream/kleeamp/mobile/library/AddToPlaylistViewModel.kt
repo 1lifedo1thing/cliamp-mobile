@@ -3,40 +3,31 @@ package stream.kleeamp.mobile.library
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.common.stateInUi
 import stream.kleeamp.mobile.prefs.Prefs
-import stream.kleeamp.mobile.radio.RadioRepository
 import stream.kleeamp.mobile.model.Station
 
 /**
  * The add-to-playlist picker: one song, favourites plus every user playlist.
  *
  * There is no staged selection and no Done: every tap applies immediately —
- * tapping a playlist adds the song, tapping again removes it, and back just
+ * tapping a playlist adds the song, tapping again removes it, and dismiss just
  * leaves (everything is already saved). The checkmarks mirror membership, so
  * they flip as soon as the database flows echo the change.
  *
- * The song arrives as a playback URL (the same key [LibrarySongInfo] uses) and
- * is re-resolved against the live library, favourites/history, the radio
- * catalogues and the persisted playlist snapshots — in that order — so a song
- * tapped inside any playlist (a podcast episode or provider track snapshot
- * that was never favourited) still resolves.
+ * The song arrives as the tapped [Station] itself (not a URL to re-resolve),
+ * so a provider track, podcast episode or local song tapped anywhere always
+ * resolves — there is no "song gone" page.
  */
 class AddToPlaylistViewModel(
-    private val stationUrl: String,
-    private val localLibrary: LocalLibrary,
+    val song: Station,
     private val playlists: PlaylistStore,
     private val prefs: Prefs,
-    private val repository: RadioRepository,
 ) : ViewModel() {
     data class UiState(
-        val song: Station? = null,
-        /** True once every source has answered (a missing song then stays missing). */
-        val songReady: Boolean = false,
         val allPlaylists: List<PlaylistStore.Playlist> = emptyList(),
         /** Slugs holding the song: the ticked rows. */
         val memberOf: Set<String> = emptySet(),
@@ -50,49 +41,14 @@ class AddToPlaylistViewModel(
         data object ToggleFavorites : Event
     }
 
-    private val _snapshot = MutableStateFlow<Station?>(null)
-    private val _snapshotReady = MutableStateFlow(false)
-
-    init {
-        viewModelScope.launch {
-            _snapshot.value = playlists.snapshotByUrl(stationUrl)
-            _snapshotReady.value = true
-        }
-    }
-
     val state: StateFlow<UiState> = combine(
-        combine(
-            localLibrary.songs,
-            prefs.favorites,
-            prefs.history,
-        ) { songs, favorites, recent -> Triple(songs, favorites, recent) },
-        combine(
-            repository.cliamp,
-            repository.directory,
-            playlists.playlists,
-        ) { cliamp, directory, all -> Triple(cliamp, directory, all) },
-        combine(
-            _snapshot,
-            _snapshotReady,
-        ) { snapshot, snapshotReady -> snapshot to snapshotReady },
-    ) { social, catalog, snapshotState ->
-        val (songs, favorites, recent) = social
-        val (cliamp, directory, all) = catalog
-        val (snapshot, snapshotReady) = snapshotState
-        val song = songs.firstOrNull { it.url == stationUrl }
-            ?: favorites.firstOrNull { it.url == stationUrl }
-            ?: recent.firstOrNull { it.url == stationUrl }
-            ?: cliamp.firstOrNull { it.url == stationUrl }
-            ?: directory.stations.firstOrNull { it.url == stationUrl }
-            ?: snapshot
-        val isFavorite = song?.let { s -> favorites.any { it.url == s.url } } ?: false
+        prefs.favorites,
+        playlists.playlists,
+    ) { favorites, all ->
+        val isFavorite = favorites.any { it.id == song.id }
         UiState(
-            song = song,
-            songReady = song != null || snapshotReady,
             allPlaylists = all,
-            memberOf = song?.let { s ->
-                all.filter { s.id in it.songIds }.map { it.station.slug }.toSet()
-            }.orEmpty(),
+            memberOf = all.filter { song.id in it.songIds }.map { it.station.slug }.toSet(),
             favoritesCount = favorites.size,
             isFavorite = isFavorite,
         )
@@ -110,7 +66,6 @@ class AddToPlaylistViewModel(
             // cancellable by navigating away: a tap is user intent that
             // must land, not screen-owned work.
             is Event.Toggle -> {
-                val song = state.value.song ?: return
                 if (state.value.allPlaylists.none { it.station.slug == e.slug }) return
                 viewModelScope.launch(NonCancellable) {
                     playlists.toggleStation(e.slug, song)
@@ -119,14 +74,12 @@ class AddToPlaylistViewModel(
             // A fresh playlist gains the song straight away, matching the
             // ticked row it arrives with.
             is Event.Create -> {
-                val song = state.value.song ?: return
                 viewModelScope.launch(NonCancellable) {
                     val slug = playlists.create(e.name) ?: return@launch
                     playlists.addStation(slug, song)
                 }
             }
             Event.ToggleFavorites -> {
-                val song = state.value.song ?: return
                 viewModelScope.launch(NonCancellable) {
                     prefs.toggleFavorite(song)
                 }
