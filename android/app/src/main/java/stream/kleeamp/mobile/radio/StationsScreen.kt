@@ -268,10 +268,11 @@ fun StationsScreen(
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
         ) {
 
-            // Page hero: the live listener globe sits above everything else,
-            // unfiltered by the source chips below it. The setting toggles
-            // the whole section - globe and top countries together.
-            if (ui.listenerGlobe) {
+            // Page hero: the live listener globe sits above the cliamp
+            // section on All and Cliamp only — it renders cliamp stats, so
+            // Directory and Custom hide it. The setting toggles the whole
+            // section - globe and top countries together.
+            if (ui.listenerGlobe && (source == Source.All || source == Source.Cliamp)) {
                 item {
                     ListenerAnalytics(
                         stats = viewStats,
