@@ -690,22 +690,21 @@ private fun SmartPlaylistDetail(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (browseable) {
-                        // Every chip taps the same way: it selects itself
-                        // and nothing else. Browse keeps the filter too.
-                        Chip("browse", shownBrowse, onClick = {
-                            browseOverride = true
-                            onBrowseChange(true)
-                        })
-                    }
-                    // Sorts share one active state with browse: exactly one
-                    // chip is lit. Tapping one applies it to the flat list.
+                    // Sorts first as one family, then browse as the mode
+                    // switch; the folder picker stays trailing. Every chip
+                    // taps the same way: it selects itself and nothing else.
                     PlaylistSort.entries.forEach { t ->
                         Chip(t.label, shownSort == t && !shownBrowse, onClick = {
                             browseOverride = false
                             onBrowseChange(false)
                             sortOverride = t
                             onSortChange(t)
+                        })
+                    }
+                    if (browseable) {
+                        Chip("browse", shownBrowse, onClick = {
+                            browseOverride = true
+                            onBrowseChange(true)
                         })
                     }
                     // Local songs only: the folder picker trails the sort row.

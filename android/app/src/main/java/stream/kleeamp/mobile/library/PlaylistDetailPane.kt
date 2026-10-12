@@ -479,14 +479,9 @@ private fun PlaylistDetailShown(
                         .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
-                    // Every chip taps the same way: it selects itself and
-                    // nothing else. Browse keeps the filter like the sorts do.
-                    Chip("browse", shownBrowse, onClick = {
-                        browseOverride = true
-                        onBrowseChange(true)
-                    })
-                    // Sorts share one active state with browse: a tap applies
-                    // the sort to the flat list.
+                    // Sorts first as one family; browse caps the row as the
+                    // mode switch. Every chip taps the same way: it selects
+                    // itself and nothing else.
                     PlaylistSort.entries.forEach { t ->
                         Chip(t.label, shownSort == t && !shownBrowse, onClick = {
                             browseOverride = false
@@ -495,6 +490,10 @@ private fun PlaylistDetailShown(
                             onSortChange(t)
                         })
                     }
+                    Chip("browse", shownBrowse, onClick = {
+                        browseOverride = true
+                        onBrowseChange(true)
+                    })
                 }
             }
             item { FilterRow(value = query, onValue = onQuery) }
