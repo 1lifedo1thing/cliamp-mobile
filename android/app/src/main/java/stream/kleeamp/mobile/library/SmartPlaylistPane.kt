@@ -380,15 +380,16 @@ internal fun GroupList(
                 ListRow(
                     onClick = { onToggle(s) },
                     verticalPadding = 8.dp,
+                    // The real row's cover stays; the box rides trailing.
                     leading = {
-                        Box(
-                            Modifier.size(24.dp).clip(RoundedCornerShape(KleeampShape.tiny))
-                                .then(if (inPl) Modifier.background(p.accent)
-                                      else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny))),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (inPl) Icon(KleeampIcons.Check, null, Modifier.size(10.dp), tint = p.onAccent)
-                        }
+                        SongCover(s = s, current = null, playing = false)
+                    },
+                    trailing = {
+                        PickBox(
+                            checked = inPl,
+                            description = if (inPl) "remove ${s.name}" else "add ${s.name}",
+                            onToggle = { onToggle(s) },
+                        )
                     },
                 ) {
                     Mono(s.name, KleeampType.rowPrimary, p.ink, maxLines = 1)
@@ -449,19 +450,16 @@ internal fun PodcastGroups(
                     ListRow(
                         onClick = { onToggle(s) },
                         verticalPadding = 8.dp,
+                        // The real row's cover stays; the box rides trailing.
                         leading = {
-                            Box(
-                                Modifier.size(24.dp).clip(RoundedCornerShape(KleeampShape.tiny))
-                                    .then(if (inPl) Modifier.background(p.accent)
-                                          else Modifier.border(
-                                              1.dp,
-                                              p.chipBorder,
-                                              RoundedCornerShape(KleeampShape.tiny),
-                                          )),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                if (inPl) Icon(KleeampIcons.Check, null, Modifier.size(10.dp), tint = p.onAccent)
-                            }
+                            SongCover(s = s, current = null, playing = false)
+                        },
+                        trailing = {
+                            PickBox(
+                                checked = inPl,
+                                description = if (inPl) "remove ${s.name}" else "add ${s.name}",
+                                onToggle = { onToggle(s) },
+                            )
                         },
                     ) {
                         Mono(s.name, KleeampType.rowPrimary, p.ink, maxLines = 1)
@@ -528,7 +526,7 @@ private fun PickDownloadsAction(picking: Boolean, onClick: () -> Unit) {
 
 /** The picker checkbox: the same 24dp box the song picker wears. */
 @Composable
-private fun PickBox(checked: Boolean, description: String, onToggle: () -> Unit) {
+internal fun PickBox(checked: Boolean, description: String, onToggle: () -> Unit) {
     val p = LocalPalette.current
     Box(
         Modifier.size(24.dp).clip(RoundedCornerShape(KleeampShape.tiny))
@@ -930,9 +928,13 @@ private fun SmartSongRow(
         rail = current?.url == s.url,
         onClick = { if (picking) onTogglePick() else onPlay(s, queue) },
         verticalPadding = 9.dp,
+        // Picking keeps the cover like the real row; the box rides the
+        // trailing end where the overflow menu was, and the row tap
+        // toggles instead of playing.
         leading = {
-            // Picking swaps the cover for the picker box; the row tap
-            // toggles instead of playing.
+            SongCover(s = s, current = current, playing = playing)
+        },
+        trailing = {
             if (picking) {
                 PickBox(
                     checked = picked,
@@ -940,11 +942,6 @@ private fun SmartSongRow(
                     onToggle = onTogglePick,
                 )
             } else {
-                SongCover(s = s, current = current, playing = playing)
-            }
-        },
-        trailing = {
-            if (!picking) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),

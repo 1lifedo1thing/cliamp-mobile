@@ -297,25 +297,7 @@ private fun PlaylistRow(
     ListRow(
         onClick = { onOpen(pl) },
         verticalPadding = 9.dp,
-        leading = {
-            // A set cover paints here; coverless playlists keep the static
-            // glyph. The thumbnail resolves from memory on the first frame,
-            // so rows stay instant like before.
-            val thumb = rememberStationThumbnail(pl.station)
-            if (thumb != null) {
-                Box(
-                    Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(KleeampShape.small))
-                        .border(1.dp, p.frameBorder, RoundedCornerShape(KleeampShape.small)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Image(thumb, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                }
-            } else {
-                PlaylistGlyph(KleeampIcons.ListShort, pl.station.name)
-            }
-        },
+        leading = { PlaylistLeading(pl) },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Mono("${pl.songIds.size} songs", KleeampType.meta, p.inkFaint)
@@ -357,10 +339,32 @@ private fun SmartPlaylistRow(
     }
 }
 
+/** A user playlist's leading mark, shared by the list and the add-to-playlist picker. */
+@Composable
+internal fun PlaylistLeading(pl: PlaylistStore.Playlist) {
+    val p = LocalPalette.current
+    // A set cover paints here; coverless playlists keep the static
+    // glyph. The thumbnail resolves from memory on the first frame,
+    // so rows stay instant like before.
+    val thumb = rememberStationThumbnail(pl.station)
+    if (thumb != null) {
+        Box(
+            Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(KleeampShape.small))
+                .border(1.dp, p.frameBorder, RoundedCornerShape(KleeampShape.small)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(thumb, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        }
+    } else {
+        PlaylistGlyph(KleeampIcons.ListShort, pl.station.name)
+    }
+}
+
 /** A playlist's identifying mark: static themed glyph on a plate, identical
  * in every theme. Deliberately not cover art - rows stay instant, with
  * nothing to load or decode. */
-
 @Composable
 internal fun PlaylistGlyph(icon: ImageVector, contentDescription: String?) {
     GlyphPlate(icon, contentDescription, Modifier.size(44.dp))

@@ -139,27 +139,29 @@ private fun PickerList(
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
             item {
+                // The real favourites row, plus the picker box trailing:
+                // glyph leading, title, count, then the box.
                 ListRow(
                     onClick = onToggleFavorites,
                     verticalPadding = 9.dp,
                     leading = {
-                        Box(
-                            Modifier.size(24.dp).clip(RoundedCornerShape(KleeampShape.tiny))
-                                .then(
-                                    if (isFavorite) Modifier.background(p.accent)
-                                    else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny))
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (isFavorite) Icon(KleeampIcons.Check, null, Modifier.size(10.dp), tint = p.onAccent)
+                        PlaylistGlyph(KleeampIcons.Heart, "favorites")
+                    },
+                    trailing = {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Mono(
+                                if (favoritesCount == 0) "empty" else "$favoritesCount items",
+                                KleeampType.meta, p.inkFaint,
+                            )
+                            PickBox(
+                                checked = isFavorite,
+                                description = if (isFavorite) "remove from favorites" else "add to favorites",
+                                onToggle = onToggleFavorites,
+                            )
                         }
                     },
                 ) {
-                    Mono("favorites", KleeampType.rowPrimary, p.ink, maxLines = 1)
-                    Mono(
-                        "$favoritesCount items",
-                        KleeampType.rowSecondary, p.inkTertiary, maxLines = 1,
-                    )
+                    Mono("favorites", KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
                 }
             }
             item {
@@ -193,27 +195,26 @@ private fun PickerList(
             items(playlists, key = { it.station.slug }) { pl ->
                 val slug = pl.station.slug
                 val isMember = slug in memberOf
+                // The real playlist row, plus the picker box trailing: set
+                // cover or glyph leading, title, count, then the box.
                 ListRow(
                     onClick = { onToggle(slug) },
                     verticalPadding = 9.dp,
                     leading = {
-                        Box(
-                            Modifier.size(24.dp).clip(RoundedCornerShape(KleeampShape.tiny))
-                                .then(
-                                    if (isMember) Modifier.background(p.accent)
-                                    else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny))
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (isMember) Icon(KleeampIcons.Check, null, Modifier.size(10.dp), tint = p.onAccent)
+                        PlaylistLeading(pl)
+                    },
+                    trailing = {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Mono("${pl.songIds.size} songs", KleeampType.meta, p.inkFaint)
+                            PickBox(
+                                checked = isMember,
+                                description = if (isMember) "remove from ${pl.station.name}" else "add to ${pl.station.name}",
+                                onToggle = { onToggle(slug) },
+                            )
                         }
                     },
                 ) {
-                    Mono(pl.station.name, KleeampType.rowPrimary, p.ink, maxLines = 1)
-                    Mono(
-                        "${pl.songIds.size} songs",
-                        KleeampType.rowSecondary, p.inkTertiary, maxLines = 1,
-                    )
+                    Mono(pl.station.name, KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
                 }
             }
             item { Spacer(Modifier.height(20.dp)) }
