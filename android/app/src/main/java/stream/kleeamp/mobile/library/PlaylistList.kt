@@ -10,15 +10,22 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -49,9 +56,12 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -197,7 +207,6 @@ internal fun PlaylistList(
         // Naming floats centered over everything: the list never shifts.
         if (creating) {
             PlaylistNameDialog(
-                title = "new playlist",
                 placeholder = "name this playlist",
                 onDone = onCreate,
                 onDismiss = onCancel,
@@ -207,7 +216,6 @@ internal fun PlaylistList(
             val current = (pinnedPlaylists + playlists)
                 .firstOrNull { it.station.slug == slug }?.station?.name.orEmpty()
             PlaylistNameDialog(
-                title = "rename playlist",
                 placeholder = "name this playlist",
                 initial = current,
                 onDone = { onRename(slug, it) },
@@ -367,14 +375,12 @@ internal fun smartKindIcon(kind: SmartKind): ImageVector = when (kind) {
     SmartKind.RecentlyPlayed -> KleeampIcons.Clock
 }
 
-/** A playlist naming dialog, centered over everything: naming never pushes
- * the list around the way the old inline row did. Same field, same
- * SAVE/CANCEL, same 48 characters; the store still trims and ignores blanks.
- * It never grabs focus on its own; the keyboard only comes up when the user
- * taps the field. */
+/** A playlist naming dialog, centered and frozen: one compact row (field +
+ * SAVE/CANCEL side by side) that clears the keys without any pan, inset
+ * tracking or movement. The IME Done key saves, so typing never depends on
+ * seeing the buttons. The store still trims and ignores blanks. */
 @Composable
 internal fun PlaylistNameDialog(
-    title: String,
     placeholder: String,
     initial: String = "",
     onDone: (String) -> Unit,
@@ -382,40 +388,65 @@ internal fun PlaylistNameDialog(
 ) {
     val p = LocalPalette.current
     var text by remember { mutableStateOf(initial) }
-    // A stock centered dialog: no custom window, no inset tracking, so it
-    // sits dead center, a tap outside dismisses, and the platform lifts it
-    // just enough to keep the field visible while the keys are open.
-    Dialog(onDismissRequest = onDismiss) {
-        Column(
-            Modifier.fillMaxWidth()
+    // Lift only when the keys would cover the card, animated both ways: up
+    // as they open, back down as they close. Otherwise the card never moves.
+    // The window takes its own insets so the platform never pans it.
+    val density = LocalDensity.current
+    var cardHpx by remember { mutableStateOf(0) }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(decorFitsSystemWindows = false),
+    ) {
+        BoxWithConstraints(
+            // Full-size so the lift math sees the screen; it also eats the
+            // dialog's own outside-tap dismiss, so taps here dismiss and the
+            // card below consumes its own.
+            Modifier.fillMaxSize().clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss,
+            ),
+            contentAlignment = Alignment.Center,
+        ) {
+            val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+            val liftTarget = with(density) {
+                val unliftedBottom = maxHeight / 2 + cardHpx.toDp() / 2
+                val keysTop = maxHeight - imeBottom
+                (unliftedBottom - keysTop + 12.dp).coerceAtLeast(0.dp)
+            }
+            val lift by animateDpAsState(liftTarget, label = "namingLift")
+            Row(
+                Modifier.fillMaxWidth()
+                    .offset(y = -lift)
+                    .onGloballyPositioned { cardHpx = it.size.height }
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {},
+                    )
                     .clip(RoundedCornerShape(KleeampShape.small))
                     .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small))
-                    .background(p.panel).padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .background(p.panel).padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-            Mono(title, KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
             KleeampTextField(
                 value = text,
                 onValueChange = { text = it.take(48) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.weight(1f),
                 placeholder = placeholder,
                 textStyle = KleeampType.rowPrimary,
                 autoFocus = true,
                 onAction = { onDone(text) },
             )
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Mono("SAVE", KleeampType.tabLabel, p.accent,
-                    Modifier.clip(RoundedCornerShape(KleeampShape.tiny)).background(p.accent.copy(alpha = 0.14f))
-                        .microPress { onDone(text) }.padding(horizontal = 9.dp, vertical = 7.dp))
-                Mono("CANCEL", KleeampType.tabLabel, p.inkTertiary,
-                    Modifier
-                        .clip(RoundedCornerShape(KleeampShape.tiny))
-                        .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny))
-                        .microPress(onClick = onDismiss).padding(horizontal = 9.dp, vertical = 7.dp))
+            Mono("SAVE", KleeampType.tabLabel, p.accent,
+                Modifier.clip(RoundedCornerShape(KleeampShape.tiny)).background(p.accent.copy(alpha = 0.14f))
+                    .microPress { onDone(text) }.padding(horizontal = 9.dp, vertical = 7.dp))
+            Mono("CANCEL", KleeampType.tabLabel, p.inkTertiary,
+                Modifier
+                    .clip(RoundedCornerShape(KleeampShape.tiny))
+                    .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny))
+                    .microPress(onClick = onDismiss).padding(horizontal = 9.dp, vertical = 7.dp))
             }
         }
     }

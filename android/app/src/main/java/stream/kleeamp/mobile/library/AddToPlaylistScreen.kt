@@ -206,7 +206,6 @@ private fun PickerList(
         // Naming floats centered over everything: the list never shifts.
         if (creating) {
             PlaylistNameDialog(
-                title = "new playlist",
                 placeholder = "name this playlist",
                 onDone = onCreate,
                 onDismiss = onCancelCreate,
