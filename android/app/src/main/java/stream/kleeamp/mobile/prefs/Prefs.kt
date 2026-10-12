@@ -257,7 +257,7 @@ class Prefs(private val context: Context) {
     private val sortOverrides = MutableStateFlow<Map<String, Int>>(emptyMap())
     private var sortPersist: Job? = null
     // Browse rides the same shape as sorts: in memory for the tap's own
-    // frame, merged into one DataStore set for restore-after-boot.
+    // frame, snapshotted to one DataStore set for restore-after-boot.
     private val browseOverrides = MutableStateFlow<Set<String>>(emptySet())
     private var browsePersist: Job? = null
     // Bookmarks ride the same shape as sorts: in memory for the tap's own
@@ -353,16 +353,17 @@ class Prefs(private val context: Context) {
         put(K.podDirectoryGrid, v)
     }
 
-    /** Remember a playlist's browse flag; edits merge so other playlists are untouched. */
+    /** Remember a playlist's browse flag; memory is the truth, disk takes a snapshot of it. */
     fun setPlaylistBrowse(slug: String, browsing: Boolean) {
         browseOverrides.value = if (browsing) browseOverrides.value + slug else browseOverrides.value - slug
+        val snapshot = browseOverrides.value
         browsePersist?.cancel()
         browsePersist = persist.launch {
             context.settingsStore.edit { p ->
-                val current = p[K.playlistBrowse]?.let { raw ->
-                    runCatching { Http.json.decodeFromString<Set<String>>(raw) }.getOrNull()
-                } ?: emptySet()
-                p[K.playlistBrowse] = Http.json.encodeToString(current + browseOverrides.value)
+                // Write the snapshot, never a union with disk: a union
+                // re-adds slugs that were just removed, so leaving browse
+                // would never survive a restart.
+                p[K.playlistBrowse] = Http.json.encodeToString(snapshot)
             }
         }
     }
@@ -385,20 +386,20 @@ class Prefs(private val context: Context) {
     fun playlistBookmark(slug: String): Flow<Int?> =
         bookmarkOverrides.map { it[slug] }
 
-    /** Remember or clear (null) a playlist's bookmark. */
+    /** Remember or clear (null) a playlist's bookmark; memory is the truth, disk takes a snapshot of it. */
     fun setPlaylistBookmark(slug: String, index: Int?) {
         bookmarkOverrides.value = if (index == null) {
             bookmarkOverrides.value - slug
         } else {
             bookmarkOverrides.value + (slug to index)
         }
+        val snapshot = bookmarkOverrides.value
         bookmarkPersist?.cancel()
         bookmarkPersist = persist.launch {
             context.settingsStore.edit { p ->
-                val current = p[K.playlistBookmarks]?.let { raw ->
-                    runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
-                } ?: emptyMap()
-                p[K.playlistBookmarks] = Http.json.encodeToString(current + bookmarkOverrides.value)
+                // Write the snapshot, never a union with disk: a union
+                // resurrects bookmarks that were just cleared after restart.
+                p[K.playlistBookmarks] = Http.json.encodeToString(snapshot)
             }
         }
     }
