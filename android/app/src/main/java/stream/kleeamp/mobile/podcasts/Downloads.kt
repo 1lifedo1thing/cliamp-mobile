@@ -38,7 +38,8 @@ val PARALLEL_DOWNLOAD_CHOICES = listOf(1, 3, 5)
  * One fetched file: where it lives plus the station snapshot that plays it.
  * Keyed by the remote audio URL everywhere, the same key progress and history
  * already use, so a download, a resume position and a queue item always agree
- * on what "this episode" is.
+ * on what "this episode" is. [seq] is the queue ticket, so the finished list
+ * reads in episode order; 0 on files fetched before tickets were kept.
  */
 @Serializable
 data class DownloadEntry(
@@ -49,6 +50,7 @@ data class DownloadEntry(
     val downloadedAt: Long = 0L,
     /** Fetched by auto-download rather than a tap; retention only sweeps these. */
     val auto: Boolean = false,
+    val seq: Long = 0L,
 )
 
 /** Transient per-URL fetch state; anything permanent lives in [DownloadEntry]. */
@@ -83,25 +85,32 @@ enum class CleanupScope(val key: String) {
     }
 }
 
-/** In-flight fetch identity: what to show in the queue and how to retry it. */
-internal data class DlMeta(val station: Station, val auto: Boolean)
+/** In-flight fetch identity: what to show in the queue and how to retry it. [seq] is the queue sequence, so rows read in episode order. */
+internal data class DlMeta(val station: Station, val auto: Boolean, val seq: Long)
 
 /** One queue row: an active, queued or failed fetch with its episode. */
-data class DownloadQueueItem(val url: String, val station: Station, val state: DownloadState, val auto: Boolean)
+data class DownloadQueueItem(val url: String, val station: Station, val state: DownloadState, val auto: Boolean, val seq: Long)
 
 /**
- * Queue order, stable: active fetches first, then queued, paused, failures.
+ * Queue order, stable: the queue sequence, so rows read top-to-bottom in
+ * the order they were queued - episode order for a download-all or a
+ * picker done - with each row's state inline instead of regrouping rows
+ * by state on every progress emit.
  * Pure so the row order is unit-tested on the JVM.
  */
 internal fun orderQueueItems(items: List<DownloadQueueItem>): List<DownloadQueueItem> =
-    items.sortedWith(
+    items.sortedBy { it.seq }
+
+/**
+ * Finished files in episode order: the queue ticket first, completion time
+ * for files fetched before tickets were kept. Pure so the finished-list
+ * order is unit-tested on the JVM.
+ */
+internal fun List<Station>.sortedByQueueOrder(entries: Map<String, DownloadEntry>): List<Station> =
+    sortedWith(
         compareBy(
-            { when (it.state) {
-                is DownloadState.Active -> 0
-                is DownloadState.Queued -> 1
-                is DownloadState.Paused -> 2
-                else -> 3
-            } },
+            { entries[it.url]?.seq?.takeIf { s -> s > 0 } ?: Long.MAX_VALUE },
+            { entries[it.url]?.downloadedAt ?: 0L },
         ),
     )
 
@@ -153,14 +162,15 @@ class DownloadStore(
     private val pausedProgress = mutableMapOf<String, Pair<Long, Long>>()
     /**
      * Strict start order: every queued fetch takes a ticket, and each job
-     * reaches the slots only after the previous ticket arrived. Fresh
+     * takes its slot only after the previous ticket holds one. Fresh
      * launches hit the dispatcher in whatever order, so without this the
-     * first fetches would start randomly; the semaphore grants FIFO, so
-     * ordered arrivals mean ordered starts. All guarded by [jobsLock].
+     * first fetches would start randomly; and with a long queue piling at
+     * the slots, wake order there is not ticket order either. The ticket
+     * number doubles as the queue row sequence. All guarded by [jobsLock].
      */
     private var nextTicket = 0L
-    private var lastArrival: CompletableDeferred<Unit>? = null
-    private val arrivals = mutableMapOf<String, CompletableDeferred<Unit>>()
+    private var lastTurn: CompletableDeferred<Unit>? = null
+    private val turns = mutableMapOf<String, CompletableDeferred<Unit>>()
     /**
      * Fetch slots, sized from the parallel-downloads setting. Recreated when
      * the setting changes; in-flight fetches keep their old slot reference
@@ -200,8 +210,8 @@ class DownloadStore(
 
     /**
      * The downloading view's rows: every active, queued, paused or failed
-     * fetch with its episode, active first. Completed fetches leave the queue
-     * for the downloads list; cancelled ones vanish.
+     * fetch with its episode, in queue sequence. Completed fetches leave
+     * the queue for the downloads list; cancelled ones vanish.
      */
     val queue: StateFlow<List<DownloadQueueItem>> =
         combine(_states, _meta) { states, meta ->
@@ -211,7 +221,7 @@ class DownloadStore(
                     if (st is DownloadState.Active || st is DownloadState.Queued ||
                         st is DownloadState.Paused || st is DownloadState.Failed
                     ) {
-                        DownloadQueueItem(url, m.station, st, m.auto)
+                        DownloadQueueItem(url, m.station, st, m.auto, m.seq)
                     } else {
                         null
                     }
@@ -281,40 +291,49 @@ class DownloadStore(
                 setState(url, DownloadState.Failed("storage full"))
                 return
             }
-            _meta.update { it + (url to DlMeta(station, auto)) }
             // Capture the current slots: the setting may swap the instance
             // mid-fetch, and this job must release the one it acquired.
             val gate = synchronized(jobsLock) { slots }
             // An explicit fetch lifts the hand-stop flag; auto fetches
             // never clear it, so a cancel sticks past the next refresh.
             if (!auto) synchronized(jobsLock) { manualStop.remove(url) }
-            // Take the next arrival ticket: this job reaches the slots only
-            // after the previous ticket arrived, so starts follow queue
-            // order no matter how the dispatcher interleaves launches.
-            val prev: CompletableDeferred<Unit>?
-            val mine: CompletableDeferred<Unit>
+            // Take the next turn ticket: this job takes its slot only after
+            // the previous ticket holds one, so starts follow queue order
+            // no matter how the dispatcher interleaves launches or in what
+            // order the slots would wake waiters. At most one job ever waits
+            // at the slots, so their fairness is moot. The ticket number is
+            // also the row sequence, so the queue reads in episode order.
+            val prevTurn: CompletableDeferred<Unit>?
+            val myTurn: CompletableDeferred<Unit>
+            val seq: Long
             synchronized(jobsLock) {
                 nextTicket++
-                prev = lastArrival
-                mine = CompletableDeferred<Unit>()
-                lastArrival = mine
-                arrivals[url] = mine
+                seq = nextTicket
+                prevTurn = lastTurn
+                myTurn = CompletableDeferred<Unit>()
+                lastTurn = myTurn
+                turns[url] = myTurn
             }
+            _meta.update { it + (url to DlMeta(station, auto, seq)) }
             jobs[url] = scope.launch(Dispatchers.IO) {
                 setState(url, initial ?: DownloadState.Queued)
-                try {
-                    prev?.await()
-                } finally {
-                    // Arrival handoff, not completion: the next ticket may
-                    // line up while this fetch still waits for a slot.
-                    // Idempotent with the cancel/remove path completing a
-                    // job that never started.
-                    mine.complete(Unit)
-                    synchronized(jobsLock) { arrivals.remove(url) }
-                }
-                gate.acquire()
                 var call: Call? = null
+                var acquired = false
                 try {
+                    prevTurn?.await()
+                    gate.acquire()
+                    acquired = true
+                    // Pass the turn NOW, while this fetch runs: the next
+                    // ticket lines up at the slots behind it. Passing it at
+                    // fetch end instead would serialize the whole queue to
+                    // one at a time whatever the setting says.
+                    myTurn.complete(Unit)
+                    synchronized(jobsLock) { turns.remove(url) }
+                    // A stop landing before the first suspension completes
+                    // the turn above but misses the job: this catches it
+                    // before a single byte moves.
+                    ensureActive()
+                    try {
                     if (!prefs.cellular.first() && !unmetered()) {
                         setState(url, DownloadState.Failed("wifi only"))
                         return@launch
@@ -379,42 +398,50 @@ class DownloadStore(
                             station = station,
                             downloadedAt = System.currentTimeMillis(),
                             auto = auto,
+                            seq = seq,
                         )
                         prefs.addDownload(entry)
                         _entries.update { it + (url to entry) }
                         clearState(url)
                         dropMeta(url)
                     }
-                } catch (e: CancellationException) {
-                    // A pause parks the fetch with its partial file; any
-                    // other cancellation reads idle again.
-                    val parked = synchronized(jobsLock) { url in paused }
-                    if (parked) {
-                        val (read, total) = synchronized(jobsLock) {
-                            pausedProgress[url] ?: (0L to -1L)
+                    } catch (e: CancellationException) {
+                        // A pause parks the fetch with its partial file; any
+                        // other cancellation reads idle again.
+                        val parked = synchronized(jobsLock) { url in paused }
+                        if (parked) {
+                            val (read, total) = synchronized(jobsLock) {
+                                pausedProgress[url] ?: (0L to -1L)
+                            }
+                            setState(url, DownloadState.Paused(read, total))
+                        } else {
+                            setState(url, DownloadState.Idle)
                         }
-                        setState(url, DownloadState.Paused(read, total))
-                    } else {
-                        setState(url, DownloadState.Idle)
-                    }
-                    throw e
-                } catch (e: Exception) {
-                    // A socket closed by a stop lands here, not in the
-                    // cancellation path: a dead job reads idle, never failed.
-                    if (isActive) {
-                        setState(url, DownloadState.Failed(e.message?.lowercase()?.take(42) ?: "download failed"))
-                    } else {
-                        setState(url, DownloadState.Idle)
+                        throw e
+                    } catch (e: Exception) {
+                        // A socket closed by a stop lands here, not in the
+                        // cancellation path: a dead job reads idle, never failed.
+                        if (isActive) {
+                            setState(url, DownloadState.Failed(e.message?.lowercase()?.take(42) ?: "download failed"))
+                        } else {
+                            setState(url, DownloadState.Idle)
+                        }
+                    } finally {
+                        val c = call
+                        val keepPartial = synchronized(jobsLock) {
+                            jobs.remove(url)
+                            if (c != null && calls[url] === c) calls.remove(url)
+                            url in paused
+                        }
+                        if (!keepPartial) runCatching { File(dir, fileName(url) + ".tmp").delete() }
                     }
                 } finally {
-                    gate.release()
-                    val c = call
-                    val keepPartial = synchronized(jobsLock) {
-                        jobs.remove(url)
-                        if (c != null && calls[url] === c) calls.remove(url)
-                        url in paused
-                    }
-                    if (!keepPartial) runCatching { File(dir, fileName(url) + ".tmp").delete() }
+                    // The turn already passed above on the running path; this
+                    // covers the stopped-before-acquiring paths so the chain
+                    // never stalls. The permit releases only when taken.
+                    myTurn.complete(Unit)
+                    synchronized(jobsLock) { turns.remove(url) }
+                    if (acquired) gate.release()
                 }
             }
         }
@@ -426,9 +453,9 @@ class DownloadStore(
         synchronized(jobsLock) {
             paused.remove(url)
             pausedProgress.remove(url)
-            // A queued fetch cancelled before its first run never reaches
-            // its arrival handoff: complete it here or the chain stalls.
-            arrivals.remove(url)?.complete(Unit)
+            // A queued fetch cancelled before taking its turn never reaches
+            // the handoff below: complete it here or the chain stalls.
+            turns.remove(url)?.complete(Unit)
             manualStop.add(url)
             call = calls.remove(url)
             job = jobs.remove(url)
@@ -466,9 +493,9 @@ class DownloadStore(
             }
             paused.add(url)
             pausedProgress[url] = progress
-            // Same stall guard as cancel: a queued fetch parked before its
-            // first run never reaches its arrival handoff.
-            arrivals.remove(url)?.complete(Unit)
+            // Same stall guard as cancel: a queued fetch parked before
+            // taking its turn never reaches the handoff below.
+            turns.remove(url)?.complete(Unit)
             manualStop.add(url)
             // Parked fetches resume by hand, never by auto. Job flag before
             // the socket close, same as cancel: the dying read settles
@@ -566,8 +593,8 @@ class DownloadStore(
             jobs.clear()
             paused.clear()
             pausedProgress.clear()
-            arrivals.values.forEach { it.complete(Unit) }
-            arrivals.clear()
+            turns.values.forEach { it.complete(Unit) }
+            turns.clear()
             callsToStop = calls.values.toList()
             calls.clear()
             manualStop.addAll(urls)
@@ -608,7 +635,7 @@ class DownloadStore(
         synchronized(jobsLock) {
             paused.remove(url)
             pausedProgress.remove(url)
-            arrivals.remove(url)?.complete(Unit)
+            turns.remove(url)?.complete(Unit)
             job = jobs.remove(url)
             manualStop.add(url)
             call = calls.remove(url)

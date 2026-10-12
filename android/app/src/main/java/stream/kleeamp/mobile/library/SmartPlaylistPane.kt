@@ -71,6 +71,8 @@ import stream.kleeamp.mobile.podcasts.EpisodeProgress
 import stream.kleeamp.mobile.podcasts.DownloadQueueItem
 import stream.kleeamp.mobile.podcasts.downloadSizeLabel
 import stream.kleeamp.mobile.model.StationSource
+import stream.kleeamp.mobile.podcasts.DownloadEntry
+import stream.kleeamp.mobile.podcasts.sortedByQueueOrder
 import stream.kleeamp.mobile.podcasts.toStation
 import stream.kleeamp.mobile.servers.ProviderAccount
 import stream.kleeamp.mobile.servers.ProviderCatalog
@@ -265,6 +267,7 @@ fun LibrarySmartPlaylistPane(
                         onBrowseChange = { vm.onEvent(SmartPlaylistViewModel.Event.SetBrowse(it)) },
                         onOpenArtist = onOpenArtist,
                         fetchedBytes = fetched.mapValues { it.value.bytes },
+                        dlEntries = fetched,
                         queue = ui.queue,
                         onRetryDownload = { s, auto ->
                             vm.onEvent(SmartPlaylistViewModel.Event.RetryDownload(s, auto))
@@ -574,11 +577,14 @@ private fun SmartPlaylistDetail(
     onFolder: (String?) -> Unit = {},
     progress: Map<String, EpisodeProgress> = emptyMap(),
     showResume: Boolean = false,
-    sort: PlaylistSort = PlaylistSort.Title,
+    /** Null when the user never picked a sort: downloads read in episode order. */
+    sort: PlaylistSort? = null,
     browse: Boolean = false,
     onBrowseChange: (Boolean) -> Unit = {},
     onOpenArtist: (String) -> Unit = {},
     fetchedBytes: Map<String, Long> = emptyMap(),
+    /** Finished files by URL: carries the queue ticket the finished list sorts by. */
+    dlEntries: Map<String, DownloadEntry> = emptyMap(),
     /** Active, queued, paused and failed fetches; shown as a section on downloads. */
     queue: List<DownloadQueueItem> = emptyList(),
     onRetryDownload: (Station, Boolean) -> Unit = { _, _ -> },
@@ -600,8 +606,15 @@ private fun SmartPlaylistDetail(
     // Favourites mix local songs, radio stations and podcasts, so they get
     // their own type sub-tabs: all / local / stations / podcasts.
     val isFav = pl.kind == SmartKind.Favorites
-    val visible = remember(members, local, sort, isFav, favScope) {
-        val base = if (local) sortedStations(members, sort) else members
+    val isDownloads = pl.kind == SmartKind.Downloads
+    val visible = remember(members, local, sort, isDownloads, dlEntries, isFav, favScope) {
+        val base = when {
+            // Downloads always read in episode (queue) order from the
+            // first frame; a session override cannot exist without chips.
+            isDownloads -> members.sortedByQueueOrder(dlEntries)
+            local -> sortedStations(members, sort ?: PlaylistSort.Title)
+            else -> members
+        }
         if (!isFav || favScope == FavScope.All) base
         else base.filter { s ->
             when (favScope) {
@@ -623,7 +636,6 @@ private fun SmartPlaylistDetail(
     // Downloads only: the trash opens a remove picker instead of dropping
     // everything. The all box starts unchecked and follows the rows both
     // ways; done removes the checked files and closes the picker.
-    val isDownloads = pl.kind == SmartKind.Downloads
     var picking by remember(pl.key) { mutableStateOf(false) }
     var picked by remember(pl.key) { mutableStateOf(setOf<String>()) }
     BackHandler(enabled = picking) {
@@ -632,16 +644,26 @@ private fun SmartPlaylistDetail(
     }
     LaunchedEffect(sort) { sortOverride = null }
     LaunchedEffect(browse) { browseOverride = null }
-    val shownSort = sortOverride ?: sort
+    // Null until the user picks a sort: every list but downloads reads in
+    // title order as before. Downloads always read in episode order (see
+    // orderByQueue): sort chips would only reintroduce the title scramble.
+    val shownSort: PlaylistSort? = sortOverride ?: sort ?: if (isDownloads) null else PlaylistSort.Title
     val shownBrowse = browseOverride ?: browse
+    // Downloads always read in episode (queue) order, even with a stored
+    // sort from before: a tapped title can never trap the list again.
+    val orderByQueue = isDownloads
     // One row per file: a repeated URL (re-downloaded episode, MediaStore
     // duplicate) used to crash the list on a duplicate key. First wins.
     val shown = remember(visible, query) { visible.matching(query).distinctBy { it.url } }
     // Same tap-frame ordering as user playlists — but only the on-device
     // lists wear sorts; favourites and recent keep their fixed orders.
     // Re-sorting the already-sorted shown list is idempotent on round-trip.
-    val ordered = remember(shown, shownSort, local) {
-        if (local) sortedStations(shown, shownSort) else shown
+    val ordered = remember(shown, shownSort, local, orderByQueue, dlEntries) {
+        when {
+            orderByQueue -> shown.sortedByQueueOrder(dlEntries)
+            local -> sortedStations(shown, shownSort ?: PlaylistSort.Title)
+            else -> shown
+        }
     }
     // The picker only ever touches live rows: removals landing mid-pick
     // fall out of the checked set on the next frame by themselves.
@@ -720,7 +742,10 @@ private fun SmartPlaylistDetail(
                 }
             }
         }
-        if (local) {
+        // Sorts, browse and the folder picker are local-songs-only:
+        // downloads always read in episode order, so chips here would only
+        // reintroduce the title scramble.
+        if (pl.kind == SmartKind.LocalSongs) {
             item {
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())

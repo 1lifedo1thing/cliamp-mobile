@@ -303,6 +303,19 @@ class Prefs(private val context: Context) {
     fun playlistSortValue(slug: String): PlaylistSort =
         sortOverrides.value[slug]?.let { PlaylistSort.entries.getOrNull(it) } ?: PlaylistSort.Title
 
+    /**
+     * The explicitly chosen sort for one list, null when never touched.
+     * Downloads lists in episode (queue) order until one is set.
+     */
+    fun playlistSortOrNull(slug: String): Flow<PlaylistSort?> =
+        sortOverrides.map { map ->
+            map[slug]?.let { PlaylistSort.entries.getOrNull(it) }
+        }
+
+    /** The explicit choice today, for the first frame of a freshly opened list. */
+    fun playlistSortOrNullValue(slug: String): PlaylistSort? =
+        sortOverrides.value[slug]?.let { PlaylistSort.entries.getOrNull(it) }
+
     /** Whether one list opens in browse, defaulting to the flat list. */
     fun playlistBrowse(slug: String): Flow<Boolean> =
         browseOverrides.map { slug in it }

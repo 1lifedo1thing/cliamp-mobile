@@ -50,7 +50,7 @@ class SmartPlaylistViewModel(
         val songs: List<Station> = emptyList(),
         val loading: Boolean = false,
         val localSort: PlaylistSort = PlaylistSort.Title,
-        val detailSort: PlaylistSort = PlaylistSort.Title,
+        val detailSort: PlaylistSort? = null,
         val detailBrowse: Boolean = false,
         val fetched: Map<String, DownloadEntry> = emptyMap(),
         val queue: List<DownloadQueueItem> = emptyList(),
@@ -82,7 +82,7 @@ class SmartPlaylistViewModel(
         val songs: List<Station> = emptyList(),
         val loading: Boolean = false,
         val localSort: PlaylistSort = PlaylistSort.Title,
-        val detailSort: PlaylistSort = PlaylistSort.Title,
+        val detailSort: PlaylistSort? = null,
         val detailBrowse: Boolean = false,
         val fetched: Map<String, DownloadEntry> = emptyMap(),
     )
@@ -107,7 +107,7 @@ class SmartPlaylistViewModel(
                 localLibrary.songs,
                 localLibrary.loading,
                 prefs.playlistSort("local-songs"),
-                prefs.playlistSort(sortKey),
+                prefs.playlistSortOrNull(sortKey),
                 prefs.downloads,
             ) { songs, loading, localSort, detailSort, fetched ->
                 DeviceState(songs, loading, localSort, detailSort, fetched = fetched)
@@ -162,7 +162,7 @@ class SmartPlaylistViewModel(
             songs = localLibrary.songs.value,
             loading = localLibrary.loading.value,
             localSort = prefs.playlistSortValue("local-songs"),
-            detailSort = prefs.playlistSortValue(sortKey),
+            detailSort = prefs.playlistSortOrNullValue(sortKey),
             detailBrowse = prefs.playlistBrowseValue(sortKey),
         ),
     )
