@@ -176,7 +176,7 @@ fun MechKey(
     }
 }
 
-/** 11px uppercase filter chip. Selected = filled accent (dark) / filled ink (light). */
+/** 11px uppercase filter chip. Selected = filled accent (dark) / filled ink (light). [caret] hangs the dropdown chevron for chips that open a sheet. */
 @Composable
 fun Chip(
     label: String,
@@ -184,10 +184,12 @@ fun Chip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     accent: Color? = null,
+    caret: Boolean = false,
 ) {
     val p = LocalPalette.current
     val fill = accent ?: if (p.dark) p.accent else p.ink
     val onFill = if (p.dark) p.onAccent else p.ground
+    val fg = if (selected) onFill else p.inkTertiary
     Box(
         modifier
             .microPress(onClick = onClick)
@@ -199,7 +201,17 @@ fun Chip(
                 )
             .padding(horizontal = 11.dp, vertical = 7.dp),
     ) {
-        Mono(label.uppercase(), KleeampType.chip, if (selected) onFill else p.inkTertiary, maxLines = 1)
+        if (caret) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Mono(label.uppercase(), KleeampType.chip, fg, maxLines = 1)
+                Icon(KleeampIcons.CaretDown, null, Modifier.size(8.dp), tint = fg)
+            }
+        } else {
+            Mono(label.uppercase(), KleeampType.chip, fg, maxLines = 1)
+        }
     }
 }
 

@@ -391,6 +391,7 @@ fun StationsScreen(
                                 countryQuery?.countryName ?: "all countries",
                                 selected = countryQuery != null,
                                 onClick = { countrySheet = true },
+                                caret = true,
                             )
                         }
                     }

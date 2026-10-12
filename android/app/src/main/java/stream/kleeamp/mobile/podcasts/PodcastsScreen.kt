@@ -207,6 +207,7 @@ fun PodcastsScreen(
                                     } ?: "all countries",
                                     selected = topQuery != null && topQuery.country.isNotEmpty(),
                                     onClick = { countrySheet = true },
+                                    caret = true,
                                 )
                                 GridListToggle(podDirectoryGrid) {
                                     vm.onEvent(PodcastsViewModel.Event.TogglePodDirectoryGrid)
