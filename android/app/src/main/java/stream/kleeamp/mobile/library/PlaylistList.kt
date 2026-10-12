@@ -253,7 +253,6 @@ internal fun PlaylistList(
                         label = if (pinned) "unpin" else "pin",
                         subtitle = if (pinned) "remove from pinned" else "keep at the top",
                         icon = KleeampIcons.Pin,
-                        tint = p.accent,
                         onClick = { onPin(pl.station.slug, !pinned) },
                     ),
                     MenuAction(
@@ -261,7 +260,6 @@ internal fun PlaylistList(
                         label = "add songs",
                         subtitle = "pick from the phone, stations and podcasts",
                         icon = KleeampIcons.Plus,
-                        tint = p.accent,
                         onClick = { onAddSongs(pl.station.slug) },
                     ),
                     MenuAction(
@@ -269,7 +267,6 @@ internal fun PlaylistList(
                         label = "rename",
                         subtitle = "change the playlist name",
                         icon = KleeampIcons.Pencil,
-                        tint = p.accent,
                         onClick = { onBeginRename(pl.station.slug) },
                     ),
                     MenuAction(
