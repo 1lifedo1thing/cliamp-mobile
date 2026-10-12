@@ -382,14 +382,17 @@ internal fun PlaylistNameDialog(
 ) {
     val p = LocalPalette.current
     var text by remember { mutableStateOf(initial) }
+    // A stock centered dialog: no custom window, no inset tracking, so it
+    // sits dead center, a tap outside dismisses, and the platform lifts it
+    // just enough to keep the field visible while the keys are open.
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier.fillMaxWidth()
-                .clip(RoundedCornerShape(KleeampShape.small))
-                .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small))
-                .background(p.panel).padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+                    .clip(RoundedCornerShape(KleeampShape.small))
+                    .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small))
+                    .background(p.panel).padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
             Mono(title, KleeampType.rowPrimaryMedium, p.ink, maxLines = 1)
             KleeampTextField(
                 value = text,
@@ -397,6 +400,7 @@ internal fun PlaylistNameDialog(
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = placeholder,
                 textStyle = KleeampType.rowPrimary,
+                autoFocus = true,
                 onAction = { onDone(text) },
             )
             Row(
