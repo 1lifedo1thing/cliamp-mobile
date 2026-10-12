@@ -281,8 +281,8 @@ fun LibrarySmartPlaylistPane(
                         onCancelAllDownloads = {
                             vm.onEvent(SmartPlaylistViewModel.Event.CancelAllDownloads)
                         },
-                        onRemoveAllDownloads = {
-                            vm.onEvent(SmartPlaylistViewModel.Event.RemoveAllDownloads)
+                        onRemoveDownloads = { urls ->
+                            vm.onEvent(SmartPlaylistViewModel.Event.RemoveDownloads(urls))
                         },
                         onBeginAdd = if (pl.kind == SmartKind.Favorites) {
                             { adding = true }
@@ -506,9 +506,9 @@ internal fun PodcastGroups(
     }
 }
 
-/** The hero remove-all key: same 40dp target and 15dp icon as the shuffle key. */
+/** The downloads trash key: same 40dp target and 15dp icon as the shuffle key. It opens the remove picker instead of dropping everything. */
 @Composable
-private fun RemoveAllAction(onClick: () -> Unit) {
+private fun PickDownloadsAction(picking: Boolean, onClick: () -> Unit) {
     val p = LocalPalette.current
     Box(
         Modifier
@@ -519,10 +519,27 @@ private fun RemoveAllAction(onClick: () -> Unit) {
     ) {
         Icon(
             KleeampIcons.Trash,
-            "remove all downloads",
+            if (picking) "close the remove picker" else "choose downloads to remove",
             Modifier.size(15.dp),
-            tint = p.inkSecondary,
+            tint = if (picking) p.accent else p.inkSecondary,
         )
+    }
+}
+
+/** The picker checkbox: the same 24dp box the song picker wears. */
+@Composable
+private fun PickBox(checked: Boolean, description: String, onToggle: () -> Unit) {
+    val p = LocalPalette.current
+    Box(
+        Modifier.size(24.dp).clip(RoundedCornerShape(KleeampShape.tiny))
+            .then(
+                if (checked) Modifier.background(p.accent)
+                else Modifier.border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.tiny))
+            )
+            .microPress(onClick = onToggle),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (checked) Icon(KleeampIcons.Check, description, Modifier.size(10.dp), tint = p.onAccent)
     }
 }
 
@@ -571,7 +588,7 @@ private fun SmartPlaylistDetail(
     onResumeDownload: (String) -> Unit = {},
     onCancelDownload: (String) -> Unit = {},
     onCancelAllDownloads: () -> Unit = {},
-    onRemoveAllDownloads: () -> Unit = {},
+    onRemoveDownloads: (Set<String>) -> Unit = {},
     /** Non-null on lists that can grow: renders the section + button. */
     onBeginAdd: (() -> Unit)? = null,
     shuffled: Boolean = false,
@@ -605,6 +622,16 @@ private fun SmartPlaylistDetail(
     val browseable = pl.kind == SmartKind.LocalSongs
     var sortOverride by remember(pl.key) { mutableStateOf<PlaylistSort?>(null) }
     var browseOverride by remember(pl.key) { mutableStateOf<Boolean?>(null) }
+    // Downloads only: the trash opens a remove picker instead of dropping
+    // everything. The all box starts unchecked and follows the rows both
+    // ways; done removes the checked files and closes the picker.
+    val isDownloads = pl.kind == SmartKind.Downloads
+    var picking by remember(pl.key) { mutableStateOf(false) }
+    var picked by remember(pl.key) { mutableStateOf(setOf<String>()) }
+    BackHandler(enabled = picking) {
+        picking = false
+        picked = emptySet()
+    }
     LaunchedEffect(sort) { sortOverride = null }
     LaunchedEffect(browse) { browseOverride = null }
     val shownSort = sortOverride ?: sort
@@ -618,6 +645,11 @@ private fun SmartPlaylistDetail(
     val ordered = remember(shown, shownSort, local) {
         if (local) sortedStations(shown, shownSort) else shown
     }
+    // The picker only ever touches live rows: removals landing mid-pick
+    // fall out of the checked set on the next frame by themselves.
+    val urls = remember(ordered) { ordered.map { it.url }.toSet() }
+    val livePicked = remember(picked, urls) { picked intersect urls }
+    val allChecked = urls.isNotEmpty() && livePicked.size == urls.size
     // Browse lists artists only — one row per artist, tap opens their
     // page — cheapest last so the flat list never waits for it.
     val artists = remember(ordered, shownBrowse) {
@@ -650,9 +682,17 @@ private fun SmartPlaylistDetail(
                             )
                         }
                         // Downloads only: a trash key beside shuffle that
-                        // drops every fetched file in one tap.
-                        if (pl.kind == SmartKind.Downloads && members.isNotEmpty()) {
-                            RemoveAllAction(onClick = onRemoveAllDownloads)
+                        // opens the remove picker; back or a second tap
+                        // closes it without removing anything.
+                        if (isDownloads && members.isNotEmpty()) {
+                            PickDownloadsAction(picking = picking, onClick = {
+                                if (picking) {
+                                    picking = false
+                                    picked = emptySet()
+                                } else {
+                                    picking = true
+                                }
+                            })
                         }
                     }
                 },
@@ -797,11 +837,48 @@ private fun SmartPlaylistDetail(
             }
         } else {
             item {
-                SectionLabel("${pl.label} — ${ordered.size}") {
-                    onBeginAdd?.let { AddSongsButton(onClick = it) }
+                // Picking swaps the count header for the picker header: an
+                // unchecked-until-tapped all box, then the done chip that
+                // removes exactly the checked files.
+                if (isDownloads && picking) {
+                    SectionLabel("remove downloads — ${livePicked.size}") {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            PickBox(
+                                checked = allChecked,
+                                description = if (allChecked) "uncheck all" else "check all",
+                                onToggle = { picked = if (allChecked) emptySet() else urls },
+                            )
+                            Mono(
+                                "all",
+                                KleeampType.chip,
+                                p.inkTertiary,
+                                maxLines = 1,
+                                modifier = Modifier.microPress(onClick = {
+                                    picked = if (allChecked) emptySet() else urls
+                                }),
+                            )
+                            Chip(
+                                "done",
+                                selected = livePicked.isNotEmpty(),
+                                onClick = {
+                                    if (livePicked.isNotEmpty()) onRemoveDownloads(livePicked)
+                                    picking = false
+                                    picked = emptySet()
+                                },
+                            )
+                        }
+                    }
+                } else {
+                    SectionLabel("${pl.label} — ${ordered.size}") {
+                        onBeginAdd?.let { AddSongsButton(onClick = it) }
+                    }
                 }
             }
             items(ordered, key = { it.url }, contentType = { "local-song" }) { s ->
+                val isPicked = s.url in livePicked
                 SmartSongRow(
                     s = s,
                     current = current,
@@ -811,8 +888,13 @@ private fun SmartPlaylistDetail(
                     onOpenMenu = onOpenMenu,
                     progress = progress,
                     trackProgress = local && showResume,
-                    showBytes = pl.kind == SmartKind.Downloads,
+                    showBytes = isDownloads,
                     fetchedBytes = fetchedBytes,
+                    picking = isDownloads && picking,
+                    picked = isPicked,
+                    onTogglePick = {
+                        picked = if (isPicked) picked - s.url else picked + s.url
+                    },
                 )
             }
         }
@@ -839,21 +921,36 @@ private fun SmartSongRow(
     trackProgress: Boolean,
     showBytes: Boolean,
     fetchedBytes: Map<String, Long>,
+    picking: Boolean = false,
+    picked: Boolean = false,
+    onTogglePick: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     ListRow(
         rail = current?.url == s.url,
-        onClick = { onPlay(s, queue) },
+        onClick = { if (picking) onTogglePick() else onPlay(s, queue) },
         verticalPadding = 9.dp,
         leading = {
-            SongCover(s = s, current = current, playing = playing)
+            // Picking swaps the cover for the picker box; the row tap
+            // toggles instead of playing.
+            if (picking) {
+                PickBox(
+                    checked = picked,
+                    description = if (picked) "uncheck ${s.name}" else "check ${s.name}",
+                    onToggle = onTogglePick,
+                )
+            } else {
+                SongCover(s = s, current = current, playing = playing)
+            }
         },
         trailing = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OverflowButton({ onOpenMenu(s) }, size = 16)
+            if (!picking) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    OverflowButton({ onOpenMenu(s) }, size = 16)
+                }
             }
         },
     ) {

@@ -491,7 +491,8 @@ class DownloadStore(
 
     /**
      * Forget everything: stops the queue and deletes all fetched files.
-     * Backs the Downloads page trash key. Optimistic: the snapshot detaches
+     * Checking every picker box lands here through the per-file remove;
+     * this stays for whole-library wipes. Optimistic: the snapshot detaches
      * and the lists empty on this frame, while the joins, file deletes and
      * persist catch up in the background.
      */
