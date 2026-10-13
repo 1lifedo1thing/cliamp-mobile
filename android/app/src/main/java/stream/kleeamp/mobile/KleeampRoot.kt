@@ -94,6 +94,8 @@ import stream.kleeamp.mobile.radio.StationsScreen
 import stream.kleeamp.mobile.radio.StationsViewModel
 import stream.kleeamp.mobile.radio.CliampChannelScreen
 import stream.kleeamp.mobile.radio.CliampChannelViewModel
+import stream.kleeamp.mobile.radio.CustomStationWizard as CustomStationWizardScreen
+import stream.kleeamp.mobile.radio.CustomStationWizardViewModel
 import stream.kleeamp.mobile.podcasts.PodcastsViewModel
 import stream.kleeamp.mobile.podcasts.PodcastShowViewModel
 import stream.kleeamp.mobile.library.LocalViewModel
@@ -443,6 +445,9 @@ fun KleeampRoot(
                                 onOpenChannel = { s ->
                                     navController.navigate(CliampChannelRoute(s.slug))
                                 },
+                                onAddCustom = {
+                                    navController.navigate(CustomStationWizard)
+                                },
                             )
                             Tab.Pods -> PodcastsScreen(
                                 vm = appViewModel { app ->
@@ -791,6 +796,22 @@ fun KleeampRoot(
                     )
                 }
             }
+            composable<CustomStationWizard> {
+                OverlayCover {
+                    CustomStationWizardScreen(
+                        vm = appViewModel { _ ->
+                            CustomStationWizardViewModel()
+                        },
+                        onCancel = { navController.popBackStack() },
+                        // Saving lands back on the list: the custom section
+                        // reads the same flow, so the new row just shows.
+                        onSave = { station ->
+                            scope.launch { prefs.addCustom(station) }
+                            navController.popBackStack()
+                        },
+                    )
+                }
+            }
         }
 
         // The expanded player lives here as a bottom sheet over the
@@ -1045,6 +1066,7 @@ private fun StationsTab(
     focusDirectory: Boolean,
     onDirectoryFocusConsumed: () -> Unit,
     onOpenChannel: (Station) -> Unit = {},
+    onAddCustom: () -> Unit = {},
 ) {
     val favorites by prefs.favorites.collectAsState(initial = emptyList())
     StationsScreen(
@@ -1060,5 +1082,6 @@ private fun StationsTab(
         focusDirectory = focusDirectory,
         onDirectoryFocusConsumed = onDirectoryFocusConsumed,
         onOpenChannel = onOpenChannel,
+        onAddCustom = onAddCustom,
     )
 }

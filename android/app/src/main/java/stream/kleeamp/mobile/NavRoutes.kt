@@ -20,6 +20,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable data object ScrobbleWizard
 
+@Serializable data object CustomStationWizard
+
 @Serializable data class PodcastShowRoute(val podcastId: String)
 
 /** One cliamp radio channel as its track list, by channel id. */
