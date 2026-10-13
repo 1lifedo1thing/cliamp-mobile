@@ -34,7 +34,10 @@ internal fun VisYinYang(frame: YinYangFrame, modifier: Modifier) {
         val dotCols = charCols * 2
         if (dotRows < 4 || dotCols < 16) return@Canvas
         val core = frame.core
-        core.ensure(dotRows, dotCols)
+        // Always the going fishes, never the pond: the strip heuristic keys
+        // off aspect, so the taller scope meter would otherwise circle while
+        // the short player meter runs the S-curve - two visualizers, one name.
+        core.ensure(dotRows, dotCols, forceStrip = true)
         core.draw()
 
         val dotW = size.width / dotCols

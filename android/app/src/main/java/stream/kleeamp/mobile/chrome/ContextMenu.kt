@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -444,13 +445,21 @@ internal fun SheetStatusBarIcons() {
 /**
  * The sheet chrome both menus and pickers share: rounded top, dimmed
  * scrim, drag handle, fixed header, scrolling body. One component, so a
- * timer or speed sheet can never drift from the menu look.
+ * timer or speed sheet can never drift from the menu look. [halfHeight]
+ * fixes the body at three-fifths of the screen instead of shrinking to
+ * fit: constant like a menu, roomier for long pickers. [bodyFraction]
+ * fixes any other fraction; [scrollBody] goes false when the body hosts
+ * its own scrolling lists, which must never sit inside another scroll.
+ * A drag up has nowhere to expand to, so the list inside scrolls.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MenuSheetShell(
     onDismiss: () -> Unit,
     header: @Composable () -> Unit,
+    halfHeight: Boolean = false,
+    bodyFraction: Float? = null,
+    scrollBody: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val p = LocalPalette.current
@@ -470,7 +479,17 @@ fun MenuSheetShell(
         Column(Modifier.fillMaxWidth().padding(horizontal = Gutter)) {
             header()
             HairlineDivider(region = true)
-            Column(Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            Column(
+                Modifier
+                    .then(
+                        when {
+                            bodyFraction != null -> Modifier.fillMaxHeight(bodyFraction)
+                            halfHeight -> Modifier.fillMaxHeight(0.6f)
+                            else -> Modifier.weight(1f, fill = false)
+                        }
+                    )
+                    .then(if (scrollBody) Modifier.verticalScroll(rememberScrollState()) else Modifier),
+            ) {
                 content()
             }
             Spacer(Modifier.navigationBarsPadding().height(14.dp))

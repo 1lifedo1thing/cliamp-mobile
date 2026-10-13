@@ -38,16 +38,27 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.util.lerp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
@@ -60,6 +71,9 @@ import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Mono
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.sin
 
 /** Screen gutter, fixed at 22dp everywhere in the concept. */
 val Gutter = 22.dp
@@ -369,19 +383,64 @@ enum class Tab(val label: String) {    // Play is gone: the full player opens fr
 }
 
 @Composable
-fun KleeampTabBar(current: Tab?, onSelect: (Tab) -> Unit, modifier: Modifier = Modifier) {
+fun KleeampTabBar(position: () -> Float?, onSelect: (Tab) -> Unit, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
+    // Read here, not at the call site: scroll frames recompose only this
+    // strip while the finger drags the pager.
+    val pos = position()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // Each tab's bounds in px, measured after layout: the one indicator
+    // line below slides between them with the drag fraction.
+    var rects by remember { mutableStateOf(List(Tab.entries.size) { Rect.Zero }) }
     Column(modifier.fillMaxWidth().background(p.ground)) {
         HairlineDivider(region = true)
-        Row(Modifier.fillMaxWidth()) {
-            Tab.entries.forEach { tab ->
+        Row(
+            Modifier.fillMaxWidth().drawBehind {
+                val settled = pos?.coerceIn(0f, (Tab.entries.size - 1).toFloat()) ?: return@drawBehind
+                val lo = settled.toInt().coerceIn(0, Tab.entries.size - 1)
+                val hi = (lo + 1).coerceAtMost(Tab.entries.size - 1)
+                val f = (settled - lo).coerceIn(0f, 1f)
+                val r0 = rects[lo]
+                val r1 = rects[hi]
+                // First frame, before anything is measured: no line yet.
+                if (r0.width <= 0f || r1.width <= 0f) return@drawBehind
+                // 2px accent top border, pulled up 1dp so it sits on the
+                // divider — one line, travelling, never two fading. It
+                // stretches mid-flight (widest halfway over) and lands
+                // exact, so taps and swipes read elastic, not rigid.
+                val c0 = r0.left + r0.width / 2f
+                val c1 = r1.left + r1.width / 2f
+                val center = lerp(c0, c1, f)
+                val half = lerp(r0.width, r1.width, f) / 2f +
+                    abs(c1 - c0) * 0.12f * sin(PI.toFloat() * f)
+                drawLine(
+                    color = p.accent,
+                    start = Offset(center - half, lerp(r0.top, r1.top, f)),
+                    end = Offset(center + half, lerp(r0.top, r1.top, f)),
+                    strokeWidth = 2.dp.toPx(),
+                    cap = StrokeCap.Round,
+                )
+            }
+        ) {
+            Tab.entries.forEachIndexed { index, tab ->
                 TabItem(
                     tab = tab,
-                    active = tab == current,
+                    // Tint still crossfades per tab: the settled tab reads
+                    // lit while its neighbour wakes mid-swipe.
+                    weight = pos?.let { (1f - abs(it - index)).coerceIn(0f, 1f) } ?: 0f,
                     bottomInset = navBottom,
                     onClick = { onSelect(tab) },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).onGloballyPositioned { coords ->
+                        val at = coords.positionInParent()
+                        val rect = Rect(
+                            at.x, at.y,
+                            at.x + coords.size.width.toFloat(),
+                            at.y + coords.size.height.toFloat(),
+                        )
+                        if (rects[index] != rect) {
+                            rects = rects.toMutableList().also { it[index] = rect }
+                        }
+                    },
                 )
             }
         }
@@ -391,18 +450,16 @@ fun KleeampTabBar(current: Tab?, onSelect: (Tab) -> Unit, modifier: Modifier = M
 @Composable
 private fun TabItem(
     tab: Tab,
-    active: Boolean,
+    weight: Float,
     bottomInset: Dp,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
-    val tint = if (active) p.accent else p.inkTertiary
+    val tint = lerp(p.inkTertiary, p.accent, weight)
     Column(
         modifier
             .microPress { onClick() }
-            // 2px accent top border, pulled up 1dp so it sits on the divider
-            .then(if (active) Modifier.offsetTopBorder(p.accent) else Modifier)
             .padding(top = 13.dp, bottom = 30.dp.coerceAtLeast(bottomInset + 8.dp)),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -414,10 +471,6 @@ private fun TabItem(
     }
 }
 
-private fun Modifier.offsetTopBorder(color: Color) = drawBehind {
-    drawRect(color = color, topLeft = Offset(0f, -1.dp.toPx()), size = Size(size.width, 2.dp.toPx()))
-}
-
 /**
  * The landscape tab bar: a slim vertical rail on the right edge instead of
  * the bottom strip, so the horizontal frame keeps its full height for
@@ -425,29 +478,69 @@ private fun Modifier.offsetTopBorder(color: Color) = drawBehind {
  */
 @Composable
 fun KleeampTabRail(
-    current: Tab?,
+    position: () -> Float?,
     onSelect: (Tab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // Same fractional read as the strip: the rail accent travels mid-swipe.
+    val pos = position()
+    // Each tab's bounds in px, measured after layout: the one side line
+    // slides between them with the drag fraction.
+    var rects by remember { mutableStateOf(List(Tab.entries.size) { Rect.Zero }) }
     Row(modifier.fillMaxHeight().background(p.ground)) {
         Box(Modifier.width(1.dp).fillMaxHeight().background(p.hairlineRegion))
         Column(
             Modifier
                 .width(TabRailWidth - 1.dp)
                 .fillMaxHeight()
-                .padding(top = statusTop + 10.dp, bottom = navBottom + 10.dp),
+                .padding(top = statusTop + 10.dp, bottom = navBottom + 10.dp)
+                .drawBehind {
+                    val settled = pos?.coerceIn(0f, (Tab.entries.size - 1).toFloat()) ?: return@drawBehind
+                    val lo = settled.toInt().coerceIn(0, Tab.entries.size - 1)
+                    val hi = (lo + 1).coerceAtMost(Tab.entries.size - 1)
+                    val f = (settled - lo).coerceIn(0f, 1f)
+                    val r0 = rects[lo]
+                    val r1 = rects[hi]
+                    if (r0.height <= 0f || r1.height <= 0f) return@drawBehind
+                    // 2px accent side border on the item's own right edge —
+                    // one line, travelling, never two fading. Same elastic
+                    // stretch as the strip, rotated.
+                    val cy0 = r0.top + r0.height / 2f
+                    val cy1 = r1.top + r1.height / 2f
+                    val center = lerp(cy0, cy1, f)
+                    val half = lerp(r0.height, r1.height, f) / 2f +
+                        abs(cy1 - cy0) * 0.12f * sin(PI.toFloat() * f)
+                    val x = lerp(r0.right, r1.right, f) - 1.dp.toPx()
+                    drawLine(
+                        color = p.accent,
+                        start = Offset(x, center - half),
+                        end = Offset(x, center + half),
+                        strokeWidth = 2.dp.toPx(),
+                        cap = StrokeCap.Round,
+                    )
+                },
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Tab.entries.forEach { tab ->
+            Tab.entries.forEachIndexed { index, tab ->
                 RailItem(
                     tab = tab,
-                    active = tab == current,
+                    weight = pos?.let { (1f - abs(it - index)).coerceIn(0f, 1f) } ?: 0f,
                     onClick = { onSelect(tab) },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).onGloballyPositioned { coords ->
+                        val at = coords.positionInParent()
+                        val rect = Rect(
+                            at.x, at.y,
+                            at.x + coords.size.width.toFloat(),
+                            at.y + coords.size.height.toFloat(),
+                        )
+                        if (rects[index] != rect) {
+                            rects = rects.toMutableList().also { it[index] = rect }
+                        }
+                    },
                 )
             }
         }
@@ -457,17 +550,16 @@ fun KleeampTabRail(
 @Composable
 private fun RailItem(
     tab: Tab,
-    active: Boolean,
+    weight: Float,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
-    val tint = if (active) p.accent else p.inkTertiary
+    val tint = lerp(p.inkTertiary, p.accent, weight)
     Column(
         modifier
             .width(70.dp)
             .microPress { onClick() }
-            .then(if (active) Modifier.offsetRightBorder(p.accent) else Modifier)
             .clip(RoundedCornerShape(KleeampShape.medium)),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterVertically),
@@ -483,10 +575,6 @@ private fun tabIcon(tab: Tab): ImageVector = when (tab) {
     Tab.Lib -> KleeampIcons.LibTab
     Tab.Stations -> KleeampIcons.StationsTab
     Tab.Pods -> KleeampIcons.PodsTab
-}
-
-private fun Modifier.offsetRightBorder(color: Color) = drawBehind {
-    drawRect(color = color, topLeft = Offset(size.width - 2.dp.toPx(), 0f), size = Size(2.dp.toPx(), size.height))
 }
 
 /**

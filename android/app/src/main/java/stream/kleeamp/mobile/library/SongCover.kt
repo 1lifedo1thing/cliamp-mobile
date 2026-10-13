@@ -232,6 +232,66 @@ private fun CollageCell(station: Station, modifier: Modifier = Modifier) {
 }
 
 /**
+ * A fixed 2x2 tile of the first four songs' covers for browse artist rows.
+ * Always four cells: covers where songs have them, the song's own plate
+ * where it has no cover, and a letterless plate where no song fills the
+ * cell, so the tile never shows flat empty ground.
+ */
+@Composable
+internal fun QuadCollage(stations: List<Station>, modifier: Modifier = Modifier) {
+    val picks = remember(stations) { stations.take(4) }
+    val seed = remember(picks) {
+        picks.firstOrNull()?.id?.ifBlank { picks.firstOrNull()?.url }.orEmpty()
+    }
+    key(picks.map { it.id }) {
+        Column(
+            modifier.clip(RoundedCornerShape(KleeampShape.small)),
+        ) {
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                QuadCell(picks.getOrNull(0), Modifier.weight(1f).fillMaxHeight(), "$seed-0")
+                QuadCell(picks.getOrNull(1), Modifier.weight(1f).fillMaxHeight(), "$seed-1")
+            }
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                QuadCell(picks.getOrNull(2), Modifier.weight(1f).fillMaxHeight(), "$seed-2")
+                QuadCell(picks.getOrNull(3), Modifier.weight(1f).fillMaxHeight(), "$seed-3")
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuadCell(station: Station?, modifier: Modifier = Modifier, fallbackKey: String = "") {
+    if (station == null) {
+        // No song for this cell: letterless plate, never flat ground.
+        SeedPlate(
+            key = fallbackKey,
+            name = null,
+            modifier = modifier,
+            radius = 0.dp,
+        )
+        return
+    }
+    val art = rememberStationThumbnail(station)
+    if (art != null) {
+        Box(
+            modifier,
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(art, station.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        }
+        return
+    }
+    // Song without cover: its own plate, like CollageCell and SongCover.
+    // Square inner corners butt cleanly; the collage clips the edge.
+    SeedPlate(
+        key = station.id.ifBlank { station.url },
+        name = station.name,
+        modifier = modifier,
+        radius = 0.dp,
+    )
+}
+
+/**
  * The songs a collage shows: everything when four or fewer, otherwise four
  * with distinct covers first so one album's art cannot fill the tile alone.
  * Pure for JVM tests.
@@ -252,4 +312,48 @@ internal fun pickCollage(songs: List<Station>, max: Int = 4): List<Station> {
         }
     }
     return picks
+}
+
+/**
+ * One song row for playlists and artist pages: cover, overflow menu and
+ * the subtitle every list row wears.
+ */
+@Composable
+internal fun PlaylistMemberRow(
+    s: Station,
+    current: Station?,
+    playing: Boolean,
+    queue: List<Station>,
+    onPlay: (Station, List<Station>) -> Unit,
+    onOpenMenu: (Station) -> Unit,
+) {
+    val p = LocalPalette.current
+    ListRow(
+        rail = current?.url == s.url,
+        onClick = { onPlay(s, queue) },
+        verticalPadding = 9.dp,
+        leading = {
+            SongCover(s = s, current = current, playing = playing)
+        },
+        trailing = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OverflowButton({ onOpenMenu(s) }, size = 16)
+            }
+        },
+    ) {
+        Mono(s.name, KleeampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
+        Mono(
+            s.artistAlbum.ifBlank {
+                when {
+                    s.source == StationSource.Local -> durationLabel(s.durationMs)
+                    s.source == StationSource.Podcast -> "podcast"
+                    else -> s.meta
+                }
+            },
+            KleeampType.rowSecondary, p.inkTertiary, maxLines = 1,
+        )
+    }
 }

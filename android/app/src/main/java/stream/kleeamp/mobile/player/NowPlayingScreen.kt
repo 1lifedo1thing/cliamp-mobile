@@ -161,8 +161,7 @@ fun NowPlayingScreen(
         AudioOutputs.current(context, uiState.outputDevice)
     }
 
-    val model = PlayerModel(
-        state = uiState.playerState,
+    val model = PlayerModel(        state = uiState.playerState,
         shownStation = uiState.shownStation,
         previousStation = uiState.previousStation,
         nextStation = uiState.nextStation,

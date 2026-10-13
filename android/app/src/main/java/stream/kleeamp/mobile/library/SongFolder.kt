@@ -139,6 +139,18 @@ fun List<Station>.matching(query: String): List<Station> {
     }
 }
 
+/** One artist and their songs for the browse view, artists by name. */
+data class ArtistGroup(val name: String, val songs: List<Station>)
+
+/**
+ * Groups songs by artist for browse. One row per artist, so a song can
+ * never show twice; songs keep the incoming order.
+ */
+fun artistsOf(songs: List<Station>): List<ArtistGroup> =
+    songs.groupBy { it.artist.ifBlank { "unknown artist" } }
+        .toSortedMap(compareBy { it.lowercase() })
+        .map { (name, list) -> ArtistGroup(name, list) }
+
 /**
  * The LIB tab's local half. Reads the phone's audio library via [LocalLibrary]
  * and lets the user play any song (through the normal Station pipeline, so

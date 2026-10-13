@@ -39,6 +39,7 @@ class YinYangCore {
     private var w: Int = 0
     private var h: Int = 0
     private var strip: Boolean = false
+    private var forcedStrip: Boolean = false
     private var cx: Double = 0.0
     private var cy: Double = 0.0
     private var radius: Double = 0.0
@@ -95,11 +96,11 @@ class YinYangCore {
         swirls.clear()
     }
 
-    fun ensure(rows: Int, cols: Int) {
-        if (rows == dotRows && cols == dotCols && cells.size == rows * cols && w == cols && h == rows) {
+    fun ensure(rows: Int, cols: Int, forceStrip: Boolean = false) {
+        if (rows == dotRows && cols == dotCols && cells.size == rows * cols && forcedStrip == forceStrip) {
             return
         }
-        layout(cols, rows)
+        layout(cols, rows, forceStrip)
     }
 
     fun tagAt(x: Int, y: Int): Int {
@@ -111,7 +112,7 @@ class YinYangCore {
         reset()
     }
 
-    private fun layout(nw: Int, nh: Int) {
+    private fun layout(nw: Int, nh: Int, forceStrip: Boolean = false) {
         w = nw
         h = nh
         dotCols = nw
@@ -121,7 +122,13 @@ class YinYangCore {
         val hd = nh.toDouble()
         cx = wd / 2
         cy = hd / 2
-        strip = wd > hd * 3
+        // The phone always wants the going fishes: the aspect heuristic
+        // below would circle the taller EQ meter on the pond path while the
+        // short Now Playing meter runs the S-curve strip, so the same mode
+        // looks like two different visualizers. Forcing the strip keeps
+        // every host in agreement.
+        strip = forceStrip || wd > hd * 3
+        forcedStrip = forceStrip
         if (strip) {
             size = min(hd * 0.84 / (2 * HALF_BODY), wd / 80)
             radius = min(hd * 0.3, size * 4.5)
@@ -535,7 +542,11 @@ class YinYangCore {
     }
 
     private fun drawShapeInto(buf: ByteArray, bw: Int, bh: Int, k: Koi, pat: Pattern, swim: Boolean) {
-        val j = k.joints
+        // The working spine is a real copy, like Go's value array. The loops
+        // below read the pristine joints while writing the swayed spine: going
+        // through the live array compounds each joint's offset into the next
+        // and bends the whole tail off its true line.
+        val work = Array(JOINTS) { k.joints[it].copy() }
         val sz = size
         var wag = 0.5
         if (swim) {
@@ -549,14 +560,14 @@ class YinYangCore {
                 if (dist > 0) {
                     val f = (i - 3).toDouble() / (JOINTS - 4)
                     val off = sin(k.phase - f * 2.5) * f * f * k.stroke * 1.8 * sz
-                    j[i] = Pt(j[i].x - dy / dist * off, j[i].y + dx / dist * off)
+                    work[i] = Pt(work[i].x - dy / dist * off, work[i].y + dx / dist * off)
                 }
             }
         }
         if (k.flick > 0) {
             val bend = k.tailBend() * k.flickDir
-            val root = j[JOINTS - 5]
-            val prv = j[JOINTS - 6]
+            val root = work[JOINTS - 5]
+            val prv = work[JOINTS - 6]
             val hx = root.x - prv.x
             val hy = root.y - prv.y
             val dist = hypot(hx, hy)
@@ -565,41 +576,41 @@ class YinYangCore {
                 val py = hx / dist
                 for (i in JOINTS - 5 until JOINTS) {
                     val off = (i - (JOINTS - 6)).toDouble() / 5 * bend * sz * 1.5
-                    j[i] = Pt(j[i].x + px * off, j[i].y + py * off)
+                    work[i] = Pt(work[i].x + px * off, work[i].y + py * off)
                 }
             }
         }
         val scratch = Scratch(buf, bw, bh)
-        val head = atan2(j[0].y - j[2].y, j[0].x - j[2].x)
+        val head = atan2(work[0].y - work[2].y, work[0].x - work[2].x)
         val flap = sin(k.phase * 0.5) * 0.25
         for (side in doubleArrayOf(-1.0, 1.0)) {
             val a = head + PI + side * (1.25 + flap)
             for (t in 0 until 3) {
                 val off = (RADII[2] + 0.6 + t) * sz
-                scratch.fill(j[2].x + cos(a) * off, j[2].y + sin(a) * off, (1.5 - t * 0.35) * sz, pat.body)
+                scratch.fill(work[2].x + cos(a) * off, work[2].y + sin(a) * off, (1.5 - t * 0.35) * sz, pat.body)
             }
         }
-        val back = atan2(j[7].y - j[6].y, j[7].x - j[6].x)
+        val back = atan2(work[7].y - work[6].y, work[7].x - work[6].x)
         for (side in doubleArrayOf(-1.0, 1.0)) {
             val a = back + side * 1.9
-            scratch.fill(j[7].x + cos(a) * 1.6 * sz, j[7].y + sin(a) * 1.6 * sz, 0.8 * sz, pat.body)
+            scratch.fill(work[7].x + cos(a) * 1.6 * sz, work[7].y + sin(a) * 1.6 * sz, 0.8 * sz, pat.body)
         }
-        val last = j[JOINTS - 1]
-        val before = j[JOINTS - 2]
+        val last = work[JOINTS - 1]
+        val before = work[JOINTS - 2]
         val tail = atan2(last.y - before.y, last.x - before.x) + sin(k.phase - 2) * wag
         scratch.fill(last.x + cos(tail) * 1.2 * sz, last.y + sin(tail) * 1.2 * sz, 0.75 * sz, pat.body)
         scratch.fill(last.x + cos(tail) * 0.6 * sz, last.y + sin(tail) * 0.6 * sz, 0.65 * sz, pat.body)
         for (i in JOINTS - 1 downTo 0) {
-            scratch.fill(j[i].x, j[i].y, RADII[i] * sz, pat.body)
+            scratch.fill(work[i].x, work[i].y, RADII[i] * sz, pat.body)
             if (i > 0) {
                 val r = (RADII[i] + RADII[i - 1]) / 2 * sz
-                scratch.fill((j[i].x + j[i - 1].x) / 2, (j[i].y + j[i - 1].y) / 2, r, pat.body)
+                scratch.fill((work[i].x + work[i - 1].x) / 2, (work[i].y + work[i - 1].y) / 2, r, pat.body)
             }
         }
         for (i in JOINTS - 1 downTo 0) {
             val p = pat.back[i]
             if (p != TAG_WATER) {
-                scratch.fill(j[i].x, j[i].y, RADII[i] * sz * 0.62, p)
+                scratch.fill(work[i].x, work[i].y, RADII[i] * sz * 0.62, p)
             }
         }
     }

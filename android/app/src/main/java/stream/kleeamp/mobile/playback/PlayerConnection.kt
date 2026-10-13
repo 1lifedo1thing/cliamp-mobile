@@ -39,6 +39,25 @@ import java.io.IOException
 private const val PROGRESS_INTERVAL = 5_000L
 
 /**
+ * End-seek margin: seeking into the last [SEEK_END_MARGIN_MS] of an item
+ * makes Media3 auto-advance at once, which reads as "just changed the
+ * song". Targets there clamp to just short of the tail instead of being
+ * dropped, so a fling to the end lands and plays out instead of snapping
+ * back to where it started.
+ */
+internal const val SEEK_END_MARGIN_MS = 250L
+
+/**
+ * Seek target in ms for [fraction] of [durationMs], or null when there is
+ * nothing sane to seek to. Pure so it can be unit-tested on the JVM.
+ */
+internal fun seekTargetMs(durationMs: Long, fraction: Float): Long? {
+    if (durationMs <= 0) return null
+    val target = (durationMs * fraction.coerceIn(0f, 1f)).toLong()
+    return minOf(target, durationMs - SEEK_END_MARGIN_MS).coerceAtLeast(0L)
+}
+
+/**
  * The UI's handle on playback. Transport goes through a MediaController rather
  * than straight to the ExoPlayer, so the app, the notification and any
  * Bluetooth remote all drive the same state machine.
@@ -374,13 +393,8 @@ class PlayerConnection(
         if (!c.isCurrentMediaItemSeekable) return
         val d = c.duration
         if (d == C.TIME_UNSET || d <= 0) return
-        // Seeking to the very end of a playlist item makes Media3 immediately
-        // auto-advance to the next track, which a user reading a seek on the far
-        // edge of the bar experiences as "just changed the song". Clamp the
-        // target just short of the tail so the seek stays on the current item.
-        val target = d * fraction.coerceIn(0f, 1f)
-        if (target >= d - 250) return
-        c.seekTo(target.toLong())
+        val target = seekTargetMs(d, fraction) ?: return
+        c.seekTo(target)
         sync()
     }
 

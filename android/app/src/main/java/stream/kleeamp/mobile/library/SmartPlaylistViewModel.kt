@@ -50,7 +50,8 @@ class SmartPlaylistViewModel(
         val songs: List<Station> = emptyList(),
         val loading: Boolean = false,
         val localSort: PlaylistSort = PlaylistSort.Title,
-        val detailSort: PlaylistSort = PlaylistSort.Title,
+        val detailSort: PlaylistSort? = null,
+        val detailBrowse: Boolean = false,
         val fetched: Map<String, DownloadEntry> = emptyMap(),
         val queue: List<DownloadQueueItem> = emptyList(),
         val favorites: List<Station> = emptyList(),
@@ -71,8 +72,9 @@ class SmartPlaylistViewModel(
         data class PauseDownload(val url: String) : Event
         data class ResumeDownload(val url: String) : Event
         data object CancelAllDownloads : Event
-        data object RemoveAllDownloads : Event
+        data class RemoveDownloads(val urls: Set<String>) : Event
         data class SetSort(val sort: PlaylistSort) : Event
+        data class SetBrowse(val browsing: Boolean) : Event
         data class OpenShow(val show: PodcastShow) : Event
     }
 
@@ -80,7 +82,8 @@ class SmartPlaylistViewModel(
         val songs: List<Station> = emptyList(),
         val loading: Boolean = false,
         val localSort: PlaylistSort = PlaylistSort.Title,
-        val detailSort: PlaylistSort = PlaylistSort.Title,
+        val detailSort: PlaylistSort? = null,
+        val detailBrowse: Boolean = false,
         val fetched: Map<String, DownloadEntry> = emptyMap(),
     )
 
@@ -100,13 +103,17 @@ class SmartPlaylistViewModel(
 
     val state: StateFlow<UiState> = combine(
         combine(
-            localLibrary.songs,
-            localLibrary.loading,
-            prefs.playlistSort("local-songs"),
-            prefs.playlistSort(sortKey),
-            prefs.downloads,
-            ::DeviceState,
-        ),
+            combine(
+                localLibrary.songs,
+                localLibrary.loading,
+                prefs.playlistSort("local-songs"),
+                prefs.playlistSortOrNull(sortKey),
+                prefs.downloads,
+            ) { songs, loading, localSort, detailSort, fetched ->
+                DeviceState(songs, loading, localSort, detailSort, fetched = fetched)
+            },
+            prefs.playlistBrowse(sortKey),
+        ) { device, detailBrowse -> device.copy(detailBrowse = detailBrowse) },
         combine(
             prefs.favorites,
             prefs.history,
@@ -132,6 +139,7 @@ class SmartPlaylistViewModel(
             loading = device.loading,
             localSort = device.localSort,
             detailSort = device.detailSort,
+            detailBrowse = device.detailBrowse,
             fetched = device.fetched,
             queue = queue,
             favorites = social.favorites,
@@ -154,7 +162,8 @@ class SmartPlaylistViewModel(
             songs = localLibrary.songs.value,
             loading = localLibrary.loading.value,
             localSort = prefs.playlistSortValue("local-songs"),
-            detailSort = prefs.playlistSortValue(sortKey),
+            detailSort = prefs.playlistSortOrNullValue(sortKey),
+            detailBrowse = prefs.playlistBrowseValue(sortKey),
         ),
     )
 
@@ -175,8 +184,9 @@ class SmartPlaylistViewModel(
             is Event.PauseDownload -> downloads.pause(e.url)
             is Event.ResumeDownload -> downloads.resume(e.url)
             is Event.CancelAllDownloads -> downloads.cancelAll()
-            is Event.RemoveAllDownloads -> downloads.removeAll()
+            is Event.RemoveDownloads -> e.urls.forEach { downloads.remove(it) }
             is Event.SetSort -> prefs.setPlaylistSort(sortKey, e.sort)
+            is Event.SetBrowse -> prefs.setPlaylistBrowse(sortKey, e.browsing)
             is Event.OpenShow -> podcasts.openShow(e.show)
         }
     }

@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -86,6 +87,7 @@ import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.MechKey
 import stream.kleeamp.mobile.chrome.MeterSize
+import stream.kleeamp.mobile.chrome.SheetDragHandle
 import stream.kleeamp.mobile.chrome.MarqueeLabel
 import stream.kleeamp.mobile.chrome.Scrubber
 import stream.kleeamp.mobile.chrome.StreamingRule
@@ -170,7 +172,7 @@ internal fun PortraitPlayer(
     actions: PlayerActions,
     modifier: Modifier = Modifier,
 ) {
-    val p = LocalPalette.current
+    val density = LocalDensity.current
     // The rows below the plate indent to the plate's own edges. The plate
     // is centred and height-bound; the pager viewport runs edge to edge
     // so sliding plates are cut at the screen edge, never mid-screen.
@@ -180,7 +182,6 @@ internal fun PortraitPlayer(
     // The plate size never depends on sibling padding (height-bound off
     // the flex remainder, width-bound off the frame), so the inset is
     // stable and cannot feed back into the plate size.
-    val density = LocalDensity.current
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
     var plateWidthPx by remember { mutableIntStateOf(0) }
     val edge = if (plateWidthPx > 0) {
@@ -191,9 +192,31 @@ internal fun PortraitPlayer(
     } else {
         0.dp
     }
-    // No status-bars padding here: the sheet's handle zone already sits
-    // below the status bar, and padding twice shrinks the art plate.
-    Column(modifier.fillMaxSize().background(p.ground).navigationBarsPadding()) {
+    // No status-bars padding on the rows: the handle zone below already
+    // sits below the status bar, and padding twice shrinks the art plate.
+    // Full-bleed: the backdrop paints the whole sheet surface (clipped to
+    // its rounded top like the container was), and the drag handle rides
+    // inside the content over the wash - so no flat container strip ever
+    // shows above the handle or below the transport.
+    Box(
+        modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
+    ) {
+        val ambient by rememberPlayerAmbient(model.shownStation)
+        PlayerBackdrop(
+            ambient = ambient,
+            playing = model.state.playing,
+            spectrum = model.spectrumProvider,
+            modifier = Modifier.fillMaxSize(),
+        )
+    Column(Modifier.fillMaxSize().navigationBarsPadding()) {
+        Box(
+            Modifier.fillMaxWidth().statusBarsPadding().padding(bottom = 2.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            SheetDragHandle()
+        }
         Row(
             Modifier.fillMaxWidth().padding(horizontal = Gutter + edge).height(48.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -291,6 +314,7 @@ internal fun PortraitPlayer(
             )
         }
         Spacer(Modifier.height(2.dp))
+        }
     }
 }
 
@@ -310,12 +334,31 @@ internal fun LandscapePlayer(
     frameHeight: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier,
 ) {
-    val p = LocalPalette.current
-    Row(
+    // Full-bleed like portrait: the backdrop owns the whole surface and
+    // the handle rides inside it, so the container never shows.
+    Box(
         modifier
             .fillMaxSize()
-            .background(p.ground)
-            .navigationBarsPadding()
+            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
+    ) {
+        val ambient by rememberPlayerAmbient(model.shownStation)
+        PlayerBackdrop(
+            ambient = ambient,
+            playing = model.state.playing,
+            spectrum = model.spectrumProvider,
+            modifier = Modifier.fillMaxSize(),
+        )
+    Column(Modifier.fillMaxSize().navigationBarsPadding()) {
+        Box(
+            Modifier.fillMaxWidth().statusBarsPadding().padding(bottom = 2.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            SheetDragHandle()
+        }
+    Row(
+        Modifier
+            .weight(1f)
+            .fillMaxWidth()
             .padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -372,6 +415,8 @@ internal fun LandscapePlayer(
             Spacer(Modifier.weight(1f))
             PlayerTransport(model, actions, meterHeight = 56.dp)
             TransportKeys(model, actions)
+        }
+        }
         }
     }
 }

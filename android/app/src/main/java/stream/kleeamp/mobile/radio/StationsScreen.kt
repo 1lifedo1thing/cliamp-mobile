@@ -36,15 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.art.ArtResolve
@@ -53,10 +46,8 @@ import stream.kleeamp.mobile.chrome.rememberArt
 import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.chrome.compact
 import stream.kleeamp.mobile.chrome.Chip
-import stream.kleeamp.mobile.chrome.ChipDropdown
-import stream.kleeamp.mobile.chrome.ChipOption
+import stream.kleeamp.mobile.chrome.CountrySheet
 import stream.kleeamp.mobile.chrome.KleeampIcons
-import stream.kleeamp.mobile.chrome.KleeampTextField
 import stream.kleeamp.mobile.chrome.EmptyNote
 import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.Gutter
@@ -99,11 +90,12 @@ fun StationsScreen(
     onDirectoryFocusConsumed: () -> Unit = {},
     /** A cliamp channel with songs opens as its track list instead of playing. */
     onOpenChannel: (Station) -> Unit = {},
+    /** The header plus key opens the add wizard as a page, never inline. */
+    onAddCustom: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
     var source by rememberSaveable { mutableStateOf(Source.All) }
-    var addingCustom by rememberSaveable { mutableStateOf(false) }
     val ui by vm.state.collectAsState()
     val cliamp = ui.cliamp
     val cliampError = ui.cliampError
@@ -203,6 +195,8 @@ fun StationsScreen(
     // The row menu's subject: set by the ⋮ trigger, cleared on dismiss.
     // The sheet itself is emitted after the list below.
     var menuFor by remember { mutableStateOf<Station?>(null) }
+    // The country picker: a bottom sheet, not the old dropdown menu.
+    var countrySheet by remember { mutableStateOf(false) }
     // NOTE: no scroll reset on query/source change. A filter keeps its
     // scroll position while the repository swaps content underneath
     // (stale rows stay until the live page lands), and returning from
@@ -255,25 +249,6 @@ fun StationsScreen(
                 Chip(s.label, source == s, onClick = { source = s })
             }
             Spacer(Modifier.width(4.dp))
-            val countryQuery = directory.query as? DirectoryQuery.Country
-            ChipDropdown(
-                label = countryQuery?.countryName ?: "all countries",
-                selected = countryQuery != null,
-                options = listOf(
-                    ChipOption("all countries") {
-                        vm.onEvent(StationsViewModel.Event.LoadDirectory(DirectoryQuery.TopVoted, reset = true))
-                    },
-                ) + countries.map { c ->
-                    ChipOption(c.name) {
-                        vm.onEvent(
-                            StationsViewModel.Event.LoadDirectory(
-                                DirectoryQuery.Country(c.iso31661, c.name),
-                                reset = true,
-                            )
-                        )
-                    }
-                },
-            )
         },
     ) {
 
@@ -286,10 +261,11 @@ fun StationsScreen(
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
         ) {
 
-            // Page hero: the live listener globe sits above everything else,
-            // unfiltered by the source chips below it. The setting toggles
-            // the whole section - globe and top countries together.
-            if (ui.listenerGlobe) {
+            // Page hero: the live listener globe sits above the cliamp
+            // section on All and Cliamp only — it renders cliamp stats, so
+            // Directory and Custom hide it. The setting toggles the whole
+            // section - globe and top countries together.
+            if (ui.listenerGlobe && (source == Source.All || source == Source.Cliamp)) {
                 item {
                     ListenerAnalytics(
                         stats = viewStats,
@@ -342,36 +318,21 @@ fun StationsScreen(
             if (source == Source.All || source == Source.Custom) {
                 item {
                     SectionLabel("custom — ${custom.size}", gutter = 8.dp) {
-                        if (!addingCustom) {
-                            Box(
-                                Modifier
-                                    .size(34.dp)
-                                    // Nudge to the row end: the shared label
-                                    // gutter leaves the key sitting in from
-                                    // the edge next to the rows below.
-                                    .offset(x = 7.dp)
-                                    .clip(RoundedCornerShape(KleeampShape.small))
-                                    .background(if (p.dark) p.keyFace else p.ground)
-                                    .border(1.dp, p.keyBorder, RoundedCornerShape(KleeampShape.small))
-                                    .microPress(onClick = { addingCustom = true }),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(KleeampIcons.Plus, "add station", Modifier.size(16.dp), tint = p.accent)
-                            }
+                        Box(
+                            Modifier
+                                .size(34.dp)
+                                // Nudge to the row end: the shared label
+                                // gutter leaves the key sitting in from
+                                // the edge next to the rows below.
+                                .offset(x = 7.dp)
+                                .clip(RoundedCornerShape(KleeampShape.small))
+                                .background(if (p.dark) p.keyFace else p.ground)
+                                .border(1.dp, p.keyBorder, RoundedCornerShape(KleeampShape.small))
+                                .microPress(onClick = onAddCustom),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(KleeampIcons.Plus, "add station", Modifier.size(16.dp), tint = p.accent)
                         }
-                    }
-                }
-                if (addingCustom) {
-                    item {
-                        CustomAddForm(
-                            onAdd = { name, url ->
-                                customStation(name, url)?.let { s ->
-                                    vm.onEvent(StationsViewModel.Event.AddCustom(s))
-                                }
-                                addingCustom = false
-                            },
-                            onCancel = { addingCustom = false },
-                        )
                     }
                 }
                 items(
@@ -395,11 +356,28 @@ fun StationsScreen(
                             ?: if (directory.error != null) "unreachable" else "loading"),
                         gutter = 8.dp,
                     ) {
-                        Mono(directory.query.label, KleeampType.meta, p.inkTertiary)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            // The default top order needs no announcement;
+                            // every other query names itself.
+                            if (directory.query != DirectoryQuery.TopVoted) {
+                                Mono(directory.query.label, KleeampType.meta, p.inkTertiary)
+                            }
+                            val countryQuery = directory.query as? DirectoryQuery.Country
+                            Chip(
+                                countryQuery?.countryName ?: "all countries",
+                                selected = countryQuery != null,
+                                onClick = { countrySheet = true },
+                                caret = true,
+                            )
+                        }
                     }
                 }
-                // The directory's filters, one row: the order controls (top /
-                // trending) lead it, then the tags that narrow the list.
+                // The directory's filters, one row: trending leads it, then
+                // the tags that narrow the list. Top is the default order
+                // and stays reachable through "all countries".
                 // Gutter-compensated like rows and labels: list padding
                 // plus this lands exactly on the shared gutter.
                 item {
@@ -408,18 +386,6 @@ fun StationsScreen(
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
-                        Chip(
-                            "top",
-                            directory.query == DirectoryQuery.TopVoted,
-                            onClick = {
-                                vm.onEvent(
-                                    StationsViewModel.Event.LoadDirectory(
-                                        DirectoryQuery.TopVoted,
-                                        reset = true,
-                                    )
-                                )
-                            },
-                        )
                         Chip(
                             "trending",
                             directory.query == DirectoryQuery.Trending,
@@ -488,6 +454,25 @@ fun StationsScreen(
         // The row menu as a bottom sheet: one reusable component fed by the
         // subject below, so stations never hardcode their own action list.
         // No info entry: radio needs none.
+        if (countrySheet) {
+            CountrySheet(
+                countries = countries,
+                selectedIso = (directory.query as? DirectoryQuery.Country)?.code?.takeIf { it.isNotEmpty() },
+                onPick = { c ->
+                    vm.onEvent(
+                        if (c == null) {
+                            StationsViewModel.Event.LoadDirectory(DirectoryQuery.TopVoted, reset = true)
+                        } else {
+                            StationsViewModel.Event.LoadDirectory(
+                                DirectoryQuery.Country(c.iso31661, c.name),
+                                reset = true,
+                            )
+                        },
+                    )
+                },
+                onDismiss = { countrySheet = false },
+            )
+        }
         menuFor?.let { s ->
             val fav = favorites.any { it.url == s.url }
             val isCustom = custom.any { it.url == s.url }
@@ -685,106 +670,14 @@ fun customStation(name: String, rawUrl: String): Station? {    val url = rawUrl.
     if (url.isBlank()) return null
     val fixed = if ("://" in url) url else "https://$url"
     if (!fixed.startsWith("http://") && !fixed.startsWith("https://")) return null
+    // Bare words ("just some words") otherwise gain https:// and save as a
+    // dead row; the wizard's probe would catch it, but failing here keeps
+    // the message about the url instead of a network error.
+    if (fixed.any { it.isWhitespace() }) return null
     val label = name.trim().ifBlank {
         runCatching { java.net.URI(fixed).host }.getOrNull()?.removePrefix("www.") ?: fixed
     }
     return Station(id = "custom:$fixed", name = label, url = fixed, source = StationSource.Custom)
-}
-
-/** Name + URL form for a hand-added station, opened by the header plus key.
- * Fields wear the provider wizard's FieldRow styling exactly (label row with
- * optional marker, trackTitleSmall entry, hairline underline that accents on
- * focus); the outer 8dp keeps them on the rows' gutter inside the grid page.
- * One form serves both the All and the Custom views, so both match. */
-@Composable
-private fun CustomAddForm(onAdd: (String, String) -> Unit, onCancel: () -> Unit) {
-    var name by rememberSaveable { mutableStateOf("") }
-    var url by rememberSaveable { mutableStateOf("") }
-    val focus = LocalFocusManager.current
-    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-        fun save() {
-            if (customStation(name, url) == null) return
-            onAdd(name, url)
-            name = ""
-            url = ""
-        }
-        CustomField(
-            label = "name",
-            optional = true,
-            value = name,
-            onValue = { name = it },
-            placeholder = "name",
-            keyboard = KeyboardType.Text,
-            imeAction = ImeAction.Next,
-            autoFocus = false,
-            onAction = { focus.moveFocus(FocusDirection.Next) },
-        )
-        CustomField(
-            label = "stream url",
-            optional = false,
-            value = url,
-            onValue = { url = it },
-            placeholder = "stream url",
-            keyboard = KeyboardType.Uri,
-            imeAction = ImeAction.Go,
-            autoFocus = false,
-            onAction = ::save,
-        )
-        Row(
-            Modifier.fillMaxWidth().padding(vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.End),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Chip("cancel", selected = false, onClick = onCancel)
-            Chip("save", url.isNotBlank(), onClick = ::save)
-        }
-    }
-}
-
-/** One provider-wizard-style field row: label (+ optional marker), entry,
- * and the hairline underline that accents while focused. */
-@Composable
-// Screen signature: state in, callbacks out; bundling would hide the data flow.
-@Suppress("LongParameterList")
-private fun CustomField(
-    label: String,
-    optional: Boolean,
-    value: String,
-    onValue: (String) -> Unit,
-    placeholder: String,
-    keyboard: KeyboardType,
-    imeAction: ImeAction,
-    autoFocus: Boolean,
-    onAction: () -> Unit,
-) {
-    val p = LocalPalette.current
-    var focused by remember { mutableStateOf(false) }
-    Column(
-        Modifier.fillMaxWidth().padding(vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Mono(label, KleeampType.rowSecondary, if (focused) p.accent else p.inkTertiary)
-            if (optional) Mono("optional", KleeampType.meta, p.inkFaint)
-        }
-        KleeampTextField(
-            value = value,
-            onValueChange = onValue,
-            modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
-            placeholder = placeholder,
-            textStyle = KleeampType.trackTitleSmall,
-            keyboardType = keyboard,
-            imeAction = imeAction,
-            autoFocus = autoFocus,
-            onAction = onAction,
-        )
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(if (focused) 2.dp else 1.dp)
-                .background(if (focused) p.accent else p.hairline)
-        )
-    }
 }
 
 /** A custom station row: plays like a directory row, plus remove. */

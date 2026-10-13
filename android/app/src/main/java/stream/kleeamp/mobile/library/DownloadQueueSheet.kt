@@ -1,18 +1,10 @@
 package stream.kleeamp.mobile.library
 
 import androidx.compose.foundation.gestures.ScrollableDefaults
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -20,31 +12,24 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Velocity
-import androidx.compose.ui.unit.dp
-import stream.kleeamp.mobile.chrome.SheetDragHandle
-import stream.kleeamp.mobile.chrome.SheetStatusBarIcons
+import stream.kleeamp.mobile.player.FullSheetShell
 import stream.kleeamp.mobile.podcasts.DownloadStore
-import stream.kleeamp.mobile.theme.LocalPalette
 
 /**
  * The downloading queue as a bottom sheet: the same rows as the downloads
- * list's downloading section, opened from the floating fetch key. Full
- * height like Up Next - a long queue scrolls inside instead of squeezing -
- * with the same slide, scrim, corners and swipe-down dismiss as the other
- * sheets.
+ * list's downloading section, opened from the floating fetch key. Rides
+ * the shared full-height shell — a long queue scrolls inside instead of
+ * squeezing — keeping its own list-first touch arbitration below.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DownloadQueueSheet(
     downloads: DownloadStore,
     onDismiss: () -> Unit,
 ) {
-    val p = LocalPalette.current
     val queue by downloads.queue.collectAsState()
     // The last row cancelled or finished: nothing left to show, so the
     // sheet peels away instead of idling empty. The key only fires on the
@@ -92,29 +77,7 @@ fun DownloadQueueSheet(
             }
         }
     }
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = p.ground,
-        contentColor = p.ink,
-        scrimColor = Color.Black.copy(alpha = 0.55f),
-        // Padded below the status bar like Up Next: at full height the
-        // handle must never sit under the time and notification icons,
-        // and the list below it starts clear of them too.
-        dragHandle = {
-            SheetStatusBarIcons()
-            Box(
-                Modifier
-                    .statusBarsPadding()
-                    .padding(bottom = 2.dp),
-            ) {
-                SheetDragHandle()
-            }
-        },
-        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-    ) {
-        SheetStatusBarIcons()
+    FullSheetShell(onDismiss = onDismiss) {
         LazyColumn(
             Modifier
                 .fillMaxSize()

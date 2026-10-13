@@ -46,8 +46,7 @@ import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.chrome.ArtKind
 import stream.kleeamp.mobile.chrome.rememberArt
 import stream.kleeamp.mobile.chrome.Chip
-import stream.kleeamp.mobile.chrome.ChipDropdown
-import stream.kleeamp.mobile.chrome.ChipOption
+import stream.kleeamp.mobile.chrome.CountrySheet
 import stream.kleeamp.mobile.chrome.KleeampIcons
 import stream.kleeamp.mobile.chrome.EmptyNote
 import stream.kleeamp.mobile.chrome.LoadingNote
@@ -117,6 +116,8 @@ fun PodcastsScreen(
     val subscribedFeeds = remember(subscriptions) { subscriptions.mapTo(HashSet()) { it.feedUrl } }
     // The show menu's subject: set by the ⋮ trigger, cleared on dismiss.
     var menuShow by remember { mutableStateOf<PodcastShow?>(null) }
+    // The country picker: a bottom sheet, not the old dropdown menu.
+    var countrySheet by remember { mutableStateOf(false) }
 
     // Warm catalogue art on entry and on page append: small for rows, full
     // for the first tiles (which decode full-res). Full downloads share
@@ -135,22 +136,6 @@ fun PodcastsScreen(
         chips = {
             Pane.entries.forEach { s -> Chip(s.label, pane == s, onClick = { pane = s }) }
             Spacer(Modifier.width(4.dp))
-            val topQuery = directory.query as? PodcastQuery.Top
-            ChipDropdown(
-                label = topQuery?.country?.takeIf { it.isNotEmpty() }?.let { c ->
-                    countryList.firstOrNull { it.iso31661.equals(c, ignoreCase = true) }?.name ?: c
-                } ?: "all countries",
-                selected = topQuery != null && topQuery.country.isNotEmpty(),
-                options = listOf(
-                    ChipOption("all countries") {
-                        vm.onEvent(PodcastsViewModel.Event.Load(PodcastQuery.Top()))
-                    },
-                ) + countryList.map { c ->
-                    ChipOption(c.name) {
-                        vm.onEvent(PodcastsViewModel.Event.Load(PodcastQuery.Top(c.iso31661)))
-                    }
-                },
-            )
         },
     ) {
 
@@ -210,7 +195,20 @@ fun PodcastsScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
-                                Mono(directory.query.label, KleeampType.meta, p.inkTertiary)
+                                // The default top chart needs no announcement;
+                                // every other query names itself.
+                                if (directory.query !is PodcastQuery.Top) {
+                                    Mono(directory.query.label, KleeampType.meta, p.inkTertiary)
+                                }
+                                val topQuery = directory.query as? PodcastQuery.Top
+                                Chip(
+                                    topQuery?.country?.takeIf { it.isNotEmpty() }?.let { c ->
+                                        countryList.firstOrNull { it.iso31661.equals(c, ignoreCase = true) }?.name ?: c
+                                    } ?: "all countries",
+                                    selected = topQuery != null && topQuery.country.isNotEmpty(),
+                                    onClick = { countrySheet = true },
+                                    caret = true,
+                                )
                                 GridListToggle(podDirectoryGrid) {
                                     vm.onEvent(PodcastsViewModel.Event.TogglePodDirectoryGrid)
                                 }
@@ -223,14 +221,8 @@ fun PodcastsScreen(
                                 .padding(horizontal = 8.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(7.dp),
                         ) {
-                            // The order control leads the filters: the current
-                            // chart order, then the genres that narrow it.
-                            val topQuery = directory.query as? PodcastQuery.Top
-                            Chip(
-                                "top",
-                                topQuery != null,
-                                onClick = { vm.onEvent(PodcastsViewModel.Event.Load(PodcastQuery.Top())) },
-                            )
+                            // The genres narrow the chart; the country chart
+                            // rides the section header by the grid toggle.
                             PodcastDirectory.genres.forEach { g ->
                                 val q = directory.query
                                 Chip(
@@ -283,6 +275,17 @@ fun PodcastsScreen(
             // The show menu as a bottom sheet: the subscription alone, since
             // shows are feeds - favourites, playlists, queue and info live
             // on episode rows instead.
+            if (countrySheet) {
+                CountrySheet(
+                    countries = countryList,
+                    selectedIso = (directory.query as? PodcastQuery.Top)?.country?.takeIf { it.isNotEmpty() },
+                    showCounts = false,
+                    onPick = { c ->
+                        vm.onEvent(PodcastsViewModel.Event.Load(PodcastQuery.Top(c?.iso31661.orEmpty())))
+                    },
+                    onDismiss = { countrySheet = false },
+                )
+            }
             menuShow?.let { show ->
                 val subscribed = show.feedUrl in subscribedFeeds
                 ContextMenuSheet(

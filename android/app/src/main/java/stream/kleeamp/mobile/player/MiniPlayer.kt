@@ -1,5 +1,7 @@
 package stream.kleeamp.mobile.player
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,11 +17,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -33,6 +39,7 @@ import stream.kleeamp.mobile.chrome.ArtPlate
 import stream.kleeamp.mobile.chrome.GlyphPlate
 import stream.kleeamp.mobile.chrome.microPress
 import stream.kleeamp.mobile.chrome.rememberArt
+import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.art.LocalArt
 import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.model.Station
@@ -64,18 +71,36 @@ fun MiniPlayer(
     // The bar never goes away: it shows the current or last-played station,
     // or the empty "nothing playing" state when nothing has played yet.
     val empty = station == null
+    // The bar wears the same art-tinted wash as the player screen, quieter
+    // so the rows and keys stay legible, and it pulses gently with the
+    // music while playing. The nothing-playing state stays plain panel.
+    val ambient by rememberPlayerAmbient(station)
+    val energy = rememberMusicEnergy(playing) { PlaybackBus.spectrum.value }
+    val washGate by animateFloatAsState(if (empty) 0f else 1f, tween(600), label = "miniWash")
+    val washAlpha = (0.22f + 0.16f * energy) * washGate
 
-    Column(Modifier.fillMaxWidth().background(p.panel)) {
+    Column(Modifier.fillMaxWidth()) {
         HairlineDivider(region = true)
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .microPress(onClick = onOpen)
-                .dragUpToOpen(onOpen)
-                .padding(horizontal = Gutter, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        Box(Modifier.fillMaxWidth().background(p.panel)) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            0f to ambient.copy(alpha = washAlpha),
+                            1f to Color.Transparent,
+                        ),
+                    ),
+            )
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .microPress(onClick = onOpen)
+                    .dragUpToOpen(onOpen)
+                    .padding(horizontal = Gutter, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
             MiniArt(station = station)
             if (empty) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -120,6 +145,13 @@ fun MiniPlayer(
                 Box(
                     Modifier
                         .size(38.dp)
+                        .graphicsLayer {
+                            // The play key swells gently with the music: a
+                            // layer transform, still the moment it pauses.
+                            val pulse = 1f + 0.06f * energy
+                            scaleX = pulse
+                            scaleY = pulse
+                        }
                         .microPress(onClick = onToggle)
                         .clip(RoundedCornerShape(KleeampShape.medium))
                         .background(if (p.dark) p.accent else p.ink),
@@ -138,6 +170,7 @@ fun MiniPlayer(
                     enabled = hasNext,
                     onClick = onNext,
                 )
+            }
             }
         }
     }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -55,19 +56,15 @@ fun ScrobbleWizard(
     val uiState by vm.state.collectAsState()
 
     Column(Modifier.fillMaxSize().background(p.ground).statusBarsPadding().navigationBarsPadding()) {
+        // Title row like every MainLayout page: chevron, then the title on
+        // the left in the same 24sp face.
         Row(
             Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BackChevron(onCancel)
-            // QueueBar floats over this corner on every screen
-            Mono(
-                if (vm.seedToken.isBlank()) "ADD SCROBBLER" else "EDIT",
-                KleeampType.sectionLabel,
-                p.inkTertiary,
-                Modifier.padding(end = 56.dp),
-            )
+            Spacer(Modifier.width(4.dp))
+            Mono("ListenBrainz", KleeampType.screenTitle, p.ink, maxLines = 1)
         }
         HairlineDivider(region = true)
 
@@ -76,7 +73,6 @@ fun ScrobbleWizard(
                 Modifier.padding(horizontal = Gutter, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Mono("ListenBrainz", KleeampType.screenTitle, p.ink)
                 Mono(
                     "counted plays scrobble to your listenbrainz profile.",
                     KleeampType.body, p.inkSecondary,

@@ -32,6 +32,7 @@ class PlaylistDetailViewModel(
         val members: List<Station> = emptyList(),
         val visible: List<Station> = emptyList(),
         val sort: PlaylistSort = PlaylistSort.Title,
+        val browse: Boolean = false,
         val localSongs: List<Station> = emptyList(),
         val radioStations: List<Station> = emptyList(),
         val subscribedShows: List<PodcastShow> = emptyList(),
@@ -51,6 +52,7 @@ class PlaylistDetailViewModel(
         data class ToggleFavorite(val station: Station) : Event
         data class SetCover(val cover: String) : Event
         data class SetSort(val sort: PlaylistSort) : Event
+        data class SetBrowse(val browsing: Boolean) : Event
         data class OpenShow(val show: PodcastShow) : Event
         data object Dedupe : Event
         data object PurgeMissing : Event
@@ -68,6 +70,7 @@ class PlaylistDetailViewModel(
         val directory: DirectoryState = DirectoryState(),
         val favorites: List<Station> = emptyList(),
         val sort: PlaylistSort = PlaylistSort.Title,
+        val browse: Boolean = false,
         val showState: ShowState = ShowState(),
         val bookmark: Int? = null,
     )
@@ -81,13 +84,17 @@ class PlaylistDetailViewModel(
             ::CollectionState,
         ),
         combine(
-            repository.directory,
-            prefs.favorites,
-            prefs.playlistSort(slug),
-            podcasts.show,
-            prefs.playlistBookmark(slug),
-            ::MetaState,
-        ),
+            combine(
+                repository.directory,
+                prefs.favorites,
+                prefs.playlistSort(slug),
+                podcasts.show,
+                prefs.playlistBookmark(slug),
+            ) { directory, favorites, sort, show, bookmark ->
+                MetaState(directory, favorites, sort, showState = show, bookmark = bookmark)
+            },
+            prefs.playlistBrowse(slug),
+        ) { meta, browse -> meta.copy(browse = browse) },
     ) { col, meta ->
         val pl = col.all.firstOrNull { it.station.slug == slug }
         val ids = pl?.songIds.orEmpty()
@@ -102,6 +109,7 @@ class PlaylistDetailViewModel(
             members = members,
             visible = sortedStations(members, meta.sort),
             sort = meta.sort,
+            browse = meta.browse,
             localSongs = col.songs,
             radioStations = (col.cliamp + meta.directory.stations + favRadio).distinctBy { it.id },
             subscribedShows = col.subscriptions,
@@ -115,6 +123,7 @@ class PlaylistDetailViewModel(
         viewModelScope,
         UiState(
             sort = prefs.playlistSortValue(slug),
+            browse = prefs.playlistBrowseValue(slug),
             localSongs = localLibrary.songs.value,
             showState = podcasts.show.value,
         ),
@@ -134,6 +143,7 @@ class PlaylistDetailViewModel(
             is Event.ToggleFavorite -> viewModelScope.launch { prefs.toggleFavorite(e.station) }
             is Event.SetCover -> viewModelScope.launch { playlists.setCover(slug, e.cover) }
             is Event.SetSort -> prefs.setPlaylistSort(slug, e.sort)
+            is Event.SetBrowse -> prefs.setPlaylistBrowse(slug, e.browsing)
             is Event.OpenShow -> podcasts.openShow(e.show)
             Event.Dedupe -> viewModelScope.launch(NonCancellable) {
                 val ids = state.value.songIds

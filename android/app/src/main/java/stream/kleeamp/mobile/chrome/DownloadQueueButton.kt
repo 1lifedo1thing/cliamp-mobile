@@ -76,7 +76,7 @@ fun DownloadQueueButton(
                     Icon(KleeampIcons.Download, "open downloads", Modifier.size(20.dp), tint = p.accent)
                 }
                 Mono(
-                    if (count > 99) "99" else count.toString(),
+                    if (count > 99) "+99" else count.toString(),
                     KleeampType.chip,
                     p.accent,
                     // Tucked inside the key's own corner, over the circle's

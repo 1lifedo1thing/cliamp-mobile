@@ -3,7 +3,6 @@ package stream.kleeamp.mobile.library
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -172,25 +171,19 @@ fun LibraryPlaylistPane(
     onAddToPlaylist: (Station) -> Unit = {},
     onAddToQueue: (Station) -> Unit = {},
     onInfo: ((Station) -> Unit)? = null,
-    /** True when opened from a playlist row's add menu: lands in the song picker. */
-    startAdding: Boolean = false,
+    onOpenArtist: (String) -> Unit = {},
+    /** Opens the add-songs sheet over this page; the sheet writes per tap. */
+    onOpenAddSongs: () -> Unit = {},
     shuffled: Boolean = false,
     onToggleShuffle: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    var adding by rememberSaveable(slug) { mutableStateOf(startAdding) }
     var query by rememberSaveable(slug) { mutableStateOf("") }
     // The row menu's subject: set by the ⋮ trigger, cleared on dismiss.
     var menuFor by remember { mutableStateOf<Station?>(null) }
     val ui by vm.state.collectAsState()
-    // Back closes the picker first; writes already landed per tap, so there
-    // is nothing to save — a second back leaves the page.
-    BackHandler(enabled = adding) { adding = false }
-    val songs = ui.localSongs
-    val radioStations = ui.radioStations
-    val subscriptions = ui.subscribedShows
     val pl = ui.playlist
     val coverLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -280,25 +273,20 @@ fun LibraryPlaylistPane(
                     PlaylistDetailShown(
                         listState = listState,
                         playlist = pl,
-                        songIds = pl.songIds,
                         members = ui.members,
                         visible = remember(ui.visible, query) { ui.visible.matching(query) },
                         query = query,
                         onQuery = { query = it },
                         sort = ui.sort,
                         onSortChange = { vm.onEvent(PlaylistDetailViewModel.Event.SetSort(it)) },
-                        localSongs = songs,
-                        radioStations = radioStations,
-                        subscribedShows = subscriptions,
-                        showState = ui.showState,
-                        onOpenShow = { vm.onEvent(PlaylistDetailViewModel.Event.OpenShow(it)) },
+                        browse = ui.browse,
+                        onBrowseChange = { vm.onEvent(PlaylistDetailViewModel.Event.SetBrowse(it)) },
+                        onOpenArtist = onOpenArtist,
                         current = current,
                         playing = playing,
                         onPlay = onPlay,
-                        onToggle = { vm.onEvent(PlaylistDetailViewModel.Event.ToggleMember(it)) },
                         onOpenMenu = { menuFor = it },
-                        adding = adding,
-                        onBeginAdd = { adding = true },
+                        onBeginAdd = onOpenAddSongs,
                         shuffled = shuffled,
                         onToggleShuffle = onToggleShuffle,
                     )
@@ -351,23 +339,18 @@ fun LibraryPlaylistPane(
 private fun PlaylistDetailShown(
     listState: LazyListState,
     playlist: PlaylistStore.Playlist,
-    songIds: List<String>,
     members: List<Station>,
     visible: List<Station>,
     query: String,
     onQuery: (String) -> Unit,
     sort: PlaylistSort,
     onSortChange: (PlaylistSort) -> Unit,
-    localSongs: List<Station>,
-    radioStations: List<Station>,
-    subscribedShows: List<PodcastShow>,
-    showState: ShowState,
-    onOpenShow: (PodcastShow) -> Unit,
+    browse: Boolean = false,
+    onBrowseChange: (Boolean) -> Unit = {},
+    onOpenArtist: (String) -> Unit = {},
     current: Station?,
     playing: Boolean,
     onPlay: (Station, List<Station>) -> Unit,
-    onToggle: (Station) -> Unit,
-    adding: Boolean,
     onBeginAdd: () -> Unit = {},
     onOpenMenu: (Station) -> Unit = {},
     shuffled: Boolean = false,
@@ -375,39 +358,38 @@ private fun PlaylistDetailShown(
 ) {
     val p = LocalPalette.current
 
-    // Browse regroups the members under artist sections in one flat
-    // scroll — no pages, no back handling. The sorts show a local override
-    // until the stored sort round-trips back, so the whole row answers on
-    // the tap.
-    var browsing by rememberSaveable(playlist.station.slug) { mutableStateOf(false) }
+    // Browse regroups the members under album rows in one flat scroll —
+    // no pages, no back handling. Browse and the sorts share one active
+    // state with a local override each until the stored value round-trips
+    // back, so every chip answers on the tap frame exactly like the rest.
     var sortOverride by remember(playlist.station.slug) { mutableStateOf<PlaylistSort?>(null) }
+    var browseOverride by remember(playlist.station.slug) { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(sort) { sortOverride = null }
+    LaunchedEffect(browse) { browseOverride = null }
     val shownSort = sortOverride ?: sort
-    // Browse regroups the filtered members; cheapest last so the flat list
-    // never waits for it.
-    val grouped = remember(visible, browsing) {
-        if (!browsing) emptyMap()
-        else visible.groupBy { it.artist.ifBlank { "unknown artist" } }
-            .toSortedMap(compareBy { it.lowercase() })
+    val shownBrowse = browseOverride ?: browse
+    // The tapped sort applies on the tap frame: the stored sort lands a
+    // beat later through the ViewModel, and waiting for it flashes the old
+    // order under the newly lit chip — worst when leaving browse, where
+    // the artists give way to the wrong order first. Re-sorting the
+    // already-sorted visible list is idempotent once it round-trips.
+    val ordered = remember(visible, shownSort) { sortedStations(visible, shownSort) }
+    // Browse lists artists only — one row per artist, tap opens their
+    // page — cheapest last so the flat list never waits for it.
+    val artists = remember(ordered, shownBrowse) {
+        if (!shownBrowse) emptyList() else artistsOf(ordered)
+    }
+    // Artists and songs are different content under one scroll state: a
+    // kept index would land mid-list after the switch, so the mode switch
+    // snaps back to the top. Sort taps keep their position.
+    LaunchedEffect(shownBrowse) {
+        listState.scrollToItem(0)
     }
 
     // Members can be any source now, so they resolve against the live local
     // library plus the persisted snapshot stations (radio/podcast members).
     // Resolved in PlaylistDetailViewModel so the pane stays dumb.
-    if (adding) {
-        AddSongsPicker(
-            selected = songIds.toSet(),
-            playlistName = playlist.station.name,
-            localSongs = localSongs,
-            radioStations = radioStations,
-            subscribedShows = subscribedShows,
-            showState = showState,
-            onOpenShow = onOpenShow,
-            onToggle = onToggle,
-        )
-        return
-    }
-
+    // Adding lives in the add-songs sheet, never as page content.
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
         item {
             val cover = rememberArt(station = playlist.station, kind = ArtKind.Full)
@@ -415,13 +397,13 @@ private fun PlaylistDetailShown(
                 title = playlist.station.name,
                 meta = "${members.size} songs",
                 actions = {
-                    if (visible.isNotEmpty()) {
+                    if (ordered.isNotEmpty()) {
                         CollectionActions(
                             shuffled = shuffled,
-                            onPlayAll = { visible.firstOrNull()?.let { onPlay(it, visible) } },
+                            onPlayAll = { ordered.firstOrNull()?.let { onPlay(it, ordered) } },
                             onShufflePlay = {
                                 if (!shuffled) onToggleShuffle()
-                                visible.randomOrNull()?.let { onPlay(it, visible) }
+                                ordered.randomOrNull()?.let { onPlay(it, ordered) }
                             },
                         )
                     }
@@ -460,59 +442,64 @@ private fun PlaylistDetailShown(
                         .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
-                    // Lit while browsing, but never untapped: a re-tap
-                    // is a no-op. Only a sort tap switches back.
-                    Chip("browse", browsing, onClick = {
-                        if (!browsing) {
-                            browsing = true
-                            onQuery("")
-                        }
-                    })
-                    // Sorts share one active state with browse: a tap applies
-                    // the sort to the flat list.
+                    // Sorts first as one family; browse caps the row as the
+                    // mode switch. Every chip taps the same way: it selects
+                    // itself and nothing else.
                     PlaylistSort.entries.forEach { t ->
-                        Chip(t.label, shownSort == t && !browsing, onClick = {
-                            browsing = false
+                        Chip(t.label, shownSort == t && !shownBrowse, onClick = {
+                            browseOverride = false
+                            onBrowseChange(false)
                             sortOverride = t
                             onSortChange(t)
                         })
                     }
+                    Chip("browse", shownBrowse, onClick = {
+                        browseOverride = true
+                        onBrowseChange(true)
+                    })
                 }
             }
             item { FilterRow(value = query, onValue = onQuery) }
-            if (browsing && visible.isNotEmpty()) {
-                grouped.forEach { (artist, songs) ->
-                    item { SectionLabel("$artist — ${songs.size}") }
-                    items(songs, key = { it.id }) { s ->
-                        PlaylistMemberRow(
-                            s = s,
-                            current = current,
-                            playing = playing,
-                            queue = visible,
-                            onPlay = onPlay,
-                            onOpenMenu = onOpenMenu,
-                        )
+            if (shownBrowse && ordered.isNotEmpty()) {
+                items(artists, key = { it.name }) { group ->
+                    ListRow(
+                        onClick = { onOpenArtist(group.name) },
+                        verticalPadding = 9.dp,
+                        leading = {
+                            QuadCollage(group.songs, Modifier.size(40.dp))
+                        },
+                        trailing = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Mono("${group.songs.size}", KleeampType.meta, p.inkFaint)
+                                Icon(KleeampIcons.CaretRight, "open", Modifier.size(9.dp), tint = p.inkFaint)
+                            }
+                        },
+                    ) {
+                        Mono(group.name, KleeampType.rowPrimary, p.ink, maxLines = 1)
                     }
                 }
             } else {
             item {
-                SectionLabel("songs — ${visible.size}") {
+                SectionLabel("songs — ${ordered.size}") {
                     AddSongsButton(onClick = onBeginAdd)
                 }
             }
-            if (visible.isEmpty()) {
+            if (ordered.isEmpty()) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
                         Mono("nothing matches", KleeampType.rowSecondary, p.inkFaint)
                     }
                 }
             }
-            items(visible, key = { it.id }) { s ->
+            items(ordered, key = { it.id }) { s ->
                 PlaylistMemberRow(
                     s = s,
                     current = current,
                     playing = playing,
-                    queue = visible,
+                    queue = ordered,
                     onPlay = onPlay,
                     onOpenMenu = onOpenMenu,
                 )
@@ -520,50 +507,6 @@ private fun PlaylistDetailShown(
             }
         }
         item { Spacer(Modifier.height(20.dp)) }
-    }
-}
-
-/**
- * One playlist member row, shared by the flat list and the browse sections
- * so both read identically.
- */
-@Composable
-private fun PlaylistMemberRow(
-    s: Station,
-    current: Station?,
-    playing: Boolean,
-    queue: List<Station>,
-    onPlay: (Station, List<Station>) -> Unit,
-    onOpenMenu: (Station) -> Unit,
-) {
-    val p = LocalPalette.current
-    ListRow(
-        rail = current?.url == s.url,
-        onClick = { onPlay(s, queue) },
-        verticalPadding = 9.dp,
-        leading = {
-            SongCover(s = s, current = current, playing = playing)
-        },
-        trailing = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OverflowButton({ onOpenMenu(s) }, size = 16)
-            }
-        },
-    ) {
-        Mono(s.name, KleeampType.rowPrimary, if (current?.url == s.url) p.accent else p.ink, maxLines = 1)
-        Mono(
-            s.artistAlbum.ifBlank {
-                when {
-                    s.source == StationSource.Local -> durationLabel(s.durationMs)
-                    s.source == StationSource.Podcast -> "podcast"
-                    else -> s.meta
-                }
-            },
-            KleeampType.rowSecondary, p.inkTertiary, maxLines = 1,
-        )
     }
 }
 
@@ -598,6 +541,7 @@ internal fun AddSongsButton(onClick: () -> Unit) {
 internal fun AddSongsPicker(
     selected: Set<String>,
     playlistName: String,
+    showTitle: Boolean = true,
     localSongs: List<Station>,
     radioStations: List<Station>,
     subscribedShows: List<PodcastShow>,
@@ -616,13 +560,15 @@ internal fun AddSongsPicker(
     // from elsewhere can never desync the boxes from the database.
 
     Column(Modifier.fillMaxSize()) {
-        Mono(
-            playlistName, KleeampType.chip, p.accent, maxLines = 1,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp),
-        )
+        if (showTitle) {
+            Mono(
+                playlistName, KleeampType.chip, p.accent, maxLines = 1,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp),
+            )
+        }
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                .padding(start = Gutter, end = Gutter, bottom = 4.dp),
+                .padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             AddTab.entries.forEach { t -> Chip(t.label, tab == t, onClick = { tab = t; query = "" }) }
