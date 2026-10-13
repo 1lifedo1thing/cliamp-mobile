@@ -14,7 +14,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.drag
@@ -43,6 +42,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -61,6 +61,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -72,6 +73,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.window.Popup
+import kotlinx.coroutines.delay
+import kotlin.math.abs
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalHapticsEnabled
@@ -445,37 +448,92 @@ fun Scrubber(
     val p = LocalPalette.current
     var dragging by remember { mutableStateOf(false) }
     var dragFraction by remember { mutableFloatStateOf(0f) }
-    // While dragging, follow the finger; the player's own position lags behind
-    // the gesture and would make the playhead stutter backwards.
-    val shown = (if (dragging) dragFraction else fraction).coerceIn(0f, 1f)
+    // The seek target committed on release: the player's own position lags an
+    // async seek (binder hop plus buffering), and showing the raw poll would
+    // snap the playhead back to the old spot until the seek lands. Hold the
+    // target until the poll catches up, moves clearly past it (track change,
+    // repeat restart), or a timeout covers a seek the player dropped.
+    var committed by remember { mutableFloatStateOf(-1f) }
+    LaunchedEffect(fraction) {
+        if (committed >= 0f &&
+            (abs(fraction - committed) < 0.004f || fraction < committed - 0.02f)
+        ) {
+            committed = -1f
+        }
+    }
+    LaunchedEffect(committed) {
+        val target = committed
+        if (target >= 0f) {
+            delay(2_000)
+            if (committed == target) committed = -1f
+        }
+    }
+    // While dragging, follow the finger; after release, hold the committed
+    // target; otherwise follow the player.
+    val shown = (if (dragging) dragFraction else committed.takeIf { it >= 0f } ?: fraction)
+        .coerceIn(0f, 1f)
 
     BoxWithConstraints(
         modifier
             .fillMaxWidth()
             .height(24.dp)
-            // Tap and drag share ONE gesture handler. As separate pointerInput
-            // blocks detectTapGestures consumed the down first, so the drag
-            // detector that followed never saw an unconsumed down and drag-seek
-            // silently never fired. Combined here: a press that clears touch
-            // slop horizontally becomes a drag, anything else is a tap.
+            // Tap and drag share ONE gesture handler with a direction lock.
+            // As separate pointerInput blocks detectTapGestures consumed the
+            // down first, so the drag detector that followed never saw an
+            // unconsumed down and drag-seek silently never fired. Combined
+            // here, and only a horizontal slop pass starts a seek: a vertical
+            // scroll or sheet-dismiss passing through never seeks, and a
+            // gesture the parent steals seeks NOTHING instead of degrading to
+            // a tap-seek at the down point (which is what snapped fast-flung
+            // drags back to where the finger landed).
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val startFraction = (down.position.x / size.width).coerceIn(0f, 1f)
                     dragFraction = startFraction
-                    val drag = awaitTouchSlopOrCancellation(down.id) { change, _ ->
-                        change.consume()
-                        dragFraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                    val slop = viewConfiguration.touchSlop
+                    var horizontal: PointerInputChange? = null
+                    var stolen = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.find { it.id == down.id } ?: break
+                        if (change.isConsumed) {
+                            stolen = true
+                            break
+                        }
+                        if (!change.pressed) break
+                        val dx = change.position.x - down.position.x
+                        val dy = change.position.y - down.position.y
+                        if (abs(dx) > slop && abs(dx) > abs(dy)) {
+                            horizontal = change
+                            break
+                        }
+                        // Vertical lock: the parent's gesture, consume nothing
+                        // so the pane scroll or sheet dismiss keeps working.
+                        if (abs(dy) > slop) break
                     }
-                    if (drag != null) {
+                    if (horizontal != null) {
+                        horizontal.consume()
                         dragging = true
-                        drag(drag.id) { change ->
+                        dragFraction = (horizontal.position.x / size.width).coerceIn(0f, 1f)
+                        drag(horizontal.id) { change ->
                             change.consume()
                             dragFraction = (change.position.x / size.width).coerceIn(0f, 1f)
                         }
                     }
                     dragging = false
-                    onSeek(if (drag != null) dragFraction else startFraction)
+                    when {
+                        horizontal != null -> {
+                            committed = dragFraction
+                            onSeek(dragFraction)
+                        }
+                        // A clean tap seeks where it landed; a stolen gesture
+                        // seeks nowhere.
+                        !stolen -> {
+                            committed = startFraction
+                            onSeek(startFraction)
+                        }
+                    }
                 }
             }
     ) {
