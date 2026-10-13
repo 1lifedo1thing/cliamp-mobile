@@ -41,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -168,9 +169,10 @@ internal fun FullscreenEffect(onExit: () -> Unit) {
 internal fun PortraitPlayer(
     model: PlayerModel,
     actions: PlayerActions,
+    ambient: Color,
     modifier: Modifier = Modifier,
 ) {
-    val p = LocalPalette.current
+    val density = LocalDensity.current
     // The rows below the plate indent to the plate's own edges. The plate
     // is centred and height-bound; the pager viewport runs edge to edge
     // so sliding plates are cut at the screen edge, never mid-screen.
@@ -180,7 +182,6 @@ internal fun PortraitPlayer(
     // The plate size never depends on sibling padding (height-bound off
     // the flex remainder, width-bound off the frame), so the inset is
     // stable and cannot feed back into the plate size.
-    val density = LocalDensity.current
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
     var plateWidthPx by remember { mutableIntStateOf(0) }
     val edge = if (plateWidthPx > 0) {
@@ -193,7 +194,11 @@ internal fun PortraitPlayer(
     }
     // No status-bars padding here: the sheet's handle zone already sits
     // below the status bar, and padding twice shrinks the art plate.
-    Column(modifier.fillMaxSize().background(p.ground).navigationBarsPadding()) {
+    // The ambient backdrop paints behind everything: ground, the
+    // art-tinted wash, then the grounding fade under the transport.
+    Box(modifier.fillMaxSize()) {
+        PlayerBackdrop(ambient = ambient, modifier = Modifier.fillMaxSize())
+    Column(Modifier.fillMaxSize().navigationBarsPadding()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = Gutter + edge).height(48.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -291,6 +296,7 @@ internal fun PortraitPlayer(
             )
         }
         Spacer(Modifier.height(2.dp))
+        }
     }
 }
 
@@ -308,13 +314,14 @@ internal fun LandscapePlayer(
     actions: PlayerActions,
     frameWidth: androidx.compose.ui.unit.Dp,
     frameHeight: androidx.compose.ui.unit.Dp,
+    ambient: Color,
     modifier: Modifier = Modifier,
 ) {
-    val p = LocalPalette.current
+    Box(modifier.fillMaxSize()) {
+        PlayerBackdrop(ambient = ambient, modifier = Modifier.fillMaxSize())
     Row(
-        modifier
+        Modifier
             .fillMaxSize()
-            .background(p.ground)
             .navigationBarsPadding()
             .padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -372,6 +379,7 @@ internal fun LandscapePlayer(
             Spacer(Modifier.weight(1f))
             PlayerTransport(model, actions, meterHeight = 56.dp)
             TransportKeys(model, actions)
+        }
         }
     }
 }

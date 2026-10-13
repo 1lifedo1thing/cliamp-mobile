@@ -36,6 +36,8 @@ import stream.kleeamp.mobile.theme.LocalPalette
 @Composable
 fun FullSheetShell(
     onDismiss: () -> Unit,
+    /** Sheet surface; null keeps the plain ground Up Next and Scope wear. */
+    containerColor: Color? = null,
     content: @Composable () -> Unit,
 ) {
     val p = LocalPalette.current
@@ -54,7 +56,7 @@ fun FullSheetShell(
             },
         ),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = p.ground,
+        containerColor = containerColor ?: p.ground,
         contentColor = p.ink,
         scrimColor = Color.Black.copy(alpha = 0.55f),
         // Padded below the status bar: the handle must never sit under

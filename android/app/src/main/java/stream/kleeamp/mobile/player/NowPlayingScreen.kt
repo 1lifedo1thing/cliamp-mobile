@@ -42,6 +42,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -138,6 +139,7 @@ internal data class PlayerActions(
 @Composable
 fun NowPlayingScreen(
     vm: NowPlayingViewModel,
+    ambient: Color,
     onOpenScope: () -> Unit,
     onOpenUpNext: () -> Unit,
     onBack: () -> Unit,
@@ -161,8 +163,7 @@ fun NowPlayingScreen(
         AudioOutputs.current(context, uiState.outputDevice)
     }
 
-    val model = PlayerModel(
-        state = uiState.playerState,
+    val model = PlayerModel(        state = uiState.playerState,
         shownStation = uiState.shownStation,
         previousStation = uiState.previousStation,
         nextStation = uiState.nextStation,
@@ -207,9 +208,10 @@ fun NowPlayingScreen(
                 LandscapePlayer(
                     model, actions,
                     frameWidth = maxWidth, frameHeight = maxHeight,
+                    ambient = ambient,
                 )
             } else {
-                PortraitPlayer(model, actions)
+                PortraitPlayer(model, actions, ambient = ambient)
             }
         }
 
