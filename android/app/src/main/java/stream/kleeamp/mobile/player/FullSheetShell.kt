@@ -36,8 +36,13 @@ import stream.kleeamp.mobile.theme.LocalPalette
 @Composable
 fun FullSheetShell(
     onDismiss: () -> Unit,
-    /** Sheet surface; null keeps the plain ground Up Next and Scope wear. */
-    containerColor: Color? = null,
+    /**
+     * True draws no handle slot: the content paints the whole surface edge
+     * to edge (clipped to the rounded top itself) and draws its own handle
+     * inside, so the container never shows as a strip anywhere. False keeps
+     * the shared slot handle Up Next and Scope wear.
+     */
+    inlineHandle: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val p = LocalPalette.current
@@ -56,19 +61,24 @@ fun FullSheetShell(
             },
         ),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = containerColor ?: p.ground,
+        containerColor = p.ground,
         contentColor = p.ink,
         scrimColor = Color.Black.copy(alpha = 0.55f),
         // Padded below the status bar: the handle must never sit under
-        // the time and notification icons.
-        dragHandle = {
-            SheetStatusBarIcons()
-            Box(
-                Modifier
-                    .statusBarsPadding()
-                    .padding(bottom = 2.dp),
-            ) {
-                SheetDragHandle()
+        // the time and notification icons. Skipped for full-bleed content,
+        // which pads and draws its own handle inside.
+        dragHandle = if (inlineHandle) {
+            null
+        } else {
+            {
+                SheetStatusBarIcons()
+                Box(
+                    Modifier
+                        .statusBarsPadding()
+                        .padding(bottom = 2.dp),
+                ) {
+                    SheetDragHandle()
+                }
             }
         },
         // The screen pads itself for status and navigation bars; the

@@ -55,13 +55,19 @@ class AmbientColorTest {
     }
 
     @Test
-    fun sheetChromeSitsBetweenGroundAndAmbient() {
-        val ground = Color(0.05f, 0.05f, 0.06f)
-        val ambient = Color(0.6f, 0.1f, 0.1f)
-        val chrome = sheetChromeColor(ground, ambient)
-        // Closer to ground than to the wash: a tint, never a band.
-        assertTrue(chrome.red > ground.red)
-        assertTrue(chrome.red < ambient.red)
+    fun spectrumEnergyIgnoresEmptiness() {
+        assertEquals(0f, spectrumEnergy(null), 0f)
+        assertEquals(0f, spectrumEnergy(FloatArray(0)), 0f)
+        assertEquals(0f, spectrumEnergy(FloatArray(64)), 0f)
+    }
+
+    @Test
+    fun spectrumEnergyScalesAndClamps() {
+        assertEquals(1f, spectrumEnergy(FloatArray(64) { 1f }), 0.001f)
+        // Half-scale lows read strong but not full.
+        assertEquals(0.8f, spectrumEnergy(FloatArray(64) { 0.5f }), 0.001f)
+        // Hotter-than-full input never escapes 0..1.
+        assertEquals(1f, spectrumEnergy(FloatArray(64) { 4f }), 0.001f)
     }
 
     @Test
