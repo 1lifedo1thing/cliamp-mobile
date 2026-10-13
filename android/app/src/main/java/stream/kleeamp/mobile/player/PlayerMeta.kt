@@ -110,9 +110,11 @@ import stream.kleeamp.mobile.model.NowPlaying
 
 
 /**
- * Minimal up-next key for the Now Playing page: the outlined chip with
+ * Up-next key for the Now Playing page: the outlined chip with
  * icon plus count, no text label. 40dp like the other page keys. The
- * full Up Next chip stays in the Up Next sheet.
+ * full Up Next chip stays in the Up Next sheet. Thin accent border
+ * so it reads as live against the backdrop; the count wears ink,
+ * not faint, for the same reason.
  */
 @Composable
 internal fun UpNextBadge(
@@ -130,13 +132,13 @@ internal fun UpNextBadge(
     ) {
         Row(
             Modifier
-                .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small))
+                .border(0.5.dp, p.accent, RoundedCornerShape(KleeampShape.small))
                 .padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(KleeampIcons.UpNextTabLines, "open up next", Modifier.size(14.dp), tint = p.accent)
-            Mono(count.toString(), KleeampType.chip, p.inkFaint, maxLines = 1)
+            Icon(KleeampIcons.UpNextTabLines, "open up next", Modifier.size(16.dp), tint = p.accent)
+            Mono(count.toString(), KleeampType.chip, p.ink, maxLines = 1)
         }
     }
 }
