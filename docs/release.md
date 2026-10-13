@@ -11,7 +11,7 @@ and publishes the release. No other step is necessary.
    workflow always keeps.
 
    ```sh
-   git tag -a v0.5.0 -m "kleeamp 0.5.0" -m "The library release: ..."
+   git tag -a v0.5.0 -m "kleeamp 0.5.0" -m "The podcasts, library and visuals release: ..."
 
    git push origin v0.5.0
    ```
