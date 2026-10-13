@@ -18,7 +18,8 @@ class CoverSkipTest {
         canNext: Boolean = true,
         canPrev: Boolean = true,
         lockedHorizontal: Boolean = true,
-    ) = coverSkipCommit(dx, vx, width, floor, fling, canNext, canPrev, lockedHorizontal)
+        fraction: Float = 0.28f,
+    ) = coverSkipCommit(dx, vx, width, floor, fling, canNext, canPrev, lockedHorizontal, fraction)
 
     @Test fun shortDragSpringsBack() {
         assertEquals(CoverSkipDecision.None, commit(dx = -100f))
@@ -84,6 +85,13 @@ class CoverSkipTest {
         // width 2000 -> 0.28 * width = 560 > floor 200, so fraction rules.
         assertEquals(CoverSkipDecision.None, commit(dx = -559f, width = 2000f))
         assertEquals(CoverSkipDecision.Next, commit(dx = -560f, width = 2000f))
+    }
+
+    @Test fun meterFractionKeepsOldEasyRule() {
+        // The meter strip commits at 0.2 * width with no minimum.
+        assertEquals(CoverSkipDecision.None, commit(dx = -199f, floor = 0f, fraction = 0.2f))
+        assertEquals(CoverSkipDecision.Next, commit(dx = -200f, floor = 0f, fraction = 0.2f))
+        assertEquals(CoverSkipDecision.Previous, commit(dx = 200f, floor = 0f, fraction = 0.2f))
     }
 
     @Test fun rubberBandStaysWithinEdge() {

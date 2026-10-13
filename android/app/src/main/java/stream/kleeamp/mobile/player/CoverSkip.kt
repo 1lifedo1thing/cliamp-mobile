@@ -55,6 +55,8 @@ internal enum class CoverSkipDecision {
  * @param width cover width in px.
  * @param floor minimum commit distance in px (80.dp).
  * @param fling fling commit velocity in px/s (900.dp/s).
+ * @param fraction commit distance as a share of [width]; the cover wants
+ *   0.28, the meter strip keeps its old easy 0.2.
  */
 internal fun coverSkipCommit(
     dx: Float,
@@ -65,11 +67,12 @@ internal fun coverSkipCommit(
     canNext: Boolean,
     canPrev: Boolean,
     lockedHorizontal: Boolean,
+    fraction: Float = 0.28f,
 ): CoverSkipDecision {
     if (!lockedHorizontal) return CoverSkipDecision.None
     if (width <= 0f) return CoverSkipDecision.None
     if (dx == 0f) return CoverSkipDecision.None
-    val threshold = max(floor, 0.28f * width)
+    val threshold = max(floor, fraction * width)
     return if (dx < 0f) {
         if (!canNext) return CoverSkipDecision.None
         if (-dx >= threshold || -vx >= fling) CoverSkipDecision.Next else CoverSkipDecision.None

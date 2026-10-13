@@ -6,13 +6,7 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -22,14 +16,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -44,11 +34,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -62,7 +50,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -97,8 +84,6 @@ import stream.kleeamp.mobile.chrome.ArtGlow
 import stream.kleeamp.mobile.chrome.ArtPlate
 import stream.kleeamp.mobile.chrome.microPress
 import stream.kleeamp.mobile.chrome.rememberAudioOutputs
-import stream.kleeamp.mobile.chrome.rememberStationThumbnail
-import stream.kleeamp.mobile.player.vis.VisualizerMeter
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
@@ -125,58 +110,27 @@ internal fun PlayerTransport(
         // A horizontal swipe pages through the visualizer list: left for
         // the next one, right for the previous, wrapping at the ends. The
         // write goes to the global setting, so every meter everywhere -
-        // player, scope sheet, fullscreen - follows the swipe.
+        // player, scope sheet, fullscreen - follows the swipe. The drag
+        // follows the finger and stays cancelable, like the cover pager.
         if (model.visualizer != "off") {
             val order = remember { Visualizer.selectable }
             val mode = Visualizer.byId(model.visualizer)
-            // Slide direction of the last swipe; survives the mode change
-            // so the incoming transition knows which way to come from.
-            var incomingDir by remember { mutableIntStateOf(0) }
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(meterHeight)
-                    .visualizerSwipe(
-                        onSwipeLeft = {
-                            incomingDir = -1
-                            actions.onSelectVisualizer(order.nextAfter(mode).id)
-                        },
-                        onSwipeRight = {
-                            incomingDir = 1
-                            actions.onSelectVisualizer(order.prevBefore(mode).id)
-                        },
-                    ),
-            ) {
-                AnimatedContent(
-                    targetState = mode,
-                    transitionSpec = {
-                        val dir = incomingDir
-                        (slideInHorizontally(
-                            animationSpec = tween(220, easing = FastOutSlowInEasing),
-                            initialOffsetX = { w -> dir * w },
-                        ) + fadeIn(tween(220))) togetherWith
-                            (slideOutHorizontally(
-                                animationSpec = tween(220, easing = FastOutSlowInEasing),
-                                targetOffsetX = { w -> dir * w },
-                            ) + fadeOut(tween(220)))
-                    },
-                    label = "visSwipe",
-                ) { current ->
-                    VisualizerMeter(
-                        mode = current,
-                        columns = MeterSize.NowPlaying.columns,
-                        live = model.state.playing,
-                        spectrumProvider = model.spectrumProvider,
-                        stereoProvider = model.stereoProvider,
-                        brick = MeterSize.NowPlaying.brick,
-                        gap = MeterSize.NowPlaying.gap,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .doubleTapToFullscreen(actions.onToggleFullscreen),
-                        generation = model.generation,
-                    )
-                }
-            }
+            VisSkip(
+                current = mode,
+                previous = order.prevBefore(mode),
+                next = order.nextAfter(mode),
+                onSelectPrevious = { actions.onSelectVisualizer(order.prevBefore(mode).id) },
+                onSelectNext = { actions.onSelectVisualizer(order.nextAfter(mode).id) },
+                columns = MeterSize.NowPlaying.columns,
+                live = model.state.playing,
+                spectrumProvider = model.spectrumProvider,
+                stereoProvider = model.stereoProvider,
+                brick = MeterSize.NowPlaying.brick,
+                gap = MeterSize.NowPlaying.gap,
+                generation = model.generation,
+                onDoubleTap = actions.onToggleFullscreen,
+                modifier = Modifier.fillMaxWidth().height(meterHeight),
+            )
         }
 
         // What the transport shows follows what the player says the
@@ -291,30 +245,10 @@ internal fun sleepRemaining(model: PlayerModel): String? =
     }
 
 /**
- * Paging gesture for the meter: a horizontal drag past a fifth of the width
- * pages the visualizer, shorter drags snap back to nothing. Vertical
- * scrolling (the landscape panes) and double-tap fullscreen keep working -
- * the drag detector only claims the gesture once it is clearly horizontal.
+ * Paging order for the meter swipe: next entry, wrapping past the end.
+ * The gesture itself lives in [VisSkip], built on the same drag detector
+ * the old swipe used so touch keeps working.
  */
-internal fun Modifier.visualizerSwipe(
-    onSwipeLeft: () -> Unit,
-    onSwipeRight: () -> Unit,
-): Modifier = pointerInput(onSwipeLeft, onSwipeRight) {
-    var totalX = 0f
-    detectHorizontalDragGestures(
-        onDragStart = { totalX = 0f },
-        onHorizontalDrag = { _, dx -> totalX += dx },
-        onDragEnd = {
-            val threshold = size.width * 0.2f
-            when {
-                totalX <= -threshold -> onSwipeLeft()
-                totalX >= threshold -> onSwipeRight()
-            }
-        },
-    )
-}
-
-/** Next entry in the swipe order, wrapping past the end. */
 internal fun List<Visualizer>.nextAfter(mode: Visualizer): Visualizer {
     if (isEmpty()) return mode
     val i = indexOf(mode).takeIf { it >= 0 } ?: 0
