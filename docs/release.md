@@ -45,7 +45,9 @@ tags, so its notes cover the full beta change set.
 ## Rebuild a release
 
 Run the `release` workflow by hand and enter a tag that already exists. The
-workflow replaces the assets and the notes of that release.
+workflow refreshes the notes of that release. Releases here are immutable,
+so a rebuild cannot replace the assets: the notes keep the version code
+and SHA-256 of the originally uploaded APK.
 
 The repository secrets `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, and
 `KEY_PASSWORD` must be set. The pipeline lives in
