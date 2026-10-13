@@ -77,7 +77,7 @@ fun MiniPlayer(
     val ambient by rememberPlayerAmbient(station)
     val energy = rememberMusicEnergy(playing) { PlaybackBus.spectrum.value }
     val washGate by animateFloatAsState(if (empty) 0f else 1f, tween(600), label = "miniWash")
-    val washAlpha = (0.22f + 0.16f * energy) * washGate
+    val washAlpha = (0.28f + 0.30f * energy) * washGate
 
     Column(Modifier.fillMaxWidth()) {
         HairlineDivider(region = true)
@@ -146,9 +146,9 @@ fun MiniPlayer(
                     Modifier
                         .size(38.dp)
                         .graphicsLayer {
-                            // The play key swells gently with the music: a
-                            // layer transform, still the moment it pauses.
-                            val pulse = 1f + 0.06f * energy
+                            // The play key swells with the music: a layer
+                            // transform, still the moment it pauses.
+                            val pulse = 1f + 0.12f * energy
                             scaleX = pulse
                             scaleY = pulse
                         }
