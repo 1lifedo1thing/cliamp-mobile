@@ -83,16 +83,8 @@ internal fun PlayerBackdrop(
     )
     // Music energy follows the low bands with a fast attack and a slow
     // release, so the wash surges smoothly with the track and settles
-    // gently into pauses instead of snapping.
-    var energy by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(playing) {
-        while (true) {
-            delay(90)
-            val target = if (playing) spectrumEnergy(spectrum()) else 0f
-            val k = if (target > energy) 0.35f else 0.12f
-            energy += (target - energy) * k
-        }
-    }
+    // gently into pauses instead of snapping. Shared with the mini bar.
+    val energy = rememberMusicEnergy(playing, spectrum)
     Box(modifier.background(p.ground)) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val radius = max(constraints.maxWidth, constraints.maxHeight).toFloat()
@@ -100,9 +92,9 @@ internal fun PlayerBackdrop(
                 Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        scaleX = 1f + 0.07f * breath * gate
-                        scaleY = 1f + 0.07f * breath * gate
-                        alpha = (0.94f + 0.06f * breath * gate + 0.10f * energy).coerceIn(0f, 1f)
+                        scaleX = 1f + 0.07f * breath * gate + 0.02f * energy
+                        scaleY = 1f + 0.07f * breath * gate + 0.02f * energy
+                        alpha = (0.94f + 0.06f * breath * gate + 0.18f * energy).coerceIn(0f, 1f)
                         transformOrigin = TransformOrigin(0.5f, 0.3f)
                     }
                     .background(
@@ -142,6 +134,26 @@ internal fun spectrumEnergy(bands: FloatArray?): Float {
     var sum = 0f
     for (i in 0 until n) sum += bands[i].coerceIn(0f, 1f)
     return (sum / n * 1.6f).coerceIn(0f, 1f)
+}
+
+/**
+ * Smoothed music energy shared by the backdrop and the mini bar: polls the
+ * spectrum ~11 times a second with a fast attack and a slow release, so
+ * motion surges with the track and eases out of pauses. Reads only, never
+ * recomposing more than its direct readers.
+ */
+@Composable
+internal fun rememberMusicEnergy(playing: Boolean, spectrum: () -> FloatArray?): Float {
+    var energy by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(playing) {
+        while (true) {
+            delay(90)
+            val target = if (playing) spectrumEnergy(spectrum()) else 0f
+            val k = if (target > energy) 0.35f else 0.12f
+            energy += (target - energy) * k
+        }
+    }
+    return energy
 }
 
 /** Stride-sampled pixels for tinting, or null when there is no art. */
