@@ -175,7 +175,10 @@ jobs:
           # Highlights for humans come from the annotated tag body, so each
           # release carries its own user-facing summary above the full commit
           # list. Lightweight tags have no message and keep commits only.
+          # The checkout may hold the tag's commit without the tag object,
+          # so fetch the tag itself before asking for its type and message.
           HIGHLIGHTS=""
+          git fetch origin "+refs/tags/$TAG:refs/tags/$TAG" 2>/dev/null || true
           if git cat-file -t "$TAG" 2>/dev/null | grep -qx tag; then
             HIGHLIGHTS=$(git for-each-ref "refs/tags/$TAG" --format='%(contents:body)' | sed '/^-----BEGIN PGP SIGNATURE-----$/,/^-----END PGP SIGNATURE-----$/d')
           fi
