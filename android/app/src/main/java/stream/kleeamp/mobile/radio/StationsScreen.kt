@@ -65,6 +65,7 @@ import stream.kleeamp.mobile.chrome.RetryNote
 
 import stream.kleeamp.mobile.chrome.MainLayout
 import stream.kleeamp.mobile.chrome.SectionLabel
+import stream.kleeamp.mobile.chrome.scrollToTop
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
@@ -272,6 +273,10 @@ fun StationsScreen(
                         hintSeen = ui.globeHintSeen,
                         onFirstSpin = { vm.onEvent(StationsViewModel.Event.MarkGlobeHintSeen) },
                         onRefresh = { vm.onEvent(StationsViewModel.Event.RefreshStats) },
+                        // The section is the list head: a country tap glides
+                        // back to the globe on the tweened flight (no snap
+                        // past the tall card) so the fly-to is on screen.
+                        onPickCountry = { scope.scrollToTop(listState) },
                     )
                 }
             }
