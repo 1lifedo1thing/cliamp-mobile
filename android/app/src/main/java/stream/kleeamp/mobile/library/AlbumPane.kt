@@ -87,16 +87,15 @@ fun LibraryAlbumPane(
                                 else -> "${songs.size} songs"
                             },
                             actions = {
-                                if (shown.isNotEmpty()) {
-                                    CollectionActions(
-                                        shuffled = shuffled,
-                                        onPlayAll = { shown.firstOrNull()?.let { onPlay(it, shown) } },
-                                        onShufflePlay = {
-                                            if (!shuffled) onToggleShuffle()
-                                            shown.randomOrNull()?.let { onPlay(it, shown) }
-                                        },
-                                    )
-                                }
+                                // Always on, even empty: the taps no-op on nothing.
+                                CollectionActions(
+                                    shuffled = shuffled,
+                                    onPlayAll = { shown.firstOrNull()?.let { onPlay(it, shown) } },
+                                    onShufflePlay = {
+                                        if (!shuffled) onToggleShuffle()
+                                        shown.randomOrNull()?.let { onPlay(it, shown) }
+                                    },
+                                )
                             },
                             art = {
                                 SeedPlate(

@@ -397,16 +397,15 @@ private fun PlaylistDetailShown(
                 title = playlist.station.name,
                 meta = "${members.size} songs",
                 actions = {
-                    if (ordered.isNotEmpty()) {
-                        CollectionActions(
-                            shuffled = shuffled,
-                            onPlayAll = { ordered.firstOrNull()?.let { onPlay(it, ordered) } },
-                            onShufflePlay = {
-                                if (!shuffled) onToggleShuffle()
-                                ordered.randomOrNull()?.let { onPlay(it, ordered) }
-                            },
-                        )
-                    }
+                    // Always on, even empty: the taps no-op on nothing.
+                    CollectionActions(
+                        shuffled = shuffled,
+                        onPlayAll = { ordered.firstOrNull()?.let { onPlay(it, ordered) } },
+                        onShufflePlay = {
+                            if (!shuffled) onToggleShuffle()
+                            ordered.randomOrNull()?.let { onPlay(it, ordered) }
+                        },
+                    )
                 },
                 art = {
                     if (cover != null) {

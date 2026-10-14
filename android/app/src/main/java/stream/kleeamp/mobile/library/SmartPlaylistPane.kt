@@ -668,16 +668,15 @@ private fun SmartPlaylistDetail(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        if (ordered.isNotEmpty()) {
-                            CollectionActions(
-                                shuffled = shuffled,
-                                onPlayAll = { ordered.firstOrNull()?.let { onPlay(it, ordered) } },
-                                onShufflePlay = {
-                                    if (!shuffled) onToggleShuffle()
-                                    ordered.randomOrNull()?.let { onPlay(it, ordered) }
-                                },
-                            )
-                        }
+                        // Always on, even empty: the taps no-op on nothing.
+                        CollectionActions(
+                            shuffled = shuffled,
+                            onPlayAll = { ordered.firstOrNull()?.let { onPlay(it, ordered) } },
+                            onShufflePlay = {
+                                if (!shuffled) onToggleShuffle()
+                                ordered.randomOrNull()?.let { onPlay(it, ordered) }
+                            },
+                        )
                         // Downloads only: a trash key beside shuffle that
                         // opens the remove picker; back or a second tap
                         // closes it without removing anything.
