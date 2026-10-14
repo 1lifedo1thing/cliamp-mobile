@@ -762,10 +762,15 @@ private fun SmartPlaylistDetail(
         if (isLocalSongs && tab == LocalSongsTab.Albums && ordered.isNotEmpty()) {
             items(albums, key = { it.key }) { group ->
                 ListRow(
-                    onClick = { onOpenAlbum(group.name, group.artist) },
+                    onClick = { onOpenAlbum(group.name, group.albumArtist) },
                     verticalPadding = 9.dp,
                     leading = {
-                        QuadCollage(group.songs, Modifier.size(40.dp))
+                        GroupArt(
+                            songs = group.songs,
+                            modifier = Modifier.size(40.dp),
+                            fallbackKey = group.key,
+                            fallbackName = group.name,
+                        )
                     },
                     trailing = {
                         Row(
@@ -778,7 +783,7 @@ private fun SmartPlaylistDetail(
                     },
                 ) {
                     Mono(group.name, KleeampType.rowPrimary, p.ink, maxLines = 1)
-                    Mono(group.artist, KleeampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                    Mono(group.displayArtist, KleeampType.rowSecondary, p.inkTertiary, maxLines = 1)
                 }
             }
         } else if (isLocalSongs && tab == LocalSongsTab.Artists && ordered.isNotEmpty()) {
@@ -787,7 +792,12 @@ private fun SmartPlaylistDetail(
                     onClick = { onOpenArtist(group.name) },
                     verticalPadding = 9.dp,
                     leading = {
-                        QuadCollage(group.songs, Modifier.size(40.dp))
+                        GroupArt(
+                            songs = group.songs,
+                            modifier = Modifier.size(40.dp),
+                            fallbackKey = group.name,
+                            fallbackName = group.name,
+                        )
                     },
                     trailing = {
                         Row(

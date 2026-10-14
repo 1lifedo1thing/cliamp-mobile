@@ -13,6 +13,7 @@ class LocalGroupingTest {
         name: String,
         artist: String = "artist",
         album: String = "album",
+        albumArtist: String = "",
         track: Int = 0,
         disc: Int = 0,
     ) = Station(
@@ -22,6 +23,7 @@ class LocalGroupingTest {
         source = StationSource.Local,
         artist = artist,
         album = album,
+        albumArtist = albumArtist,
         trackNo = track,
         discNo = disc,
     )
@@ -48,16 +50,39 @@ class LocalGroupingTest {
         assertEquals(listOf("b-title", "a-title", "disc2-track1"), ordered)
     }
 
-    @Test fun albumsGroupByNameAndArtist() {
+    @Test fun compilationStaysOneAlbumViaAlbumArtist() {
         val songs = listOf(
-            song("t1", artist = "a1", album = "hits", track = 2),
-            song("t2", artist = "a1", album = "hits", track = 1),
-            song("t3", artist = "a2", album = "hits", track = 1),
+            song("t1", artist = "Daft Punk", album = "Alive 2007", albumArtist = "Daft Punk", track = 2),
+            song("t2", artist = "Daft Punk", album = "Alive 2007", albumArtist = "Daft Punk", track = 1),
+            song("t3", artist = "Gabrielle", album = "Alive 2007", albumArtist = "Daft Punk", track = 3),
         )
         val groups = albumsOf(songs)
-        assertEquals(2, groups.size)
-        val first = groups.first { it.artist == "a1" }
-        assertEquals(listOf("t2", "t1"), first.songs.map { it.name })
+        assertEquals(1, groups.size)
+        assertEquals("Daft Punk", groups.single().displayArtist)
+        assertEquals(listOf("t2", "t1", "t3"), groups.single().songs.map { it.name })
+    }
+
+    @Test fun sameNameSplitsByAlbumArtist() {
+        val songs = listOf(
+            song("a1", artist = "x", album = "Hits", albumArtist = "A"),
+            song("b1", artist = "y", album = "Hits", albumArtist = "B"),
+        )
+        assertEquals(2, albumsOf(songs).size)
+    }
+
+    @Test fun untaggedFallsBackToAlbumName() {
+        val songs = listOf(
+            song("t1", artist = "a1", album = "Mix"),
+            song("t2", artist = "a2", album = "Mix"),
+        )
+        val groups = albumsOf(songs)
+        assertEquals(1, groups.size)
+        assertEquals("Various Artists", groups.single().displayArtist)
+    }
+
+    @Test fun untaggedLoneArtistShowsThatArtist() {
+        val songs = listOf(song("t1", artist = "Rush", album = "2112"))
+        assertEquals("Rush", albumsOf(songs).single().displayArtist)
     }
 
     @Test fun artistsGroupAlphabetically() {

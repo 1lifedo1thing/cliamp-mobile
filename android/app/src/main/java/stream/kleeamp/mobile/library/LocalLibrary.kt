@@ -36,6 +36,8 @@ data class LocalSong(
     val title: String,
     val artist: String,
     val album: String,
+    /** Album artist tag; blank when untagged. */
+    val albumArtist: String = "",
     /** Track number within its disc, 0 when unknown. */
     val trackNo: Int = 0,
     /** Disc number within its album, 0 when unknown. */
@@ -56,6 +58,7 @@ data class LocalSong(
             cover = cover,
             artist = artist,
             album = album,
+            albumArtist = albumArtist,
             trackNo = trackNo,
             discNo = discNo,
             durationMs = durationMs,
@@ -242,6 +245,7 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
             MediaStore.Audio.Media.TRACK,
             // DISC_NUMBER exists on newer platforms; absent columns fall back to -1 below.
             "disc_number",
+            MediaStore.Audio.Media.ALBUM_ARTIST,
         )
         resolver.query(
             collection,
@@ -264,6 +268,8 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
                 data = runCatching { c.getColumnIndex(MediaStore.Audio.Media.DATA) }.getOrNull() ?: -1,
                 track = runCatching { c.getColumnIndex(MediaStore.Audio.Media.TRACK) }.getOrDefault(-1),
                 disc = runCatching { c.getColumnIndex("disc_number") }.getOrDefault(-1),
+                albumArtist = runCatching { c.getColumnIndex(MediaStore.Audio.Media.ALBUM_ARTIST) }
+                    .getOrDefault(-1),
             )
             while (c.moveToNext()) {
                 out += mapRow(c, cols)
@@ -284,6 +290,7 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
         val data: Int,
         val track: Int = -1,
         val disc: Int = -1,
+        val albumArtist: Int = -1,
     )
 
     /** One cursor row as a song, strings only. Playlist ids stay local:$path. */
@@ -309,6 +316,7 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
             title = title,
             artist = c.getString(cols.artist) ?: "unknown artist",
             album = c.getString(cols.album) ?: "",
+            albumArtist = if (cols.albumArtist >= 0) c.getString(cols.albumArtist).orEmpty() else "",
             trackNo = trackNo,
             discNo = discNo,
             durationMs = c.getLong(cols.dur),
@@ -354,6 +362,7 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
                         title = row.title,
                         artist = row.artist,
                         album = row.album,
+                        albumArtist = row.albumArtist,
                         trackNo = row.trackNo,
                         discNo = row.discNo,
                         durationMs = row.durationMs,
@@ -381,6 +390,7 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
                         title = s.name,
                         artist = s.artist,
                         album = s.album,
+                        albumArtist = s.albumArtist,
                         trackNo = s.trackNo,
                         discNo = s.discNo,
                         durationMs = s.durationMs,

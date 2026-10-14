@@ -592,8 +592,8 @@ fun KleeampRoot(
                         progress = progress,
                         onAddToPlaylist = { s -> addToPlaylistStation = s },
                         onOpenArtist = { name -> navController.navigate(LibraryArtist(name, "local-songs")) },
-                        onOpenAlbum = { name, artist ->
-                            navController.navigate(LibraryAlbum(name, artist, "local-songs"))
+                        onOpenAlbum = { name, albumArtist ->
+                            navController.navigate(LibraryAlbum(name, albumArtist, "local-songs"))
                         },
                         onOpenAddSongs = { addSongsTarget = AddSongsTarget.Favorites },
                         shuffled = shuffled,
@@ -664,10 +664,10 @@ fun KleeampRoot(
                 val route = entry.toRoute<LibraryAlbum>()
                 Box(contentModifier) {
                     LibraryAlbumPane(
-                        vm = appViewModel(key = "album:${route.context}:${route.artist}:${route.name}") { app ->
+                        vm = appViewModel(key = "album:${route.context}:${route.albumArtist}:${route.name}") { app ->
                             AlbumViewModel(
                                 route.name,
-                                route.artist,
+                                route.albumArtist,
                                 route.context,
                                 app.localLibrary,
                                 app.playlists,
@@ -675,7 +675,7 @@ fun KleeampRoot(
                             )
                         },
                         album = route.name,
-                        artist = route.artist,
+                        albumArtist = route.albumArtist,
                         current = station,
                         playing = playerState.playing,
                         onPlay = playOrOpenChannel,

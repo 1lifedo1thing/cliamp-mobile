@@ -20,7 +20,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.chrome.CollectionActions
 import stream.kleeamp.mobile.chrome.CollectionHeader
 import stream.kleeamp.mobile.chrome.ContextMenuSheet
@@ -33,7 +32,6 @@ import stream.kleeamp.mobile.chrome.menuActions
 import stream.kleeamp.mobile.chrome.scrollToTop
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
-import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Mono
@@ -45,7 +43,7 @@ import stream.kleeamp.mobile.theme.Mono
 fun LibraryAlbumPane(
     vm: AlbumViewModel,
     album: String,
-    artist: String,
+    albumArtist: String,
     current: Station?,
     playing: Boolean,
     onPlay: (Station, List<Station>) -> Unit,
@@ -62,7 +60,7 @@ fun LibraryAlbumPane(
     val scope = rememberCoroutineScope()
     val ui by vm.state.collectAsState()
     val songs = ui.songs
-    var query by rememberSaveable(album, artist) { mutableStateOf("") }
+    var query by rememberSaveable(album, albumArtist) { mutableStateOf("") }
     // The row menu's subject: set by the ⋮ trigger, cleared on dismiss.
     var menuFor by remember { mutableStateOf<Station?>(null) }
     val shown = remember(songs, query) { songs.matching(query).distinctBy { it.url } }
@@ -83,7 +81,7 @@ fun LibraryAlbumPane(
                             title = title,
                             meta = when {
                                 songs.isEmpty() -> ""
-                                artist.isNotBlank() -> "$artist · ${songs.size} songs"
+                                ui.displayArtist.isNotBlank() -> "${ui.displayArtist} · ${songs.size} songs"
                                 else -> "${songs.size} songs"
                             },
                             actions = {
@@ -103,11 +101,11 @@ fun LibraryAlbumPane(
                                 )
                             },
                             art = {
-                                SeedPlate(
-                                    key = "$artist-$album",
-                                    name = title,
+                                GroupArt(
+                                    songs = songs,
                                     modifier = Modifier.fillMaxSize(),
-                                    radius = KleeampShape.small,
+                                    fallbackKey = "$albumArtist-$album",
+                                    fallbackName = title,
                                 )
                             },
                         )

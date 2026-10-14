@@ -134,42 +134,62 @@ enum class LocalSongsTab(val label: String) {
     Songs("songs"), Albums("albums"), Artists("artists"),
 }
 
-/** One album and its songs, keyed by album + artist so same-named albums stay apart. */
+/** One album and its songs, keyed by album + album artist. */
 data class AlbumGroup(
     val name: String,
-    val artist: String,
+    /** Raw album-artist tag; blank when untagged. */
+    val albumArtist: String,
     val songs: List<Station>,
 ) {
-    /** Stable key for LazyColumn: album + artist, lowercased. */
-    val key: String get() = "${artist.lowercase()}\u0001${name.lowercase()}"
+    /** Stable key for LazyColumn: album + album artist, lowercased. */
+    val key: String get() = "${albumArtist.lowercase()}\u0001${name.lowercase()}"
+
+    /**
+     * Shown under the album: the album artist, the lone track artist when
+     * untagged, or Various Artists for untagged multi-artist sets.
+     */
+    val displayArtist: String get() = albumDisplayArtist(albumArtist, songs)
 }
 
 /**
- * Groups songs by album for the albums tab. One row per album+artist pair,
- * albums by name; songs inside play in disc/track order.
+ * Display artist for an album: the album-artist tag wins; untagged albums
+ * show their lone track artist, or Various Artists when those differ.
+ */
+fun albumDisplayArtist(albumArtist: String, songs: List<Station>): String = when {
+    albumArtist.isNotBlank() -> albumArtist
+    songs.map { it.artist.ifBlank { "unknown artist" } }.toSet().size == 1 ->
+        songs.first().artist.ifBlank { "unknown artist" }
+    else -> "Various Artists"
+}
+
+/**
+ * Groups songs by album for the albums tab: compilations stay one album via
+ * the album-artist tag instead of shattering per track artist. Blank tags
+ * merge by album name. Same-named albums from different album artists stay
+ * apart. Songs inside play in disc/track order.
  */
 fun albumsOf(songs: List<Station>): List<AlbumGroup> {
     val byKey = LinkedHashMap<String, MutableList<Station>>()
     val meta = LinkedHashMap<String, Pair<String, String>>()
     songs.forEach { s ->
         val album = s.album.ifBlank { "unknown album" }
-        val artist = s.artist.ifBlank { "unknown artist" }
-        val key = "${artist.lowercase()}\u0001${album.lowercase()}"
+        val albumArtist = s.albumArtist
+        val key = "${albumArtist.lowercase()}\u0001${album.lowercase()}"
         byKey.getOrPut(key) { mutableListOf() } += s
-        meta.putIfAbsent(key, album to artist)
+        meta.putIfAbsent(key, album to albumArtist)
     }
     return byKey
         .map { (key, list) ->
-            val (album, artist) = meta.getValue(key)
+            val (album, albumArtist) = meta.getValue(key)
             AlbumGroup(
                 name = album,
-                artist = artist,
+                albumArtist = albumArtist,
                 songs = list.sortedWith(
                     compareBy<Station> { it.discNo }.thenBy { it.trackNo }.thenBy { it.name.lowercase() },
                 ),
             )
         }
-        .sortedWith(compareBy<AlbumGroup> { it.name.lowercase() }.thenBy { it.artist.lowercase() })
+        .sortedWith(compareBy<AlbumGroup> { it.name.lowercase() }.thenBy { it.displayArtist.lowercase() })
 }
 
 /**

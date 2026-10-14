@@ -292,6 +292,47 @@ private fun QuadCell(station: Station?, modifier: Modifier = Modifier, fallbackK
 }
 
 /**
+ * One group's primary artwork: the first song's cover filling the tile, or
+ * the group's own plate when nothing has a cover. Album and artist rows and
+ * headers share this so one group reads as one image everywhere, never a
+ * grid of the same cover four times.
+ */
+@Composable
+internal fun GroupArt(
+    songs: List<Station>,
+    modifier: Modifier = Modifier,
+    fallbackKey: String,
+    fallbackName: String?,
+) {
+    val first = songs.firstOrNull()
+    if (first == null) {
+        SeedPlate(
+            key = fallbackKey,
+            name = null,
+            modifier = modifier,
+            radius = KleeampShape.small,
+        )
+        return
+    }
+    val art = rememberStationThumbnail(first)
+    Box(
+        modifier.clip(RoundedCornerShape(KleeampShape.small)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (art != null) {
+            Image(art, first.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        } else {
+            SeedPlate(
+                key = first.id.ifBlank { first.url },
+                name = fallbackName,
+                modifier = Modifier.fillMaxSize(),
+                radius = 0.dp,
+            )
+        }
+    }
+}
+
+/**
  * The songs a collage shows: everything when four or fewer, otherwise four
  * with distinct covers first so one album's art cannot fill the tile alone.
  * Pure for JVM tests.

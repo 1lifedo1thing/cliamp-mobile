@@ -13,12 +13,13 @@ import stream.kleeamp.mobile.prefs.Prefs
  * Every track of one album within the list the album was opened from.
  * Context "local-songs" scopes to the on-device library; otherwise the
  * source is exactly that user playlist's resolved members. The album is
- * keyed by album + artist so same-named albums stay apart. Songs play in
+ * keyed by album + album artist so compilations stay one album while
+ * same-named albums from different album artists stay apart. Songs play in
  * disc/track order.
  */
 class AlbumViewModel(
     val album: String,
-    val artist: String,
+    val albumArtist: String,
     private val context: String,
     private val localLibrary: LocalLibrary,
     private val playlists: PlaylistStore,
@@ -27,6 +28,8 @@ class AlbumViewModel(
     data class UiState(
         val songs: List<Station> = emptyList(),
         val favorites: List<Station> = emptyList(),
+        /** Shown under the album title, same rule as the albums list. */
+        val displayArtist: String = "",
     )
 
     sealed interface Event {
@@ -43,16 +46,19 @@ class AlbumViewModel(
         }.orEmpty()
         val source = if (context == "local-songs") songs else members
         val wantAlbum = album.ifBlank { "unknown album" }
-        val wantArtist = artist.ifBlank { "unknown artist" }
         val mine = source.distinctBy { it.id }
             .filter {
                 it.album.ifBlank { "unknown album" } == wantAlbum &&
-                    it.artist.ifBlank { "unknown artist" } == wantArtist
+                    it.albumArtist == albumArtist
             }
             .sortedWith(
                 compareBy<Station> { it.discNo }.thenBy { it.trackNo }.thenBy { it.name.lowercase() },
             )
-        UiState(songs = mine, favorites = favorites)
+        UiState(
+            songs = mine,
+            favorites = favorites,
+            displayArtist = albumDisplayArtist(albumArtist, mine),
+        )
     }.stateInUi(viewModelScope, UiState())
 
     fun onEvent(e: Event) {
