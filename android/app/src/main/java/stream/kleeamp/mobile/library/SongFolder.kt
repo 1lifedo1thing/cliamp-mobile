@@ -103,28 +103,6 @@ import stream.kleeamp.mobile.theme.Mono
 import stream.kleeamp.mobile.prefs.PlaylistSort
 import stream.kleeamp.mobile.prefs.sortedStations
 
-/** One on-device folder and the songs MediaStore found inside it. */
-data class SongFolder(val path: String, val name: String, val songs: List<Station>)
-
-/**
- * Groups the library by parent directory, folders by name. Derived from the
- * songs flow, so it tracks rescans and deletions with nothing stored.
- */
-fun foldersOf(songs: List<Station>): List<SongFolder> {
-    val byDir = LinkedHashMap<String, MutableList<Station>>()
-    songs.forEach { s ->
-        if (!s.url.startsWith("file://")) return@forEach
-        val dir = java.io.File(android.net.Uri.decode(s.url.removePrefix("file://"))).parent
-            ?: return@forEach
-        byDir.getOrPut(dir) { mutableListOf() } += s
-    }
-    return byDir
-        .map { (dir, list) ->
-            SongFolder(dir, java.io.File(dir).name.ifBlank { dir }, list.sortedBy { it.name.lowercase() })
-        }
-        .sortedBy { it.name.lowercase() }
-}
-
 /**
  * Narrows stations by name, artist or album for the playlist filter boxes.
  * Blank query passes the list through untouched.

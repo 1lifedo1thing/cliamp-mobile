@@ -82,8 +82,6 @@ import stream.kleeamp.mobile.servers.SftpLibrary
 import stream.kleeamp.mobile.chrome.rememberStationThumbnail
 import stream.kleeamp.mobile.chrome.BackChevron
 import stream.kleeamp.mobile.chrome.Chip
-import stream.kleeamp.mobile.chrome.ChipDropdown
-import stream.kleeamp.mobile.chrome.ChipOption
 import stream.kleeamp.mobile.chrome.CollectionActions
 import stream.kleeamp.mobile.chrome.CollectionHeader
 import stream.kleeamp.mobile.chrome.FilterRow
@@ -202,19 +200,7 @@ fun LibrarySmartPlaylistPane(
         )
     }
     val pl = smartPlaylists.firstOrNull { it.kind == kind }
-    // Local songs filter by folder through a picker dropdown that trails the
-    // tab/sort rows; the tab (songs/albums/artists) switches the list content.
-    val folders = remember(pl?.stations) {
-        if (pl?.kind == SmartKind.LocalSongs) foldersOf(pl.stations) else emptyList()
-    }
-    var folder by rememberSaveable(pl?.key ?: "playlist") { mutableStateOf<String?>(null) }
-    // A deleted folder must not leave the filter pointing at nothing.
-    LaunchedEffect(folders) {
-        if (folder != null && folders.none { it.path == folder }) folder = null
-    }
-    val members = if (pl?.kind == SmartKind.LocalSongs && folder != null) {
-        folders.firstOrNull { it.path == folder }?.songs.orEmpty()
-    } else pl?.stations.orEmpty()
+    val members = pl?.stations.orEmpty()
     // Local-songs categories live pinned in the fixed header below the title,
     // so they never scroll away. Hoisted here (not in the detail) because the
     // header owns that row.
@@ -223,8 +209,8 @@ fun LibrarySmartPlaylistPane(
     val tab = LocalSongsTab.entries.getOrElse(tabOrdinal) { LocalSongsTab.Songs }
     // The row menu's subject: set by the ⋮ trigger, cleared on dismiss.
     var menuFor by remember { mutableStateOf<Station?>(null) }
-    // The header carries the category chips on local songs; sort/folder
-    // pickers ride the scrolling rows below, on top of the filter.
+    // The header carries the category chips on local songs; sorts ride the
+    // scrolling row below, on top of the filter.
     Box(Modifier.fillMaxSize().background(p.ground)) {
         val scope = rememberCoroutineScope()
         val listState = rememberLazyListState()
@@ -256,9 +242,6 @@ fun LibrarySmartPlaylistPane(
                         favScope = favScope,
                         onFavScopeChange = onFavScopeChange,
                         onSortChange = { vm.onEvent(SmartPlaylistViewModel.Event.SetSort(it)) },
-                        folders = folders,
-                        folder = folder,
-                        onFolder = { folder = it },
                         progress = progress,
                         showResume = showResume,
                         sort = detailSort,
@@ -571,9 +554,6 @@ private fun SmartPlaylistDetail(
     favScope: FavScope = FavScope.All,
     onFavScopeChange: (FavScope) -> Unit = {},
     onSortChange: (PlaylistSort) -> Unit = {},
-    folders: List<SongFolder> = emptyList(),
-    folder: String? = null,
-    onFolder: (String?) -> Unit = {},
     progress: Map<String, EpisodeProgress> = emptyMap(),
     showResume: Boolean = false,
     /** Null when the user never picked a sort: downloads read in episode order. */
@@ -599,8 +579,7 @@ private fun SmartPlaylistDetail(
 ) {
     val p = LocalPalette.current
     // Only the on-device smart lists sort; favourites and recent have their
-    // own fixed orders (recent is already time-sorted). Local songs arrive
-    // already folder-filtered when a folder chip is active.
+    // own fixed orders (recent is already time-sorted).
     val local = pl.kind == SmartKind.LocalSongs || pl.kind == SmartKind.Downloads
     // Favourites mix local songs, radio stations and podcasts, so they get
     // their own type sub-tabs: all / local / stations / podcasts.
@@ -741,62 +720,23 @@ private fun SmartPlaylistDetail(
             }
         }
         // Sorts + folder ride the scrolling rows on top of the filter; the
+        // Sorts ride the scrolling row on top of the filter on songs only;
         // categories live pinned in the fixed header. Downloads always read
         // in episode order, so chips there would only reintroduce the title
         // scramble.
-        if (isLocalSongs) {
-            if (tab == LocalSongsTab.Songs) {
-                item {
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                            .padding(start = Gutter, end = Gutter, top = 0.dp, bottom = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        PlaylistSort.entries.forEach { t ->
-                            Chip(t.label, shownSort == t, onClick = {
-                                sortOverride = t
-                                onSortChange(t)
-                            })
-                        }
-                        if (folders.isNotEmpty()) {
-                            ChipDropdown(
-                                label = folders.firstOrNull { it.path == folder }?.name ?: "all folders",
-                                selected = folder != null,
-                                options = listOf(
-                                    ChipOption("all folders") {
-                                        onFolder(null)
-                                    },
-                                ) + folders.map { f ->
-                                    ChipOption(f.name) {
-                                        onFolder(f.path)
-                                    }
-                                },
-                            )
-                        }
-                    }
-                }
-            } else if (folders.isNotEmpty()) {
-                item {
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                            .padding(start = Gutter, end = Gutter, top = 0.dp, bottom = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ChipDropdown(
-                            label = folders.firstOrNull { it.path == folder }?.name ?: "all folders",
-                            selected = folder != null,
-                            options = listOf(
-                                ChipOption("all folders") {
-                                    onFolder(null)
-                                },
-                            ) + folders.map { f ->
-                                ChipOption(f.name) {
-                                    onFolder(f.path)
-                                }
-                            },
-                        )
+        if (isLocalSongs && tab == LocalSongsTab.Songs) {
+            item {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                        .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PlaylistSort.entries.forEach { t ->
+                        Chip(t.label, shownSort == t, onClick = {
+                            sortOverride = t
+                            onSortChange(t)
+                        })
                     }
                 }
             }
