@@ -32,14 +32,22 @@ class NowPlayingViewModel(
         val shuffled: Boolean = false,
         val visualizer: String = "spectrum",
         val outputDevice: Int = -1,
+        val speedSections: Boolean = true,
+        val boostDb: Int = 0,
+        val boostSupported: Boolean = false,
     )
 
     sealed interface Event {
         data object ToggleFavorite : Event
         data class SetSpeed(val value: Float) : Event
+        data class SetBoostDb(val db: Int) : Event
         data class SetOutputDevice(val id: Int) : Event
         data class SetVisualizer(val id: String) : Event
     }
+
+    /** Whether this device ships the loudness-enhancer effect; static per device. */
+    private val boostSupported: Boolean =
+        runCatching { stream.kleeamp.mobile.playback.VolumeBoost().isSupported() }.getOrDefault(false)
 
     /** Live transport and tune state: what is playing and what it says. */
     private data class BusState(
@@ -57,6 +65,7 @@ class NowPlayingViewModel(
         val visualizer: String = "spectrum",
         val shuffled: Boolean = false,
         val outputDevice: Int = -1,
+        val speedSections: Boolean = true,
     )
 
     val state: StateFlow<UiState> = combine(
@@ -76,19 +85,22 @@ class NowPlayingViewModel(
             prefs.favorites,
             prefs.history,
             prefs.visualizer,
-            player.shuffle,
-        ) { output, favorites, history, visualizer, shuffled ->
+            combine(player.shuffle, prefs.speedPerSection) { s, sec -> s to sec },
+        ) { output, favorites, history, visualizer, shuffleSections ->
+            val (shuffled, sections) = shuffleSections
             LibState(
                 favorites = favorites,
                 recent = history,
                 visualizer = visualizer,
                 shuffled = shuffled,
                 outputDevice = output,
+                speedSections = sections,
             )
         },
         player.upNext,
         player.upNextIndex,
-    ) { bus, lib, upNext, upNextIndex ->
+        prefs.boostDb,
+    ) { bus, lib, upNext, upNextIndex, boost ->
         // Before anything has been played this session the live bus carries no
         // station, so fall back to the last-played station from history - the same
         // fallback the mini bar uses - rather than showing an empty "no track".
@@ -114,6 +126,9 @@ class NowPlayingViewModel(
             shuffled = lib.shuffled,
             visualizer = lib.visualizer,
             outputDevice = lib.outputDevice,
+            speedSections = lib.speedSections,
+            boostDb = boost,
+            boostSupported = boostSupported,
         )
     }.stateInUi(viewModelScope, UiState())
 
@@ -126,6 +141,7 @@ class NowPlayingViewModel(
             // stay as direct vm.player.* calls in the composable; only writes
             // that go through prefs or need an event are routed here.
             is Event.SetSpeed -> player.setSpeed(e.value)
+            is Event.SetBoostDb -> viewModelScope.launch { prefs.setBoostDb(e.db) }
             is Event.SetOutputDevice -> viewModelScope.launch { prefs.setOutputDevice(e.id) }
             is Event.SetVisualizer -> viewModelScope.launch { prefs.setVisualizer(e.id) }
         }

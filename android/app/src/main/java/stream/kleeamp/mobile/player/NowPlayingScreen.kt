@@ -71,6 +71,7 @@ import stream.kleeamp.mobile.playback.AudioOutputs
 import stream.kleeamp.mobile.playback.OutputKind
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerState
+import stream.kleeamp.mobile.prefs.playSectionFor
 import stream.kleeamp.mobile.chrome.clock
 import stream.kleeamp.mobile.chrome.compact
 import stream.kleeamp.mobile.chrome.BackChevron
@@ -113,6 +114,8 @@ internal data class PlayerModel(
     val outputDevice: Int,
     val outputs: List<AudioOutput>,
     val currentOutput: AudioOutput?,
+    val boostDb: Int,
+    val boostSupported: Boolean,
 )
 
 /** Every control the player screen can take, so both layouts share one set. */
@@ -125,6 +128,7 @@ internal data class PlayerActions(
     val onOpenScope: () -> Unit,
     val onToggleFav: () -> Unit,
     val onSeek: (Float) -> Unit,
+    val onOpenBoost: () -> Unit,
     val onPrev: () -> Unit,
     val onPlayPause: () -> Unit,
     val onNext: () -> Unit,
@@ -145,6 +149,7 @@ fun NowPlayingScreen(
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     var sleepOpen by rememberSaveable { mutableStateOf(false) }
     var speedOpen by rememberSaveable { mutableStateOf(false) }
+    var boostOpen by rememberSaveable { mutableStateOf(false) }
     val uiState by vm.state.collectAsState()
     // The meters read the live analyser straight off the bus in their frame
     // loops: routing spectrum through VM state would recompose this whole
@@ -178,6 +183,8 @@ fun NowPlayingScreen(
         outputDevice = uiState.outputDevice,
         outputs = outputs,
         currentOutput = currentOutput,
+        boostDb = uiState.boostDb,
+        boostSupported = uiState.boostSupported,
     )
     val actions = PlayerActions(
         onBack = onBack,
@@ -188,6 +195,7 @@ fun NowPlayingScreen(
         onOpenScope = onOpenScope,
         onToggleFav = { vm.onEvent(NowPlayingViewModel.Event.ToggleFavorite) },
         onSeek = { vm.player.seekTo(it) },
+        onOpenBoost = { boostOpen = true },
         onPrev = { vm.player.prev() },
         onPlayPause = { vm.player.toggle(uiState.shownStation) },
         onNext = { vm.player.next() },
@@ -227,8 +235,19 @@ fun NowPlayingScreen(
         if (speedOpen) {
             SpeedDialog(
                 current = uiState.playerState.speed,
+                sectionLabel = if (uiState.speedSections) {
+                    uiState.shownStation?.let { playSectionFor(it.source).label }.orEmpty()
+                } else "",
                 onPick = { vm.onEvent(NowPlayingViewModel.Event.SetSpeed(it)) },
                 onDismiss = { speedOpen = false },
+            )
+        }
+
+        if (boostOpen) {
+            BoostDialog(
+                current = uiState.boostDb,
+                onPick = { vm.onEvent(NowPlayingViewModel.Event.SetBoostDb(it)) },
+                onDismiss = { boostOpen = false },
             )
         }
     }

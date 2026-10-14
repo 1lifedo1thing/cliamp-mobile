@@ -27,6 +27,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import stream.kleeamp.mobile.KleeampApp
 import stream.kleeamp.mobile.prefs.Prefs
+import stream.kleeamp.mobile.prefs.playSectionFor
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.model.wrapNext
@@ -55,6 +56,17 @@ internal fun seekTargetMs(durationMs: Long, fraction: Float): Long? {
     if (durationMs <= 0) return null
     val target = (durationMs * fraction.coerceIn(0f, 1f)).toLong()
     return minOf(target, durationMs - SEEK_END_MARGIN_MS).coerceAtLeast(0L)
+}
+
+/**
+ * Seek target in ms for [deltaSec] from [positionMs], clamped to the item
+ * (short of the tail, where Media3 would auto-advance at once). Pure so it
+ * can be unit-tested on the JVM.
+ */
+internal fun seekByTargetMs(positionMs: Long, durationMs: Long, deltaSec: Int): Long? {
+    if (durationMs <= 0 || positionMs < 0) return null
+    val end = (durationMs - SEEK_END_MARGIN_MS).coerceAtLeast(0L)
+    return (positionMs + deltaSec * 1000L).coerceIn(0L, end)
 }
 
 /**
@@ -110,7 +122,18 @@ class PlayerConnection(
     /** Read-only preview of what prev/next would land on; null where a key would no-op. */
     internal fun peekAdjacent(): Pair<Station?, Station?> = queue.peekAdjacent()
     fun playUpNextEntry(index: Int) = queue.playUpNextEntry(index)
-    fun play(station: Station, from: List<Station> = emptyList()) = queue.play(station, from)
+    fun play(station: Station, from: List<Station> = emptyList()) {
+        // Each section keeps its own pace when switched on: apply it
+        // synchronously so the media job (and every later transition) reads
+        // the right speed. Off leaves the one app-wide speed alone.
+        if (_speedSectionsOn.value) {
+            val s = _sectionSpeeds.value[playSectionFor(station.source).name]
+                ?.coerceIn(0.25f, 2f) ?: _speed.value
+            _speed.value = s
+            controller?.setPlaybackSpeed(s)
+        }
+        queue.play(station, from)
+    }
     fun toggleShuffle() = queue.toggleShuffle()
     fun toggleRepeat() = queue.toggleRepeat()
     fun next() = queue.next()
@@ -158,6 +181,16 @@ class PlayerConnection(
     val speed: StateFlow<Float> = _speed.asStateFlow()
 
     /**
+     * Remembered speeds by section, kept in memory so play() applies the
+     * right pace synchronously (no disk read racing the media job). The
+     * stored map already falls back to the legacy global per section.
+     */
+    private val _sectionSpeeds = MutableStateFlow<Map<String, Float>>(emptyMap())
+
+    /** Master switch for per-section pace; off means one app-wide speed. */
+    private val _speedSectionsOn = MutableStateFlow(true)
+
+    /**
      * Sleep timer deadline (epoch ms), or null when off. Checked on every
      * sync tick, so it fires even with the screen off; deliberately not
      * persisted - a deadline makes no sense after a restart.
@@ -182,6 +215,20 @@ class PlayerConnection(
     init {
         scope.launch { autoResume.collect { _autoResume.value = it } }
         scope.launch { resumeLocal.collect { _resumeLocal.value = it } }
+        scope.launch {
+            runCatching {
+                (context.applicationContext as KleeampApp).prefs.speedSections.collect {
+                    _sectionSpeeds.value = it
+                }
+            }
+        }
+        scope.launch {
+            runCatching {
+                (context.applicationContext as KleeampApp).prefs.speedPerSection.collect {
+                    _speedSectionsOn.value = it
+                }
+            }
+        }
     }
 
     /** The list prev/next walks. Set whenever the user plays from a list. */
@@ -398,18 +445,39 @@ class PlayerConnection(
         sync()
     }
 
+    /** Skips by whole seconds, clamped to the item; live streams ignore it. */
+    fun seekBy(seconds: Int) {
+        val c = controller ?: return
+        if (!c.isCurrentMediaItemSeekable) return
+        val d = c.duration
+        if (d == C.TIME_UNSET || d <= 0) return
+        val target = seekByTargetMs(c.currentPosition, d, seconds) ?: return
+        c.seekTo(target)
+        sync()
+    }
+
     fun setVolume(v: Float) {
         controller?.volume = v.coerceIn(0f, 1f)
         sync()
     }
 
-    /** Speed applies live and persists, so podcasts reopen at your pace. */
+    /**
+     * Speed applies live and persists under the playing station's section
+     * when per-section memory is on, so podcasts reopen at podcast pace
+     * while radio stays 1x. Off writes the one app-wide speed.
+     */
     fun setSpeed(v: Float) {
         val s = v.coerceIn(0.25f, 2f)
         _speed.value = s
         controller?.setPlaybackSpeed(s)
         scope.launch {
-            (context.applicationContext as KleeampApp).prefs.setSpeed(s)
+            val prefs = (context.applicationContext as KleeampApp).prefs
+            val station = PlaybackBus.station.value
+            if (_speedSectionsOn.value && station != null) {
+                prefs.setSpeedFor(playSectionFor(station.source), s)
+            } else {
+                prefs.setSpeed(s)
+            }
         }
         sync()
     }
