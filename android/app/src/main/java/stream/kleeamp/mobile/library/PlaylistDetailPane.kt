@@ -357,6 +357,7 @@ private fun PlaylistDetailShown(
     onToggleShuffle: () -> Unit = {},
 ) {
     val p = LocalPalette.current
+    val scope = rememberCoroutineScope()
 
     // Browse regroups the members under album rows in one flat scroll —
     // no pages, no back handling. Browse and the sorts share one active
@@ -379,12 +380,9 @@ private fun PlaylistDetailShown(
     val artists = remember(ordered, shownBrowse) {
         if (!shownBrowse) emptyList() else artistsOf(ordered)
     }
-    // Artists and songs are different content under one scroll state: a
-    // kept index would land mid-list after the switch, so the mode switch
-    // snaps back to the top. Sort taps keep their position.
-    LaunchedEffect(shownBrowse) {
-        listState.scrollToItem(0)
-    }
+    // Artists and songs share one scroll state: the position survives detail
+    // navigation, and only a mode switch (at the chips below) snaps back to
+    // the top. Sort taps keep their position.
 
     // Members can be any source now, so they resolve against the live local
     // library plus the persisted snapshot stations (radio/podcast members).
@@ -451,6 +449,10 @@ private fun PlaylistDetailShown(
                     // itself and nothing else.
                     PlaylistSort.entries.forEach { t ->
                         Chip(t.label, shownSort == t && !shownBrowse, onClick = {
+                            // Leaving browse swaps the whole content, so only
+                            // the mode switch snaps back; re-sorting the songs
+                            // keeps the position, as does coming back here.
+                            if (shownBrowse) scope.launch { listState.scrollToItem(0) }
                             browseOverride = false
                             onBrowseChange(false)
                             sortOverride = t
@@ -458,6 +460,7 @@ private fun PlaylistDetailShown(
                         })
                     }
                     Chip("browse", shownBrowse, onClick = {
+                        if (!shownBrowse) scope.launch { listState.scrollToItem(0) }
                         browseOverride = true
                         onBrowseChange(true)
                     })

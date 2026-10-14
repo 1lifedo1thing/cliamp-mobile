@@ -222,7 +222,14 @@ fun LibrarySmartPlaylistPane(
             onBack = onBack,
             chips = if (!isLocalSongsPage) null else ({
                 LocalSongsTab.entries.forEach { t ->
-                    Chip(t.label, tab == t, onClick = { tabOrdinal = t.ordinal })
+                    // The snap lives on the tap, never in an effect: coming
+                    // back from an album/artist/song keeps the position.
+                    Chip(t.label, tab == t, onClick = {
+                        if (tab != t) {
+                            tabOrdinal = t.ordinal
+                            scope.launch { listState.scrollToItem(0) }
+                        }
+                    })
                 }
             }),
         ) {
@@ -652,12 +659,9 @@ private fun SmartPlaylistDetail(
     val artists = remember(ordered, tab, isLocalSongs) {
         if (!isLocalSongs || tab != LocalSongsTab.Artists) emptyList() else artistsOf(ordered)
     }
-    // Songs, albums and artists are different content under one scroll state:
-    // a kept index would land mid-list after the switch, so the tab switch
-    // snaps back to the top. Sort taps keep their position.
-    LaunchedEffect(tab) {
-        listState.scrollToItem(0)
-    }
+    // Songs, albums and artists share one scroll state: the position survives
+    // detail navigation, and only a tab tap snaps back to the top — at the
+    // header chips above. Sort taps keep their position.
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
         item {
             CollectionHeader(
