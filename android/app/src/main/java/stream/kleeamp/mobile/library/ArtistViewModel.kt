@@ -45,6 +45,12 @@ class ArtistViewModel(
         val source = if (context == "local-songs") songs else members
         val mine = source.distinctBy { it.id }
             .filter { it.artist.ifBlank { "unknown artist" } == artist }
+            .sortedWith(
+                compareBy<Station> { it.album.lowercase() }
+                    .thenBy { it.discNo }
+                    .thenBy { it.trackNo }
+                    .thenBy { it.name.lowercase() },
+            )
         UiState(songs = mine, favorites = favorites)
     }.stateInUi(viewModelScope, UiState())
 

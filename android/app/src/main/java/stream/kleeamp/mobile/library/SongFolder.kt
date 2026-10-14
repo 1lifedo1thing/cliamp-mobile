@@ -151,6 +151,49 @@ fun artistsOf(songs: List<Station>): List<ArtistGroup> =
         .toSortedMap(compareBy { it.lowercase() })
         .map { (name, list) -> ArtistGroup(name, list) }
 
+/** Local-songs sub-tabs: the flat list plus album and artist categories. */
+enum class LocalSongsTab(val label: String) {
+    Songs("songs"), Albums("albums"), Artists("artists"),
+}
+
+/** One album and its songs, keyed by album + artist so same-named albums stay apart. */
+data class AlbumGroup(
+    val name: String,
+    val artist: String,
+    val songs: List<Station>,
+) {
+    /** Stable key for LazyColumn: album + artist, lowercased. */
+    val key: String get() = "${artist.lowercase()}\u0001${name.lowercase()}"
+}
+
+/**
+ * Groups songs by album for the albums tab. One row per album+artist pair,
+ * albums by name; songs inside play in disc/track order.
+ */
+fun albumsOf(songs: List<Station>): List<AlbumGroup> {
+    val byKey = LinkedHashMap<String, MutableList<Station>>()
+    val meta = LinkedHashMap<String, Pair<String, String>>()
+    songs.forEach { s ->
+        val album = s.album.ifBlank { "unknown album" }
+        val artist = s.artist.ifBlank { "unknown artist" }
+        val key = "${artist.lowercase()}\u0001${album.lowercase()}"
+        byKey.getOrPut(key) { mutableListOf() } += s
+        meta.putIfAbsent(key, album to artist)
+    }
+    return byKey
+        .map { (key, list) ->
+            val (album, artist) = meta.getValue(key)
+            AlbumGroup(
+                name = album,
+                artist = artist,
+                songs = list.sortedWith(
+                    compareBy<Station> { it.discNo }.thenBy { it.trackNo }.thenBy { it.name.lowercase() },
+                ),
+            )
+        }
+        .sortedWith(compareBy<AlbumGroup> { it.name.lowercase() }.thenBy { it.artist.lowercase() })
+}
+
 /**
  * The LIB tab's local half. Reads the phone's audio library via [LocalLibrary]
  * and lets the user play any song (through the normal Station pipeline, so

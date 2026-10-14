@@ -36,6 +36,10 @@ data class LocalSong(
     val title: String,
     val artist: String,
     val album: String,
+    /** Track number within its disc, 0 when unknown. */
+    val trackNo: Int = 0,
+    /** Disc number within its album, 0 when unknown. */
+    val discNo: Int = 0,
     /** duration in milliseconds. */
     val durationMs: Long,
     /** When the file first entered the media store, seconds since epoch. */
@@ -52,12 +56,34 @@ data class LocalSong(
             cover = cover,
             artist = artist,
             album = album,
+            trackNo = trackNo,
+            discNo = discNo,
             durationMs = durationMs,
             dateAdded = dateAdded,
         )
 
     /** Longest sort field is the safe proxy for "starts with title". */
     val sortKey: String get() = title.lowercase()
+}
+
+/**
+ * Splits a MediaStore TRACK value into (disc, track). Older devices pack
+ * disc*1000+track into TRACK with no DISC_NUMBER column; newer ones carry
+ * both. A real DISC_NUMBER wins, the packed form is the fallback, and
+ * anything missing stays 0 (unknown) so the title tiebreak still orders it.
+ */
+internal fun decodeDiscTrack(rawTrack: Int, rawDisc: Int): Pair<Int, Int> {
+    val disc = when {
+        rawDisc > 0 -> rawDisc
+        rawTrack >= 1000 -> rawTrack / 1000
+        else -> 0
+    }
+    val track = when {
+        rawTrack <= 0 -> 0
+        rawTrack >= 1000 -> rawTrack % 1000
+        else -> rawTrack
+    }
+    return disc to track
 }
 
 /** "4:32" style duration for local-song rows and headers. */
@@ -213,6 +239,9 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DATE_ADDED,
             MediaStore.Audio.Media.DATA,
+            MediaStore.Audio.Media.TRACK,
+            // DISC_NUMBER exists on newer platforms; absent columns fall back to -1 below.
+            "disc_number",
         )
         resolver.query(
             collection,
@@ -233,6 +262,8 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
                 // Blank rows stay in the list on a content:// item uri; only
                 // the id/path form changes, never membership.
                 data = runCatching { c.getColumnIndex(MediaStore.Audio.Media.DATA) }.getOrNull() ?: -1,
+                track = runCatching { c.getColumnIndex(MediaStore.Audio.Media.TRACK) }.getOrDefault(-1),
+                disc = runCatching { c.getColumnIndex("disc_number") }.getOrDefault(-1),
             )
             while (c.moveToNext()) {
                 out += mapRow(c, cols)
@@ -251,6 +282,8 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
         val dur: Int,
         val added: Int,
         val data: Int,
+        val track: Int = -1,
+        val disc: Int = -1,
     )
 
     /** One cursor row as a song, strings only. Playlist ids stay local:$path. */
@@ -268,11 +301,16 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
         val title = c.getString(cols.title)?.takeIf { it.isNotBlank() }
             ?: data?.substringAfterLast('/')?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
             ?: "track"
+        val rawTrack = if (cols.track >= 0) runCatching { c.getInt(cols.track) }.getOrDefault(0) else 0
+        val rawDisc = if (cols.disc >= 0) runCatching { c.getInt(cols.disc) }.getOrDefault(0) else 0
+        val (discNo, trackNo) = decodeDiscTrack(rawTrack, rawDisc)
         return LocalSong(
             path = path,
             title = title,
             artist = c.getString(cols.artist) ?: "unknown artist",
             album = c.getString(cols.album) ?: "",
+            trackNo = trackNo,
+            discNo = discNo,
             durationMs = c.getLong(cols.dur),
             dateAdded = if (cols.added >= 0) c.getLong(cols.added) else 0L,
             uri = uri,
@@ -316,6 +354,8 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
                         title = row.title,
                         artist = row.artist,
                         album = row.album,
+                        trackNo = row.trackNo,
+                        discNo = row.discNo,
                         durationMs = row.durationMs,
                         dateAdded = row.dateAdded,
                         // Rows without DATA play by content uri; the stored
@@ -341,6 +381,8 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
                         title = s.name,
                         artist = s.artist,
                         album = s.album,
+                        trackNo = s.trackNo,
+                        discNo = s.discNo,
                         durationMs = s.durationMs,
                         uri = s.url,
                         cover = s.cover,

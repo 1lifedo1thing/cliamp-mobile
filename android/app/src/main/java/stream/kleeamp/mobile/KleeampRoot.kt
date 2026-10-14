@@ -80,6 +80,8 @@ import stream.kleeamp.mobile.library.LibrarySmartPlaylistPane
 import stream.kleeamp.mobile.library.LibrarySongInfoPane
 import stream.kleeamp.mobile.library.LibraryScreen
 import stream.kleeamp.mobile.library.LibraryArtistPane
+import stream.kleeamp.mobile.library.LibraryAlbumPane
+import stream.kleeamp.mobile.library.AlbumViewModel
 import stream.kleeamp.mobile.library.ArtistViewModel
 import stream.kleeamp.mobile.podcasts.PodcastShowScreen
 import stream.kleeamp.mobile.podcasts.PodcastsScreen
@@ -590,6 +592,9 @@ fun KleeampRoot(
                         progress = progress,
                         onAddToPlaylist = { s -> addToPlaylistStation = s },
                         onOpenArtist = { name -> navController.navigate(LibraryArtist(name, "local-songs")) },
+                        onOpenAlbum = { name, artist ->
+                            navController.navigate(LibraryAlbum(name, artist, "local-songs"))
+                        },
                         onOpenAddSongs = { addSongsTarget = AddSongsTarget.Favorites },
                         shuffled = shuffled,
                         onToggleShuffle = { player.toggleShuffle() },
@@ -641,6 +646,36 @@ fun KleeampRoot(
                             )
                         },
                         artist = route.name,
+                        current = station,
+                        playing = playerState.playing,
+                        onPlay = playOrOpenChannel,
+                        onAddToQueue = { player.addToUpNext(it) },
+                        onAddToPlaylist = { s -> addToPlaylistStation = s },
+                        onInfo = { s -> navController.navigate(LibrarySongInfo(s.url)) },
+                        onBack = { navController.popBackStack() },
+                        onOpenSearch = { navController.navigate(Search) },
+                        onOpenSettings = { navController.navigate(Settings) },
+                        shuffled = shuffled,
+                        onToggleShuffle = { player.toggleShuffle() },
+                    )
+                }
+            }
+            composable<LibraryAlbum> { entry ->
+                val route = entry.toRoute<LibraryAlbum>()
+                Box(contentModifier) {
+                    LibraryAlbumPane(
+                        vm = appViewModel(key = "album:${route.context}:${route.artist}:${route.name}") { app ->
+                            AlbumViewModel(
+                                route.name,
+                                route.artist,
+                                route.context,
+                                app.localLibrary,
+                                app.playlists,
+                                app.prefs,
+                            )
+                        },
+                        album = route.name,
+                        artist = route.artist,
                         current = station,
                         playing = playerState.playing,
                         onPlay = playOrOpenChannel,

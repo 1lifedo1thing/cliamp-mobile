@@ -34,4 +34,6 @@ import kotlinx.serialization.Serializable
 @Serializable data class LibraryPlaylist(val slug: String)
 /** One artist's tracks, scoped strictly to that list: a playlist slug or "local-songs". */
 @Serializable data class LibraryArtist(val name: String, val context: String)
+/** One album's tracks, keyed by album + artist so same-named albums stay apart. */
+@Serializable data class LibraryAlbum(val name: String, val artist: String, val context: String)
 @Serializable data class LibrarySongInfo(val stationUrl: String)

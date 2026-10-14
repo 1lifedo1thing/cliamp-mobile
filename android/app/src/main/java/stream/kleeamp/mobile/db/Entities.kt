@@ -35,6 +35,8 @@ data class StationEntity(
     val cover: String = "",
     val artist: String = "",
     val album: String = "",
+    val trackNo: Int = 0,
+    val discNo: Int = 0,
     val durationMs: Long = 0,
 ) {
     fun toStation() = Station(
@@ -43,7 +45,7 @@ data class StationEntity(
         slug = slug, tags = tags, country = country, countryCode = countryCode,
         codec = codec, bitrate = bitrate, votes = votes, homepage = homepage,
         favicon = favicon, uuid = uuid, cover = cover, artist = artist,
-        album = album, durationMs = durationMs,
+        album = album, trackNo = trackNo, discNo = discNo, durationMs = durationMs,
     )
 }
 
@@ -51,7 +53,8 @@ fun Station.toEntity() = StationEntity(
     url = url, stationId = id, name = name, source = source.name, slug = slug,
     tags = tags, country = country, countryCode = countryCode, codec = codec,
     bitrate = bitrate, votes = votes, homepage = homepage, favicon = favicon,
-    uuid = uuid, cover = cover, artist = artist, album = album, durationMs = durationMs,
+    uuid = uuid, cover = cover, artist = artist, album = album,
+    trackNo = trackNo, discNo = discNo, durationMs = durationMs,
 )
 
 /**
@@ -104,6 +107,8 @@ data class LocalSongEntity(
     val title: String,
     val artist: String,
     val album: String,
+    val trackNo: Int = 0,
+    val discNo: Int = 0,
     val durationMs: Long,
     val uri: String,
     val cover: String,
