@@ -92,10 +92,10 @@ internal fun PlayerBackdrop(
                 Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        scaleX = 1f + 0.07f * breath * gate + 0.02f * energy
-                        scaleY = 1f + 0.07f * breath * gate + 0.02f * energy
-                        alpha = (0.94f + 0.06f * breath * gate + 0.18f * energy).coerceIn(0f, 1f)
-                        transformOrigin = TransformOrigin(0.5f, 0.3f)
+                        scaleX = 1f + 0.07f * breath * gate + 0.05f * energy
+                        scaleY = 1f + 0.07f * breath * gate + 0.05f * energy
+                        alpha = (0.88f + 0.12f * breath * gate + 0.30f * energy).coerceIn(0f, 1f)
+                        transformOrigin = TransformOrigin(0.5f, 0.26f)
                     }
                     .background(
                         Brush.radialGradient(
@@ -104,22 +104,24 @@ internal fun PlayerBackdrop(
                             1f to Color.Transparent,
                             center = Offset(
                                 constraints.maxWidth * 0.5f,
-                                constraints.maxHeight * 0.30f,
+                                constraints.maxHeight * 0.26f,
                             ),
-                            radius = radius * 0.95f,
+                            radius = radius * 0.8f,
                         ),
                     ),
             )
         }
-        // Grounding fade: the wash lives behind the art, the transport sits
-        // on the page. Without this the keys float on tint.
+        // Grounding fade: the wash lives behind the art, the meter and the
+        // transport sit on the page. It reaches ground well above them, or
+        // the tint muddies the bricks - legibility first, glow second.
         Box(
             Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
                         0f to Color.Transparent,
-                        0.58f to Color.Transparent,
+                        0.45f to Color.Transparent,
+                        0.85f to p.ground,
                         1f to p.ground,
                     ),
                 ),
@@ -138,19 +140,24 @@ internal fun spectrumEnergy(bands: FloatArray?): Float {
 
 /**
  * Smoothed music energy shared by the backdrop and the mini bar: polls the
- * spectrum ~11 times a second with a fast attack and a slow release, so
- * motion surges with the track and eases out of pauses. Reads only, never
- * recomposing more than its direct readers.
+ * spectrum ~20 times a second with a fast attack and a slow release, so
+ * motion surges with the track and eases out of pauses. The level
+ * normalizes against a slowly-decaying recent peak, so quiet and loud
+ * masters alike swing the full 0..1 instead of hovering near zero - a
+ * fixed gain would fit one track and starve the next.
  */
 @Composable
 internal fun rememberMusicEnergy(playing: Boolean, spectrum: () -> FloatArray?): Float {
     var energy by remember { mutableFloatStateOf(0f) }
+    var peak by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(playing) {
         while (true) {
-            delay(90)
-            val target = if (playing) spectrumEnergy(spectrum()) else 0f
-            val k = if (target > energy) 0.35f else 0.12f
-            energy += (target - energy) * k
+            delay(50)
+            val raw = if (playing) spectrumEnergy(spectrum()) else 0f
+            peak = maxOf(raw, peak * 0.997f)
+            val norm = if (peak > 0.08f) (raw / peak).coerceIn(0f, 1f) else 0f
+            val k = if (norm > energy) 0.4f else 0.10f
+            energy += (norm - energy) * k
         }
     }
     return energy

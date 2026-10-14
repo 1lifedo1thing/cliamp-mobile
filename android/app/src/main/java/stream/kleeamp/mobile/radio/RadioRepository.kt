@@ -129,7 +129,10 @@ class RadioRepository(
     /** Refreshes the listener figures; failures keep the last good value. */
     fun refreshCliampStats() {
         scope.launch {
-            fetchCliampStats()?.let { _cliampStats.value = it }
+            fetchCliampStats()?.let {
+                _cliampStats.value = it
+                snapshotMeta("meta:cliamp-stats", it)
+            }
         }
     }
 
@@ -190,6 +193,8 @@ class RadioRepository(
         }
         // Meta first: instant chips and stats from the last snapshot, then the
         // live fetches replace them. Same snapshot pattern as the directories.
+        // (refreshCliamp above already re-fetches the listener figures, so a
+        // cache hit paints instantly and the live answer replaces it.)
         scope.launch { restoreMeta() }
         scope.launch {
             _directoryStats.value = retryFetch { RadioBrowser.stats() }
@@ -407,6 +412,10 @@ class RadioRepository(
         cache.get("meta:stats")?.let { row ->
             runCatching { Http.json.decodeFromString<DirectoryStats>(row.json) }.getOrNull()
                 ?.let { if (_directoryStats.value == null) _directoryStats.value = it }
+        }
+        cache.get("meta:cliamp-stats")?.let { row ->
+            runCatching { Http.json.decodeFromString<CliampStats>(row.json) }.getOrNull()
+                ?.let { if (_cliampStats.value == null) _cliampStats.value = it }
         }
         cache.get("meta:tags")?.let { row ->
             runCatching { Http.json.decodeFromString<List<NameCount>>(row.json) }.getOrNull()

@@ -48,14 +48,21 @@ enum class PlaylistSort(val label: String) {
 /** Playlist members sorted by the chosen order; title is the stable tiebreak. */
 fun sortedStations(songs: List<Station>, sort: PlaylistSort): List<Station> {
     val title = compareBy<Station> { it.name.lowercase() }
+    // Album order is disc then track so multi-disc sets play in order;
+    // title only breaks ties when tags are missing (both 0).
+    val discTrack = compareBy<Station> { it.discNo }.thenBy { it.trackNo }.then(title)
     return when (sort) {
         PlaylistSort.Title -> songs.sortedWith(title)
         PlaylistSort.Artist -> songs.sortedWith(compareBy<Station> { it.artist.lowercase() }.then(title))
-        PlaylistSort.Album -> songs.sortedWith(compareBy<Station> { it.album.lowercase() }.then(title))
+        PlaylistSort.Album -> songs.sortedWith(compareBy<Station> { it.album.lowercase() }.then(discTrack))
         PlaylistSort.RecentlyAdded ->
             songs.sortedWith(compareByDescending<Station> { it.dateAdded }.then(title))
     }
 }
+
+/** Tracks of one album in play order: disc, then track, then title. */
+fun List<Station>.sortedForAlbum(): List<Station> =
+    sortedWith(compareBy<Station> { it.discNo }.thenBy { it.trackNo }.thenBy { it.name.lowercase() })
 
 /**
  * Settings only.

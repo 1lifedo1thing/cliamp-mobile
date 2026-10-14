@@ -26,7 +26,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PlayStatEntity::class,
         ScrobbleEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class KleeampDatabase : RoomDatabase() {
@@ -187,6 +187,29 @@ abstract class KleeampDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Local disc/track numbers so albums play in disc/track order instead
+         * of alphabetical title order. Additive ALTERs with 0 (unknown) as the
+         * default, which sorts first and keeps the title tiebreak; the next
+         * MediaStore scan backfills real values.
+         */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `local_songs` ADD COLUMN `trackNo` INTEGER NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE `local_songs` ADD COLUMN `discNo` INTEGER NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE `stations` ADD COLUMN `trackNo` INTEGER NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE `stations` ADD COLUMN `discNo` INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
         fun get(context: Context): KleeampDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
@@ -196,7 +219,7 @@ abstract class KleeampDatabase : RoomDatabase() {
                 // playlist_members cascades from playlists, which only works
                 // with foreign keys actually switched on
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .build()
                 .also { instance = it }
         }

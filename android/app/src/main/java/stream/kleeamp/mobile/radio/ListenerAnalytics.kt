@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,7 +29,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import stream.kleeamp.mobile.chrome.Chip
 import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.theme.Mono
 import stream.kleeamp.mobile.theme.KleeampShape
@@ -50,8 +51,9 @@ fun ListenerAnalytics(
     hintSeen: Boolean = false,
     /** Fired once on the first real spin, to persist the hint dismissal. */
     onFirstSpin: () -> Unit = {},
+    /** Fired on every country-list tap so the host can scroll the globe into view. */
+    onPickCountry: () -> Unit = {},
 ) {
-    val p = LocalPalette.current
     val geometry = rememberWorldGeometry()
     var selectedCode by rememberSaveable { mutableStateOf<String?>(null) }
     val rows = stats?.countries.orEmpty()
@@ -105,10 +107,12 @@ fun ListenerAnalytics(
                     )
                     CountrySide(
                         rows = rows,
-                        isLive = stats?.isLive == true,
                         loading = stats == null,
                         selectedCode = selectedCode,
-                        onSelect = { select(it, fly = it != null) },
+                        onSelect = {
+                            select(it, fly = it != null)
+                            onPickCountry()
+                        },
                         modifier = Modifier.weight(0.55f),
                     )
                 }
@@ -126,33 +130,20 @@ fun ListenerAnalytics(
                     )
                     CountrySide(
                         rows = rows,
-                        isLive = stats?.isLive == true,
                         loading = stats == null,
                         selectedCode = selectedCode,
-                        onSelect = { select(it, fly = it != null) },
+                        onSelect = {
+                            select(it, fly = it != null)
+                            onPickCountry()
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
         }
-        // Selected-country detail with close, kept inside the section.
-        selected?.let { c ->
-            val rank = rows.indexOf(c) + 1
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Mono(
-                    "${c.name} · ${"%,d".format(c.listeners)} " +
-                        "${if (stats?.isLive == true) "listening" else "sessions"} · #$rank",
-                    KleeampType.rowSecondary,
-                    p.ink,
-                    modifier = Modifier.weight(1f),
-                )
-                Chip("close", selected = false, onClick = { selectedCode = null })
-            }
-        }
+        // Breathing room before the next section (cliamp radio): the list
+        // ends flush, so without this the rows stick to its header.
+        Spacer(Modifier.height(12.dp))
     }
 }
 
@@ -243,56 +234,62 @@ private fun GlobeCard(
 }
 
 /**
- * Ranked country list behind a toggle: the globe stays the hero and the
- * ranking opens on demand instead of always filling the page.
+ * Ranked country list, always visible like cliamp.stream: name over an
+ * accent progress bar, count right-aligned. Tapping a row flies the globe
+ * to that country (touch has no hover tooltip); the selected name wears the
+ * accent so the detail below reads as linked.
  */
 @Composable
 private fun CountrySide(
     rows: List<CountryListeners>,
-    isLive: Boolean,
     loading: Boolean,
     selectedCode: String?,
     onSelect: (String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
-    var open by rememberSaveable { mutableStateOf(false) }
+    // Open like the site; the header taps shut to a one-line summary.
+    var open by rememberSaveable { mutableStateOf(true) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(9.dp)) {
         Row(
             Modifier.fillMaxWidth()
                 .clip(RoundedCornerShape(KleeampShape.tiny))
                 .clickable(
-                    enabled = rows.isNotEmpty(),
                     role = Role.Button,
                     onClickLabel = if (open) "hide top countries" else "show top countries",
                     onClick = { open = !open },
                 )
-                .padding(vertical = 12.dp),
+                .padding(vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Mono(
-                if (isLive) "TOP COUNTRIES" else "TOP COUNTRIES · ALL-TIME",
+                "TOP COUNTRIES",
                 KleeampType.meta,
                 p.inkSecondary,
             )
             Mono(
-                when {
-                    loading -> "loading.."
-                    rows.isEmpty() -> "–"
-                    open -> "hide ▲"
-                    else -> "${rows.size} ▼"
-                },
+                if (rows.isEmpty()) "–" else "${rows.size} LISTENERS ${if (open) "▲" else "▼"}",
                 KleeampType.meta,
                 p.inkSecondary,
             )
         }
-        if (open && rows.isNotEmpty()) {
+        if (open) {
+            if (rows.isEmpty()) {
+                Mono(
+                    if (loading) "loading.." else "nobody is tuned in right now",
+                    KleeampType.rowSecondary,
+                    p.inkFaint,
+                )
+            } else {
             val top = rows.take(10)
             val max = top.firstOrNull()?.listeners?.coerceAtLeast(1) ?: 1
             top.forEach { c ->
                 val selected = selectedCode == c.code
-                Row(
+                // Name above; the bar and the count share one row centered
+                // together, so the number rides the bar's line whatever the
+                // font metrics are — no optical offset to tune.
+                Column(
                     Modifier.fillMaxWidth()
                         .clip(RoundedCornerShape(KleeampShape.tiny))
                         .clickable(
@@ -300,36 +297,42 @@ private fun CountrySide(
                             onClickLabel = if (selected) "deselect ${c.name}" else "show ${c.name}",
                             onClick = { onSelect(if (selected) null else c.code) },
                         )
-                        .background(if (selected) p.accentWash else p.ground)
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                        .padding(vertical = 2.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    Column(Modifier.weight(1f)) {
-                        Mono(
-                            c.name,
-                            KleeampType.rowSecondary,
-                            if (selected) p.accent else p.ink,
-                            maxLines = 1,
-                        )
+                    Mono(
+                        c.name,
+                        KleeampType.rowSecondary,
+                        if (selected) p.accent else p.ink,
+                        maxLines = 1,
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
                         Box(
-                            Modifier.fillMaxWidth().height(4.dp).padding(top = 5.dp)
+                            Modifier.weight(1f).height(4.dp)
                                 .background(p.hairline, RoundedCornerShape(2.dp)),
                         ) {
                             val width = (c.listeners.toFloat() / max).coerceIn(0.02f, 1f)
                             Box(
-                                Modifier.fillMaxWidth(width).height(4.dp)
+                                Modifier.fillMaxWidth(width).fillMaxHeight()
                                     .background(p.accent, RoundedCornerShape(2.dp)),
                             )
                         }
+                        Box(
+                            Modifier.widthIn(min = 48.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Mono(
+                                "%,d".format(c.listeners),
+                                KleeampType.rowSecondary,
+                                p.inkSecondary,
+                            )
+                        }
                     }
-                    Mono(
-                        "%,d".format(c.listeners),
-                        KleeampType.rowSecondary,
-                        p.inkSecondary,
-                        modifier = Modifier.padding(start = 10.dp),
-                    )
                 }
+            }
             }
         }
     }

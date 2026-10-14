@@ -103,28 +103,6 @@ import stream.kleeamp.mobile.theme.Mono
 import stream.kleeamp.mobile.prefs.PlaylistSort
 import stream.kleeamp.mobile.prefs.sortedStations
 
-/** One on-device folder and the songs MediaStore found inside it. */
-data class SongFolder(val path: String, val name: String, val songs: List<Station>)
-
-/**
- * Groups the library by parent directory, folders by name. Derived from the
- * songs flow, so it tracks rescans and deletions with nothing stored.
- */
-fun foldersOf(songs: List<Station>): List<SongFolder> {
-    val byDir = LinkedHashMap<String, MutableList<Station>>()
-    songs.forEach { s ->
-        if (!s.url.startsWith("file://")) return@forEach
-        val dir = java.io.File(android.net.Uri.decode(s.url.removePrefix("file://"))).parent
-            ?: return@forEach
-        byDir.getOrPut(dir) { mutableListOf() } += s
-    }
-    return byDir
-        .map { (dir, list) ->
-            SongFolder(dir, java.io.File(dir).name.ifBlank { dir }, list.sortedBy { it.name.lowercase() })
-        }
-        .sortedBy { it.name.lowercase() }
-}
-
 /**
  * Narrows stations by name, artist or album for the playlist filter boxes.
  * Blank query passes the list through untouched.
@@ -150,6 +128,49 @@ fun artistsOf(songs: List<Station>): List<ArtistGroup> =
     songs.groupBy { it.artist.ifBlank { "unknown artist" } }
         .toSortedMap(compareBy { it.lowercase() })
         .map { (name, list) -> ArtistGroup(name, list) }
+
+/** Local-songs sub-tabs: the flat list plus album and artist categories. */
+enum class LocalSongsTab(val label: String) {
+    Songs("songs"), Albums("albums"), Artists("artists"),
+}
+
+/** One album and its songs, keyed by album + artist so same-named albums stay apart. */
+data class AlbumGroup(
+    val name: String,
+    val artist: String,
+    val songs: List<Station>,
+) {
+    /** Stable key for LazyColumn: album + artist, lowercased. */
+    val key: String get() = "${artist.lowercase()}\u0001${name.lowercase()}"
+}
+
+/**
+ * Groups songs by album for the albums tab. One row per album+artist pair,
+ * albums by name; songs inside play in disc/track order.
+ */
+fun albumsOf(songs: List<Station>): List<AlbumGroup> {
+    val byKey = LinkedHashMap<String, MutableList<Station>>()
+    val meta = LinkedHashMap<String, Pair<String, String>>()
+    songs.forEach { s ->
+        val album = s.album.ifBlank { "unknown album" }
+        val artist = s.artist.ifBlank { "unknown artist" }
+        val key = "${artist.lowercase()}\u0001${album.lowercase()}"
+        byKey.getOrPut(key) { mutableListOf() } += s
+        meta.putIfAbsent(key, album to artist)
+    }
+    return byKey
+        .map { (key, list) ->
+            val (album, artist) = meta.getValue(key)
+            AlbumGroup(
+                name = album,
+                artist = artist,
+                songs = list.sortedWith(
+                    compareBy<Station> { it.discNo }.thenBy { it.trackNo }.thenBy { it.name.lowercase() },
+                ),
+            )
+        }
+        .sortedWith(compareBy<AlbumGroup> { it.name.lowercase() }.thenBy { it.artist.lowercase() })
+}
 
 /**
  * The LIB tab's local half. Reads the phone's audio library via [LocalLibrary]

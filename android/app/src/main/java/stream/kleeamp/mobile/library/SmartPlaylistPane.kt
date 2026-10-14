@@ -82,8 +82,6 @@ import stream.kleeamp.mobile.servers.SftpLibrary
 import stream.kleeamp.mobile.chrome.rememberStationThumbnail
 import stream.kleeamp.mobile.chrome.BackChevron
 import stream.kleeamp.mobile.chrome.Chip
-import stream.kleeamp.mobile.chrome.ChipDropdown
-import stream.kleeamp.mobile.chrome.ChipOption
 import stream.kleeamp.mobile.chrome.CollectionActions
 import stream.kleeamp.mobile.chrome.CollectionHeader
 import stream.kleeamp.mobile.chrome.FilterRow
@@ -138,6 +136,7 @@ fun LibrarySmartPlaylistPane(
     progress: Map<String, EpisodeProgress> = emptyMap(),
     onAddToPlaylist: (Station) -> Unit = {},
     onOpenArtist: (String) -> Unit = {},
+    onOpenAlbum: (String, String) -> Unit = { _, _ -> },
     /** Opens the add-songs sheet over this page; the sheet writes per tap. */
     onOpenAddSongs: () -> Unit = {},
     shuffled: Boolean = false,
@@ -201,23 +200,17 @@ fun LibrarySmartPlaylistPane(
         )
     }
     val pl = smartPlaylists.firstOrNull { it.kind == kind }
-    // Local songs filter by folder through a picker dropdown that leads the
-    // sort row - one scrollable header row, no mode switching, no drill state.
-    val folders = remember(pl?.stations) {
-        if (pl?.kind == SmartKind.LocalSongs) foldersOf(pl.stations) else emptyList()
-    }
-    var folder by rememberSaveable(pl?.key ?: "playlist") { mutableStateOf<String?>(null) }
-    // A deleted folder must not leave the filter pointing at nothing.
-    LaunchedEffect(folders) {
-        if (folder != null && folders.none { it.path == folder }) folder = null
-    }
-    val members = if (pl?.kind == SmartKind.LocalSongs && folder != null) {
-        folders.firstOrNull { it.path == folder }?.songs.orEmpty()
-    } else pl?.stations.orEmpty()
+    val members = pl?.stations.orEmpty()
+    // Local-songs categories live pinned in the fixed header below the title,
+    // so they never scroll away. Hoisted here (not in the detail) because the
+    // header owns that row.
+    val isLocalSongsPage = pl?.kind == SmartKind.LocalSongs
+    var tabOrdinal by rememberSaveable(pl?.key ?: "playlist") { mutableStateOf(0) }
+    val tab = LocalSongsTab.entries.getOrElse(tabOrdinal) { LocalSongsTab.Songs }
     // The row menu's subject: set by the ⋮ trigger, cleared on dismiss.
     var menuFor by remember { mutableStateOf<Station?>(null) }
-    // The header carries no chip rows; pickers ride the scrolling rows
-    // below, on top of the filter.
+    // The header carries the category chips on local songs; sorts ride the
+    // scrolling row below, on top of the filter.
     Box(Modifier.fillMaxSize().background(p.ground)) {
         val scope = rememberCoroutineScope()
         val listState = rememberLazyListState()
@@ -227,6 +220,11 @@ fun LibrarySmartPlaylistPane(
             onOpenSettings = onOpenSettings,
             onTitleClick = { scope.scrollToTop(listState) },
             onBack = onBack,
+            chips = if (!isLocalSongsPage) null else ({
+                LocalSongsTab.entries.forEach { t ->
+                    Chip(t.label, tab == t, onClick = { tabOrdinal = t.ordinal })
+                }
+            }),
         ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (pl == null) {
@@ -244,15 +242,12 @@ fun LibrarySmartPlaylistPane(
                         favScope = favScope,
                         onFavScopeChange = onFavScopeChange,
                         onSortChange = { vm.onEvent(SmartPlaylistViewModel.Event.SetSort(it)) },
-                        folders = folders,
-                        folder = folder,
-                        onFolder = { folder = it },
                         progress = progress,
                         showResume = showResume,
                         sort = detailSort,
-                        browse = ui.detailBrowse,
-                        onBrowseChange = { vm.onEvent(SmartPlaylistViewModel.Event.SetBrowse(it)) },
+                        tab = tab,
                         onOpenArtist = onOpenArtist,
+                        onOpenAlbum = onOpenAlbum,
                         fetchedBytes = fetched.mapValues { it.value.bytes },
                         dlEntries = fetched,
                         queue = ui.queue,
@@ -559,16 +554,13 @@ private fun SmartPlaylistDetail(
     favScope: FavScope = FavScope.All,
     onFavScopeChange: (FavScope) -> Unit = {},
     onSortChange: (PlaylistSort) -> Unit = {},
-    folders: List<SongFolder> = emptyList(),
-    folder: String? = null,
-    onFolder: (String?) -> Unit = {},
     progress: Map<String, EpisodeProgress> = emptyMap(),
     showResume: Boolean = false,
     /** Null when the user never picked a sort: downloads read in episode order. */
     sort: PlaylistSort? = null,
-    browse: Boolean = false,
-    onBrowseChange: (Boolean) -> Unit = {},
+    tab: LocalSongsTab = LocalSongsTab.Songs,
     onOpenArtist: (String) -> Unit = {},
+    onOpenAlbum: (String, String) -> Unit = { _, _ -> },
     fetchedBytes: Map<String, Long> = emptyMap(),
     /** Finished files by URL: carries the queue ticket the finished list sorts by. */
     dlEntries: Map<String, DownloadEntry> = emptyMap(),
@@ -587,8 +579,7 @@ private fun SmartPlaylistDetail(
 ) {
     val p = LocalPalette.current
     // Only the on-device smart lists sort; favourites and recent have their
-    // own fixed orders (recent is already time-sorted). Local songs arrive
-    // already folder-filtered when a folder chip is active.
+    // own fixed orders (recent is already time-sorted).
     val local = pl.kind == SmartKind.LocalSongs || pl.kind == SmartKind.Downloads
     // Favourites mix local songs, radio stations and podcasts, so they get
     // their own type sub-tabs: all / local / stations / podcasts.
@@ -613,13 +604,11 @@ private fun SmartPlaylistDetail(
         }
     }
     var query by rememberSaveable(pl.key) { mutableStateOf("") }
-    // Browse for Local Songs only: the same songs under album rows in one
-    // flat scroll — no pages, no back handling. Browse and the sorts share
-    // one active state with a local override each until the stored value
-    // round-trips back, so every chip answers on the tap frame alike.
-    val browseable = pl.kind == SmartKind.LocalSongs
+    // Local Songs sub-tabs (songs/albums/artists) switch the list content.
+    // The tab row itself lives pinned in the fixed header; sorts live on
+    // songs only. Tab switches snap back to the top, sort taps keep position.
+    val isLocalSongs = pl.kind == SmartKind.LocalSongs
     var sortOverride by remember(pl.key) { mutableStateOf<PlaylistSort?>(null) }
-    var browseOverride by remember(pl.key) { mutableStateOf<Boolean?>(null) }
     // Downloads only: the trash opens a remove picker instead of dropping
     // everything. The all box starts unchecked and follows the rows both
     // ways; done removes the checked files and closes the picker.
@@ -630,12 +619,10 @@ private fun SmartPlaylistDetail(
         picked = emptySet()
     }
     LaunchedEffect(sort) { sortOverride = null }
-    LaunchedEffect(browse) { browseOverride = null }
     // Null until the user picks a sort: every list but downloads reads in
     // title order as before. Downloads always read in episode order (see
     // orderByQueue): sort chips would only reintroduce the title scramble.
     val shownSort: PlaylistSort? = sortOverride ?: sort ?: if (isDownloads) null else PlaylistSort.Title
-    val shownBrowse = browseOverride ?: browse
     // Downloads always read in episode (queue) order, even with a stored
     // sort from before: a tapped title can never trap the list again.
     val orderByQueue = isDownloads
@@ -657,15 +644,18 @@ private fun SmartPlaylistDetail(
     val urls = remember(ordered) { ordered.map { it.url }.toSet() }
     val livePicked = remember(picked, urls) { picked intersect urls }
     val allChecked = urls.isNotEmpty() && livePicked.size == urls.size
-    // Browse lists artists only — one row per artist, tap opens their
-    // page — cheapest last so the flat list never waits for it.
-    val artists = remember(ordered, shownBrowse) {
-        if (!shownBrowse) emptyList() else artistsOf(ordered)
+    // Album and artist categories group the same folder+query-filtered songs;
+    // cheapest last so the flat list never waits for them.
+    val albums = remember(ordered, tab, isLocalSongs) {
+        if (!isLocalSongs || tab != LocalSongsTab.Albums) emptyList() else albumsOf(ordered)
     }
-    // Artists and songs are different content under one scroll state: a
-    // kept index would land mid-list after the switch, so the mode switch
+    val artists = remember(ordered, tab, isLocalSongs) {
+        if (!isLocalSongs || tab != LocalSongsTab.Artists) emptyList() else artistsOf(ordered)
+    }
+    // Songs, albums and artists are different content under one scroll state:
+    // a kept index would land mid-list after the switch, so the tab switch
     // snaps back to the top. Sort taps keep their position.
-    LaunchedEffect(shownBrowse) {
+    LaunchedEffect(tab) {
         listState.scrollToItem(0)
     }
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
@@ -729,10 +719,12 @@ private fun SmartPlaylistDetail(
                 }
             }
         }
-        // Sorts, browse and the folder picker are local-songs-only:
-        // downloads always read in episode order, so chips here would only
-        // reintroduce the title scramble.
-        if (pl.kind == SmartKind.LocalSongs) {
+        // Sorts + folder ride the scrolling rows on top of the filter; the
+        // Sorts ride the scrolling row on top of the filter on songs only;
+        // categories live pinned in the fixed header. Downloads always read
+        // in episode order, so chips there would only reintroduce the title
+        // scramble.
+        if (isLocalSongs && tab == LocalSongsTab.Songs) {
             item {
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
@@ -740,38 +732,11 @@ private fun SmartPlaylistDetail(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // Sorts first as one family, then browse as the mode
-                    // switch; the folder picker stays trailing. Every chip
-                    // taps the same way: it selects itself and nothing else.
                     PlaylistSort.entries.forEach { t ->
-                        Chip(t.label, shownSort == t && !shownBrowse, onClick = {
-                            browseOverride = false
-                            onBrowseChange(false)
+                        Chip(t.label, shownSort == t, onClick = {
                             sortOverride = t
                             onSortChange(t)
                         })
-                    }
-                    if (browseable) {
-                        Chip("browse", shownBrowse, onClick = {
-                            browseOverride = true
-                            onBrowseChange(true)
-                        })
-                    }
-                    // Local songs only: the folder picker trails the sort row.
-                    if (pl.kind == SmartKind.LocalSongs && folders.isNotEmpty()) {
-                        ChipDropdown(
-                            label = folders.firstOrNull { it.path == folder }?.name ?: "all folders",
-                            selected = folder != null,
-                            options = listOf(
-                                ChipOption("all folders") {
-                                    onFolder(null)
-                                },
-                            ) + folders.map { f ->
-                                ChipOption(f.name) {
-                                    onFolder(f.path)
-                                }
-                            },
-                        )
                     }
                 }
             }
@@ -790,7 +755,29 @@ private fun SmartPlaylistDetail(
                 onCancelAllDownloads = onCancelAllDownloads,
             )
         }
-        if (shownBrowse && ordered.isNotEmpty()) {
+        if (isLocalSongs && tab == LocalSongsTab.Albums && ordered.isNotEmpty()) {
+            items(albums, key = { it.key }) { group ->
+                ListRow(
+                    onClick = { onOpenAlbum(group.name, group.artist) },
+                    verticalPadding = 9.dp,
+                    leading = {
+                        QuadCollage(group.songs, Modifier.size(40.dp))
+                    },
+                    trailing = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Mono("${group.songs.size}", KleeampType.meta, p.inkFaint)
+                            Icon(KleeampIcons.CaretRight, "open", Modifier.size(9.dp), tint = p.inkFaint)
+                        }
+                    },
+                ) {
+                    Mono(group.name, KleeampType.rowPrimary, p.ink, maxLines = 1)
+                    Mono(group.artist, KleeampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                }
+            }
+        } else if (isLocalSongs && tab == LocalSongsTab.Artists && ordered.isNotEmpty()) {
             items(artists, key = { it.name }) { group ->
                 ListRow(
                     onClick = { onOpenArtist(group.name) },
@@ -913,7 +900,7 @@ private fun SmartPlaylistDetail(
 }
 
 /**
- * One song row, shared by the flat list and the browse sections so both
+ * One song row, shared by the flat list and the album/artist sections so both
  * read identically: cover, overflow menu, and the resume/size readouts the
  * flat rows already wear.
  */

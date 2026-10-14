@@ -26,6 +26,10 @@ data class Station(
     /** Local-file metadata, empty for streams. */
     val artist: String = "",
     val album: String = "",
+    /** Track number within its disc (MediaStore TRACK), 0 when unknown. */
+    val trackNo: Int = 0,
+    /** Disc number within its album (MediaStore DISC_NUMBER), 0 when unknown. */
+    val discNo: Int = 0,
     val durationMs: Long = 0L,
     /** When the file first entered the local media store, seconds since epoch. */
     val dateAdded: Long = 0L,
