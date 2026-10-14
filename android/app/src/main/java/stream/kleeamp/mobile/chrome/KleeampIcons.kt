@@ -339,6 +339,35 @@ object KleeampIcons {
     val Speaker = stroked(20f, 20f, 1.7f, "M2 7l5-4v14l-5-4z", "M11 6.5a4 4 0 010 7")
     val SpeakerSolid = solid(20f, 20f, "M2 7l5-4v14l-5-4z")
     /**
+     * Speaker with two radiating waves: sound going somewhere. The Sound
+     * Output row's mark; per-sink rows keep their own kind glyphs.
+     */
+    val SpeakerWaves = stroked(
+        20f, 20f, 1.7f,
+        "M2 7l5-4v14l-5-4z",
+        "M11.5 8l2.8 2.8-2.8 2.8",
+        "M14.2 5.3l4 4.7-4 4.7",
+    )
+    /**
+     * Rising bars with a solid plus badge: louder-plus. The boost row's
+     * mark; bare bars read as signal strength, which is the output rows'
+     * job, so the badge carries the "more" meaning. Same stroked-plus-solid
+     * mix as [PlaylistAdd].
+     */
+    val BoostPlus = ImageVector.Builder(
+        defaultWidth = 20.dp, defaultHeight = 20.dp, viewportWidth = 20f, viewportHeight = 20f,
+    ).apply {
+        listOf(
+            rect(1f, 12f, 3.2f, 6.5f),
+            rect(5.7f, 8.5f, 3.2f, 10f),
+            rect(10.4f, 5f, 3.2f, 13.5f),
+        ).forEach { addPath(addPathNodes(it), fill = SolidColor(Color.White)) }
+        listOf(
+            rect(13.4f, 14.6f, 6.2f, 2.4f),
+            rect(15.3f, 12.7f, 2.4f, 6.2f),
+        ).forEach { addPath(addPathNodes(it), fill = SolidColor(Color.White)) }
+    }.build()
+    /**
      * An hourglass: two triangles meeting at a waist. Replaces a circle with
      * hands, which broke the no-curves rule and read as a generic clock; two
      * triangles say "time passing" with nothing but straight edges.

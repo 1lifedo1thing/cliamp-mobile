@@ -269,7 +269,7 @@ private fun playerMenuActions(
             id = "output",
             label = "Sound Output",
             subtitle = model.currentOutput?.name ?: "system default",
-            icon = outputIcon(model.currentOutput?.kind),
+            icon = KleeampIcons.SpeakerWaves,
             tint = if (model.currentOutput?.kind?.let { it != OutputKind.Speaker } == true) {
                 p.accent
             } else {
@@ -294,7 +294,7 @@ private fun playerMenuActions(
                 id = "boost",
                 label = "Volume Boost",
                 subtitle = if (model.boostDb > 0) "+${model.boostDb}dB over volume" else "extra gain, off",
-                icon = KleeampIcons.Speaker,
+                icon = KleeampIcons.BoostPlus,
                 tint = if (model.boostDb > 0) p.accent else null,
                 onClick = actions.onOpenBoost,
             )
