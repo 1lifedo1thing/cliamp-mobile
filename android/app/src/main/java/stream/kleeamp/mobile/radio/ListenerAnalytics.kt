@@ -107,7 +107,6 @@ fun ListenerAnalytics(
                     )
                     CountrySide(
                         rows = rows,
-                        isLive = stats?.isLive == true,
                         loading = stats == null,
                         selectedCode = selectedCode,
                         onSelect = {
@@ -131,7 +130,6 @@ fun ListenerAnalytics(
                     )
                     CountrySide(
                         rows = rows,
-                        isLive = stats?.isLive == true,
                         loading = stats == null,
                         selectedCode = selectedCode,
                         onSelect = {
@@ -143,6 +141,9 @@ fun ListenerAnalytics(
                 }
             }
         }
+        // Breathing room before the next section (cliamp radio): the list
+        // ends flush, so without this the rows stick to its header.
+        Spacer(Modifier.height(12.dp))
     }
 }
 
@@ -241,42 +242,54 @@ private fun GlobeCard(
 @Composable
 private fun CountrySide(
     rows: List<CountryListeners>,
-    isLive: Boolean,
     loading: Boolean,
     selectedCode: String?,
     onSelect: (String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
+    // Open like the site; the header taps shut to a one-line summary.
+    var open by rememberSaveable { mutableStateOf(true) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(9.dp)) {
         Row(
-            Modifier.fillMaxWidth(),
+            Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(KleeampShape.tiny))
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = if (open) "hide top countries" else "show top countries",
+                    onClick = { open = !open },
+                )
+                .padding(vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Mono(
-                if (isLive) "TOP COUNTRIES" else "TOP COUNTRIES · ALL-TIME",
+                "TOP COUNTRIES",
                 KleeampType.meta,
                 p.inkSecondary,
             )
             Mono(
-                if (isLive) "LISTENERS" else "SESSIONS",
+                if (rows.isEmpty()) "–" else "${rows.size} LISTENERS ${if (open) "▲" else "▼"}",
                 KleeampType.meta,
                 p.inkSecondary,
             )
         }
-        if (rows.isEmpty()) {
-            Mono(
-                if (loading) "loading.." else "nobody is tuned in right now",
-                KleeampType.rowSecondary,
-                p.inkFaint,
-            )
-        } else {
+        if (open) {
+            if (rows.isEmpty()) {
+                Mono(
+                    if (loading) "loading.." else "nobody is tuned in right now",
+                    KleeampType.rowSecondary,
+                    p.inkFaint,
+                )
+            } else {
             val top = rows.take(10)
             val max = top.firstOrNull()?.listeners?.coerceAtLeast(1) ?: 1
             top.forEach { c ->
                 val selected = selectedCode == c.code
-                Row(
+                // Name above; the bar and the count share one row centered
+                // together, so the number rides the bar's line whatever the
+                // font metrics are — no optical offset to tune.
+                Column(
                     Modifier.fillMaxWidth()
                         .clip(RoundedCornerShape(KleeampShape.tiny))
                         .clickable(
@@ -285,21 +298,20 @@ private fun CountrySide(
                             onClick = { onSelect(if (selected) null else c.code) },
                         )
                         .padding(vertical = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    Column(
-                        Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                    Mono(
+                        c.name,
+                        KleeampType.rowSecondary,
+                        if (selected) p.accent else p.ink,
+                        maxLines = 1,
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Mono(
-                            c.name,
-                            KleeampType.rowSecondary,
-                            if (selected) p.accent else p.ink,
-                            maxLines = 1,
-                        )
                         Box(
-                            Modifier.fillMaxWidth().height(4.dp)
+                            Modifier.weight(1f).height(4.dp)
                                 .background(p.hairline, RoundedCornerShape(2.dp)),
                         ) {
                             val width = (c.listeners.toFloat() / max).coerceIn(0.02f, 1f)
@@ -308,18 +320,19 @@ private fun CountrySide(
                                     .background(p.accent, RoundedCornerShape(2.dp)),
                             )
                         }
-                    }
-                    Box(
-                        Modifier.widthIn(min = 48.dp),
-                        contentAlignment = Alignment.CenterEnd,
-                    ) {
-                        Mono(
-                            "%,d".format(c.listeners),
-                            KleeampType.rowSecondary,
-                            p.inkSecondary,
-                        )
+                        Box(
+                            Modifier.widthIn(min = 48.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Mono(
+                                "%,d".format(c.listeners),
+                                KleeampType.rowSecondary,
+                                p.inkSecondary,
+                            )
+                        }
                     }
                 }
+            }
             }
         }
     }

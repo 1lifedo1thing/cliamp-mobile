@@ -20,12 +20,14 @@ import stream.kleeamp.mobile.net.Http
  * back to all-time sessions otherwise. [peak] stays in the model for
  * diagnostics but is never shown in station rows.
  */
+@Serializable
 data class CountryListeners(
     val code: String,
     val name: String,
     val listeners: Int,
 )
 
+@Serializable
 data class CliampStats(
     val activeNow: Int,
     val peak: Int,
