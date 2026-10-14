@@ -132,8 +132,13 @@ fun CliampChannelScreen(
                                 shuffled = shuffled,
                                 onPlayAll = { shown.firstOrNull()?.let { onPlay(it, shown) } },
                                 onShufflePlay = {
-                                    if (!shuffled) onToggleShuffle()
-                                    shown.randomOrNull()?.let { onPlay(it, shown) }
+                                    if (!shuffled) {
+                                        onToggleShuffle()
+                                        shown.randomOrNull()?.let { onPlay(it, shown) }
+                                    } else {
+                                        // Second tap turns it off; the current track keeps playing.
+                                        onToggleShuffle()
+                                    }
                                 },
                             )
                         },

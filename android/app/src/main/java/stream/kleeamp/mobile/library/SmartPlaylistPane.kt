@@ -673,8 +673,13 @@ private fun SmartPlaylistDetail(
                             shuffled = shuffled,
                             onPlayAll = { ordered.firstOrNull()?.let { onPlay(it, ordered) } },
                             onShufflePlay = {
-                                if (!shuffled) onToggleShuffle()
-                                ordered.randomOrNull()?.let { onPlay(it, ordered) }
+                                if (!shuffled) {
+                                    onToggleShuffle()
+                                    ordered.randomOrNull()?.let { onPlay(it, ordered) }
+                                } else {
+                                    // Second tap turns it off; the current track keeps playing.
+                                    onToggleShuffle()
+                                }
                             },
                         )
                         // Downloads only: a trash key beside shuffle that
