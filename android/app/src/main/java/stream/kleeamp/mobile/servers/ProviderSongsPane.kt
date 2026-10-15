@@ -239,60 +239,43 @@ fun ProviderSongsPane(
         ) {
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
                 // Picker rows scroll with the list; only the header is
-                // fixed. Sort first, rescan trailing for SSH accounts.
+                // fixed. What is browsed leads the row, always on screen.
                 item {
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                            .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    ) {
-                        PlaylistSort.entries.forEach { s ->
-                            Chip(
-                                s.label, sort == s,
-                                onClick = { sort = s; query = ""; selectedArtist = null; selectedAlbum = null },
-                            )
-                        }
-                        // The browse page is gone; its rescan rides the sort row for
-                        // SSH accounts, trailing like it always did.
-                        val selectedAccount = accounts.firstOrNull { it.id == selected }
-                        if (selectedAccount?.providerKey == "ssh") {
-                            val indexState by SftpLibrary.status(selectedAccount.id).collectAsState()
-                            Chip(
-                                if (indexState.scanning) "scanning" else "rescan",
-                                selected = false,
-                                onClick = { scope.launch { SftpLibrary.rescan(selectedAccount) } },
-                            )
-                        }
-                        // Plex and Audiobookshelf serve several libraries but
-                        // browse one: the picker chooses which, trailing like
-                        // the folder picker on smart playlists.
-                        if (selectedAccount?.providerKey == "plex" ||
+                    val selectedAccount = accounts.firstOrNull { it.id == selected }
+                    val indexState by SftpLibrary
+                        .status(selectedAccount?.id.orEmpty())
+                        .collectAsState()
+                    ProviderSortRow(
+                        sort = sort,
+                        onSort = {
+                            sort = it
+                            query = ""
+                            selectedArtist = null
+                            selectedAlbum = null
+                        },
+                        rescanVisible = selectedAccount?.providerKey == "ssh",
+                        rescanning = indexState.scanning,
+                        onRescan = {
+                            selectedAccount?.let { scope.launch { SftpLibrary.rescan(it) } }
+                        },
+                        libraries = if (
+                            selectedAccount?.providerKey == "plex" ||
                             selectedAccount?.providerKey == "abs"
                         ) {
-                            val libs = ui.librariesByAccount[selected].orEmpty()
-                            if (libs.size > 1) {
-                                val stored = selectedAccount.values["library"]
-                                val current =
-                                    libs.firstOrNull { it.id == stored } ?: libs.first()
-                                ChipDropdown(
-                                    label = current.name,
-                                    selected = stored?.isNotBlank() == true,
-                                    options = libs.map { lib ->
-                                        ChipOption(lib.name) {
-                                            vm.onEvent(
-                                                ProviderSongsViewModel.Event.SetLibrary(
-                                                    selectedAccount.id, lib.id
-                                                )
-                                            )
-                                            query = ""
-                                            selectedArtist = null
-                                            selectedAlbum = null
-                                        }
-                                    },
+                            ui.librariesByAccount[selected].orEmpty()
+                        } else emptyList(),
+                        currentLibraryId = selectedAccount?.values?.get("library"),
+                        onPickLibrary = { libId ->
+                            selectedAccount?.let {
+                                vm.onEvent(
+                                    ProviderSongsViewModel.Event.SetLibrary(it.id, libId)
                                 )
                             }
-                        }
-                    }
+                            query = ""
+                            selectedArtist = null
+                            selectedAlbum = null
+                        },
+                    )
                 }
                 item { FilterRow(value = query, onValue = { query = it }) }
                 item {
@@ -435,6 +418,55 @@ fun ProviderSongsPane(
                     onDismiss = { menuFor = null },
                 )
             }
+        }
+    }
+}
+
+/**
+ * The provider songs sort row: what is browsed leads, always on screen,
+ * then the sort chips. Plex/Audiobookshelf accounts with several libraries
+ * get the library picker first; SSH accounts get rescan. Pure state in,
+ * callbacks out, so previews can render it without an account.
+ */
+@Composable
+// Screen signature: state in, callbacks out; bundling would hide the data flow.
+@Suppress("LongParameterList")
+internal fun ProviderSortRow(
+    sort: PlaylistSort,
+    onSort: (PlaylistSort) -> Unit,
+    rescanVisible: Boolean,
+    rescanning: Boolean,
+    onRescan: () -> Unit,
+    libraries: List<ProviderLibrary>,
+    currentLibraryId: String?,
+    onPickLibrary: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+            .padding(start = Gutter, end = Gutter, top = 10.dp, bottom = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        if (rescanVisible) {
+            Chip(
+                if (rescanning) "scanning" else "rescan",
+                selected = false,
+                onClick = onRescan,
+            )
+        }
+        if (libraries.size > 1) {
+            val current =
+                libraries.firstOrNull { it.id == currentLibraryId } ?: libraries.first()
+            ChipDropdown(
+                label = current.name,
+                selected = currentLibraryId?.isNotBlank() == true,
+                options = libraries.map { lib ->
+                    ChipOption(lib.name) { onPickLibrary(lib.id) }
+                },
+            )
+        }
+        PlaylistSort.entries.forEach { s ->
+            Chip(s.label, sort == s, onClick = { onSort(s) })
         }
     }
 }
