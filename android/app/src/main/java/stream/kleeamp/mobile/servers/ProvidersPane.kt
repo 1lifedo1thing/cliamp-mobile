@@ -90,8 +90,8 @@ import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
 import stream.kleeamp.mobile.chrome.OverflowButton
-import stream.kleeamp.mobile.chrome.OverflowItem
-import stream.kleeamp.mobile.chrome.OverflowMenu
+import stream.kleeamp.mobile.chrome.ContextMenuSheet
+import stream.kleeamp.mobile.chrome.MenuAction
 import stream.kleeamp.mobile.chrome.ScreenHeader
 import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.scrollToTop
@@ -155,6 +155,9 @@ private fun ProvidersView(
     onRemoveProvider: (ProviderAccount) -> Unit,
 ) {
     val p = LocalPalette.current
+    // The account menu as a bottom sheet: set by the ⋮ trigger, cleared on
+    // dismiss. One subject at a time, like every other row menu.
+    var menuAcc by remember { mutableStateOf<ProviderAccount?>(null) }
     val connectedKeys = providers.map { it.providerKey }.toSet()
     // Every provider allows several accounts - two servers of one kind are
     // as ordinary as two SSH hosts - so all specs stay addable.
@@ -189,21 +192,7 @@ private fun ProvidersView(
                     // hosts can be added without limit.
                     trailing = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            OverflowMenu(
-                                trigger = { open -> OverflowButton(open, size = 16) },
-                                items = listOf(
-                                    OverflowItem(
-                                        "edit account",
-                                        color = p.ink,
-                                        action = { onEditProvider(acc) },
-                                    ),
-                                    OverflowItem(
-                                        "remove account",
-                                        color = p.destructiveInk,
-                                        action = { onRemoveProvider(acc) },
-                                    ),
-                                ),
-                            )
+                            OverflowButton({ menuAcc = acc }, size = 16)
                         }
                     },
                 ) {
@@ -255,5 +244,43 @@ private fun ProvidersView(
             }
         }
         item { Spacer(Modifier.height(20.dp)) }
+    }
+
+    // The account menu as a bottom sheet: edit where it resolves, remove
+    // with the destructive styling, like every other row menu.
+    menuAcc?.let { acc ->
+        ContextMenuSheet(
+            title = acc.displayName().ifBlank { "provider" },
+            subtitle = ProviderCatalog.byKey(acc.providerKey)?.summary?.invoke(acc.values)
+                ?: acc.url,
+            art = {
+                Box(
+                    Modifier.fillMaxSize()
+                        .clip(RoundedCornerShape(KleeampShape.small))
+                        .border(1.dp, p.chipBorder, RoundedCornerShape(KleeampShape.small)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(KleeampIcons.Server, null, Modifier.size(26.dp), tint = p.amber)
+                }
+            },
+            actions = listOf(
+                MenuAction(
+                    id = "edit",
+                    label = "edit account",
+                    subtitle = "change the connection details",
+                    icon = KleeampIcons.Pencil,
+                    onClick = { onEditProvider(acc) },
+                ),
+                MenuAction(
+                    id = "remove",
+                    label = "remove account",
+                    subtitle = "songs stay on the server",
+                    icon = KleeampIcons.Trash,
+                    destructive = true,
+                    onClick = { onRemoveProvider(acc) },
+                ),
+            ),
+            onDismiss = { menuAcc = null },
+        )
     }
 }

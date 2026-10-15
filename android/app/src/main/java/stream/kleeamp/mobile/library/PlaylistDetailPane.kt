@@ -93,9 +93,8 @@ import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
 import stream.kleeamp.mobile.chrome.OverflowButton
-import stream.kleeamp.mobile.chrome.OverflowItem
-import stream.kleeamp.mobile.chrome.OverflowMenu
 import stream.kleeamp.mobile.chrome.ContextMenuSheet
+import stream.kleeamp.mobile.chrome.MenuAction
 import stream.kleeamp.mobile.chrome.DestructiveAction
 import stream.kleeamp.mobile.chrome.MenuKind
 import stream.kleeamp.mobile.chrome.MenuSubject
@@ -118,6 +117,7 @@ import stream.kleeamp.mobile.prefs.sortedStations
 /** Playlist maintenance: dedupe, missing-file purge and position bookmark. */
 @Composable
 private fun PlaylistToolsMenu(
+    playlistName: String,
     state: PlaylistToolsState,
     onDedupe: () -> Unit,
     onPurgeMissing: () -> Unit,
@@ -126,24 +126,69 @@ private fun PlaylistToolsMenu(
     onClearBookmark: () -> Unit,
 ) {
     val p = LocalPalette.current
-    val items = buildList {
+    var open by remember { mutableStateOf(false) }
+    val actions = buildList {
         if (state.dupCount > 0) {
-            add(OverflowItem("remove ${state.dupCount} duplicates", onDedupe, p.ink))
+            add(
+                MenuAction(
+                    id = "dedupe",
+                    label = "remove ${state.dupCount} duplicates",
+                    subtitle = "keep the first copy of each song",
+                    onClick = onDedupe,
+                )
+            )
         }
         if (state.missingCount > 0) {
-            add(OverflowItem("remove ${state.missingCount} missing", onPurgeMissing, p.ink))
+            add(
+                MenuAction(
+                    id = "purge",
+                    label = "remove ${state.missingCount} missing",
+                    subtitle = "drop files no longer on the phone",
+                    onClick = onPurgeMissing,
+                )
+            )
         }
-        if (state.canBookmark) add(OverflowItem("bookmark current", onBookmarkCurrent, p.ink))
+        if (state.canBookmark) {
+            add(
+                MenuAction(
+                    id = "bookmark",
+                    label = "bookmark current",
+                    subtitle = "mark the playing song",
+                    onClick = onBookmarkCurrent,
+                )
+            )
+        }
         if (state.bookmarkIndex != null) {
-            add(OverflowItem("go to bookmark", onGoBookmark, p.accent))
-            add(OverflowItem("clear bookmark", onClearBookmark, p.ink))
+            add(
+                MenuAction(
+                    id = "gobookmark",
+                    label = "go to bookmark",
+                    subtitle = "play the marked song",
+                    tint = p.accent,
+                    onClick = onGoBookmark,
+                )
+            )
+            add(
+                MenuAction(
+                    id = "clearbookmark",
+                    label = "clear bookmark",
+                    subtitle = "forget the marked position",
+                    onClick = onClearBookmark,
+                )
+            )
         }
     }
-    if (items.isEmpty()) return
-    OverflowMenu(
-        trigger = { open -> OverflowButton(open, size = 16) },
-        items = items,
-    )
+    if (actions.isEmpty()) return
+    OverflowButton({ open = true }, size = 16)
+    if (open) {
+        ContextMenuSheet(
+            title = playlistName,
+            subtitle = "playlist tools",
+            art = { PlaylistGlyph(KleeampIcons.ListShort, playlistName) },
+            actions = actions,
+            onDismiss = { open = false },
+        )
+    }
 }
 
 /** Inputs for [PlaylistToolsMenu], read off the detail state. */
@@ -241,6 +286,7 @@ fun LibraryPlaylistPane(
                         )
                     }
                     PlaylistToolsMenu(
+                        playlistName = pl.station.name,
                         state = PlaylistToolsState(
                             dupCount = ui.dupCount,
                             missingCount = ui.missingCount,
