@@ -1,6 +1,8 @@
 package stream.kleeamp.mobile.library
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
@@ -38,6 +40,14 @@ class LocalGroupingTest {
 
     @Test fun decodeMissingStaysZero() {
         assertEquals(0 to 0, decodeDiscTrack(0, 0))
+    }
+
+    @Test fun libraryProjectionFallsBackToGuaranteedColumns() {
+        val full = libraryProjection(full = true).toSet()
+        val base = libraryProjection(full = false).toSet()
+        assertTrue(full.contains("disc_number"))
+        assertTrue(full.containsAll(base))
+        assertFalse(base.contains("disc_number"))
     }
 
     @Test fun albumSortUsesDiscThenTrack() {

@@ -117,6 +117,34 @@ internal fun albumArtUri(albumId: Long): String? =
  * every later one reads the cached snapshot instantly and refreshes in the
  * background, so opening the Library is never slow again.
  */
+/**
+ * MediaStore projection in two tiers. Optional columns (disc number, album
+ * artist) are missing on older platforms, and one unknown projection column
+ * fails the whole query with IllegalArgumentException — an empty library on
+ * old phones. The full tier is probed first, then the guaranteed tier; the
+ * per-column -1 defaults at the cursor absorb whatever is absent. Pure
+ * column names, so it stays unit-testable without the framework.
+ */
+internal fun libraryProjection(full: Boolean): Array<String> {
+    val base = arrayOf(
+        MediaStore.Audio.Media._ID,
+        MediaStore.Audio.Media.TITLE,
+        MediaStore.Audio.Media.ARTIST,
+        MediaStore.Audio.Media.ALBUM,
+        MediaStore.Audio.Media.ALBUM_ID,
+        MediaStore.Audio.Media.DURATION,
+        MediaStore.Audio.Media.DATE_ADDED,
+        MediaStore.Audio.Media.DATA,
+        MediaStore.Audio.Media.TRACK,
+    )
+    if (!full) return base
+    return base + arrayOf(
+        // DISC_NUMBER exists on newer platforms only.
+        "disc_number",
+        MediaStore.Audio.Media.ALBUM_ARTIST,
+    )
+}
+
 class LocalLibrary(context: Context, private val scope: CoroutineScope) {
 
     private val resolver = context.contentResolver
@@ -233,27 +261,17 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
      */
     private fun querySongs(): List<Station> {
         val out = ArrayList<LocalSong>(256)
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.DATE_ADDED,
-            MediaStore.Audio.Media.DATA,
-            MediaStore.Audio.Media.TRACK,
-            // DISC_NUMBER exists on newer platforms; absent columns fall back to -1 below.
-            "disc_number",
-            MediaStore.Audio.Media.ALBUM_ARTIST,
-        )
-        resolver.query(
-            collection,
-            projection,
-            MediaStore.Audio.Media.IS_MUSIC + " != 0",
-            null,
-            MediaStore.Audio.Media.TITLE + " COLLATE NOCASE",
-        )?.use { c ->
+        val selection = MediaStore.Audio.Media.IS_MUSIC + " != 0"
+        val order = MediaStore.Audio.Media.TITLE + " COLLATE NOCASE"
+        // Probe the full projection first, then the guaranteed tier: a throw
+        // from the last tier still surfaces through scan() as the library
+        // error instead of silently emptying the list.
+        val cursor = runCatching {
+            resolver.query(collection, libraryProjection(full = true), selection, null, order)
+        }.getOrNull() ?: runCatching {
+            resolver.query(collection, libraryProjection(full = false), selection, null, order)
+        }.getOrThrow()
+        cursor?.use { c ->
             val cols = SongColumns(
                 id = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID),
                 title = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE),
