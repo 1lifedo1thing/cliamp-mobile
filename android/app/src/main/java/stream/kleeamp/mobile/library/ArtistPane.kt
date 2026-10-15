@@ -79,7 +79,7 @@ fun LibraryArtistPane(
                     item {
                         CollectionHeader(
                             title = artist,
-                            meta = if (songs.isEmpty()) "" else "${songs.size} songs",
+                            meta = "${songs.size} songs",
                             actions = {
                                 // Always on, even empty: the taps no-op on nothing.
                                 CollectionActions(

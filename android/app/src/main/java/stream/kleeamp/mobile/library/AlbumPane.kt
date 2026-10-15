@@ -80,7 +80,6 @@ fun LibraryAlbumPane(
                         CollectionHeader(
                             title = title,
                             meta = when {
-                                songs.isEmpty() -> ""
                                 ui.displayArtist.isNotBlank() -> "${ui.displayArtist} · ${songs.size} songs"
                                 else -> "${songs.size} songs"
                             },

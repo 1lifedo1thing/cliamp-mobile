@@ -666,7 +666,7 @@ private fun SmartPlaylistDetail(
         item {
             CollectionHeader(
                 title = pl.label,
-                meta = if (members.isEmpty()) "" else "${members.size} items",
+                meta = "${members.size} items",
                 actions = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
