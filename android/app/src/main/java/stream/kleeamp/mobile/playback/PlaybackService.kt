@@ -68,6 +68,8 @@ import stream.kleeamp.mobile.net.Http
 import stream.kleeamp.mobile.net.redactUrl
 import stream.kleeamp.mobile.widget.WidgetRenderer
 import stream.kleeamp.mobile.prefs.Prefs
+import stream.kleeamp.mobile.prefs.MaxBoostDb
+import stream.kleeamp.mobile.prefs.playSectionFor
 
 /**
  * Owns the player, the session and the audio effects. Everything the phone
@@ -244,9 +246,17 @@ class PlaybackService : MediaSessionService() {
         }
 
         // Extra gain for quiet recordings: follows the stored boost like the
-        // EQ follows its bands, re-attaching wherever the session does.
+        // EQ follows its bands, re-attaching wherever the session does. Each
+        // section keeps its own gain when switched on, mirroring pace.
         scope.launch {
-            prefs0.boostDb.collect { boost.setBoostDb(it) }
+            combine(
+                prefs0.boostDb,
+                prefs0.boostSections,
+                prefs0.boostPerSection,
+                PlaybackBus.station,
+            ) { global, sections, scoped, station ->
+                effectiveBoostDb(global, sections, scoped, station)
+            }.collect { boost.setBoostDb(it) }
         }
 
         reconnector = Reconnector(this, player, scope) { retrying, attempt ->
@@ -919,3 +929,18 @@ private class OxideNotificationProvider(context: Context) :
 @UnstableApi
 private fun identityMatrix(n: Int): ChannelMixingMatrix =
     ChannelMixingMatrix(n, n, FloatArray(n * n) { i -> if (i % (n + 1) == 0) 1f else 0f })
+
+/**
+ * Gain for the audible station: its section's remembered boost when
+ * per-section memory is on, else the one app-wide value. Pure so unit
+ * tests can pin the selection.
+ */
+internal fun effectiveBoostDb(
+    global: Int,
+    sections: Map<String, Int>,
+    scoped: Boolean,
+    station: Station?,
+): Int {
+    if (!scoped || station == null) return global.coerceIn(0, MaxBoostDb)
+    return (sections[playSectionFor(station.source).name] ?: global).coerceIn(0, MaxBoostDb)
+}

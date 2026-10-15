@@ -71,7 +71,6 @@ import stream.kleeamp.mobile.theme.Mono
 import stream.kleeamp.mobile.player.UpNextSwipeToRemove
 import stream.kleeamp.mobile.podcasts.CleanupScope
 import stream.kleeamp.mobile.podcasts.PARALLEL_DOWNLOAD_CHOICES
-import stream.kleeamp.mobile.prefs.MaxBoostDb
 import stream.kleeamp.mobile.prefs.SKIP_DURATIONS
 import stream.kleeamp.mobile.prefs.DEFAULT_SKIP_BACK_SEC
 import stream.kleeamp.mobile.prefs.DEFAULT_SKIP_FWD_SEC
@@ -99,9 +98,8 @@ fun SettingsScreen(
     val cellular = uiState.cellular
     val mono = uiState.mono
     val buffer = uiState.buffer
-    val boostDb = uiState.boostDb
-    val boostSupported = uiState.boostSupported
     val speedPerSection = uiState.speedPerSection
+    val boostPerSection = uiState.boostPerSection
     val skipBackSec = uiState.skipBackSec
     val skipFwdSec = uiState.skipFwdSec
     val autoResume = uiState.autoResume
@@ -172,6 +170,16 @@ fun SettingsScreen(
             KleeampType.meta, p.inkFaint,
             modifier = Modifier.padding(horizontal = Gutter).padding(bottom = 10.dp),
         )
+        ToggleRow(
+            title = "Remember audio boost per section",
+            checked = boostPerSection,
+            onChange = { vm.onEvent(SettingsViewModel.Event.SetBoostPerSection(it)) },
+        )
+        Mono(
+            "stations, podcasts and library each keep their own audio boost",
+            KleeampType.meta, p.inkFaint,
+            modifier = Modifier.padding(horizontal = Gutter).padding(bottom = 10.dp),
+        )
         Column(
             Modifier.padding(horizontal = Gutter, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -232,36 +240,6 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             Mono("deeper buffers survive a bad tunnel, at the cost of latency", KleeampType.meta, p.inkFaint)
-        }
-        Column(
-            Modifier.padding(horizontal = Gutter, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Mono("Volume boost", KleeampType.rowPrimary, p.ink)
-                Mono(
-                    if (boostDb > 0) "+${boostDb}dB" else "off",
-                    KleeampType.rowSecondary,
-                    if (boostDb > 0) p.accent else p.inkTertiary,
-                )
-            }
-            if (boostSupported) {
-                MechSlider(
-                    value = boostDb.toFloat(),
-                    onValueChange = { vm.onEvent(SettingsViewModel.Event.SetBoostDb(it.roundToInt())) },
-                    range = 0f..MaxBoostDb.toFloat(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Mono(
-                    "extra gain for quiet recordings, over the volume slider",
-                    KleeampType.meta, p.inkFaint,
-                )
-            } else {
-                Mono(
-                    "not supported on this device",
-                    KleeampType.meta, p.inkFaint,
-                )
-            }
         }
         HairlineDivider()
 

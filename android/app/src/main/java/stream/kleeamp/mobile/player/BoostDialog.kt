@@ -30,6 +30,7 @@ import stream.kleeamp.mobile.theme.Mono
 @Composable
 internal fun BoostDialog(
     current: Int,
+    sectionLabel: String,
     onPick: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -59,7 +60,8 @@ internal fun BoostDialog(
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Mono("Volume Boost", KleeampType.trackTitleCompact, p.ink, maxLines = 1)
                     Mono(
-                        "extra gain over the volume slider",
+                        "extra gain over the volume slider" +
+                            if (sectionLabel.isNotBlank()) " · remembers $sectionLabel" else "",
                         KleeampType.rowSecondary, p.inkTertiary, maxLines = 1,
                     )
                 }

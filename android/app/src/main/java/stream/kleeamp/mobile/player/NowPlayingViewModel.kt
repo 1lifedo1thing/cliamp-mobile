@@ -7,7 +7,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.common.stateInUi
+import stream.kleeamp.mobile.playback.effectiveBoostDb
 import stream.kleeamp.mobile.prefs.Prefs
+import stream.kleeamp.mobile.prefs.playSectionFor
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.playback.PlaybackBus
 import stream.kleeamp.mobile.playback.PlayerConnection
@@ -35,6 +37,7 @@ class NowPlayingViewModel(
         val speedSections: Boolean = true,
         val boostDb: Int = 0,
         val boostSupported: Boolean = false,
+        val boostSections: Boolean = true,
         val showSkipKeys: Boolean = false,
         val skipBackSec: Int = 15,
         val skipFwdSec: Int = 30,
@@ -75,6 +78,8 @@ class NowPlayingViewModel(
         val shuffled: Boolean = false,
         val outputDevice: Int = -1,
         val speedSections: Boolean = true,
+        val boostSections: Boolean = true,
+        val boostMaps: Map<String, Int> = emptyMap(),
         val skipBackSec: Int = 15,
         val skipFwdSec: Int = 30,
     )
@@ -111,6 +116,14 @@ class NowPlayingViewModel(
             combine(prefs.skipBackSec, prefs.skipFwdSec, ::SkipKeysState),
         ) { lib, skip ->
             lib.copy(skipBackSec = skip.backSec, skipFwdSec = skip.fwdSec)
+        }.combine(
+            prefs.boostPerSection,
+        ) { lib, per ->
+            lib.copy(boostSections = per)
+        }.combine(
+            prefs.boostSections,
+        ) { lib, maps ->
+            lib.copy(boostMaps = maps)
         },
         player.upNext,
         player.upNextIndex,
@@ -142,8 +155,9 @@ class NowPlayingViewModel(
             visualizer = lib.visualizer,
             outputDevice = lib.outputDevice,
             speedSections = lib.speedSections,
-            boostDb = boost,
+            boostDb = effectiveBoostDb(boost, lib.boostMaps, lib.boostSections, shownStation),
             boostSupported = boostSupported,
+            boostSections = lib.boostSections,
             // Skip keys dress tracks only (podcasts, audiobooks, local
             // files): live stations keep the plain 3-key row.
             showSkipKeys = shownStation?.isTrack == true,
@@ -161,7 +175,16 @@ class NowPlayingViewModel(
             // stay as direct vm.player.* calls in the composable; only writes
             // that go through prefs or need an event are routed here.
             is Event.SetSpeed -> player.setSpeed(e.value)
-            is Event.SetBoostDb -> viewModelScope.launch { prefs.setBoostDb(e.db) }
+            is Event.SetBoostDb -> viewModelScope.launch {
+                // Section-aware like speed: the playing tab keeps its own
+                // gain while the master is on, else the one global value.
+                val station = state.value.shownStation
+                if (station != null) {
+                    prefs.setBoostFor(playSectionFor(station.source), e.db)
+                } else {
+                    prefs.setBoostDb(e.db)
+                }
+            }
             is Event.SetOutputDevice -> viewModelScope.launch { prefs.setOutputDevice(e.id) }
             is Event.SetVisualizer -> viewModelScope.launch { prefs.setVisualizer(e.id) }
         }

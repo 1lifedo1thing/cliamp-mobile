@@ -256,6 +256,9 @@ fun NowPlayingScreen(
         if (boostOpen) {
             BoostDialog(
                 current = uiState.boostDb,
+                sectionLabel = if (uiState.boostSections) {
+                    uiState.shownStation?.let { playSectionFor(it.source).label }.orEmpty()
+                } else "",
                 onPick = { vm.onEvent(NowPlayingViewModel.Event.SetBoostDb(it)) },
                 onDismiss = { boostOpen = false },
             )
