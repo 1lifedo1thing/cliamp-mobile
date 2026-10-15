@@ -26,6 +26,9 @@ interface StationDao {
     /** A single persisted station by its playback URL (favourites, history, snapshots). */
     @Query("SELECT * FROM stations WHERE url = :url")
     suspend fun byUrl(url: String): StationEntity?
+
+    @Query("DELETE FROM stations WHERE url = :url")
+    suspend fun deleteByUrl(url: String)
 }
 
 @Dao
@@ -49,6 +52,14 @@ interface FavoriteDao {
 
     @Query("DELETE FROM favorites WHERE url = :url")
     suspend fun remove(url: String)
+
+    /** Legacy file:// rows, for the content-uri migration. */
+    @Query("SELECT url FROM favorites WHERE url LIKE 'file://%'")
+    suspend fun fileUrls(): List<String>
+
+    /** Moves a membership (position kept); the caller ensures no clash. */
+    @Query("UPDATE favorites SET url = :newUrl WHERE url = :oldUrl")
+    suspend fun rekey(oldUrl: String, newUrl: String)
 }
 
 @Dao
@@ -63,6 +74,20 @@ interface HistoryDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun touch(row: HistoryEntity)
+
+    @Query("DELETE FROM history WHERE url = :url")
+    suspend fun remove(url: String)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM history WHERE url = :url)")
+    suspend fun contains(url: String): Boolean
+
+    /** Legacy file:// rows, for the content-uri migration. */
+    @Query("SELECT url FROM history WHERE url LIKE 'file://%'")
+    suspend fun fileUrls(): List<String>
+
+    /** Moves a membership (played-at kept); the caller ensures no clash. */
+    @Query("UPDATE history SET url = :newUrl WHERE url = :oldUrl")
+    suspend fun rekey(oldUrl: String, newUrl: String)
 
     /** Trimming is a query, not a list rebuilt and rewritten in full. */
     @Query("DELETE FROM history WHERE url NOT IN (SELECT url FROM history ORDER BY playedAt DESC LIMIT :keep)")
@@ -89,6 +114,17 @@ interface StatsDao {
         val cur = peek(url)
         upsert(PlayStatEntity(url, (cur?.plays ?: 0) + 1, now))
     }
+
+    /** Legacy file:// rows, for the content-uri migration. */
+    @Query("SELECT url FROM play_stats WHERE url LIKE 'file://%'")
+    suspend fun fileUrls(): List<String>
+
+    /** Moves counters; the caller merges first when the target exists. */
+    @Query("UPDATE play_stats SET url = :newUrl WHERE url = :oldUrl")
+    suspend fun rekey(oldUrl: String, newUrl: String)
+
+    @Query("DELETE FROM play_stats WHERE url = :url")
+    suspend fun remove(url: String)
 }
 
 @Dao
@@ -244,6 +280,14 @@ interface PodcastDao {
 
     @Query("DELETE FROM episode_progress WHERE url = :url")
     suspend fun clearProgress(url: String)
+
+    /** Legacy file:// rows, for the content-uri migration. */
+    @Query("SELECT url FROM episode_progress WHERE url LIKE 'file://%'")
+    suspend fun fileUrls(): List<String>
+
+    /** Moves a position; the caller drops the old row when the target exists. */
+    @Query("UPDATE episode_progress SET url = :newUrl WHERE url = :oldUrl")
+    suspend fun rekey(oldUrl: String, newUrl: String)
 }
 
 /** An album as the index sees it: a directory of tracks, grouped. */

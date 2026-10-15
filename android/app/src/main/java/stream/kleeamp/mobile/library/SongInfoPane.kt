@@ -1,7 +1,6 @@
 package stream.kleeamp.mobile.library
 
 import android.app.Activity
-import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
@@ -199,14 +198,16 @@ private fun SongInfoView(
     // navigation), but must stand down when a player/queue overlay is on top.
     BackHandler(enabled = systemBack) { onDismiss() }
 
-    val path = s.url.removePrefix("file://").let(Uri::decode)
+    val path = songFilePath(s)
     // File rows only read when there is a real file: streams would show a
-    // zero size and a URL for a location.
-    val isFile = s.url.startsWith("file://")
-    val sizeLabel = remember(s.url) {
-        val f = File(path)
-        val mb = f.length() / 1_048_576f
-        String.format(Locale.US, "%.1f MB", mb)
+    // zero size and a URL for a location. Local songs count as files even
+    // though they play by content uri; on Android 10 the OS will not stat
+    // shared files, so an unreadable size reads as "—", never 0.0 MB.
+    val isFile = s.source == StationSource.Local || s.url.startsWith("file://")
+    val sizeLabel = remember(s.id, s.url) {
+        val len = runCatching { File(path).length() }.getOrDefault(0L)
+        if (!isFile || len <= 0) "—"
+        else String.format(Locale.US, "%.1f MB", len / 1_048_576f)
     }
     val added = remember(s.dateAdded) {
         if (s.dateAdded > 0) SimpleDateFormat("dd MMM yyyy", Locale.US)

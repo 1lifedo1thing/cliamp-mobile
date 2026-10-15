@@ -94,20 +94,14 @@ class Reconnector(
     }
 
     /**
-     * Everything except a malformed container or an unsupported codec is worth
-     * another go. Retrying a stream the decoder cannot play would just spin.
+     * Everything except a malformed container, an unsupported codec, a file
+     * that is gone, or a file the OS will not let us open is worth another
+     * go. Retrying a stream the decoder cannot play would just spin — and
+     * retrying a permission denial spins the same way: EACCES never heals
+     * into audio, it only reads as "reconnecting" forever.
      */
-    private fun recoverable(error: PlaybackException): Boolean = when (error.errorCode) {
-        PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
-        PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
-        PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
-        PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
-        PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
-        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
-        PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
-        -> false
-        else -> true
-    }
+    private fun recoverable(error: PlaybackException): Boolean =
+        isRecoverablePlaybackError(error.errorCode)
 
     private fun checkStall() {
         if (!player.playWhenReady || bufferingSince == 0L) return
@@ -166,4 +160,21 @@ class Reconnector(
     }
 
     private companion object { const val TAG = "kleeamp/reconnect" }
+}
+
+/**
+ * Retry decision for a player error code, pure so unit tests can pin it: a
+ * denied file must fail fast instead of looping "reconnecting" forever.
+ */
+internal fun isRecoverablePlaybackError(errorCode: Int): Boolean = when (errorCode) {
+    PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+    PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+    PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+    PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
+    PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+    PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+    PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
+    PlaybackException.ERROR_CODE_IO_NO_PERMISSION,
+    -> false
+    else -> true
 }

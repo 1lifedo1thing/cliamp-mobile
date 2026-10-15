@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import stream.kleeamp.mobile.db.KleeampDatabase
 import stream.kleeamp.mobile.db.LocalSongEntity
+import stream.kleeamp.mobile.db.PlayStatEntity
+import stream.kleeamp.mobile.db.toEntity
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
 import java.io.File
@@ -147,6 +149,7 @@ internal fun libraryProjection(full: Boolean): Array<String> {
 
 class LocalLibrary(context: Context, private val scope: CoroutineScope) {
 
+    private val appContext = context.applicationContext
     private val resolver = context.contentResolver
     private val dao = KleeampDatabase.get(context).localSongs()
 
@@ -251,6 +254,11 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
                 "cache write ${found.size} songs in ${System.currentTimeMillis() - tCache}ms",
             )
         }
+        // Favorites, history, counters and resume positions are keyed by
+        // playback url: rows cached before the content-uri switch still
+        // point at unplayable file:// urls, so re-key them onto the fresh
+        // rows by DATA path. A no-op once nothing file:// remains.
+        migrateLegacyFileUris(found)
     }
 
     /**
@@ -316,13 +324,12 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
         val rowId = c.getLong(cols.id)
         val data = if (cols.data >= 0) c.getString(cols.data) else null
         val path = data?.takeIf { it.isNotBlank() } ?: "media:$rowId"
-        val uri = if (!data.isNullOrBlank()) {
-            // Uri building only, no disk I/O: keeps the exact encoded form
-            // playback and the cache already use.
-            Uri.fromFile(File(data))
-        } else {
-            ContentUris.withAppendedId(collection, rowId)
-        }
+        // Playback always goes through the MediaStore item uri: raw file
+        // paths are refused under scoped storage (Android 10 lists them
+        // fine through the cursor, then EACCES on open), while the item uri
+        // plays everywhere with the audio permission. The DATA path stays
+        // as the stable id, never as the playback url.
+        val uri = ContentUris.withAppendedId(collection, rowId)
         val title = c.getString(cols.title)?.takeIf { it.isNotBlank() }
             ?: data?.substringAfterLast('/')?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
             ?: "track"
@@ -385,13 +392,15 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
                         discNo = row.discNo,
                         durationMs = row.durationMs,
                         dateAdded = row.dateAdded,
-                        // Rows without DATA play by content uri; the stored
-                        // uri round-trips verbatim, file rows rebuild encoded.
-                        uri = if (row.uri.startsWith("content://")) Uri.parse(row.uri)
-                        else Uri.fromFile(File(row.path)),
+                        // Content rows round-trip verbatim. Legacy file://
+                        // rows (cached before the content-uri switch) can no
+                        // longer play, so they never paint: the scan below
+                        // repopulates them in one pass.
+                        uri = Uri.parse(row.uri),
                         cover = row.cover,
                     ).station
                 }
+                .filter { it.url.startsWith("content://") }
                 .takeIf { it.isNotEmpty() }
         }.getOrNull()
 
@@ -424,7 +433,124 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
 
     // ── removing a song from the phone ──────────────────────────────────────
 
-    private fun pathOf(s: Station): String = s.url.removePrefix("file://").let(Uri::decode)
+    /** DATA path for a local song: the stable id first, the legacy url fallback. */
+    private fun pathOf(s: Station): String = when {
+        s.id.startsWith("local:") -> s.id.removePrefix("local:")
+        s.url.startsWith("file://") -> s.url.removePrefix("file://").let(Uri::decode)
+        else -> s.url
+    }
+
+    /**
+     * Re-keys every file:// membership row (favorites, history, play counts,
+     * resume positions) onto its fresh content-uri row, matched by DATA path.
+     * Song ids never changed, so playlists need no migration; rows whose
+     * file is gone are left alone. Memberships keep position/played-at via
+     * UPDATE, and the favorites/history joins gain a fresh station snapshot
+     * under the new url.
+     */
+    private suspend fun migrateLegacyFileUris(found: List<Station>) {
+        val byPath = found
+            .filter { it.source == StationSource.Local && it.id.startsWith("local:") }
+            .associate { it.id.removePrefix("local:") to it }
+        if (byPath.isEmpty()) return
+        val db = KleeampDatabase.get(appContext)
+        for (old in db.favorites().fileUrls()) migrateFavoriteUrl(db, byPath, old)
+        for (old in db.history().fileUrls()) migrateHistoryUrl(db, byPath, old)
+        for (old in db.stats().fileUrls()) migrateStatsUrl(db, byPath, old)
+        for (old in db.podcasts().fileUrls()) migrateProgressUrl(db, byPath, old)
+    }
+
+    /** Fresh row for a legacy file:// url, matched by DATA path. */
+    private fun songFor(
+        byPath: Map<String, Station>,
+        oldUrl: String,
+    ): Station? {
+        if (!oldUrl.startsWith("file://")) return null
+        return byPath[decodePath(oldUrl.removePrefix("file://"))]
+    }
+
+    /** Fresh station snapshots under the new url; the joins need them. */
+    private suspend fun adoptSnapshot(db: KleeampDatabase, song: Station, oldUrl: String) {
+        runCatching {
+            db.stations().upsert(song.toEntity())
+            db.stations().deleteByUrl(oldUrl)
+        }
+    }
+
+    private suspend fun migrateFavoriteUrl(
+        db: KleeampDatabase,
+        byPath: Map<String, Station>,
+        old: String,
+    ) {
+        val song = songFor(byPath, old) ?: return
+        runCatching {
+            if (db.favorites().contains(song.url)) db.favorites().remove(old)
+            else db.favorites().rekey(old, song.url)
+        }
+        adoptSnapshot(db, song, old)
+    }
+
+    private suspend fun migrateHistoryUrl(
+        db: KleeampDatabase,
+        byPath: Map<String, Station>,
+        old: String,
+    ) {
+        val song = songFor(byPath, old) ?: return
+        // History has no position worth a merge: the surviving row wins.
+        runCatching {
+            if (db.history().contains(song.url)) db.history().remove(old)
+            else db.history().rekey(old, song.url)
+        }
+        adoptSnapshot(db, song, old)
+    }
+
+    /** Play counts merge (plays add up, latest stamp wins). */
+    private suspend fun migrateStatsUrl(
+        db: KleeampDatabase,
+        byPath: Map<String, Station>,
+        old: String,
+    ) {
+        val song = songFor(byPath, old) ?: return
+        runCatching {
+            val cur = db.stats().peek(song.url)
+            val legacy = db.stats().peek(old)
+            if (cur == null && legacy != null) {
+                db.stats().rekey(old, song.url)
+            } else {
+                if (legacy != null && cur != null) {
+                    db.stats().upsert(
+                        PlayStatEntity(
+                            song.url,
+                            cur.plays + legacy.plays,
+                            maxOf(cur.lastPlayedAt, legacy.lastPlayedAt),
+                        )
+                    )
+                }
+                db.stats().remove(old)
+            }
+        }
+    }
+
+    /** Resume keeps the newer position when both rows exist. */
+    private suspend fun migrateProgressUrl(
+        db: KleeampDatabase,
+        byPath: Map<String, Station>,
+        old: String,
+    ) {
+        val song = songFor(byPath, old) ?: return
+        runCatching {
+            val cur = db.podcasts().progress(song.url)
+            if (cur == null) {
+                db.podcasts().rekey(old, song.url)
+            } else {
+                val legacy = db.podcasts().progress(old)
+                if (legacy != null && legacy.updatedAt > cur.updatedAt) {
+                    db.podcasts().saveProgress(legacy.copy(url = song.url))
+                }
+                db.podcasts().clearProgress(old)
+            }
+        }
+    }
 
     /**
      * The MediaStore `content:` uri for a local song item, so it can be shown
@@ -436,21 +562,7 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
     private fun mediaUri(s: Station): Uri? {
         // Content rows already are their own item uri — deletable as-is.
         if (s.url.startsWith("content://")) return Uri.parse(s.url)
-        val path = pathOf(s)
-        return runCatching {
-            resolver.query(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                arrayOf(MediaStore.Audio.Media._ID),
-                "${MediaStore.Audio.Media.DATA} = ?",
-                arrayOf(path),
-                null,
-            )?.use { c ->
-                if (c.moveToFirst()) ContentUris.withAppendedId(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    c.getLong(0)
-                ) else null
-            }
-        }.getOrNull()
+        return contentUriForDataPath(appContext, pathOf(s))
     }
 
     /**
@@ -492,5 +604,42 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
 
         fun hasAudioPermission(context: Context): Boolean =
             context.checkSelfPermission(audioPermission()) == PackageManager.PERMISSION_GRANTED
+
+        /**
+         * MediaStore item uri for a DATA path, or null when the row is gone.
+         * The single lookup behind delete, legacy playback and migration.
+         * Blocking: call off Main.
+         */
+        fun contentUriForDataPath(context: Context, dataPath: String): Uri? {
+            if (dataPath.isBlank()) return null
+            return runCatching {
+                context.contentResolver.query(
+                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                    arrayOf(MediaStore.Audio.Media._ID),
+                    "${MediaStore.Audio.Media.DATA} = ?",
+                    arrayOf(dataPath),
+                    null,
+                )?.use { c ->
+                    if (c.moveToFirst()) ContentUris.withAppendedId(
+                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                        c.getLong(0),
+                    ) else null
+                }
+            }.getOrNull()
+        }
+
+        /**
+         * Content uri for a legacy `file://` song url, or null when the row
+         * is gone. Playback safety net for rows cached before the
+         * content-uri switch (favorites, history, restored queues).
+         * Blocking: call off Main.
+         */
+        fun contentUriForLegacyFile(context: Context, fileUrl: String): Uri? {
+            if (!fileUrl.startsWith("file://")) return null
+            return contentUriForDataPath(
+                context,
+                android.net.Uri.decode(fileUrl.removePrefix("file://")),
+            )
+        }
     }
 }

@@ -367,6 +367,11 @@ class PodcastRepositoryTest {
         override suspend fun clearProgress(url: String) {
             savedRows.remove(url)
         }
+        override suspend fun fileUrls(): List<String> =
+            savedRows.keys.filter { it.startsWith("file://") }
+        override suspend fun rekey(oldUrl: String, newUrl: String) {
+            savedRows.remove(oldUrl)?.let { savedRows[newUrl] = it.copy(url = newUrl) }
+        }
     }
 
     @Test

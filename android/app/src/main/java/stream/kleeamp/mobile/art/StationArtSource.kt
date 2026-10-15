@@ -110,6 +110,7 @@ object StationArtSource {
 
     /** Directory holding decoded embedded-art bytes, keyed by audio path hash. */
     private var cacheDir: java.io.File? = null
+    private var appContext: android.content.Context? = null
 
     // Persisted winning image URL: memory `resolved` dies with the process,
     // so the winner is also filed next to covers/ as <md5(id)>.txt holding
@@ -158,6 +159,7 @@ object StationArtSource {
 
     /** Call once at startup with an application context. */
     fun init(context: android.content.Context) {
+        appContext = context.applicationContext
         cacheDir = java.io.File(context.cacheDir, "covers").apply { mkdirs() }
     }
 
@@ -215,16 +217,20 @@ object StationArtSource {
         return java.io.File(cacheDir, "$name.jpg")
     }
 
-    /** Pulls the album art embedded inside a local audio file. [fileUri] is a `file://` URI. */
+    /** Pulls the album art embedded inside a local audio file. Accepts `file://`
+     * and MediaStore `content://` uris; raw paths fail under scoped storage,
+     * so content rows resolve through the resolver instead of the filesystem.
+     */
     private suspend fun embeddedArt(fileUri: String, target: Int): Bitmap? = withContext(CoverIo) {
-        val path = Uri.parse(fileUri).path ?: return@withContext null
+        val uri = Uri.parse(fileUri)
+        val path = uri.path ?: return@withContext null
         // Serve a previously-decoded copy from disk instantly; only reach into
         // the audio file when we have never seen this track before.
         val cached = coverFile(path)
         if (cached.isFile) {
             runCatching { decodeFile(cached.absolutePath, target) }.getOrNull()
         } else {
-            decodeEmbedded(path)?.let { bytes ->
+            decodeEmbedded(uri)?.let { bytes ->
                 runCatching { cached.writeBytes(bytes) }
                 decodeScaled(bytes, target)
             }
@@ -232,10 +238,14 @@ object StationArtSource {
     }
 
     /** Reads the embedded album art bytes out of an audio file, or null. */
-    private fun decodeEmbedded(path: String): ByteArray? {
+    private fun decodeEmbedded(uri: Uri): ByteArray? {
         val retriever = MediaMetadataRetriever()
         return try {
-            retriever.setDataSource(path)
+            if (uri.scheme == "file") retriever.setDataSource(uri.path)
+            else {
+                val ctx = appContext ?: return null
+                retriever.setDataSource(ctx, uri)
+            }
             retriever.embeddedPicture
         } catch (_: Exception) {
             null
