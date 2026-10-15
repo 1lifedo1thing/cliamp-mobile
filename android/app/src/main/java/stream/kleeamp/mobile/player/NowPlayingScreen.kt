@@ -116,6 +116,9 @@ internal data class PlayerModel(
     val currentOutput: AudioOutput?,
     val boostDb: Int,
     val boostSupported: Boolean,
+    val showSkipKeys: Boolean,
+    val skipBackSec: Int,
+    val skipFwdSec: Int,
 )
 
 /** Every control the player screen can take, so both layouts share one set. */
@@ -132,6 +135,8 @@ internal data class PlayerActions(
     val onPrev: () -> Unit,
     val onPlayPause: () -> Unit,
     val onNext: () -> Unit,
+    val onSkipBack: () -> Unit,
+    val onSkipFwd: () -> Unit,
     val onOpenSleep: () -> Unit,
     val onSelectOutput: (Int) -> Unit,
     val onToggleFullscreen: () -> Unit,
@@ -185,6 +190,9 @@ fun NowPlayingScreen(
         currentOutput = currentOutput,
         boostDb = uiState.boostDb,
         boostSupported = uiState.boostSupported,
+        showSkipKeys = uiState.showSkipKeys,
+        skipBackSec = uiState.skipBackSec,
+        skipFwdSec = uiState.skipFwdSec,
     )
     val actions = PlayerActions(
         onBack = onBack,
@@ -199,6 +207,8 @@ fun NowPlayingScreen(
         onPrev = { vm.player.prev() },
         onPlayPause = { vm.player.toggle(uiState.shownStation) },
         onNext = { vm.player.next() },
+        onSkipBack = { vm.player.seekBy(-uiState.skipBackSec) },
+        onSkipFwd = { vm.player.seekBy(uiState.skipFwdSec) },
         onOpenSleep = { sleepOpen = true },
         onSelectOutput = { vm.onEvent(NowPlayingViewModel.Event.SetOutputDevice(it)) },
         onToggleFullscreen = { fullscreen = true },

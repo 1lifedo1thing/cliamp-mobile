@@ -80,6 +80,13 @@ fun playSectionFor(source: StationSource): PlaySection = when (source) {
 /** Volume-boost ceiling in dB; the device effect clamps further per hardware. */
 const val MaxBoostDb = 12
 
+/** Skip-key durations on offer, seconds. */
+val SKIP_DURATIONS = listOf(5, 10, 15, 30, 60)
+
+/** Out-of-the-box skip seconds: rewind, forward. */
+const val DEFAULT_SKIP_BACK_SEC = 15
+const val DEFAULT_SKIP_FWD_SEC = 30
+
 /**
  * Settings only.
  *
@@ -117,6 +124,8 @@ class Prefs(private val context: Context) {
         val speedPerSection = booleanPreferencesKey("speed_per_section")
         val boostDb = intPreferencesKey("boost_db")               // 0..12, LoudnessEnhancer gain
         val repeat = stringPreferencesKey("repeat")
+        val skipBackSec = intPreferencesKey("skip_back_sec")
+        val skipFwdSec = intPreferencesKey("skip_fwd_sec")
         val lbToken = stringPreferencesKey("lb_token")
         val autoResume = booleanPreferencesKey("auto_resume")
         val autoDownload = booleanPreferencesKey("auto_download")
@@ -207,6 +216,14 @@ class Prefs(private val context: Context) {
     }
     /** Repeat mode, off/all/one like cliamp. Survives process death. */
     val repeat: Flow<String> = context.settingsStore.data.map { it[K.repeat] ?: "off" }
+    /** Rewind seconds for the skip-back key; one of 5/10/15/30/60. */
+    val skipBackSec: Flow<Int> = context.settingsStore.data.map {
+        (it[K.skipBackSec] ?: DEFAULT_SKIP_BACK_SEC).let { v -> if (v in SKIP_DURATIONS) v else DEFAULT_SKIP_BACK_SEC }
+    }
+    /** Forward seconds for the skip-forward key; one of 5/10/15/30/60. */
+    val skipFwdSec: Flow<Int> = context.settingsStore.data.map {
+        (it[K.skipFwdSec] ?: DEFAULT_SKIP_FWD_SEC).let { v -> if (v in SKIP_DURATIONS) v else DEFAULT_SKIP_FWD_SEC }
+    }
 
     /** Podcasts subscribed-shows section as a grid. */
     val subsGrid: StateFlow<Boolean> = subsGridFlag.asStateFlow()
@@ -423,6 +440,8 @@ class Prefs(private val context: Context) {
         }
     }
     suspend fun setBoostDb(v: Int) = put(K.boostDb, v.coerceIn(0, MaxBoostDb))
+    suspend fun setSkipBackSec(v: Int) = put(K.skipBackSec, if (v in SKIP_DURATIONS) v else DEFAULT_SKIP_BACK_SEC)
+    suspend fun setSkipFwdSec(v: Int) = put(K.skipFwdSec, if (v in SKIP_DURATIONS) v else DEFAULT_SKIP_FWD_SEC)
     suspend fun setRepeat(v: String) = put(K.repeat, v)
     suspend fun setSubsGrid(v: Boolean) {
         subsGridFlag.value = v

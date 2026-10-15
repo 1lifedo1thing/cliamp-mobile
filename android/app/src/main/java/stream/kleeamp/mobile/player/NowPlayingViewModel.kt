@@ -35,6 +35,9 @@ class NowPlayingViewModel(
         val speedSections: Boolean = true,
         val boostDb: Int = 0,
         val boostSupported: Boolean = false,
+        val showSkipKeys: Boolean = false,
+        val skipBackSec: Int = 15,
+        val skipFwdSec: Int = 30,
     )
 
     sealed interface Event {
@@ -58,6 +61,12 @@ class NowPlayingViewModel(
         val reconnect: Int = 0,
     )
 
+    /** Skip-key durations, chained onto [LibState] below. */
+    private data class SkipKeysState(
+        val backSec: Int = 15,
+        val fwdSec: Int = 30,
+    )
+
     /** Library prefs and derived flags that dress the transport. */
     private data class LibState(
         val favorites: List<Station> = emptyList(),
@@ -66,6 +75,8 @@ class NowPlayingViewModel(
         val shuffled: Boolean = false,
         val outputDevice: Int = -1,
         val speedSections: Boolean = true,
+        val skipBackSec: Int = 15,
+        val skipFwdSec: Int = 30,
     )
 
     val state: StateFlow<UiState> = combine(
@@ -96,6 +107,10 @@ class NowPlayingViewModel(
                 outputDevice = output,
                 speedSections = sections,
             )
+        }.combine(
+            combine(prefs.skipBackSec, prefs.skipFwdSec, ::SkipKeysState),
+        ) { lib, skip ->
+            lib.copy(skipBackSec = skip.backSec, skipFwdSec = skip.fwdSec)
         },
         player.upNext,
         player.upNextIndex,
@@ -129,6 +144,11 @@ class NowPlayingViewModel(
             speedSections = lib.speedSections,
             boostDb = boost,
             boostSupported = boostSupported,
+            // Skip keys dress tracks only (podcasts, audiobooks, local
+            // files): live stations keep the plain 3-key row.
+            showSkipKeys = shownStation?.isTrack == true,
+            skipBackSec = lib.skipBackSec,
+            skipFwdSec = lib.skipFwdSec,
         )
     }.stateInUi(viewModelScope, UiState())
 

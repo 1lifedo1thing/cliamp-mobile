@@ -72,6 +72,9 @@ import stream.kleeamp.mobile.player.UpNextSwipeToRemove
 import stream.kleeamp.mobile.podcasts.CleanupScope
 import stream.kleeamp.mobile.podcasts.PARALLEL_DOWNLOAD_CHOICES
 import stream.kleeamp.mobile.prefs.MaxBoostDb
+import stream.kleeamp.mobile.prefs.SKIP_DURATIONS
+import stream.kleeamp.mobile.prefs.DEFAULT_SKIP_BACK_SEC
+import stream.kleeamp.mobile.prefs.DEFAULT_SKIP_FWD_SEC
 import kotlin.math.roundToInt
 
 @Composable
@@ -99,6 +102,8 @@ fun SettingsScreen(
     val boostDb = uiState.boostDb
     val boostSupported = uiState.boostSupported
     val speedPerSection = uiState.speedPerSection
+    val skipBackSec = uiState.skipBackSec
+    val skipFwdSec = uiState.skipFwdSec
     val autoResume = uiState.autoResume
     val autoDownload = uiState.autoDownload
     val autoCellular = uiState.autoCellular
@@ -167,6 +172,51 @@ fun SettingsScreen(
             KleeampType.meta, p.inkFaint,
             modifier = Modifier.padding(horizontal = Gutter).padding(bottom = 10.dp),
         )
+        Column(
+            Modifier.padding(horizontal = Gutter, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Mono("Skip back", KleeampType.rowPrimary, p.ink)
+                Mono("${skipBackSec}s", KleeampType.rowSecondary, p.accent)
+            }
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                SKIP_DURATIONS.forEach { n ->
+                    Chip("$n", skipBackSec == n, onClick = {
+                        vm.onEvent(SettingsViewModel.Event.SetSkipBackSec(n))
+                    })
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Mono("Skip forward", KleeampType.rowPrimary, p.ink)
+                Mono("${skipFwdSec}s", KleeampType.rowSecondary, p.accent)
+            }
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                SKIP_DURATIONS.forEach { n ->
+                    Chip("$n", skipFwdSec == n, onClick = {
+                        vm.onEvent(SettingsViewModel.Event.SetSkipFwdSec(n))
+                    })
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.Start,
+            ) {
+                Chip("reset", selected = false, onClick = {
+                    vm.onEvent(SettingsViewModel.Event.SetSkipBackSec(DEFAULT_SKIP_BACK_SEC))
+                    vm.onEvent(SettingsViewModel.Event.SetSkipFwdSec(DEFAULT_SKIP_FWD_SEC))
+                })
+            }
+        }
         Column(
             Modifier.padding(horizontal = Gutter, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),

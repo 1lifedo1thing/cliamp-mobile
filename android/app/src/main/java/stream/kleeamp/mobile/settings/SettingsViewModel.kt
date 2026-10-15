@@ -41,6 +41,8 @@ class SettingsViewModel(
         val boostDb: Int = 0,
         val boostSupported: Boolean = false,
         val speedPerSection: Boolean = true,
+        val skipBackSec: Int = 15,
+        val skipFwdSec: Int = 30,
         val listenBrainzOn: Boolean = false,
         val scrobbleRadio: Boolean = false,
         val scrobblePending: Int = 0,
@@ -63,6 +65,8 @@ class SettingsViewModel(
         data class SetMono(val v: Boolean) : Event
         data class SetBuffer(val seconds: Int) : Event
         data class SetBoostDb(val db: Int) : Event
+        data class SetSkipBackSec(val seconds: Int) : Event
+        data class SetSkipFwdSec(val seconds: Int) : Event
         data class SetSpeedPerSection(val v: Boolean) : Event
         data class SetHaptics(val v: Boolean) : Event
         data class SetListenerGlobe(val v: Boolean) : Event
@@ -101,6 +105,8 @@ class SettingsViewModel(
         val parallelDownloads: Int = 3,
         val boostDb: Int = 0,
         val speedPerSection: Boolean = true,
+        val skipBackSec: Int = 15,
+        val skipFwdSec: Int = 30,
     )
 
     /** Library counts, scrobble flag and directory stats. */
@@ -155,6 +161,10 @@ class SettingsViewModel(
                 boostDb = boost,
                 speedPerSection = sections,
             )
+        }.combine(
+            combine(prefs.skipBackSec, prefs.skipFwdSec) { b, f -> b to f },
+        ) { playback, skip ->
+            playback.copy(skipBackSec = skip.first, skipFwdSec = skip.second)
         },
         combine(
             prefs.resumeLocal,
@@ -190,6 +200,8 @@ class SettingsViewModel(
             boostDb = playback.boostDb,
             boostSupported = boostSupported,
             speedPerSection = playback.speedPerSection,
+            skipBackSec = playback.skipBackSec,
+            skipFwdSec = playback.skipFwdSec,
             resumeLocal = library.resumeLocal,
             listenBrainzOn = library.listenBrainzToken.isNotBlank(),
             scrobbleRadio = scrobbleBox.radio,
@@ -216,6 +228,8 @@ class SettingsViewModel(
             is Event.SetMono -> viewModelScope.launch { prefs.setMono(e.v) }
             is Event.SetBuffer -> viewModelScope.launch { prefs.setBufferSeconds(e.seconds) }
             is Event.SetBoostDb -> viewModelScope.launch { prefs.setBoostDb(e.db) }
+            is Event.SetSkipBackSec -> viewModelScope.launch { prefs.setSkipBackSec(e.seconds) }
+            is Event.SetSkipFwdSec -> viewModelScope.launch { prefs.setSkipFwdSec(e.seconds) }
             is Event.SetSpeedPerSection -> viewModelScope.launch { prefs.setSpeedPerSection(e.v) }
             is Event.SetHaptics -> viewModelScope.launch { prefs.setHaptics(e.v) }
             is Event.SetListenerGlobe -> viewModelScope.launch { prefs.setListenerGlobe(e.v) }
