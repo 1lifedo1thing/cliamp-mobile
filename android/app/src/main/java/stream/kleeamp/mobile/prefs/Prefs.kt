@@ -32,6 +32,7 @@ import stream.kleeamp.mobile.db.toEntity
 import stream.kleeamp.mobile.net.Http
 import stream.kleeamp.mobile.podcasts.CleanupScope
 import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.podcasts.DownloadEntry
 
 private val Context.settingsStore: DataStore<Preferences> by preferencesDataStore("cliamp")
@@ -63,6 +64,21 @@ fun sortedStations(songs: List<Station>, sort: PlaylistSort): List<Station> {
 /** Tracks of one album in play order: disc, then track, then title. */
 fun List<Station>.sortedForAlbum(): List<Station> =
     sortedWith(compareBy<Station> { it.discNo }.thenBy { it.trackNo }.thenBy { it.name.lowercase() })
+
+/** Playback-speed scope: each tab remembers its own pace. */
+enum class PlaySection(val label: String) {
+    Stations("stations"), Podcasts("podcasts"), Library("library"),
+}
+
+/** Which speed scope a station plays under: podcasts, local files, or radio. */
+fun playSectionFor(source: StationSource): PlaySection = when (source) {
+    StationSource.Podcast -> PlaySection.Podcasts
+    StationSource.Local -> PlaySection.Library
+    else -> PlaySection.Stations
+}
+
+/** Volume-boost ceiling in dB; the device effect clamps further per hardware. */
+const val MaxBoostDb = 12
 
 /**
  * Settings only.
@@ -97,6 +113,9 @@ class Prefs(private val context: Context) {
         val lastStation = stringPreferencesKey("last_station")
         val volume = floatPreferencesKey("volume")
         val speed = floatPreferencesKey("speed")
+        val speedSections = stringPreferencesKey("speed_sections") // PlaySection.name -> speed
+        val speedPerSection = booleanPreferencesKey("speed_per_section")
+        val boostDb = intPreferencesKey("boost_db")               // 0..12, LoudnessEnhancer gain
         val repeat = stringPreferencesKey("repeat")
         val lbToken = stringPreferencesKey("lb_token")
         val autoResume = booleanPreferencesKey("auto_resume")
@@ -164,6 +183,28 @@ class Prefs(private val context: Context) {
     val volume: Flow<Float> = context.settingsStore.data.map { it[K.volume] ?: 1f }
     /** Playback speed multiplier, 0.25–2.0 like cliamp. Applied to every play. */
     val speed: Flow<Float> = context.settingsStore.data.map { (it[K.speed] ?: 1f).coerceIn(0.25f, 2f) }
+    /**
+     * Whether each section keeps its own pace. On by default: the map seeds
+     * from the legacy global, so enabling changes nothing until a section's
+     * speed is touched. Off restores one app-wide speed.
+     */
+    val speedPerSection: Flow<Boolean> = context.settingsStore.data.map { it[K.speedPerSection] ?: true }
+    /**
+     * Per-section remembered speeds. Empty until the user picks one: every
+     * section falls back to the legacy global [speed], which seeds the map
+     * on first write, so nothing the user set is ever lost.
+     */
+    val speedSections: Flow<Map<String, Float>> = context.settingsStore.data.map { p ->
+        val global = (p[K.speed] ?: 1f).coerceIn(0.25f, 2f)
+        val stored = p[K.speedSections]?.let { raw ->
+            runCatching { Http.json.decodeFromString<Map<String, Float>>(raw) }.getOrNull()
+        }.orEmpty()
+        PlaySection.entries.associate { it.name to (stored[it.name] ?: global) }
+    }
+    /** Extra gain in dB over the volume slider; 0 means off. */
+    val boostDb: Flow<Int> = context.settingsStore.data.map {
+        (it[K.boostDb] ?: 0).coerceIn(0, MaxBoostDb)
+    }
     /** Repeat mode, off/all/one like cliamp. Survives process death. */
     val repeat: Flow<String> = context.settingsStore.data.map { it[K.repeat] ?: "off" }
 
@@ -363,6 +404,25 @@ class Prefs(private val context: Context) {
     suspend fun setScrobbleRadio(v: Boolean) = put(K.scrobbleRadio, v)
     suspend fun setVolume(v: Float) = put(K.volume, v)
     suspend fun setSpeed(v: Float) = put(K.speed, v.coerceIn(0.25f, 2f))
+    suspend fun setSpeedPerSection(v: Boolean) = put(K.speedPerSection, v)
+    /**
+     * Remember one section's speed. Merges with the stored map (seeded from
+     * the legacy global on read), so other sections are untouched.
+     */
+    suspend fun setSpeedFor(section: PlaySection, v: Float) {
+        val speed = v.coerceIn(0.25f, 2f)
+        context.settingsStore.edit { p ->
+            val global = (p[K.speed] ?: 1f).coerceIn(0.25f, 2f)
+            val stored = p[K.speedSections]?.let { raw ->
+                runCatching { Http.json.decodeFromString<Map<String, Float>>(raw) }.getOrNull()
+            }.orEmpty()
+            val merged = PlaySection.entries.associate { it.name to (stored[it.name] ?: global) } +
+                (section.name to speed)
+            p[K.speedSections] = Http.json.encodeToString(merged)
+            p[K.speed] = speed
+        }
+    }
+    suspend fun setBoostDb(v: Int) = put(K.boostDb, v.coerceIn(0, MaxBoostDb))
     suspend fun setRepeat(v: String) = put(K.repeat, v)
     suspend fun setSubsGrid(v: Boolean) {
         subsGridFlag.value = v

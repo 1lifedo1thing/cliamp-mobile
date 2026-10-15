@@ -268,11 +268,6 @@ private fun CountrySide(
                 KleeampType.meta,
                 p.inkSecondary,
             )
-            Mono(
-                if (rows.isEmpty()) "–" else "${rows.size} LISTENERS ${if (open) "▲" else "▼"}",
-                KleeampType.meta,
-                p.inkSecondary,
-            )
         }
         if (open) {
             if (rows.isEmpty()) {

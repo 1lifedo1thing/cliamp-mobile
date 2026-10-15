@@ -26,6 +26,8 @@ data class Station(
     /** Local-file metadata, empty for streams. */
     val artist: String = "",
     val album: String = "",
+    /** Album artist tag (compilations keep one); empty when untagged. */
+    val albumArtist: String = "",
     /** Track number within its disc (MediaStore TRACK), 0 when unknown. */
     val trackNo: Int = 0,
     /** Disc number within its album (MediaStore DISC_NUMBER), 0 when unknown. */

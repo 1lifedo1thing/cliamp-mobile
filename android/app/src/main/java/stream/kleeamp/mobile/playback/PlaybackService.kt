@@ -80,6 +80,8 @@ class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
     private lateinit var player: ExoPlayer
     private val fx = AudioFx(bands = SPECTRUM_BANDS)
+    /** Extra gain for quiet content; attaches wherever the EQ does. */
+    private val boost = VolumeBoost()
 
     /**
      * Centralized PCM analysis: Tee tap → PcmRing → 4096-pt FFT → 64 bands.
@@ -241,6 +243,12 @@ class PlaybackService : MediaSessionService() {
             }
         }
 
+        // Extra gain for quiet recordings: follows the stored boost like the
+        // EQ follows its bands, re-attaching wherever the session does.
+        scope.launch {
+            prefs0.boostDb.collect { boost.setBoostDb(it) }
+        }
+
         reconnector = Reconnector(this, player, scope) { retrying, attempt ->
             PlaybackBus.publishReconnect(if (retrying) attempt else 0)
             if (retrying) PlaybackBus.publishError(null)
@@ -297,6 +305,7 @@ class PlaybackService : MediaSessionService() {
             }.collect { (vis, eqOn, bands) ->
                 spectrumWanted = vis != "off"
                 fx.attach(player.audioSessionId, spectrumWanted)
+                boost.attach(player.audioSessionId)
                 fx.setEqEnabled(eqOn)
                 // Pretend-off: DSP stays engaged, OFF means flat (no pops
                 // from removing the effect; battery cost is negligible vs
@@ -619,6 +628,7 @@ class PlaybackService : MediaSessionService() {
         }
         lastFxRetryMs = now
         fx.attach(player.audioSessionId, spectrumWanted)
+        boost.attach(player.audioSessionId)
         // The tap flows even while buffering/reconnecting; mark live once
         // PCM has been seen so meters never freeze permanently after a stall.
         if (spectrumWanted && PcmRing.written() > 0 && !PlaybackBus.spectrumLive.value) {
@@ -637,6 +647,7 @@ class PlaybackService : MediaSessionService() {
         reconnector?.detach()
         analyzer.stop()
         fx.release()
+        boost.release()
         scope.cancel()
         // the session must go first; releasing the player under a live
         // session leaves the notification pointing at a dead controller
@@ -731,6 +742,7 @@ class PlaybackService : MediaSessionService() {
             // so this is the attach that usually wins - it must still respect
             // the user's setting rather than force the visualizer back on
             fx.attach(player.audioSessionId, spectrumWanted)
+            boost.attach(player.audioSessionId)
         }
 
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {

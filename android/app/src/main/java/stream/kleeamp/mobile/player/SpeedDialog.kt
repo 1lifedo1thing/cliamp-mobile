@@ -14,26 +14,31 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
+import stream.kleeamp.mobile.chrome.Chip
+import stream.kleeamp.mobile.chrome.MechSlider
 import stream.kleeamp.mobile.chrome.MenuSheetShell
-import stream.kleeamp.mobile.chrome.SheetOptionRow
-import stream.kleeamp.mobile.chrome.clock
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Mono
 
-/** Every speed the sheet offers, slowest first so the list scans naturally. */
+/** Every speed the sheet offers as quick chips, slowest first. */
 internal val SpeedSteps = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
 
+/** Slider granularity: 0.05 steps across the 0.25–2.0 range. */
+internal fun roundSpeed(v: Float): Float =
+    ((v * 20f).roundToInt() / 20f).coerceIn(0.25f, 2f)
+
 /**
- * Playback speed sheet on the menu chrome: one tap picks a speed outright.
- * Cycling the key through eight blind steps took five taps to reach 0.5x
- * from normal; the list shows the whole ladder with the current step
- * checked, like the playlist picker's ticked rows.
+ * Playback speed sheet: a fine slider on top, the classic preset chips
+ * below. Picks apply live and persist under the playing section, so
+ * podcasts keep podcast pace while radio stays 1x.
  */
 @Composable
 internal fun SpeedDialog(
     current: Float,
+    sectionLabel: String,
     onPick: (Float) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -62,17 +67,35 @@ internal fun SpeedDialog(
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Mono("Playback Speed", KleeampType.trackTitleCompact, p.ink, maxLines = 1)
-                    Mono("currently ${speedLabel(current)}", KleeampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                    Mono(
+                        "currently ${speedLabel(current)}" +
+                            if (sectionLabel.isNotBlank()) " · remembers ${sectionLabel}" else "",
+                        KleeampType.rowSecondary, p.inkTertiary, maxLines = 1,
+                    )
                 }
             }
         },
     ) {
-        for (step in SpeedSteps) {
-            SheetOptionRow(
-                label = speedLabel(step),
-                selected = kotlin.math.abs(step - current) < 0.01f,
-                onClick = { onPick(step); onDismiss() },
-            )
+        MechSlider(
+            value = current,
+            onValueChange = { onPick(roundSpeed(it)) },
+            range = 0.25f..2f,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+        )
+        // Eight chips never fit one sheet row; two rows of four do.
+        SpeedSteps.chunked(4).forEach { row ->
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                for (step in row) {
+                    Chip(
+                        speedLabel(step),
+                        kotlin.math.abs(step - current) < 0.01f,
+                        onClick = { onPick(step); onDismiss() },
+                    )
+                }
+            }
         }
     }
 }

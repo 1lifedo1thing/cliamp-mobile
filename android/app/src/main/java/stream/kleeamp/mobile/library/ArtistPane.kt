@@ -22,7 +22,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.chrome.CollectionActions
 import stream.kleeamp.mobile.chrome.CollectionHeader
 import stream.kleeamp.mobile.chrome.ContextMenuSheet
@@ -35,7 +34,6 @@ import stream.kleeamp.mobile.chrome.menuActions
 import stream.kleeamp.mobile.chrome.scrollToTop
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
-import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Mono
@@ -83,23 +81,27 @@ fun LibraryArtistPane(
                             title = artist,
                             meta = if (songs.isEmpty()) "" else "${songs.size} songs",
                             actions = {
-                                if (shown.isNotEmpty()) {
-                                    CollectionActions(
-                                        shuffled = shuffled,
-                                        onPlayAll = { shown.firstOrNull()?.let { onPlay(it, shown) } },
-                                        onShufflePlay = {
-                                            if (!shuffled) onToggleShuffle()
+                                // Always on, even empty: the taps no-op on nothing.
+                                CollectionActions(
+                                    shuffled = shuffled,
+                                    onPlayAll = { shown.firstOrNull()?.let { onPlay(it, shown) } },
+                                    onShufflePlay = {
+                                        if (!shuffled) {
+                                            onToggleShuffle()
                                             shown.randomOrNull()?.let { onPlay(it, shown) }
-                                        },
-                                    )
-                                }
+                                        } else {
+                                            // Second tap turns it off; the current track keeps playing.
+                                            onToggleShuffle()
+                                        }
+                                    },
+                                )
                             },
                             art = {
-                                SeedPlate(
-                                    key = artist,
-                                    name = artist,
+                                GroupArt(
+                                    songs = songs,
                                     modifier = Modifier.fillMaxSize(),
-                                    radius = KleeampShape.small,
+                                    fallbackKey = artist,
+                                    fallbackName = artist,
                                 )
                             },
                         )

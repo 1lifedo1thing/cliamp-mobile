@@ -97,6 +97,11 @@ fun StationsScreen(
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
     var source by rememberSaveable { mutableStateOf(Source.All) }
+    // Local favorites filter for the directory: the list is already in
+    // memory, so no query, no paging, no network. Any real query (trending,
+    // tag, country) switches it back off.
+    var favOnly by rememberSaveable { mutableStateOf(false) }
+    val favUrls = remember(favorites) { favorites.map { it.url }.toSet() }
     val ui by vm.state.collectAsState()
     val cliamp = ui.cliamp
     val cliampError = ui.cliampError
@@ -208,8 +213,11 @@ fun StationsScreen(
             last >= listState.layoutInfo.totalItemsCount - 8
         }
     }
-    LaunchedEffect(nearEnd, directory.stations.size) {
-        if (nearEnd && source != Source.Cliamp && source != Source.Custom) vm.onEvent(StationsViewModel.Event.NextPage)
+    LaunchedEffect(nearEnd, directory.stations.size, favOnly) {
+        // The favorites filter is local: no pages to fetch behind it.
+        if (nearEnd && !favOnly && source != Source.Cliamp && source != Source.Custom) {
+            vm.onEvent(StationsViewModel.Event.NextPage)
+        }
     }
 
     // A global search in the command/tab writes its temporary query into the
@@ -355,21 +363,29 @@ fun StationsScreen(
             }
 
             if (source == Source.All || source == Source.Directory) {
+                // Favorites filter reads the in-memory directory page, so the
+                // count, rows and play queue all follow one list.
+                val dirStations = if (favOnly) {
+                    directory.stations.filter { it.url in favUrls }
+                } else {
+                    directory.stations
+                }
                 item {
                     SectionLabel(
-                        "directory — " + (dirStats?.playable?.let { "%,d".format(it) }
-                            ?: if (directory.error != null) "unreachable" else "loading"),
+                        if (favOnly) {
+                            "favorites — ${dirStations.size}"
+                        } else {
+                            "directory — " + (dirStats?.playable?.let { "%,d".format(it) }
+                                ?: if (directory.error != null) "unreachable" else "loading")
+                        },
                         gutter = 8.dp,
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            // The default top order needs no announcement;
-                            // every other query names itself.
-                            if (directory.query != DirectoryQuery.TopVoted) {
-                                Mono(directory.query.label, KleeampType.meta, p.inkTertiary)
-                            }
+                            // The active filter already reads lit in the chip
+                            // row below; repeating it here only clutters.
                             val countryQuery = directory.query as? DirectoryQuery.Country
                             Chip(
                                 countryQuery?.countryName ?: "all countries",
@@ -392,30 +408,60 @@ fun StationsScreen(
                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
                         Chip(
-                            "trending",
-                            directory.query == DirectoryQuery.Trending,
+                            "top",
+                            directory.query == DirectoryQuery.TopVoted && !favOnly,
                             onClick = {
-                                vm.onEvent(
-                                    StationsViewModel.Event.LoadDirectory(
-                                        DirectoryQuery.Trending,
-                                        reset = true,
+                                favOnly = false
+                                // Already there: refetching would flash loading
+                                // and reshuffle the list the user just left.
+                                if (directory.query != DirectoryQuery.TopVoted) {
+                                    vm.onEvent(
+                                        StationsViewModel.Event.LoadDirectory(
+                                            DirectoryQuery.TopVoted,
+                                            reset = true,
+                                        )
                                     )
-                                )
+                                }
                             },
+                        )
+                        Chip(
+                            "trending",
+                            directory.query == DirectoryQuery.Trending && !favOnly,
+                            onClick = {
+                                favOnly = false
+                                // Already there: refetching would flash loading
+                                // and reshuffle the list the user just left.
+                                if (directory.query != DirectoryQuery.Trending) {
+                                    vm.onEvent(
+                                        StationsViewModel.Event.LoadDirectory(
+                                            DirectoryQuery.Trending,
+                                            reset = true,
+                                        )
+                                    )
+                                }
+                            },
+                        )
+                        Chip(
+                            "favorites",
+                            favOnly,
+                            onClick = { favOnly = !favOnly },
                         )
                         if (tags.isNotEmpty()) {
                             tags.take(24).forEach { t ->
                                 val q = directory.query
                                 Chip(
                                     t.name,
-                                    selected = q is DirectoryQuery.Tag && q.tag == t.name,
+                                    selected = q is DirectoryQuery.Tag && q.tag == t.name && !favOnly,
                                     onClick = {
-                                        vm.onEvent(
-                                            StationsViewModel.Event.LoadDirectory(
-                                                DirectoryQuery.Tag(t.name),
-                                                reset = true,
+                                        favOnly = false
+                                        if (q != DirectoryQuery.Tag(t.name)) {
+                                            vm.onEvent(
+                                                StationsViewModel.Event.LoadDirectory(
+                                                    DirectoryQuery.Tag(t.name),
+                                                    reset = true,
+                                                )
                                             )
-                                        )
+                                        }
                                     },
                                 )
                             }
@@ -424,19 +470,21 @@ fun StationsScreen(
                 }
                 item { Spacer(Modifier.height(6.dp)) }
                 items(
-                    directory.stations,
+                    dirStations,
                     key = { "dir:${it.url}" },
                 ) { s ->
                     StationRow(
                         station = s,
                         active = current?.url == s.url,
                         playing = playing && current?.url == s.url,
-                        onPlay = { onPlay(s, directory.stations) },
+                        onPlay = { onPlay(s, dirStations) },
                         onOpenMenu = { menuFor = s },
                     )
                 }
                 item {
                     when {
+                        favOnly && dirStations.isEmpty() -> EmptyNote("no favourite stations yet")
+                        favOnly -> Spacer(Modifier.height(8.dp))
                         directory.error != null -> RetryNote(
                             message = "couldn't fetch the directory",
                             prominent = directory.stations.isEmpty(),
@@ -464,16 +512,16 @@ fun StationsScreen(
                 countries = countries,
                 selectedIso = (directory.query as? DirectoryQuery.Country)?.code?.takeIf { it.isNotEmpty() },
                 onPick = { c ->
-                    vm.onEvent(
-                        if (c == null) {
-                            StationsViewModel.Event.LoadDirectory(DirectoryQuery.TopVoted, reset = true)
-                        } else {
-                            StationsViewModel.Event.LoadDirectory(
-                                DirectoryQuery.Country(c.iso31661, c.name),
-                                reset = true,
-                            )
-                        },
-                    )
+                    favOnly = false
+                    val target = if (c == null) {
+                        DirectoryQuery.TopVoted
+                    } else {
+                        DirectoryQuery.Country(c.iso31661, c.name)
+                    }
+                    // Same query re-picked: keep the list, skip the reload.
+                    if (directory.query != target) {
+                        vm.onEvent(StationsViewModel.Event.LoadDirectory(target, reset = true))
+                    }
                 },
                 onDismiss = { countrySheet = false },
             )

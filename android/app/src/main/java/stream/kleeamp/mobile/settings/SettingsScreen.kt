@@ -71,6 +71,7 @@ import stream.kleeamp.mobile.theme.Mono
 import stream.kleeamp.mobile.player.UpNextSwipeToRemove
 import stream.kleeamp.mobile.podcasts.CleanupScope
 import stream.kleeamp.mobile.podcasts.PARALLEL_DOWNLOAD_CHOICES
+import stream.kleeamp.mobile.prefs.MaxBoostDb
 import kotlin.math.roundToInt
 
 @Composable
@@ -95,6 +96,9 @@ fun SettingsScreen(
     val cellular = uiState.cellular
     val mono = uiState.mono
     val buffer = uiState.buffer
+    val boostDb = uiState.boostDb
+    val boostSupported = uiState.boostSupported
+    val speedPerSection = uiState.speedPerSection
     val autoResume = uiState.autoResume
     val autoDownload = uiState.autoDownload
     val autoCellular = uiState.autoCellular
@@ -153,6 +157,16 @@ fun SettingsScreen(
             checked = mono,
             onChange = { vm.onEvent(SettingsViewModel.Event.SetMono(it)) },
         )
+        ToggleRow(
+            title = "Remember speed per section",
+            checked = speedPerSection,
+            onChange = { vm.onEvent(SettingsViewModel.Event.SetSpeedPerSection(it)) },
+        )
+        Mono(
+            "stations, podcasts and library each keep their own pace",
+            KleeampType.meta, p.inkFaint,
+            modifier = Modifier.padding(horizontal = Gutter).padding(bottom = 10.dp),
+        )
         Column(
             Modifier.padding(horizontal = Gutter, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -168,6 +182,36 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             Mono("deeper buffers survive a bad tunnel, at the cost of latency", KleeampType.meta, p.inkFaint)
+        }
+        Column(
+            Modifier.padding(horizontal = Gutter, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Mono("Volume boost", KleeampType.rowPrimary, p.ink)
+                Mono(
+                    if (boostDb > 0) "+${boostDb}dB" else "off",
+                    KleeampType.rowSecondary,
+                    if (boostDb > 0) p.accent else p.inkTertiary,
+                )
+            }
+            if (boostSupported) {
+                MechSlider(
+                    value = boostDb.toFloat(),
+                    onValueChange = { vm.onEvent(SettingsViewModel.Event.SetBoostDb(it.roundToInt())) },
+                    range = 0f..MaxBoostDb.toFloat(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Mono(
+                    "extra gain for quiet recordings, over the volume slider",
+                    KleeampType.meta, p.inkFaint,
+                )
+            } else {
+                Mono(
+                    "not supported on this device",
+                    KleeampType.meta, p.inkFaint,
+                )
+            }
         }
         HairlineDivider()
 

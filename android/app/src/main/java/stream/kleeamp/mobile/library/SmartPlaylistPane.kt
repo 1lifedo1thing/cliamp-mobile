@@ -222,7 +222,14 @@ fun LibrarySmartPlaylistPane(
             onBack = onBack,
             chips = if (!isLocalSongsPage) null else ({
                 LocalSongsTab.entries.forEach { t ->
-                    Chip(t.label, tab == t, onClick = { tabOrdinal = t.ordinal })
+                    // The snap lives on the tap, never in an effect: coming
+                    // back from an album/artist/song keeps the position.
+                    Chip(t.label, tab == t, onClick = {
+                        if (tab != t) {
+                            tabOrdinal = t.ordinal
+                            scope.launch { listState.scrollToItem(0) }
+                        }
+                    })
                 }
             }),
         ) {
@@ -652,12 +659,9 @@ private fun SmartPlaylistDetail(
     val artists = remember(ordered, tab, isLocalSongs) {
         if (!isLocalSongs || tab != LocalSongsTab.Artists) emptyList() else artistsOf(ordered)
     }
-    // Songs, albums and artists are different content under one scroll state:
-    // a kept index would land mid-list after the switch, so the tab switch
-    // snaps back to the top. Sort taps keep their position.
-    LaunchedEffect(tab) {
-        listState.scrollToItem(0)
-    }
+    // Songs, albums and artists share one scroll state: the position survives
+    // detail navigation, and only a tab tap snaps back to the top — at the
+    // header chips above. Sort taps keep their position.
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
         item {
             CollectionHeader(
@@ -668,16 +672,20 @@ private fun SmartPlaylistDetail(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        if (ordered.isNotEmpty()) {
-                            CollectionActions(
-                                shuffled = shuffled,
-                                onPlayAll = { ordered.firstOrNull()?.let { onPlay(it, ordered) } },
-                                onShufflePlay = {
-                                    if (!shuffled) onToggleShuffle()
+                        // Always on, even empty: the taps no-op on nothing.
+                        CollectionActions(
+                            shuffled = shuffled,
+                            onPlayAll = { ordered.firstOrNull()?.let { onPlay(it, ordered) } },
+                            onShufflePlay = {
+                                if (!shuffled) {
+                                    onToggleShuffle()
                                     ordered.randomOrNull()?.let { onPlay(it, ordered) }
-                                },
-                            )
-                        }
+                                } else {
+                                    // Second tap turns it off; the current track keeps playing.
+                                    onToggleShuffle()
+                                }
+                            },
+                        )
                         // Downloads only: a trash key beside shuffle that
                         // opens the remove picker; back or a second tap
                         // closes it without removing anything.
@@ -758,10 +766,15 @@ private fun SmartPlaylistDetail(
         if (isLocalSongs && tab == LocalSongsTab.Albums && ordered.isNotEmpty()) {
             items(albums, key = { it.key }) { group ->
                 ListRow(
-                    onClick = { onOpenAlbum(group.name, group.artist) },
+                    onClick = { onOpenAlbum(group.name, group.albumArtist) },
                     verticalPadding = 9.dp,
                     leading = {
-                        QuadCollage(group.songs, Modifier.size(40.dp))
+                        GroupArt(
+                            songs = group.songs,
+                            modifier = Modifier.size(40.dp),
+                            fallbackKey = group.key,
+                            fallbackName = group.name,
+                        )
                     },
                     trailing = {
                         Row(
@@ -774,7 +787,7 @@ private fun SmartPlaylistDetail(
                     },
                 ) {
                     Mono(group.name, KleeampType.rowPrimary, p.ink, maxLines = 1)
-                    Mono(group.artist, KleeampType.rowSecondary, p.inkTertiary, maxLines = 1)
+                    Mono(group.displayArtist, KleeampType.rowSecondary, p.inkTertiary, maxLines = 1)
                 }
             }
         } else if (isLocalSongs && tab == LocalSongsTab.Artists && ordered.isNotEmpty()) {
@@ -783,7 +796,12 @@ private fun SmartPlaylistDetail(
                     onClick = { onOpenArtist(group.name) },
                     verticalPadding = 9.dp,
                     leading = {
-                        QuadCollage(group.songs, Modifier.size(40.dp))
+                        GroupArt(
+                            songs = group.songs,
+                            modifier = Modifier.size(40.dp),
+                            fallbackKey = group.name,
+                            fallbackName = group.name,
+                        )
                     },
                     trailing = {
                         Row(
