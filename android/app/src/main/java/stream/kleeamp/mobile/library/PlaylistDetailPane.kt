@@ -375,8 +375,9 @@ private fun PlaylistDetailShown(
     // the artists give way to the wrong order first. Re-sorting the
     // already-sorted visible list is idempotent once it round-trips.
     val ordered = remember(visible, shownSort) { sortedStations(visible, shownSort) }
-    // Browse lists artists only — one row per artist, tap opens their
-    // page — cheapest last so the flat list never waits for it.
+    // Browse lists artists only — one row per artist (track or album
+    // artist, like the library tab), tap opens their page — cheapest last
+    // so the flat list never waits for it.
     val artists = remember(ordered, shownBrowse) {
         if (!shownBrowse) emptyList() else artistsOf(ordered)
     }
@@ -468,12 +469,17 @@ private fun PlaylistDetailShown(
             }
             item { FilterRow(value = query, onValue = onQuery) }
             if (shownBrowse && ordered.isNotEmpty()) {
-                items(artists, key = { it.name }) { group ->
+                items(artists, key = { it.key }) { group ->
                     ListRow(
                         onClick = { onOpenArtist(group.name) },
                         verticalPadding = 9.dp,
                         leading = {
-                            QuadCollage(group.songs, Modifier.size(40.dp))
+                            GroupArt(
+                                songs = group.songs,
+                                modifier = Modifier.size(40.dp),
+                                fallbackKey = group.key,
+                                fallbackName = group.name,
+                            )
                         },
                         trailing = {
                             Row(

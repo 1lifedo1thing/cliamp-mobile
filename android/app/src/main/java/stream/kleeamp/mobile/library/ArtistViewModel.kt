@@ -13,7 +13,9 @@ import stream.kleeamp.mobile.prefs.Prefs
  * Every track of one artist within the list the artist was opened from.
  * Context "local-songs" scopes to the on-device library; otherwise the
  * source is exactly that user playlist's resolved members. Songs by the
- * same artist outside that list are never merged in.
+ * same artist outside that list are never merged in. One song lives under
+ * exactly one artist (track artist, else album artist, else unknown), so a
+ * track never shows under two names.
  */
 class ArtistViewModel(
     val artist: String,
@@ -41,10 +43,21 @@ class ArtistViewModel(
         }.orEmpty()
         // Scope strictly to the list the artist was opened from: the
         // device library for "local-songs", otherwise that playlist's
-        // own members. Never union the two.
+        // own members. Never union the two. Case-insensitive so "daft punk"
+        // and "Daft Punk" stay one artist, like the albums list. Single
+        // attribution (track, else album artist, else unknown) so one song
+        // never lands under two names.
         val source = if (context == "local-songs") songs else members
+        val want = artist.ifBlank { "unknown artist" }
         val mine = source.distinctBy { it.id }
-            .filter { it.artist.ifBlank { "unknown artist" } == artist }
+            .filter { s ->
+                val effective = when {
+                    s.artist.isNotBlank() -> s.artist
+                    s.albumArtist.isNotBlank() -> s.albumArtist
+                    else -> "unknown artist"
+                }
+                effective.equals(want, ignoreCase = true)
+            }
             .sortedWith(
                 compareBy<Station> { it.album.lowercase() }
                     .thenBy { it.discNo }

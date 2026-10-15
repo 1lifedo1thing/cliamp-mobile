@@ -89,4 +89,33 @@ class LocalGroupingTest {
         val songs = listOf(song("t1", artist = "zebra"), song("t2", artist = "apple"))
         assertEquals(listOf("apple", "zebra"), artistsOf(songs).map { it.name })
     }
+
+    @Test fun artistSongLivesUnderTrackArtistOnly() {
+        val songs = listOf(
+            song("t1", artist = "Daft Punk", album = "Alive 2007", albumArtist = "Daft Punk"),
+            song("t2", artist = "Gabrielle", album = "Alive 2007", albumArtist = "Daft Punk"),
+        )
+        val groups = artistsOf(songs).associateBy({ it.name }, { it.songs.map { s -> s.name } })
+        assertEquals(listOf("t1"), groups["Daft Punk"])
+        assertEquals(listOf("t2"), groups["Gabrielle"])
+        assertEquals(2, groups.values.sumOf { it.size })
+    }
+
+    @Test fun albumArtistOnlyGetsOwnRow() {
+        val songs = listOf(
+            song("t1", artist = "", album = "Mix", albumArtist = "DJ Mix"),
+        )
+        val groups = artistsOf(songs)
+        assertEquals(listOf("DJ Mix"), groups.map { it.name })
+    }
+
+    @Test fun artistsMergeCaseVariants() {
+        val songs = listOf(
+            song("t1", artist = "daft punk"),
+            song("t2", artist = "Daft Punk"),
+        )
+        val groups = artistsOf(songs)
+        assertEquals(1, groups.size)
+        assertEquals(2, groups.single().songs.size)
+    }
 }

@@ -113,21 +113,41 @@ fun List<Station>.matching(query: String): List<Station> {
     return filter {
         it.name.lowercase().contains(q) ||
             it.artist.lowercase().contains(q) ||
-            it.album.lowercase().contains(q)
+            it.album.lowercase().contains(q) ||
+            it.albumArtist.lowercase().contains(q)
     }
 }
 
 /** One artist and their songs for the browse view, artists by name. */
-data class ArtistGroup(val name: String, val songs: List<Station>)
+data class ArtistGroup(val name: String, val songs: List<Station>) {
+    /** Stable key for LazyColumn: artist name, lowercased. */
+    val key: String get() = name.lowercase()
+}
 
 /**
- * Groups songs by artist for browse. One row per artist, so a song can
- * never show twice; songs keep the incoming order.
+ * Groups songs by artist for browse. One row per artist, so a song never
+ * shows twice; songs keep the incoming order. Case variants merge under the
+ * first-seen spelling, and a blank track artist falls back to the album
+ * artist before "unknown artist".
  */
-fun artistsOf(songs: List<Station>): List<ArtistGroup> =
-    songs.groupBy { it.artist.ifBlank { "unknown artist" } }
-        .toSortedMap(compareBy { it.lowercase() })
-        .map { (name, list) -> ArtistGroup(name, list) }
+fun artistsOf(songs: List<Station>): List<ArtistGroup> {
+    val byKey = LinkedHashMap<String, MutableList<Station>>()
+    val display = LinkedHashMap<String, String>()
+    songs.forEach { s ->
+        val name = when {
+            s.artist.isNotBlank() -> s.artist
+            s.albumArtist.isNotBlank() -> s.albumArtist
+            else -> "unknown artist"
+        }
+        val key = name.lowercase()
+        display.putIfAbsent(key, name)
+        val list = byKey.getOrPut(key) { mutableListOf() }
+        if (list.none { it.id == s.id }) list += s
+    }
+    return byKey
+        .map { (key, list) -> ArtistGroup(display.getValue(key), list) }
+        .sortedBy { it.name.lowercase() }
+}
 
 /** Local-songs sub-tabs: the flat list plus album and artist categories. */
 enum class LocalSongsTab(val label: String) {
