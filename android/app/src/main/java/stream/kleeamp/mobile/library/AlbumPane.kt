@@ -104,7 +104,7 @@ fun LibraryAlbumPane(
                                 GroupArt(
                                     songs = songs,
                                     modifier = Modifier.fillMaxSize(),
-                                    fallbackKey = "$albumArtist-$album",
+                                    fallbackKey = "${albumArtist.lowercase()}\u0001${title.lowercase()}",
                                     fallbackName = title,
                                 )
                             },

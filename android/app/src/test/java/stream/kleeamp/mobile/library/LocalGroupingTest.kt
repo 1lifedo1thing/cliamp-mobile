@@ -118,4 +118,20 @@ class LocalGroupingTest {
         assertEquals(1, groups.size)
         assertEquals(2, groups.single().songs.size)
     }
+
+    @Test fun albumsMergeCaseVariants() {
+        val songs = listOf(
+            song("t1", album = "hits", albumArtist = "a"),
+            song("t2", album = "Hits", albumArtist = "A"),
+        )
+        val groups = albumsOf(songs)
+        assertEquals(1, groups.size)
+        assertEquals(2, groups.single().songs.size)
+    }
+
+    @Test fun albumsDedupeRepeatedIds() {
+        val dup = song("t1", album = "Hits", albumArtist = "A")
+        val groups = albumsOf(listOf(dup, dup))
+        assertEquals(1, groups.single().songs.size)
+    }
 }

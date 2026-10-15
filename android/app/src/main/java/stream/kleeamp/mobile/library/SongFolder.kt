@@ -195,7 +195,8 @@ fun albumsOf(songs: List<Station>): List<AlbumGroup> {
         val album = s.album.ifBlank { "unknown album" }
         val albumArtist = s.albumArtist
         val key = "${albumArtist.lowercase()}\u0001${album.lowercase()}"
-        byKey.getOrPut(key) { mutableListOf() } += s
+        val list = byKey.getOrPut(key) { mutableListOf() }
+        if (list.none { it.id == s.id }) list += s
         meta.putIfAbsent(key, album to albumArtist)
     }
     return byKey
