@@ -60,6 +60,9 @@ fun MiniPlayer(
     reconnecting: Int = 0,
     hasPrev: Boolean = false,
     hasNext: Boolean = false,
+    /** Elapsed/duration ms: paints the position hairline on tracks. */
+    positionMs: Long = 0L,
+    durationMs: Long = 0L,
     onPrev: () -> Unit = {},
     onNext: () -> Unit = {},
     onOpenUpNext: () -> Unit,
@@ -91,6 +94,19 @@ fun MiniPlayer(
                         ),
                     ),
             )
+            // Position hairline along the bar's bottom edge on tracks with
+            // a known length: overlay only, so the bar measures exactly
+            // as before with or without it.
+            if (!empty && station?.isTrack == true && durationMs > 0) {
+                val done = (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)
+                Box(
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth(done)
+                        .height(2.dp)
+                        .background(p.accent),
+                )
+            }
             Row(
                 Modifier
                     .fillMaxWidth()

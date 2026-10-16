@@ -360,6 +360,8 @@ fun KleeampRoot(
                 wantPlaying = playerState.wantPlaying,
                 hasPrev = playerState.hasPrev,
                 hasNext = playerState.hasNext,
+                positionMs = playerState.positionMs,
+                durationMs = playerState.durationMs,
                 onOpenUpNext = { upNextOpen = true },
                 onOpen = { playerOpen = true },
             )
@@ -1064,6 +1066,8 @@ private fun ScopedMiniPlayer(
     wantPlaying: Boolean,
     hasPrev: Boolean,
     hasNext: Boolean,
+    positionMs: Long,
+    durationMs: Long,
     onOpenUpNext: () -> Unit,
     onOpen: () -> Unit,
 ) {
@@ -1080,6 +1084,8 @@ private fun ScopedMiniPlayer(
         reconnecting = stream.kleeamp.mobile.player.effectiveReconnect(reconnecting, inGrace),
         hasPrev = hasPrev,
         hasNext = hasNext,
+        positionMs = positionMs,
+        durationMs = durationMs,
         onPrev = { player.prev() },
         onNext = { player.next() },
         onOpenUpNext = onOpenUpNext,
