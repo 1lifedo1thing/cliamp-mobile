@@ -68,13 +68,25 @@ class CustomStationWizardViewModel : ViewModel() {
     }
 
     private suspend fun runProbe() {
-        val station = customStation(name.value, url.value)
+        val raw = url.value
+        val station = customStation(name.value, raw)
         if (station == null) {
             probe.value = CustomProbe.Failed("enter a stream url like https://…")
             return
         }
         probe.value = CustomProbe.Running
-        probe.value = probeCustomStream(station.url).fold(
+        val bareHost = "://" !in raw.trim()
+        var result = probeCustomStream(station.url)
+        // Bare hosts default to https://; an http-only Icecast (common on
+        // :8000) then fails closed. Retry once over http before surfacing.
+        if (result.isFailure && bareHost && station.url.startsWith("https://")) {
+            val httpUrl = "http://" + station.url.removePrefix("https://")
+            result = probeCustomStream(httpUrl)
+            if (result.isSuccess) {
+                url.value = httpUrl
+            }
+        }
+        probe.value = result.fold(
             onSuccess = { CustomProbe.Ok(it) },
             onFailure = { CustomProbe.Failed(it.message ?: "could not reach the stream") },
         )
