@@ -80,6 +80,13 @@ fun playSectionFor(source: StationSource): PlaySection = when (source) {
 /** Volume-boost ceiling in dB; the device effect clamps further per hardware. */
 const val MaxBoostDb = 12
 
+/** Skip-key durations on offer, seconds. */
+val SKIP_DURATIONS = listOf(5, 10, 15, 30, 60)
+
+/** Out-of-the-box skip seconds: rewind, forward. */
+const val DEFAULT_SKIP_BACK_SEC = 15
+const val DEFAULT_SKIP_FWD_SEC = 30
+
 /**
  * Settings only.
  *
@@ -117,6 +124,10 @@ class Prefs(private val context: Context) {
         val speedPerSection = booleanPreferencesKey("speed_per_section")
         val boostDb = intPreferencesKey("boost_db")               // 0..12, LoudnessEnhancer gain
         val repeat = stringPreferencesKey("repeat")
+        val boostSections = stringPreferencesKey("boost_sections") // PlaySection.name -> boost dB
+        val boostPerSection = booleanPreferencesKey("boost_per_section")
+        val skipBackSec = intPreferencesKey("skip_back_sec")
+        val skipFwdSec = intPreferencesKey("skip_fwd_sec")
         val lbToken = stringPreferencesKey("lb_token")
         val autoResume = booleanPreferencesKey("auto_resume")
         val autoDownload = booleanPreferencesKey("auto_download")
@@ -207,6 +218,28 @@ class Prefs(private val context: Context) {
     }
     /** Repeat mode, off/all/one like cliamp. Survives process death. */
     val repeat: Flow<String> = context.settingsStore.data.map { it[K.repeat] ?: "off" }
+    /**
+     * Per-section remembered boost. Empty until a section is touched: every
+     * section falls back to the global [boostDb], which seeds the map on
+     * first write, so nothing set before is ever lost. Same shape as speed.
+     */
+    val boostSections: Flow<Map<String, Int>> = context.settingsStore.data.map { p ->
+        val global = (p[K.boostDb] ?: 0).coerceIn(0, MaxBoostDb)
+        val stored = p[K.boostSections]?.let { raw ->
+            runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
+        }.orEmpty()
+        PlaySection.entries.associate { it.name to (stored[it.name] ?: global) }
+    }
+    /** Whether each section keeps its own boost. On by default, like speed. */
+    val boostPerSection: Flow<Boolean> = context.settingsStore.data.map { it[K.boostPerSection] ?: true }
+    /** Rewind seconds for the skip-back key; one of 5/10/15/30/60. */
+    val skipBackSec: Flow<Int> = context.settingsStore.data.map {
+        (it[K.skipBackSec] ?: DEFAULT_SKIP_BACK_SEC).let { v -> if (v in SKIP_DURATIONS) v else DEFAULT_SKIP_BACK_SEC }
+    }
+    /** Forward seconds for the skip-forward key; one of 5/10/15/30/60. */
+    val skipFwdSec: Flow<Int> = context.settingsStore.data.map {
+        (it[K.skipFwdSec] ?: DEFAULT_SKIP_FWD_SEC).let { v -> if (v in SKIP_DURATIONS) v else DEFAULT_SKIP_FWD_SEC }
+    }
 
     /** Podcasts subscribed-shows section as a grid. */
     val subsGrid: StateFlow<Boolean> = subsGridFlag.asStateFlow()
@@ -423,6 +456,32 @@ class Prefs(private val context: Context) {
         }
     }
     suspend fun setBoostDb(v: Int) = put(K.boostDb, v.coerceIn(0, MaxBoostDb))
+    suspend fun setBoostPerSection(v: Boolean) = put(K.boostPerSection, v)
+    /**
+     * Remember one section's boost. Merges with the stored map (seeded from
+     * the global on read), so other sections are untouched. With the master
+     * off this is just the global write.
+     */
+    suspend fun setBoostFor(section: PlaySection, v: Int) {
+        val db = v.coerceIn(0, MaxBoostDb)
+        val scoped = context.settingsStore.data.map { it[K.boostPerSection] ?: true }.first()
+        if (!scoped) {
+            put(K.boostDb, db)
+            return
+        }
+        context.settingsStore.edit { p ->
+            val global = (p[K.boostDb] ?: 0).coerceIn(0, MaxBoostDb)
+            val stored = p[K.boostSections]?.let { raw ->
+                runCatching { Http.json.decodeFromString<Map<String, Int>>(raw) }.getOrNull()
+            }.orEmpty()
+            val merged = PlaySection.entries.associate { it.name to (stored[it.name] ?: global) } +
+                (section.name to db)
+            p[K.boostSections] = Http.json.encodeToString(merged)
+            p[K.boostDb] = db
+        }
+    }
+    suspend fun setSkipBackSec(v: Int) = put(K.skipBackSec, if (v in SKIP_DURATIONS) v else DEFAULT_SKIP_BACK_SEC)
+    suspend fun setSkipFwdSec(v: Int) = put(K.skipFwdSec, if (v in SKIP_DURATIONS) v else DEFAULT_SKIP_FWD_SEC)
     suspend fun setRepeat(v: String) = put(K.repeat, v)
     suspend fun setSubsGrid(v: Boolean) {
         subsGridFlag.value = v
@@ -511,6 +570,47 @@ class Prefs(private val context: Context) {
 
     suspend fun setLastStation(s: Station) =
         put(K.lastStation, Http.json.encodeToString(s))
+
+    /**
+     * Re-keys DataStore stations cached before the content-uri switch.
+     * Room favorites/history/stats migrate in LocalLibrary; the queue,
+     * last station and widget windows live here as JSON and would otherwise
+     * keep pointing at unplayable file:// urls (audible once via the
+     * legacy fallback, then re-persisted as file:// forever).
+     */
+    suspend fun healLegacyLocalStations(byPath: Map<String, Station>) {
+        if (byPath.isEmpty()) return
+        context.settingsStore.edit { p ->
+            p[K.queue]?.let { raw -> healStationList(raw, byPath)?.let { fixed -> p[K.queue] = fixed } }
+            p[K.wNext]?.let { raw -> healStationList(raw, byPath)?.let { fixed -> p[K.wNext] = fixed } }
+            p[K.wSource]?.let { raw -> healStationList(raw, byPath)?.let { fixed -> p[K.wSource] = fixed } }
+            p[K.lastStation]?.let { raw ->
+                healStation(raw, byPath)?.let { fixed -> p[K.lastStation] = fixed }
+            }
+        }
+    }
+
+    private fun healOneLegacyStation(s: Station, byPath: Map<String, Station>): Station {
+        if (!s.url.startsWith("file://")) return s
+        val path = runCatching {
+            java.net.URLDecoder.decode(s.url.removePrefix("file://"), "UTF-8")
+        }.getOrNull() ?: s.url.removePrefix("file://")
+        return byPath[path] ?: s
+    }
+
+    private fun healStationList(raw: String?, byPath: Map<String, Station>): String? {
+        if (raw.isNullOrBlank()) return raw
+        val list = runCatching { Http.json.decodeFromString<List<Station>>(raw) }.getOrNull()
+            ?: return raw
+        if (list.none { it.url.startsWith("file://") }) return raw
+        return Http.json.encodeToString(list.map { healOneLegacyStation(it, byPath) })
+    }
+
+    private fun healStation(raw: String, byPath: Map<String, Station>): String? {
+        val s = runCatching { Http.json.decodeFromString<Station>(raw) }.getOrNull() ?: return null
+        val fixed = healOneLegacyStation(s, byPath)
+        return if (fixed.url != s.url) Http.json.encodeToString(fixed) else null
+    }
 
     /**
      * Serializes favourite writes. The check and the write happen inside one

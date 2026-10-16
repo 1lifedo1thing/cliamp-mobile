@@ -122,7 +122,7 @@ fun CliampChannelScreen(
                     CollectionHeader(
                         title = ch.name,
                         meta = buildList {
-                            if (ch.trackCount > 0) add("${ch.trackCount} tracks")
+                            add("${ch.trackCount} tracks")
                             if (ch.genre.isNotBlank()) add(ch.genre.lowercase())
                         }.joinToString(" · "),
                         description = ch.description,

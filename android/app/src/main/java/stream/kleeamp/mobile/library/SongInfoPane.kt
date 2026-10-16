@@ -1,7 +1,6 @@
 package stream.kleeamp.mobile.library
 
 import android.app.Activity
-import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
@@ -89,8 +88,6 @@ import stream.kleeamp.mobile.chrome.Gutter
 import stream.kleeamp.mobile.chrome.HairlineDivider
 import stream.kleeamp.mobile.chrome.ListRow
 import stream.kleeamp.mobile.chrome.OverflowButton
-import stream.kleeamp.mobile.chrome.OverflowItem
-import stream.kleeamp.mobile.chrome.OverflowMenu
 import stream.kleeamp.mobile.chrome.ScreenHeader
 import stream.kleeamp.mobile.chrome.SectionLabel
 import stream.kleeamp.mobile.chrome.scrollToTop
@@ -199,14 +196,26 @@ private fun SongInfoView(
     // navigation), but must stand down when a player/queue overlay is on top.
     BackHandler(enabled = systemBack) { onDismiss() }
 
-    val path = s.url.removePrefix("file://").let(Uri::decode)
+    val path = songFilePath(s)
     // File rows only read when there is a real file: streams would show a
-    // zero size and a URL for a location.
-    val isFile = s.url.startsWith("file://")
-    val sizeLabel = remember(s.url) {
-        val f = File(path)
-        val mb = f.length() / 1_048_576f
-        String.format(Locale.US, "%.1f MB", mb)
+    // zero size and a URL for a location. Local songs count as files even
+    // though they play by content uri; shared files cannot be stat()ed
+    // under scoped storage, so content rows read MediaStore SIZE instead.
+    val isFile = s.source == StationSource.Local || s.url.startsWith("file://")
+    val sizeLabel = remember(s.id, s.url) {
+        val len = runCatching {
+            if (s.url.startsWith("content://")) {
+                context.contentResolver.query(
+                    android.net.Uri.parse(s.url),
+                    arrayOf(android.provider.MediaStore.Audio.Media.SIZE),
+                    null, null, null,
+                )?.use { c -> if (c.moveToFirst()) c.getLong(0) else 0L } ?: 0L
+            } else {
+                File(path).length()
+            }
+        }.getOrDefault(0L)
+        if (!isFile || len <= 0) "—"
+        else String.format(Locale.US, "%.1f MB", len / 1_048_576f)
     }
     val added = remember(s.dateAdded) {
         if (s.dateAdded > 0) SimpleDateFormat("dd MMM yyyy", Locale.US)

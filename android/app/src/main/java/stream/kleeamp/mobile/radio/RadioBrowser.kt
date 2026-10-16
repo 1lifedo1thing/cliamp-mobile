@@ -198,7 +198,7 @@ object RadioBrowser {
         Http.json.decodeFromString<List<RbStation>>(body)
             .asSequence()
             .filter { it.urlResolved.isNotBlank() || it.url.isNotBlank() }
-            .filter { it.hls == 0 || it.urlResolved.endsWith(".m3u8") }
+            .filter { it.hls == 0 || it.urlResolved.substringBefore('?').lowercase().endsWith(".m3u8") }
             .map { it.toStation() }
             .distinctBy { it.url }
             .toList()

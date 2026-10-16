@@ -101,8 +101,20 @@ fun StationsScreen(
     // memory, so no query, no paging, no network. Any real query (trending,
     // tag, country) switches it back off.
     var favOnly by rememberSaveable { mutableStateOf(false) }
-    val favUrls = remember(favorites) { favorites.map { it.url }.toSet() }
     val ui by vm.state.collectAsState()
+    // Favorites render the saved stations themselves, never the loaded
+    // page: a favorite on an unloaded page, another query or a reloaded
+    // list is still a favorite. Live rows win when present, so votes and
+    // meta stay fresh; the snapshot covers the rest. Cliamp and custom
+    // favorites belong here too, the same stations scope the library wears.
+    val favStations = remember(favorites, ui.directory.stations) {
+        val liveByUrl = ui.directory.stations.associateBy { it.url }
+        favorites.filter {
+            it.source == StationSource.Cliamp ||
+                it.source == StationSource.Directory ||
+                it.source == StationSource.Custom
+        }.map { liveByUrl[it.url] ?: it }.distinctBy { it.url }
+    }
     val cliamp = ui.cliamp
     val cliampError = ui.cliampError
     // Live listener figures from the same documents cliamp.stream renders,
@@ -363,13 +375,7 @@ fun StationsScreen(
             }
 
             if (source == Source.All || source == Source.Directory) {
-                // Favorites filter reads the in-memory directory page, so the
-                // count, rows and play queue all follow one list.
-                val dirStations = if (favOnly) {
-                    directory.stations.filter { it.url in favUrls }
-                } else {
-                    directory.stations
-                }
+                val dirStations = if (favOnly) favStations else directory.stations
                 item {
                     SectionLabel(
                         if (favOnly) {

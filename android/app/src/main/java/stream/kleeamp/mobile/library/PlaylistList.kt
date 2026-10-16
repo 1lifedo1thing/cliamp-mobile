@@ -326,7 +326,7 @@ private fun SmartPlaylistRow(
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Mono(
-                    if (sp.stations.isEmpty()) "empty" else "${sp.stations.size} items",
+                    "${sp.stations.size} items",
                     KleeampType.meta, p.inkFaint,
                 )
             }

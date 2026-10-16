@@ -38,9 +38,10 @@ class SettingsViewModel(
         val cleanupPlayed: CleanupScope = CleanupScope.Off,
         val parallelDownloads: Int = 3,
         val resumeLocal: Boolean = false,
-        val boostDb: Int = 0,
-        val boostSupported: Boolean = false,
         val speedPerSection: Boolean = true,
+        val boostPerSection: Boolean = true,
+        val skipBackSec: Int = 15,
+        val skipFwdSec: Int = 30,
         val listenBrainzOn: Boolean = false,
         val scrobbleRadio: Boolean = false,
         val scrobblePending: Int = 0,
@@ -62,8 +63,10 @@ class SettingsViewModel(
         data class SetCellular(val v: Boolean) : Event
         data class SetMono(val v: Boolean) : Event
         data class SetBuffer(val seconds: Int) : Event
-        data class SetBoostDb(val db: Int) : Event
+        data class SetSkipBackSec(val seconds: Int) : Event
+        data class SetSkipFwdSec(val seconds: Int) : Event
         data class SetSpeedPerSection(val v: Boolean) : Event
+        data class SetBoostPerSection(val v: Boolean) : Event
         data class SetHaptics(val v: Boolean) : Event
         data class SetListenerGlobe(val v: Boolean) : Event
         data class SetVisualizer(val v: String) : Event
@@ -74,10 +77,6 @@ class SettingsViewModel(
     }
 
     private val importError = MutableStateFlow<String?>(null)
-
-    /** Whether this device ships the loudness-enhancer effect; static per device. */
-    private val boostSupported: Boolean =
-        runCatching { stream.kleeamp.mobile.playback.VolumeBoost().isSupported() }.getOrDefault(false)
 
     /** Theme, feel and import state. */
     private data class Appearance(
@@ -99,8 +98,10 @@ class SettingsViewModel(
         val autoCellular: Boolean = false,
         val cleanupPlayed: CleanupScope = CleanupScope.Off,
         val parallelDownloads: Int = 3,
-        val boostDb: Int = 0,
         val speedPerSection: Boolean = true,
+        val boostPerSection: Boolean = true,
+        val skipBackSec: Int = 15,
+        val skipFwdSec: Int = 30,
     )
 
     /** Library counts, scrobble flag and directory stats. */
@@ -145,16 +146,22 @@ class SettingsViewModel(
             prefs.autoCellular,
             prefs.cleanupPlayed,
             prefs.parallelDownloads,
-            combine(prefs.boostDb, prefs.speedPerSection) { b, s -> b to s },
-        ) { playback, cell, clean, parallel, audio ->
-            val (boost, sections) = audio
+            prefs.speedPerSection,
+        ) { playback, cell, clean, parallel, sections ->
             playback.copy(
                 autoCellular = cell,
                 cleanupPlayed = clean,
                 parallelDownloads = parallel,
-                boostDb = boost,
                 speedPerSection = sections,
             )
+        }.combine(
+            combine(prefs.skipBackSec, prefs.skipFwdSec) { b, f -> b to f },
+        ) { playback, skip ->
+            playback.copy(skipBackSec = skip.first, skipFwdSec = skip.second)
+        }.combine(
+            prefs.boostPerSection,
+        ) { playback, per ->
+            playback.copy(boostPerSection = per)
         },
         combine(
             prefs.resumeLocal,
@@ -187,9 +194,10 @@ class SettingsViewModel(
             autoCellular = playback.autoCellular,
             cleanupPlayed = playback.cleanupPlayed,
             parallelDownloads = playback.parallelDownloads,
-            boostDb = playback.boostDb,
-            boostSupported = boostSupported,
             speedPerSection = playback.speedPerSection,
+            boostPerSection = playback.boostPerSection,
+            skipBackSec = playback.skipBackSec,
+            skipFwdSec = playback.skipFwdSec,
             resumeLocal = library.resumeLocal,
             listenBrainzOn = library.listenBrainzToken.isNotBlank(),
             scrobbleRadio = scrobbleBox.radio,
@@ -215,8 +223,10 @@ class SettingsViewModel(
             is Event.SetCellular -> viewModelScope.launch { prefs.setCellular(e.v) }
             is Event.SetMono -> viewModelScope.launch { prefs.setMono(e.v) }
             is Event.SetBuffer -> viewModelScope.launch { prefs.setBufferSeconds(e.seconds) }
-            is Event.SetBoostDb -> viewModelScope.launch { prefs.setBoostDb(e.db) }
+            is Event.SetSkipBackSec -> viewModelScope.launch { prefs.setSkipBackSec(e.seconds) }
+            is Event.SetSkipFwdSec -> viewModelScope.launch { prefs.setSkipFwdSec(e.seconds) }
             is Event.SetSpeedPerSection -> viewModelScope.launch { prefs.setSpeedPerSection(e.v) }
+            is Event.SetBoostPerSection -> viewModelScope.launch { prefs.setBoostPerSection(e.v) }
             is Event.SetHaptics -> viewModelScope.launch { prefs.setHaptics(e.v) }
             is Event.SetListenerGlobe -> viewModelScope.launch { prefs.setListenerGlobe(e.v) }
             is Event.SetVisualizer -> viewModelScope.launch { prefs.setVisualizer(e.v) }

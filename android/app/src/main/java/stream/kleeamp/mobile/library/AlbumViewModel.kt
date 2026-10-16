@@ -14,8 +14,9 @@ import stream.kleeamp.mobile.prefs.Prefs
  * Context "local-songs" scopes to the on-device library; otherwise the
  * source is exactly that user playlist's resolved members. The album is
  * keyed by album + album artist so compilations stay one album while
- * same-named albums from different album artists stay apart. Songs play in
- * disc/track order.
+ * same-named albums from different album artists stay apart. Matching is
+ * case-insensitive so the detail agrees with the lowercased list key.
+ * Songs play in disc/track order.
  */
 class AlbumViewModel(
     val album: String,
@@ -48,8 +49,8 @@ class AlbumViewModel(
         val wantAlbum = album.ifBlank { "unknown album" }
         val mine = source.distinctBy { it.id }
             .filter {
-                it.album.ifBlank { "unknown album" } == wantAlbum &&
-                    it.albumArtist == albumArtist
+                it.album.ifBlank { "unknown album" }.equals(wantAlbum, ignoreCase = true) &&
+                    it.albumArtist.equals(albumArtist, ignoreCase = true)
             }
             .sortedWith(
                 compareBy<Station> { it.discNo }.thenBy { it.trackNo }.thenBy { it.name.lowercase() },

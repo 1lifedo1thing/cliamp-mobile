@@ -66,7 +66,8 @@ class StreamResolver(
             val ref = url.removePrefix(PROVIDER_SCHEME)
             val accountId = ref.substringBefore('/')
             val trackId = ref.substringAfter('/')
-            return providerResolver?.invoke(accountId, trackId) ?: ResolvedStream(url)
+            return providerResolver?.invoke(accountId, trackId)
+                ?: throw IOException("provider track unavailable")
         }
         if (url.startsWith("http://") || url.startsWith("https://")) {
             downloadLookup?.invoke(url)?.let { path ->
@@ -76,10 +77,17 @@ class StreamResolver(
         val lower = url.substringBefore('?').lowercase()
         return when {
             lower.endsWith(".m3u8") -> ResolvedStream(url)
-            lower.endsWith(".m3u") -> ResolvedStream(firstUrl(runCatching { Http.text(url) }.getOrNull()) ?: url)
-            lower.endsWith(".pls") -> ResolvedStream(firstPlsUrl(runCatching { Http.text(url) }.getOrNull()) ?: url)
+            lower.endsWith(".m3u") -> ResolvedStream(playlistTarget(url, pls = false))
+            lower.endsWith(".pls") -> ResolvedStream(playlistTarget(url, pls = true))
             else -> ResolvedStream(url)
         }
+    }
+
+    private suspend fun playlistTarget(url: String, pls: Boolean): String {
+        val body = runCatching { Http.text(url) }.getOrNull()
+            ?: throw IOException("playlist unreachable")
+        val target = if (pls) firstPlsUrl(body) else firstUrl(body)
+        return target ?: throw IOException("playlist empty")
     }
 
     private fun firstUrl(body: String?): String? = body

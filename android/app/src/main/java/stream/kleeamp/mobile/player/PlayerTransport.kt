@@ -205,13 +205,49 @@ internal fun PlayerTransport(
     }
 }
 
-/** The prev / play-pause / next row. */
+/** The prev / play-pause / next row — or the 5-key skip row on tracks. */
 @Composable
 internal fun TransportKeys(
     model: PlayerModel,
     actions: PlayerActions,
     modifier: Modifier = Modifier,
 ) {
+    if (model.showSkipKeys) {
+        Row(modifier, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            MechKey(
+                onClick = actions.onPrev,
+                modifier = Modifier.weight(1f),
+                enabled = model.state.hasPrev,
+            ) { Icon(KleeampIcons.Prev, "previous station", Modifier.size(width = 21.dp, height = 17.dp)) }
+
+            MechKey(onClick = actions.onSkipBack, modifier = Modifier.weight(0.7f)) {
+                SkipKeyContent(icon = KleeampIcons.Rewind, description = "skip back", seconds = model.skipBackSec)
+            }
+
+            MechKey(
+                onClick = actions.onPlayPause,
+                modifier = Modifier.weight(1.6f),
+                filled = true,
+            ) {
+                if (model.state.playing) {
+                    Icon(KleeampIcons.Pause, "pause", Modifier.size(width = 20.dp, height = 22.dp))
+                } else {
+                    Icon(KleeampIcons.PlayTab, "play", Modifier.size(22.dp))
+                }
+            }
+
+            MechKey(onClick = actions.onSkipFwd, modifier = Modifier.weight(0.7f)) {
+                SkipKeyContent(icon = KleeampIcons.Forward, description = "skip forward", seconds = model.skipFwdSec)
+            }
+
+            MechKey(
+                onClick = actions.onNext,
+                modifier = Modifier.weight(1f),
+                enabled = model.state.hasNext,
+            ) { Icon(KleeampIcons.Next, "next station", Modifier.size(width = 21.dp, height = 17.dp)) }
+        }
+        return
+    }
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
         MechKey(
             onClick = actions.onPrev,
@@ -238,6 +274,23 @@ internal fun TransportKeys(
         ) { Icon(KleeampIcons.Next, "next station", Modifier.size(width = 21.dp, height = 17.dp)) }
     }
 }
+/** Circular-arrow skip key with its seconds: premium icon, honest number. */
+@Composable
+private fun SkipKeyContent(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    seconds: Int,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(icon, "$description $seconds seconds", Modifier.size(13.dp))
+        Mono("$seconds", KleeampType.meta, maxLines = 1)
+    }
+}
+
+/** "-15s" / "+30s": a skip key always names its seconds. Pure for tests. */
+internal fun skipLabel(seconds: Int): String =
+    if (seconds < 0) "${seconds}s" else "+${seconds}s"
+
 /** "SLEEP m:ss" countdown while a timer runs, else null. */
 internal fun sleepRemaining(model: PlayerModel): String? =
     model.state.sleepAtMs?.let { at ->

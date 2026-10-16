@@ -57,7 +57,7 @@ fun AddToPlaylistSheet(
     ) {
         PickerRow(
             label = "favorites",
-            countLabel = if (ui.favoritesCount == 0) "empty" else "${ui.favoritesCount} items",
+            countLabel = "${ui.favoritesCount} items",
             checked = ui.isFavorite,
             checkDescription = if (ui.isFavorite) "remove from favorites" else "add to favorites",
             leading = { PlaylistGlyph(KleeampIcons.Heart, "favorites") },

@@ -1,6 +1,8 @@
 package stream.kleeamp.mobile.library
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
@@ -38,6 +40,14 @@ class LocalGroupingTest {
 
     @Test fun decodeMissingStaysZero() {
         assertEquals(0 to 0, decodeDiscTrack(0, 0))
+    }
+
+    @Test fun libraryProjectionFallsBackToGuaranteedColumns() {
+        val full = libraryProjection(full = true).toSet()
+        val base = libraryProjection(full = false).toSet()
+        assertTrue(full.contains("disc_number"))
+        assertTrue(full.containsAll(base))
+        assertFalse(base.contains("disc_number"))
     }
 
     @Test fun albumSortUsesDiscThenTrack() {
@@ -88,5 +98,50 @@ class LocalGroupingTest {
     @Test fun artistsGroupAlphabetically() {
         val songs = listOf(song("t1", artist = "zebra"), song("t2", artist = "apple"))
         assertEquals(listOf("apple", "zebra"), artistsOf(songs).map { it.name })
+    }
+
+    @Test fun artistSongLivesUnderTrackArtistOnly() {
+        val songs = listOf(
+            song("t1", artist = "Daft Punk", album = "Alive 2007", albumArtist = "Daft Punk"),
+            song("t2", artist = "Gabrielle", album = "Alive 2007", albumArtist = "Daft Punk"),
+        )
+        val groups = artistsOf(songs).associateBy({ it.name }, { it.songs.map { s -> s.name } })
+        assertEquals(listOf("t1"), groups["Daft Punk"])
+        assertEquals(listOf("t2"), groups["Gabrielle"])
+        assertEquals(2, groups.values.sumOf { it.size })
+    }
+
+    @Test fun albumArtistOnlyGetsOwnRow() {
+        val songs = listOf(
+            song("t1", artist = "", album = "Mix", albumArtist = "DJ Mix"),
+        )
+        val groups = artistsOf(songs)
+        assertEquals(listOf("DJ Mix"), groups.map { it.name })
+    }
+
+    @Test fun artistsMergeCaseVariants() {
+        val songs = listOf(
+            song("t1", artist = "daft punk"),
+            song("t2", artist = "Daft Punk"),
+        )
+        val groups = artistsOf(songs)
+        assertEquals(1, groups.size)
+        assertEquals(2, groups.single().songs.size)
+    }
+
+    @Test fun albumsMergeCaseVariants() {
+        val songs = listOf(
+            song("t1", album = "hits", albumArtist = "a"),
+            song("t2", album = "Hits", albumArtist = "A"),
+        )
+        val groups = albumsOf(songs)
+        assertEquals(1, groups.size)
+        assertEquals(2, groups.single().songs.size)
+    }
+
+    @Test fun albumsDedupeRepeatedIds() {
+        val dup = song("t1", album = "Hits", albumArtist = "A")
+        val groups = albumsOf(listOf(dup, dup))
+        assertEquals(1, groups.single().songs.size)
     }
 }

@@ -103,8 +103,21 @@ fun renderM3u(stations: List<Station>): String = buildString {
         val secs = if (s.durationMs > 0) s.durationMs / 1000 else -1
         val title = listOf(s.artist, s.name).filter { it.isNotBlank() }.joinToString(" - ")
         appendLine("#EXTINF:$secs,$title")
-        appendLine(s.url.removePrefix("file://"))
+        appendLine(songFilePath(s))
     }
+}
+
+/**
+ * Filesystem path for a song, for export and info display. Local songs
+ * carry their stable DATA path in the id (`local:$path`) and play by
+ * content uri, so the id — never the playback url — is the path source.
+ * Anything else keeps the old behavior: legacy file urls decode, other
+ * urls pass through untouched.
+ */
+internal fun songFilePath(s: Station): String = when {
+    s.source == StationSource.Local && s.id.startsWith("local:") -> s.id.removePrefix("local:")
+    s.url.startsWith("file://") -> decodePath(s.url.removePrefix("file://"))
+    else -> s.url
 }
 
 /**
@@ -113,13 +126,14 @@ fun renderM3u(stations: List<Station>): String = buildString {
  * playable URL stations like hand-added customs. Anything else counts as
  * missing instead of failing the import.
  *
- * Both sides are percent-decoded first: library urls arrive encoded from
- * Uri.fromFile (spaces as %20), while playlist files usually carry plain
- * filenames — comparing either side raw misses every name with a space.
+ * Both sides are percent-decoded first: entry locations and legacy file
+ * urls arrive encoded (spaces as %20), while playlist files usually carry
+ * plain filenames — comparing either side raw misses every name with a
+ * space. Local songs match by their stable id path, whatever the url shape.
  */
 fun matchEntries(entries: List<PlaylistEntry>, localSongs: List<Station>): PlaylistMatch {
-    val byPath = localSongs.associateBy { decodePath(it.url.removePrefix("file://")) }
-    val byName = localSongs.groupBy { File(decodePath(it.url.removePrefix("file://"))).name }
+    val byPath = localSongs.associateBy { songFilePath(it) }
+    val byName = localSongs.groupBy { File(songFilePath(it)).name }
     val matched = entries.mapNotNull { matchOne(it, byPath, byName) }
     return PlaylistMatch(matched, entries.size - matched.size)
 }

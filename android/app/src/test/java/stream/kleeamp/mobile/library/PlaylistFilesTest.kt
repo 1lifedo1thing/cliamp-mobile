@@ -128,4 +128,50 @@ class PlaylistFilesTest {
         assertEquals("/m/plus+kept.mp3", decodePath("/m/plus+kept.mp3"))
         assertEquals("/m/plain.mp3", decodePath("/m/plain.mp3"))
     }
+
+    @Test
+    fun songFilePathPrefersStableIdForLocal() {
+        // New rows play by content uri; the id still names the file.
+        val s = localSong("/music/a.mp3").copy(url = "content://media/external/audio/media/42")
+        assertEquals("/music/a.mp3", songFilePath(s))
+    }
+
+    @Test
+    fun songFilePathDecodesLegacyFileUrls() {
+        val s = localSong("/music/a b.mp3").copy(
+            id = "other",
+            url = "file:///music/a%20b.mp3",
+        )
+        assertEquals("/music/a b.mp3", songFilePath(s))
+    }
+
+    @Test
+    fun songFilePathPassesOtherUrlsThrough() {
+        assertEquals(
+            "https://x.test/s.mp3",
+            songFilePath(urlStation("https://x.test/s.mp3", "")),
+        )
+    }
+
+    @Test
+    fun m3uRendersRawPathForContentUriLocal() {
+        val s = localSong("/music/a.mp3").copy(
+            url = "content://media/external/audio/media/42",
+            artist = "Art",
+            durationMs = 200_000,
+        )
+        val again = parseM3u(renderM3u(listOf(s)))
+        assertEquals(1, again.size)
+        assertEquals("/music/a.mp3", again[0].location)
+    }
+
+    @Test
+    fun matchFindsContentUriLibraryByIdPath() {
+        val lib = listOf(
+            localSong("/music/a.mp3").copy(url = "content://media/external/audio/media/42"),
+        )
+        val match = matchEntries(listOf(PlaylistEntry("/music/a.mp3")), lib)
+        assertEquals(1, match.matched.size)
+        assertEquals(0, match.missing)
+    }
 }

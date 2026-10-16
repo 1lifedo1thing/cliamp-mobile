@@ -666,7 +666,7 @@ private fun SmartPlaylistDetail(
         item {
             CollectionHeader(
                 title = pl.label,
-                meta = if (members.isEmpty()) "" else "${members.size} items",
+                meta = "${members.size} items",
                 actions = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -791,7 +791,7 @@ private fun SmartPlaylistDetail(
                 }
             }
         } else if (isLocalSongs && tab == LocalSongsTab.Artists && ordered.isNotEmpty()) {
-            items(artists, key = { it.name }) { group ->
+            items(artists, key = { it.key }) { group ->
                 ListRow(
                     onClick = { onOpenArtist(group.name) },
                     verticalPadding = 9.dp,
@@ -799,7 +799,7 @@ private fun SmartPlaylistDetail(
                         GroupArt(
                             songs = group.songs,
                             modifier = Modifier.size(40.dp),
-                            fallbackKey = group.name,
+                            fallbackKey = group.key,
                             fallbackName = group.name,
                         )
                     },

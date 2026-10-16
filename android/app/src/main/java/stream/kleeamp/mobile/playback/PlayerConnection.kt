@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import stream.kleeamp.mobile.KleeampApp
+import stream.kleeamp.mobile.library.LocalLibrary
 import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.prefs.playSectionFor
 import stream.kleeamp.mobile.model.Station
@@ -328,6 +329,7 @@ class PlayerConnection(
             playing = c.isPlaying,
             buffering = c.playbackState == Player.STATE_BUFFERING,
             idle = c.playbackState == Player.STATE_IDLE && c.mediaItemCount == 0,
+            wantPlaying = c.playWhenReady && c.mediaItemCount > 0,
             positionMs = c.currentPosition.coerceAtLeast(0),
             bufferedMs = (c.bufferedPosition - c.currentPosition).coerceAtLeast(0),
             volume = c.volume,
@@ -390,7 +392,17 @@ class PlayerConnection(
             // this over a slice, so an unbounded item multiplies into an
             // unbounded queue swap.
             withTimeoutOrNull(StreamResolver.RESOLVE_TIMEOUT_MS) {
-                PlaybackService.mediaItem(context, station, streams.resolve(station.url))
+                val resolved = streams.resolve(station.url)
+                val url = if (station.source == StationSource.Local && resolved.url.startsWith("file://")) {
+                    // Legacy rows cached before the content-uri switch: map
+                    // once through the index instead of handing ExoPlayer a
+                    // raw path scoped storage will refuse. Unresolvable rows
+                    // play as-is and fail exactly once (no retry loop).
+                    withContext(Dispatchers.IO) {
+                        LocalLibrary.contentUriForLegacyFile(context, resolved.url)?.toString()
+                    } ?: resolved.url
+                } else resolved.url
+                PlaybackService.mediaItem(context, station, ResolvedStream(url, resolved.headers))
             } ?: throw IOException("stream resolve timed out")
         }
 
@@ -494,6 +506,8 @@ data class PlayerState(
     val playing: Boolean = false,
     val buffering: Boolean = false,
     val idle: Boolean = true,
+    /** Play intent: a tap is in flight even before first audio. */
+    val wantPlaying: Boolean = false,
     val positionMs: Long = 0,
     val bufferedMs: Long = 0,
     val volume: Float = 1f,

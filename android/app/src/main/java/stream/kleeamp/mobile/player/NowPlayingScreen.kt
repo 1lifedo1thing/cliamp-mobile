@@ -116,6 +116,9 @@ internal data class PlayerModel(
     val currentOutput: AudioOutput?,
     val boostDb: Int,
     val boostSupported: Boolean,
+    val showSkipKeys: Boolean,
+    val skipBackSec: Int,
+    val skipFwdSec: Int,
 )
 
 /** Every control the player screen can take, so both layouts share one set. */
@@ -132,6 +135,8 @@ internal data class PlayerActions(
     val onPrev: () -> Unit,
     val onPlayPause: () -> Unit,
     val onNext: () -> Unit,
+    val onSkipBack: () -> Unit,
+    val onSkipFwd: () -> Unit,
     val onOpenSleep: () -> Unit,
     val onSelectOutput: (Int) -> Unit,
     val onToggleFullscreen: () -> Unit,
@@ -166,13 +171,27 @@ fun NowPlayingScreen(
         AudioOutputs.current(context, uiState.outputDevice)
     }
 
-    val model = PlayerModel(        state = uiState.playerState,
+    // Optimistic 3s window after every track change: most slow streams
+    // join inside it, so keep the pause glyph and hide buffering /
+    // reconnecting instead of blinking. Pause inside the window still
+    // reads as paused via wantPlaying.
+    val inGrace = rememberNavGrace(uiState.shownStation?.id)
+    val effState = uiState.playerState.copy(
+        playing = effectivePlaying(
+            uiState.playerState.playing,
+            uiState.playerState.wantPlaying,
+            inGrace,
+        ),
+        buffering = effectiveBuffering(uiState.playerState.buffering, inGrace),
+    )
+    val effReconnect = effectiveReconnect(uiState.reconnect, inGrace)
+    val model = PlayerModel(        state = effState,
         shownStation = uiState.shownStation,
         previousStation = uiState.previousStation,
         nextStation = uiState.nextStation,
         streamTitle = uiState.streamTitle,
         upNextCount = uiState.upNextCount,
-        reconnect = uiState.reconnect,
+        reconnect = effReconnect,
         error = uiState.error,
         isFav = uiState.isFav,
         shuffled = uiState.shuffled,
@@ -185,6 +204,9 @@ fun NowPlayingScreen(
         currentOutput = currentOutput,
         boostDb = uiState.boostDb,
         boostSupported = uiState.boostSupported,
+        showSkipKeys = uiState.showSkipKeys,
+        skipBackSec = uiState.skipBackSec,
+        skipFwdSec = uiState.skipFwdSec,
     )
     val actions = PlayerActions(
         onBack = onBack,
@@ -199,6 +221,8 @@ fun NowPlayingScreen(
         onPrev = { vm.player.prev() },
         onPlayPause = { vm.player.toggle(uiState.shownStation) },
         onNext = { vm.player.next() },
+        onSkipBack = { vm.player.seekBy(-uiState.skipBackSec) },
+        onSkipFwd = { vm.player.seekBy(uiState.skipFwdSec) },
         onOpenSleep = { sleepOpen = true },
         onSelectOutput = { vm.onEvent(NowPlayingViewModel.Event.SetOutputDevice(it)) },
         onToggleFullscreen = { fullscreen = true },
@@ -246,6 +270,9 @@ fun NowPlayingScreen(
         if (boostOpen) {
             BoostDialog(
                 current = uiState.boostDb,
+                sectionLabel = if (uiState.boostSections) {
+                    uiState.shownStation?.let { playSectionFor(it.source).label }.orEmpty()
+                } else "",
                 onPick = { vm.onEvent(NowPlayingViewModel.Event.SetBoostDb(it)) },
                 onDismiss = { boostOpen = false },
             )
