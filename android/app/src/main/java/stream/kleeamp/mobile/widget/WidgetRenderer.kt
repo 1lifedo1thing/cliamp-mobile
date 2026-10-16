@@ -8,7 +8,6 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
-import android.os.SystemClock
 import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
@@ -195,10 +194,8 @@ object WidgetRenderer {
                     delay(100)
                     val req = synchronized(lock) { Req(pending, pendingCold) }
                     val ctx = synchronized(lock) { appContext } ?: return@launch
-                    val t0 = SystemClock.uptimeMillis()
                     runCatching { render(ctx, req) }
                         .onFailure { Log.e("kleeamp/wid", "widget push failed", it) }
-                    Log.d("kleeamp/wid", "widget push ms=${SystemClock.uptimeMillis() - t0}")
                 } while (synchronized(lock) { again })
             } finally {
                 // A request that slipped in after the last drain check set
@@ -236,7 +233,6 @@ object WidgetRenderer {
             val tiny = h < MINIMAL_MAX_HEIGHT_DP && w < COMPACT_MAX_WIDTH_DP
             val minimal = !tiny && h < MINIMAL_MAX_HEIGHT_DP
             val compact = !tiny && !minimal && (w < COMPACT_MAX_WIDTH_DP || h < COMPACT_MAX_HEIGHT_DP)
-            Log.d("kleeamp/wid", "widget layout id=$id cell=${w}x${h} tiny=$tiny minimal=$minimal compact=$compact")
             mgr.updateAppWidget(id, buildViews(ctx, row, p, compact, minimal, tiny))
         }
     }

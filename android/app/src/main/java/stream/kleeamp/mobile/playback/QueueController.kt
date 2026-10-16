@@ -252,10 +252,6 @@ internal class QueueController(
         PlaybackBus.publishStation(station)
         PlaybackBus.publishSource(model.source)
         history.record(station)
-        android.util.Log.d(
-            "kleeamp/wid",
-            "PLAY source.size=${model.source.size} station=${station.name} preserve=$preserveOrder",
-        )
         persistWidgetWindow(station)
         persistQueue()
         PlaybackBus.publishError(null)

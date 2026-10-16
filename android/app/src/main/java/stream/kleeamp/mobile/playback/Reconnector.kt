@@ -78,10 +78,6 @@ class Reconnector(
         override fun onPlayerError(error: PlaybackException) {
             if (!player.playWhenReady) return
             lastErrorRecoverable = recoverable(error)
-            android.util.Log.d(
-                "kleeamp/seek",
-                "playerError ${error.errorCodeName} id=${PlaybackBus.station.value?.id}",
-            )
             if (!lastErrorRecoverable) {
                 Log.w(TAG, "not retrying: ${error.errorCodeName}")
                 return
@@ -167,11 +163,9 @@ class Reconnector(
         restorePosMs = 0L
         val stationNow = PlaybackBus.station.value
         val cur = player.currentPosition
-        android.util.Log.d("kleeamp/seek", "restore check rid=$rid now=${stationNow?.id} held=$held cur=$cur")
         if (!shouldRestoreTrackPosition(rid, stationNow?.takeIf { it.isTrack }?.id, held, cur)) return
         val at = idx.coerceIn(0, (player.mediaItemCount - 1).coerceAtLeast(0))
-        val ok = runCatching { player.seekTo(at, held) }.isSuccess
-        android.util.Log.d("kleeamp/seek", "restore fired id=$rid idx=$at pos=$held ok=$ok")
+        runCatching { player.seekTo(at, held) }
     }
 
     private fun scheduleRetry(reason: String) {

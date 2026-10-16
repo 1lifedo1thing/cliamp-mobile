@@ -229,15 +229,10 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
             _loading.value = true
         }
 
-        val tQuery = System.currentTimeMillis()
         val found = runCatching { querySongs() }.getOrElse { e ->
             if (_songs.value.isEmpty()) _error.value = e.message ?: "could not read the library"
             _songs.value
         }
-        android.util.Log.d(
-            "kleeamp/library",
-            "query ${found.size} songs in ${System.currentTimeMillis() - tQuery}ms",
-        )
 
         // The list (and the spinner going away) always wins over the cache
         // write: rows are up the moment the cursor closes, however slow the
@@ -247,12 +242,7 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
         _loading.value = false
 
         if (found != cached.orEmpty()) {
-            val tCache = System.currentTimeMillis()
             writeCache(found)
-            android.util.Log.d(
-                "kleeamp/library",
-                "cache write ${found.size} songs in ${System.currentTimeMillis() - tCache}ms",
-            )
         }
         // Favorites, history, counters and resume positions are keyed by
         // playback url: rows cached before the content-uri switch still

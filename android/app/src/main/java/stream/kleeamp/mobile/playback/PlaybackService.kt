@@ -65,7 +65,6 @@ import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.model.wrapNext
 import stream.kleeamp.mobile.net.Http
-import stream.kleeamp.mobile.net.redactUrl
 import stream.kleeamp.mobile.widget.WidgetRenderer
 import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.prefs.MaxBoostDb
@@ -397,11 +396,6 @@ class PlaybackService : MediaSessionService() {
                 .add(SessionCommand(CMD_FAVOURITE, Bundle.EMPTY))
                 .add(SessionCommand(CMD_SHUFFLE, Bundle.EMPTY))
                 .build()
-            android.util.Log.d(
-                "kleeamp/seek",
-                "onConnect grants seek=" +
-                    "${playerCommands.contains(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)}",
-            )
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller)
                 .setAvailableSessionCommands(commands)
                 .setAvailablePlayerCommands(playerCommands)
@@ -505,7 +499,6 @@ class PlaybackService : MediaSessionService() {
                 .build(),
         )
         if (station.isTrack && pos > 0) runCatching { player.seekTo(index, pos) }
-        android.util.Log.d("kleeamp/seek", "artwork replace id=${station.id} restored=$pos")
     }
 
     /**
@@ -564,12 +557,6 @@ class PlaybackService : MediaSessionService() {
             seekable = seekable,
             durationMs = duration,
         )
-        Log.d(
-            "kleeamp/wid",
-            "publishWidgetState playing=${next.playing} streamTitle=${next.track} " +
-                "url=${redactUrl(next.url)} station=${station?.name} " +
-                "seekable=${next.seekable} duration=${next.durationMs}",
-        )
         // Both halves of the cache update synchronously. lastWidgetSourceKey
         // used to be assigned inside the launch below (and only when upNext
         // was non-empty), so after a cold start it stayed null forever, the
@@ -601,9 +588,6 @@ class PlaybackService : MediaSessionService() {
                     shuffled,
                 )
             )
-            val names = upNext.map { it.name }
-            Log.d("kleeamp/wid", "nextUp source.size=${source.size} count=${upNext.size} names=$names")
-            // An active source may intentionally have no upcoming items.
             // Preserve the persisted fallback only when no session source exists.
             if (sourceChanged && source.isNotEmpty()) {
                 prefs0.setWidgetNext(upNext)

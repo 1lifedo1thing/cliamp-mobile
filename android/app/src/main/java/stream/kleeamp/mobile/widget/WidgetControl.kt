@@ -42,7 +42,6 @@ object WidgetControl {
 
     private suspend fun <T> withController(context: Context, block: (MediaController) -> T): T? =
         withContext(Dispatchers.Main) {
-            val t0 = System.currentTimeMillis()
             val token = SessionToken(
                 context.applicationContext,
                 ComponentName(context.applicationContext, PlaybackService::class.java),
@@ -50,7 +49,6 @@ object WidgetControl {
             val controller = MediaController.Builder(context.applicationContext, token)
                 .buildAsync()
                 .await() ?: return@withContext null
-            android.util.Log.d("kleeamp/wid", "controller build ms=${System.currentTimeMillis() - t0}")
             try {
                 block(controller)
             } finally {
@@ -105,7 +103,6 @@ object WidgetControl {
             }
         }
         if (handled) return
-        val t0 = System.currentTimeMillis()
         // Walk the persisted window of the current list (local / radio /
         // podcast) rather than the in-memory PlaybackBus, which is empty when
         // the widget wakes a cold process and made prev/next fall back to the
@@ -120,17 +117,11 @@ object WidgetControl {
         val here = PlaybackBus.station.value?.url ?: app.prefs.readLastStation()?.url
         val i = list.indexOfFirst { it.url == here }
         val target = if (i < 0) list.first() else list[(i + delta + list.size) % list.size]
-        val elapsed = System.currentTimeMillis() - t0
-        android.util.Log.d(
-            "kleeamp/wid",
-            "step delta=$delta src=${list.size} here=$here target=${target.name} ms=$elapsed",
-        )
         tune(context, target)
     }
 
     suspend fun tune(context: Context, station: Station) {
         val app = context.applicationContext as KleeampApp
-        val t0 = System.currentTimeMillis()
         PlaybackBus.publishStation(station)
         PlaybackBus.publishError(null)
         app.prefs.setLastStation(station)
@@ -162,13 +153,11 @@ object WidgetControl {
         )
 
         val resolved = app.streamResolver.resolve(station.url)
-        android.util.Log.d("kleeamp/wid", "tune resolve ms=${System.currentTimeMillis() - t0}")
         withController(context) { c ->
             c.setMediaItem(PlaybackService.mediaItem(context, station, resolved))
             c.prepare()
             c.play()
         }
-        android.util.Log.d("kleeamp/wid", "tune controller+play ms=${System.currentTimeMillis() - t0}")
         publish(context, station)
     }
 

@@ -51,9 +51,6 @@ private const val PROGRESS_INTERVAL = 5_000L
  */
 internal const val SEEK_END_MARGIN_MS = 250L
 
-/** Diagnosing podcast seeks resetting to zero; remove once pinned. */
-private const val SEEK_TAG = "kleeamp/seek"
-
 /** How long a fired seek owns the clock until the player lands on it. */
 private const val FIRED_SEEK_HOLD_MS = 2_000L
 
@@ -616,11 +613,6 @@ class PlayerConnection(
         pendingSeekStationId = station.id
         PlaybackBus.lastSeekMs = System.currentTimeMillis()
         val c = controller
-        android.util.Log.d(
-            SEEK_TAG,
-            "prime id=${station.id} f=$fraction items=${c?.mediaItemCount} " +
-                "st=${c?.playbackState} seekable=${c?.isCurrentMediaItemSeekable}",
-        )
         if (c == null || c.mediaItemCount == 0) {
             play(station)
             return
@@ -635,7 +627,6 @@ class PlayerConnection(
         val pendingId = pendingSeekStationId ?: return false
         val stationNow = PlaybackBus.station.value ?: return false
         if (pendingId != stationNow.id) {
-            android.util.Log.d(SEEK_TAG, "drop prime: station changed $pendingId -> ${stationNow.id}")
             pendingSeekFraction = null
             pendingSeekStationId = null
             return false
@@ -644,7 +635,6 @@ class PlayerConnection(
         // instead of firing into the void and clearing it (which read as
         // "tap, then back to zero" on slow podcast/local loads).
         if (c.playbackState == Player.STATE_IDLE) {
-            android.util.Log.d(SEEK_TAG, "hold prime: IDLE id=${stationNow.id} pos=${c.currentPosition}")
             return false
         }
         // A seek fired before the item reports seekable is dropped by
@@ -652,19 +642,14 @@ class PlayerConnection(
         // prime and snapping a long podcast back to zero once the UI's
         // 2s hold releases. Keep priming until the player can take it.
         if (!c.isCurrentMediaItemSeekable) {
-            android.util.Log.d(SEEK_TAG, "hold prime: not seekable id=${stationNow.id} st=${c.playbackState}")
             return false
         }
         if (!c.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) {
-            android.util.Log.d(SEEK_TAG, "hold prime: seek not granted id=${stationNow.id}")
             return false
         }
         val d = c.duration.takeIf { it != C.TIME_UNSET && it > 0 }
             ?: stationNow.durationMs.takeIf { it > 0 }
-            ?: run {
-                android.util.Log.d(SEEK_TAG, "hold prime: no duration id=${stationNow.id} st=${c.playbackState}")
-                return false
-            }
+            ?: return false
         val target = seekTargetMs(d, pending)
         if (target == null) {
             pendingSeekFraction = null
@@ -672,10 +657,6 @@ class PlayerConnection(
             return false
         }
         val ok = runCatching { c.seekTo(target) }.isSuccess
-        android.util.Log.d(
-            SEEK_TAG,
-            "fire prime: id=${stationNow.id} f=$pending d=$d target=$target st=${c.playbackState}",
-        )
         if (ok) {
             pendingSeekFraction = null
             pendingSeekStationId = null
