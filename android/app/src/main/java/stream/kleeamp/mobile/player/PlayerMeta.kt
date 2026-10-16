@@ -385,6 +385,11 @@ internal fun outputIcon(kind: OutputKind?): androidx.compose.ui.graphics.vector.
 private val NameLineHeight = (28 * 1.7).sp
 private val TitleLineHeight = (15 * 1.75).sp
 private val MetaLineHeight = (13 * 1.8).sp
+/**
+ * Hero glyph size. The line height stays [NameLineHeight], so the bigger
+ * face fits the exact same box - presence without layout shift.
+ */
+private val HeroFontSize = 30.sp
 
 @Composable
 internal fun PlayerMeta(
@@ -398,7 +403,7 @@ internal fun PlayerMeta(
         key(model.shownStation?.id) {
             MarqueeLabel(
                 model.shownStation?.name ?: "pick a station",
-                KleeampType.trackTitle.copy(lineHeight = NameLineHeight),
+                KleeampType.trackTitle.copy(fontSize = HeroFontSize, lineHeight = NameLineHeight),
                 p.ink,
             )
             ArtistLine(
