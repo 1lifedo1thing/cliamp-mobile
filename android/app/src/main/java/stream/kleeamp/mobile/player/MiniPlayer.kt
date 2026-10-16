@@ -25,7 +25,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -160,13 +159,6 @@ fun MiniPlayer(
                 Box(
                     Modifier
                         .size(38.dp)
-                        .graphicsLayer {
-                            // The play key swells with the music: a layer
-                            // transform, still the moment it pauses.
-                            val pulse = 1f + 0.12f * energy
-                            scaleX = pulse
-                            scaleY = pulse
-                        }
                         .microPress(onClick = onToggle)
                         .clip(RoundedCornerShape(KleeampShape.medium))
                         .background(if (p.dark) p.accent else p.ink),

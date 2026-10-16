@@ -45,19 +45,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInParent
-import androidx.compose.ui.util.lerp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Brush
@@ -71,9 +66,7 @@ import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Mono
-import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.sin
 
 /** Screen gutter, fixed at 22dp everywhere in the concept. */
 val Gutter = 22.dp
@@ -389,58 +382,22 @@ fun KleeampTabBar(position: () -> Float?, onSelect: (Tab) -> Unit, modifier: Mod
     // strip while the finger drags the pager.
     val pos = position()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    // Each tab's bounds in px, measured after layout: the one indicator
-    // line below slides between them with the drag fraction.
-    var rects by remember { mutableStateOf(List(Tab.entries.size) { Rect.Zero }) }
     Column(modifier.fillMaxWidth().background(p.ground)) {
         HairlineDivider(region = true)
         Row(
-            Modifier.fillMaxWidth().drawBehind {
-                val settled = pos?.coerceIn(0f, (Tab.entries.size - 1).toFloat()) ?: return@drawBehind
-                val lo = settled.toInt().coerceIn(0, Tab.entries.size - 1)
-                val hi = (lo + 1).coerceAtMost(Tab.entries.size - 1)
-                val f = (settled - lo).coerceIn(0f, 1f)
-                val r0 = rects[lo]
-                val r1 = rects[hi]
-                // First frame, before anything is measured: no line yet.
-                if (r0.width <= 0f || r1.width <= 0f) return@drawBehind
-                // 2px accent top border, pulled up 1dp so it sits on the
-                // divider — one line, travelling, never two fading. It
-                // stretches mid-flight (widest halfway over) and lands
-                // exact, so taps and swipes read elastic, not rigid.
-                val c0 = r0.left + r0.width / 2f
-                val c1 = r1.left + r1.width / 2f
-                val center = lerp(c0, c1, f)
-                val half = lerp(r0.width, r1.width, f) / 2f +
-                    abs(c1 - c0) * 0.12f * sin(PI.toFloat() * f)
-                drawLine(
-                    color = p.accent,
-                    start = Offset(center - half, lerp(r0.top, r1.top, f)),
-                    end = Offset(center + half, lerp(r0.top, r1.top, f)),
-                    strokeWidth = 2.dp.toPx(),
-                    cap = StrokeCap.Round,
-                )
-            }
+            Modifier.fillMaxWidth(),
         ) {
             Tab.entries.forEachIndexed { index, tab ->
                 TabItem(
                     tab = tab,
                     // Tint still crossfades per tab: the settled tab reads
-                    // lit while its neighbour wakes mid-swipe.
+                    // lit while its neighbour wakes mid-swipe. The wash
+                    // follows the same weight, so the active third carries
+                    // a lighter background instead of a travelling line.
                     weight = pos?.let { (1f - abs(it - index)).coerceIn(0f, 1f) } ?: 0f,
                     bottomInset = navBottom,
                     onClick = { onSelect(tab) },
-                    modifier = Modifier.weight(1f).onGloballyPositioned { coords ->
-                        val at = coords.positionInParent()
-                        val rect = Rect(
-                            at.x, at.y,
-                            at.x + coords.size.width.toFloat(),
-                            at.y + coords.size.height.toFloat(),
-                        )
-                        if (rects[index] != rect) {
-                            rects = rects.toMutableList().also { it[index] = rect }
-                        }
-                    },
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
@@ -487,41 +444,14 @@ fun KleeampTabRail(
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     // Same fractional read as the strip: the rail accent travels mid-swipe.
     val pos = position()
-    // Each tab's bounds in px, measured after layout: the one side line
-    // slides between them with the drag fraction.
-    var rects by remember { mutableStateOf(List(Tab.entries.size) { Rect.Zero }) }
+    // Same fractional read as the strip: the rail wash follows mid-swipe.
     Row(modifier.fillMaxHeight().background(p.ground)) {
         Box(Modifier.width(1.dp).fillMaxHeight().background(p.hairlineRegion))
         Column(
             Modifier
                 .width(TabRailWidth - 1.dp)
                 .fillMaxHeight()
-                .padding(top = statusTop + 10.dp, bottom = navBottom + 10.dp)
-                .drawBehind {
-                    val settled = pos?.coerceIn(0f, (Tab.entries.size - 1).toFloat()) ?: return@drawBehind
-                    val lo = settled.toInt().coerceIn(0, Tab.entries.size - 1)
-                    val hi = (lo + 1).coerceAtMost(Tab.entries.size - 1)
-                    val f = (settled - lo).coerceIn(0f, 1f)
-                    val r0 = rects[lo]
-                    val r1 = rects[hi]
-                    if (r0.height <= 0f || r1.height <= 0f) return@drawBehind
-                    // 2px accent side border on the item's own right edge —
-                    // one line, travelling, never two fading. Same elastic
-                    // stretch as the strip, rotated.
-                    val cy0 = r0.top + r0.height / 2f
-                    val cy1 = r1.top + r1.height / 2f
-                    val center = lerp(cy0, cy1, f)
-                    val half = lerp(r0.height, r1.height, f) / 2f +
-                        abs(cy1 - cy0) * 0.12f * sin(PI.toFloat() * f)
-                    val x = lerp(r0.right, r1.right, f) - 1.dp.toPx()
-                    drawLine(
-                        color = p.accent,
-                        start = Offset(x, center - half),
-                        end = Offset(x, center + half),
-                        strokeWidth = 2.dp.toPx(),
-                        cap = StrokeCap.Round,
-                    )
-                },
+                .padding(top = statusTop + 10.dp, bottom = navBottom + 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -530,17 +460,7 @@ fun KleeampTabRail(
                     tab = tab,
                     weight = pos?.let { (1f - abs(it - index)).coerceIn(0f, 1f) } ?: 0f,
                     onClick = { onSelect(tab) },
-                    modifier = Modifier.weight(1f).onGloballyPositioned { coords ->
-                        val at = coords.positionInParent()
-                        val rect = Rect(
-                            at.x, at.y,
-                            at.x + coords.size.width.toFloat(),
-                            at.y + coords.size.height.toFloat(),
-                        )
-                        if (rects[index] != rect) {
-                            rects = rects.toMutableList().also { it[index] = rect }
-                        }
-                    },
+                    modifier = Modifier.weight(1f),
                 )
             }
         }

@@ -496,32 +496,16 @@ private fun ArtistLine(
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
-    Row(
+    MarqueeLabel(
+        text,
+        KleeampType.rowPrimary.copy(lineHeight = TitleLineHeight),
+        when {
+            error -> p.destructiveInk
+            live -> p.ink
+            else -> p.inkSecondary
+        },
         modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-    ) {
-        Icon(
-            KleeampIcons.MusicNote,
-            null,
-            Modifier.size(12.dp),
-            tint = when {
-                error -> p.destructiveInk
-                live -> p.accent
-                else -> p.inkTertiary
-            },
-        )
-        MarqueeLabel(
-            text,
-            KleeampType.rowPrimary.copy(lineHeight = TitleLineHeight),
-            when {
-                error -> p.destructiveInk
-                live -> p.ink
-                else -> p.inkSecondary
-            },
-            Modifier.weight(1f),
-        )
-    }
+    )
 }
 
 /** Short source name for the badge. Pure for tests. */
