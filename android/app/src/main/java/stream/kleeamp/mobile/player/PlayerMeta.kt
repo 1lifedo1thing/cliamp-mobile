@@ -406,13 +406,77 @@ internal fun PlayerMeta(
                 if (model.error != null && model.streamTitle.isBlank()) p.destructiveInk else p.inkSecondary,
             )
         }
+        SourceLine(model.shownStation)
+    }
+}
+
+/**
+ * The source · country · votes row under the stream title: an
+ * accent-washed source badge, the country in secondary ink, and the
+ * vote count with a heart in amber - one line, always.
+ */
+@Composable
+internal fun SourceLine(
+    station: Station?,
+    modifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    if (station == null) {
         Mono(
-            sourceLine(model.shownStation),
+            "15 cliamp channels · 50k+ directory",
             KleeampType.body.copy(lineHeight = MetaLineHeight),
             p.inkTertiary,
             maxLines = 1,
         )
+        return
     }
+    val country = station.country.takeIf { it.isNotBlank() && station.source != StationSource.Cliamp }
+        ?.lowercase()
+    Row(
+        modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(KleeampShape.small))
+                .background(p.accent.copy(alpha = 0.16f))
+                .padding(horizontal = 7.dp, vertical = 3.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Mono(sourceLabel(station.source).uppercase(), KleeampType.chip, p.accent, maxLines = 1)
+        }
+        if (country != null) {
+            Mono("·", KleeampType.body, p.inkFaint, maxLines = 1)
+            Mono(
+                country,
+                KleeampType.body.copy(lineHeight = MetaLineHeight),
+                p.inkSecondary,
+                Modifier.weight(1f, fill = false),
+                maxLines = 1,
+            )
+        }
+        if (station.votes > 0) {
+            Mono("·", KleeampType.body, p.inkFaint, maxLines = 1)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(KleeampIcons.HeartFilled, "votes", Modifier.size(10.dp), tint = p.amber)
+                Mono(compact(station.votes), KleeampType.body, p.amber, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** Short source name for the badge; pure so unit tests can pin it. */
+internal fun sourceLabel(source: StationSource): String = when (source) {
+    StationSource.Cliamp -> "cliamp radio"
+    StationSource.Directory -> "directory"
+    StationSource.Local -> "on device"
+    StationSource.Provider -> "provider"
+    StationSource.Podcast -> "podcast"
+    StationSource.Custom -> "custom"
 }
 
 
@@ -420,16 +484,7 @@ internal fun PlayerMeta(
 internal fun sourceLine(shownStation: Station?): String {
     val parts = buildList {
         shownStation?.let { s ->
-            add(
-                when (s.source) {
-                    StationSource.Cliamp -> "cliamp radio"
-                    StationSource.Directory -> "directory"
-                    StationSource.Local -> "on device"
-                    StationSource.Provider -> "provider"
-                    StationSource.Podcast -> "podcast"
-                    StationSource.Custom -> "custom"
-                }
-            )
+            add(sourceLabel(s.source))
             if (s.country.isNotBlank() && s.source != StationSource.Cliamp) add(s.country.lowercase())
             if (s.votes > 0) add("${compact(s.votes)} votes")
         }
