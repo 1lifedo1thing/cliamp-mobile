@@ -27,6 +27,12 @@ import stream.kleeamp.mobile.widget.WidgetRenderer
 private const val NAV_DEBOUNCE_MS = 180L
 /** Caps the undo stack: walking back fifty edits is plenty, and old sources stay small. */
 private const val MAX_UNDO_DEPTH = 50
+/**
+ * Largest source persisted whole across restarts. A Station serializes to a
+ * few hundred bytes, so this caps the queue blob well under a megabyte;
+ * bigger lists fall back to the bounded window like before.
+ */
+private const val FULL_SOURCE_PERSIST_CAP = 500
 
 /**
  * The queue half of playback: the source lists, the bounded Up Next window,
@@ -93,22 +99,35 @@ internal class QueueController(
 
 
     /**
-     * Cold-start queue restore: the last session's Up Next window becomes this
-     * session's queue, published paused - never auto-played. The mini player
+     * Cold-start queue restore: the last session's list becomes this
+     * session's queue, published paused - never auto-played. Whole sources
+     * persisted via [persistQueue] restore whole and re-window onto the
+     * remembered position; windows restore as before. The mini player
      * and the Up Next screen render the remembered list from the first
      * DataStore emission instead of flashing empty until something plays.
      * Skipped when a play already landed (e.g. auto-resume won the race).
      */
     private suspend fun restoreQueue(prefs: Prefs) {
-        val window = prefs.queue.first()
-        if (window.isEmpty() || model.currentUpNext.isNotEmpty()) return
-        val idx = prefs.queueIndex.first().coerceIn(0, window.lastIndex)
-        // The full source list is deliberately not persisted (it can be the
-        // whole local library), so navigation walks the restored window. The
-        // next real play rebases onto its own list as before.
-        model.restoreWindow(window, idx)
-        PlaybackBus.publishStation(window[idx])
-        PlaybackBus.publishSource(window)
+        val stored = prefs.queue.first()
+        if (stored.isEmpty() || model.currentUpNext.isNotEmpty()) return
+        if (prefs.queueFull.first()) {
+            val idx = prefs.queueIndex.first().coerceIn(0, stored.lastIndex)
+            model.source = stored
+            model.baseSource = stored
+            model.ringFallback = false
+            val w = model.rewindow(idx)
+            PlaybackBus.publishStation(w.window.getOrNull(w.index))
+            PlaybackBus.publishSource(stored)
+            val nav = navAvailability()
+            onQueueRestored(nav.hasPrev, nav.hasNext)
+            return
+        }
+        val idx = prefs.queueIndex.first().coerceIn(0, stored.lastIndex)
+        // Windows restore as a fresh walking order: the next real play
+        // rebases onto its own list as before.
+        model.restoreWindow(stored, idx)
+        PlaybackBus.publishStation(stored[idx])
+        PlaybackBus.publishSource(stored)
         val nav = navAvailability()
         onQueueRestored(nav.hasPrev, nav.hasNext)
     }
@@ -203,16 +222,23 @@ internal class QueueController(
 
     /**
      * The Up Next window plus the position inside it, so a cold start reopens
-     * on the remembered queue. The window alone starts at the tapped track,
-     * so up to [QueuePolicy.PREV_KEEP] predecessors from the source ride in front of it -
-     * linear and clamped, never wrapped, so a finite list still reads in its
-     * own order. Written at the same choke point as the widget window, so
-     * both agree on what "now" means.
+     * on the remembered queue. Finite track lists persist whole (up to
+     * [FULL_SOURCE_PERSIST_CAP]) so the full panel survives a force stop;
+     * anything bigger - or any mixed/live list - persists the bounded window
+     * with predecessors like before.
      */
     private fun persistQueue() {
         val q = model.currentUpNext
         if (q.isEmpty()) return
         val prefs = (context.applicationContext as KleeampApp).prefs
+        val src = model.source
+        if (src.isNotEmpty() && src.size <= FULL_SOURCE_PERSIST_CAP && src.all { it.isTrack }) {
+            val abs = (model.windowBase + model.currentIndex)
+                .takeIf { model.currentIndex in q.indices }
+                ?.coerceIn(0, src.lastIndex) ?: 0
+            scope.launch { prefs.setQueue(src, abs, full = true) }
+            return
+        }
         val (combined, queueIndex) = model.persistWindow(q)
         scope.launch { prefs.setQueue(combined, queueIndex) }
     }
@@ -359,6 +385,7 @@ internal class QueueController(
         model.ringFallback = false
         PlaybackBus.publishSource(model.source)
         PlaybackBus.station.value?.let(::persistWidgetWindow)
+        persistQueue()
         bridge.rebuildWindow(snap.window, snap.index)
     }
 
@@ -620,6 +647,7 @@ internal class QueueController(
         model.setIndex(idx)
         PlaybackBus.publishSource(model.source)
         PlaybackBus.station.value?.let(::persistWidgetWindow)
+        persistQueue()
         bridge.applyEdit(q, idx, previousUpNext, edit)
     }
 
@@ -633,6 +661,7 @@ internal class QueueController(
             model.baseSource = model.source
             model.publishPanel()
             PlaybackBus.publishSource(model.source)
+            persistQueue()
             onSync()
             return
         }
@@ -669,6 +698,7 @@ internal class QueueController(
             model.publishPanel()
             PlaybackBus.publishSource(model.source)
             PlaybackBus.station.value?.let(::persistWidgetWindow)
+            persistQueue()
             onSync()
             return
         }
@@ -739,6 +769,7 @@ internal class QueueController(
         val w = model.rewindow(abs)
         PlaybackBus.publishSource(reordered)
         PlaybackBus.station.value?.let(::persistWidgetWindow)
+        persistQueue()
         bridge.rebuildWindow(w.window, w.index)
     }
 
