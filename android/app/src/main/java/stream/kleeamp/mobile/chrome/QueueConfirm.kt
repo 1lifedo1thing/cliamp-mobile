@@ -30,21 +30,22 @@ import stream.kleeamp.mobile.theme.LocalPalette
 import stream.kleeamp.mobile.theme.Mono
 
 /**
- * The global "Added to Up Next" confirmation: an accent pill that pops in
- * and fades, driven by [PlaybackBus.queuedCount] so every queue add -
- * menu or otherwise - confirms the same way. Replaces the per-row pill
- * the swipe-to-queue gesture wore; the gesture is gone, the feedback is
- * not. Touch-transparent and decorative to accessibility.
+ * The global queue confirmation: an accent pill that pops in and fades,
+ * naming what landed so the add reads even at the end of a long list.
+ * Driven by [PlaybackBus.queuedCount] so every queue add - menu or
+ * otherwise - confirms the same way. Touch-transparent and decorative
+ * to accessibility.
  */
 @Composable
 fun QueueConfirmHost(modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val tick by PlaybackBus.queuedCount.collectAsStateWithLifecycle()
+    val text by PlaybackBus.queuedText.collectAsStateWithLifecycle()
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(tick) {
         if (tick == 0) return@LaunchedEffect
         visible = true
-        delay(1500)
+        delay(2000)
         visible = false
     }
     AnimatedVisibility(
@@ -62,7 +63,7 @@ fun QueueConfirmHost(modifier: Modifier = Modifier) {
                     .clearAndSetSemantics {},
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Mono("Added to Up Next", KleeampType.chip, p.onAccent)
+                Mono(text.ifBlank { "Added to Up Next" }, KleeampType.chip, p.onAccent, maxLines = 1)
             }
         }
     }

@@ -536,6 +536,8 @@ fun StationsScreen(
             val fav = favorites.any { it.url == s.url }
             val isCustom = custom.any { it.url == s.url }
             val menuTracks = channelBySlug[s.slug]?.takeIf { it.hasTracks }?.trackCount ?: 0
+            // A live channel queues nothing: its tracks do, from inside.
+            val liveChannel = s.source == StationSource.Cliamp && !s.isChannelTrack
             ContextMenuSheet(
                 title = s.name,
                 subtitle = stationMenuSubtitle(s, menuTracks),
@@ -554,7 +556,7 @@ fun StationsScreen(
                         } else {
                             null
                         },
-                        onQueue = { onAddToQueue(s) },
+                        onQueue = if (liveChannel) null else ({ onAddToQueue(s) }),
                         onToggleFavorite = { vm.onEvent(StationsViewModel.Event.ToggleFavorite(s)) },
                         onAddToPlaylist = { onAddToPlaylist(s) },
                     ),

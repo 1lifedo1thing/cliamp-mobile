@@ -82,10 +82,14 @@ object PlaybackBus {
     /**
      * Counts user queue adds: each [publishQueued] bumps it, so observers
      * see every add distinctly even back-to-back. The root pill hosts the
-     * "Added to Up Next" confirmation off this.
+     * confirmation off this, reading the human text from [queuedText].
      */
     private val _queuedCount = MutableStateFlow(0)
     val queuedCount: StateFlow<Int> = _queuedCount.asStateFlow()
+
+    /** Human confirmation for the last queue add, set before the count bumps. */
+    private val _queuedText = MutableStateFlow("")
+    val queuedText: StateFlow<String> = _queuedText.asStateFlow()
 
     fun publishSpectrum(v: FloatArray) { _spectrum.value = v }
     fun publishSpectrumLive(v: Boolean) { _spectrumLive.value = v }
@@ -102,7 +106,10 @@ object PlaybackBus {
     fun publishFormat(v: StreamFormat) { _format.value = v }
     fun publishError(v: String?) { _error.value = v }
     fun publishReconnect(attempt: Int) { _reconnectAttempt.value = attempt }
-    fun publishQueued() { _queuedCount.value += 1 }
+    fun publishQueued(text: String = "") {
+        _queuedText.value = text
+        _queuedCount.value += 1
+    }
 }
 
 data class StreamFormat(
