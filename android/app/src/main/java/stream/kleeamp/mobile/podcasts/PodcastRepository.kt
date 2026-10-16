@@ -329,11 +329,12 @@ private var chartCursor: List<String> = emptyList()
      * snapshot from the last visit fills the list while the network answers, so
      * re-opening a show is instant instead of another multi-megabyte download.
      */
-    fun openShow(show: PodcastShow) {
+    fun openShow(show: PodcastShow, force: Boolean = false) {
         val job = synchronized(showLock) {
             val held = _show.value
-            // Re-entering a show already in hand should be instant.
-            if (held.show?.feedUrl == show.feedUrl && held.episodes.isNotEmpty() && !held.loading) return
+            // Re-entering a show already in hand should be instant, unless
+            // this is an explicit refresh which must re-fetch.
+            if (!force && held.show?.feedUrl == show.feedUrl && held.episodes.isNotEmpty() && !held.loading) return
             val request = Any()
             showRequest = request
             showJob?.cancel()
@@ -413,7 +414,7 @@ private var chartCursor: List<String> = emptyList()
         }
     }
 
-    fun refreshShow() = _show.value.show?.let { openShow(it) }
+    fun refreshShow() = _show.value.show?.let { openShow(it, force = true) }
 
     /** Returns the new state, so a row can toggle without re-reading. */
     suspend fun toggleSubscription(show: PodcastShow): Boolean {
