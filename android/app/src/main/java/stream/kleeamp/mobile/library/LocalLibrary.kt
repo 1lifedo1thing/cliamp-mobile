@@ -341,26 +341,6 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
         )
     }
 
-    /** Companion cover image in the track's own folder, if the user keeps one. Kept for a later optional miss path on a visible row — never on the scan path. */
-    private fun nearestCover(dir: File?): String? {
-        if (dir == null) return null
-        val covers = listOf(
-            "cover.jpg", "cover.png", "folder.jpg", "folder.png",
-            "albumart.jpg", "albumart.png", "front.jpg", "front.png",
-        )
-        val named = covers.firstNotNullOfOrNull { name ->
-            File(dir, name).takeIf { it.isFile }
-        }
-        if (named != null) return Uri.fromFile(named).toString()
-        // Fall back to any image in the same folder (some viewers drop a
-        // "folder.jpg"-style file with a different name). If none, leaving it
-        // blank lets the embedded-art fallback in LocalArt/StationArtSource win.
-        val image = dir.listFiles()?.firstOrNull {
-            it.isFile && it.extension.lowercase() in setOf("jpg", "jpeg", "png")
-        }
-        return image?.let { Uri.fromFile(it).toString() }
-    }
-
     // ── disk cache ──────────────────────────────────────────────────────────
 
     /**
