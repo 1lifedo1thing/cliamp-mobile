@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -111,6 +112,7 @@ fun MiniPlayer(
                     .fillMaxWidth()
                     .microPress(onClick = onOpen)
                     .dragUpToOpen(onOpen)
+                    .swipeToStep(onPrev, onNext)
                     .padding(horizontal = Gutter, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -199,6 +201,27 @@ private fun Modifier.dragUpToOpen(onOpen: () -> Unit): Modifier = pointerInput(o
         onDragCancel = { travel = 0f },
     )
 }
+
+/**
+ * Swiping the bar sideways steps the queue: left for next, right for
+ * previous. Same travel threshold as the upward open, taps untouched,
+ * and a short fling back stays put.
+ */
+private fun Modifier.swipeToStep(onPrev: () -> Unit, onNext: () -> Unit): Modifier =
+    pointerInput(onPrev, onNext) {
+        val threshold = 64.dp.toPx()
+        var travel = 0f
+        detectHorizontalDragGestures(
+            onDragStart = { travel = 0f },
+            onHorizontalDrag = { _, amount -> travel += amount },
+            onDragEnd = {
+                if (travel < -threshold) onNext()
+                else if (travel > threshold) onPrev()
+                travel = 0f
+            },
+            onDragCancel = { travel = 0f },
+        )
+    }
 
 /** A small prev/next key for the mini bar transport cluster. */@Composable
 private fun MiniKey(
