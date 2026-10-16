@@ -82,6 +82,7 @@ class KleeampApp : Application() {
             },
             autoResume = prefs.autoResume,
             resumeLocal = prefs.resumeLocal,
+            resumePodcasts = prefs.resumePodcasts,
         )
 
     /** Delete-after-listening for a naturally finished episode, per scope. */

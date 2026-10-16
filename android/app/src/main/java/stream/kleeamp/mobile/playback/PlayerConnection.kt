@@ -129,6 +129,8 @@ class PlayerConnection(
     /** Master resume switch and local-files opt-in, collected below. */
     autoResume: Flow<Boolean> = flowOf(false),
     resumeLocal: Flow<Boolean> = flowOf(false),
+    /** Episode resume switch, on by default. */
+    resumePodcasts: Flow<Boolean> = flowOf(true),
 ) {
     private var controller: MediaController? = null
 
@@ -239,16 +241,20 @@ class PlayerConnection(
         sync()
     }
 
-    /** Whether radio channel tracks resume; podcasts and provider tracks always do. */
+    /** Whether radio channel tracks resume; provider tracks always do. */
     private val _autoResume = MutableStateFlow(false)
 
-    /** Whether local files resume (podcasts and provider tracks always do). */
+    /** Whether local files resume; episodes keep their own switch below. */
     private val _resumeLocal = MutableStateFlow(false)
+
+    /** Whether episodes resume. On by default. */
+    private val _resumePodcasts = MutableStateFlow(true)
     private var pollJob: Job? = null
 
     init {
         scope.launch { autoResume.collect { _autoResume.value = it } }
         scope.launch { resumeLocal.collect { _resumeLocal.value = it } }
+        scope.launch { resumePodcasts.collect { _resumePodcasts.value = it } }
         scope.launch {
             runCatching {
                 (context.applicationContext as KleeampApp).prefs.speedSections.collect {
@@ -495,12 +501,13 @@ class PlayerConnection(
     }
     private suspend fun resumeAt(station: Station): Long {
         if (!station.isTrack) return 0L
-        // Local files only resume when the user asked them to, radio channel
-        // tracks only when auto-resume is on; podcasts and provider tracks
-        // always do.
-        if (station.source == StationSource.Local && !_resumeLocal.value) return 0L
-        if (station.isChannelTrack && !_autoResume.value) return 0L
-        return resumeLookup?.invoke(station) ?: 0L
+        // Local files only resume when the user asked them to, episodes keep
+        // their own switch (on by default), radio channel tracks only when
+        // auto-resume is on; provider tracks always do.
+        val gated = (station.source == StationSource.Local && !_resumeLocal.value) ||
+            (station.source == StationSource.Podcast && !_resumePodcasts.value) ||
+            (station.isChannelTrack && !_autoResume.value)
+        return if (gated) 0L else resumeLookup?.invoke(station) ?: 0L
     }
 
     private suspend fun buildItem(station: Station): MediaItem =

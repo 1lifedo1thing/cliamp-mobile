@@ -130,6 +130,8 @@ class Prefs(private val context: Context) {
         val skipFwdSec = intPreferencesKey("skip_fwd_sec")
         val lbToken = stringPreferencesKey("lb_token")
         val autoResume = booleanPreferencesKey("auto_resume")
+        /** Episodes reopen where they stopped. On by default. */
+        val resumePodcasts = booleanPreferencesKey("resume_podcasts")
         val autoDownload = booleanPreferencesKey("auto_download")
         val autoCellular = booleanPreferencesKey("auto_cellular")
         val cleanupPlayed = stringPreferencesKey("cleanup_played")
@@ -171,6 +173,8 @@ class Prefs(private val context: Context) {
     val eqEnabled: Flow<Boolean> = context.settingsStore.data.map { it[K.eqEnabled] ?: false }
     val eqPreset: Flow<String> = context.settingsStore.data.map { it[K.eqPreset] ?: "flat" }
     val autoResume: Flow<Boolean> = context.settingsStore.data.map { it[K.autoResume] ?: false }
+    /** Episodes reopen where they stopped. On by default. */
+    val resumePodcasts: Flow<Boolean> = context.settingsStore.data.map { it[K.resumePodcasts] ?: true }
     /** Latest episodes fetch themselves for subscribed shows. Off by default. */
     val autoDownload: Flow<Boolean> = context.settingsStore.data.map { it[K.autoDownload] ?: false }
     /** Auto-download may use metered data. Off by default: wifi-only unless opted in. */
@@ -429,6 +433,7 @@ class Prefs(private val context: Context) {
     suspend fun setEqEnabled(v: Boolean) = put(K.eqEnabled, v)
     suspend fun setEqPreset(v: String) = put(K.eqPreset, v)
     suspend fun setAutoResume(v: Boolean) = put(K.autoResume, v)
+    suspend fun setResumePodcasts(v: Boolean) = put(K.resumePodcasts, v)
     suspend fun setAutoDownload(v: Boolean) = put(K.autoDownload, v)
     suspend fun setAutoCellular(v: Boolean) = put(K.autoCellular, v)
     suspend fun setCleanupPlayed(v: CleanupScope) = put(K.cleanupPlayed, v.key)
