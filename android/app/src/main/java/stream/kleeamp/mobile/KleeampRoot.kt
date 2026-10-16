@@ -357,6 +357,7 @@ fun KleeampRoot(
                 playing = playerState.playing,
                 buffering = playerState.buffering,
                 reconnecting = reconnect,
+                wantPlaying = playerState.wantPlaying,
                 hasPrev = playerState.hasPrev,
                 hasNext = playerState.hasNext,
                 onOpenUpNext = { upNextOpen = true },
@@ -1060,18 +1061,21 @@ private fun ScopedMiniPlayer(
     playing: Boolean,
     buffering: Boolean,
     reconnecting: Int,
+    wantPlaying: Boolean,
     hasPrev: Boolean,
     hasNext: Boolean,
     onOpenUpNext: () -> Unit,
     onOpen: () -> Unit,
 ) {
     val recent by prefs.history.collectAsState(initial = emptyList())
+    val shown = station ?: recent.firstOrNull()
+    val inGrace = stream.kleeamp.mobile.player.rememberNavGrace(shown?.id)
     MiniPlayer(
-        station = station ?: recent.firstOrNull(),
+        station = shown,
         streamTitle = streamTitle,
-        playing = playing,
-        buffering = buffering,
-        reconnecting = reconnecting,
+        playing = stream.kleeamp.mobile.player.effectivePlaying(playing, wantPlaying, inGrace),
+        buffering = stream.kleeamp.mobile.player.effectiveBuffering(buffering, inGrace),
+        reconnecting = stream.kleeamp.mobile.player.effectiveReconnect(reconnecting, inGrace),
         hasPrev = hasPrev,
         hasNext = hasNext,
         onPrev = { player.prev() },

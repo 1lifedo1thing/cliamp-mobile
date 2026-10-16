@@ -329,6 +329,7 @@ class PlayerConnection(
             playing = c.isPlaying,
             buffering = c.playbackState == Player.STATE_BUFFERING,
             idle = c.playbackState == Player.STATE_IDLE && c.mediaItemCount == 0,
+            wantPlaying = c.playWhenReady && c.mediaItemCount > 0,
             positionMs = c.currentPosition.coerceAtLeast(0),
             bufferedMs = (c.bufferedPosition - c.currentPosition).coerceAtLeast(0),
             volume = c.volume,
@@ -505,6 +506,8 @@ data class PlayerState(
     val playing: Boolean = false,
     val buffering: Boolean = false,
     val idle: Boolean = true,
+    /** Play intent: a tap is in flight even before first audio. */
+    val wantPlaying: Boolean = false,
     val positionMs: Long = 0,
     val bufferedMs: Long = 0,
     val volume: Float = 1f,

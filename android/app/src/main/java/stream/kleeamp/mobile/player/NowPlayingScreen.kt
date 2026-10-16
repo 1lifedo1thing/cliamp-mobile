@@ -171,13 +171,27 @@ fun NowPlayingScreen(
         AudioOutputs.current(context, uiState.outputDevice)
     }
 
-    val model = PlayerModel(        state = uiState.playerState,
+    // Optimistic 3s window after every track change: most slow streams
+    // join inside it, so keep the pause glyph and hide buffering /
+    // reconnecting instead of blinking. Pause inside the window still
+    // reads as paused via wantPlaying.
+    val inGrace = rememberNavGrace(uiState.shownStation?.id)
+    val effState = uiState.playerState.copy(
+        playing = effectivePlaying(
+            uiState.playerState.playing,
+            uiState.playerState.wantPlaying,
+            inGrace,
+        ),
+        buffering = effectiveBuffering(uiState.playerState.buffering, inGrace),
+    )
+    val effReconnect = effectiveReconnect(uiState.reconnect, inGrace)
+    val model = PlayerModel(        state = effState,
         shownStation = uiState.shownStation,
         previousStation = uiState.previousStation,
         nextStation = uiState.nextStation,
         streamTitle = uiState.streamTitle,
         upNextCount = uiState.upNextCount,
-        reconnect = uiState.reconnect,
+        reconnect = effReconnect,
         error = uiState.error,
         isFav = uiState.isFav,
         shuffled = uiState.shuffled,
