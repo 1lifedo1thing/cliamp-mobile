@@ -978,7 +978,7 @@ private fun SmartSongRow(
             buildList {
                 when (s.source) {
                     StationSource.Podcast -> add(s.artist.ifBlank { s.meta.ifBlank { "podcast" } })
-                    StationSource.Local -> add(s.artistAlbum.ifBlank { s.meta })
+                    StationSource.Local, StationSource.Provider -> add(s.artistAlbum.ifBlank { s.meta })
                     else -> {
                         s.meta.takeIf { it.isNotBlank() }?.let { add(it) }
                         s.tagList.take(2).forEach { add(it) }

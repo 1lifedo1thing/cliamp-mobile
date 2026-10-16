@@ -66,6 +66,10 @@ class ArtistOrTagLineTest {
             "daft punk · discovery",
             artistOrTagLine(station(StationSource.Local, artist = "daft punk", album = "discovery")),
         )
+        assertEquals(
+            "miles davis",
+            artistOrTagLine(station(StationSource.Provider, artist = "miles davis")),
+        )
         // Tags split on commas and spaces alike, then rejoin.
         assertEquals(
             "pop · top · 40",

@@ -60,5 +60,9 @@ class NotificationArtistTest {
             "some show",
             PlaybackService.notificationArtist(station(StationSource.Podcast, artist = "some show")),
         )
+        assertEquals(
+            "coltrane",
+            PlaybackService.notificationArtist(station(StationSource.Provider, artist = "coltrane")),
+        )
     }
 }

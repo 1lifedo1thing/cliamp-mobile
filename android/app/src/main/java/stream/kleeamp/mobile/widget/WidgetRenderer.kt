@@ -396,6 +396,7 @@ object WidgetRenderer {
         val raw = when (station.source) {
             StationSource.Local -> station.artistAlbum
             StationSource.Podcast -> station.artist
+            StationSource.Provider -> station.artistAlbum
             else -> station.meta
         }
         return deEchoArtistLine(raw.split("·"), 3).ifBlank { "unknown" }

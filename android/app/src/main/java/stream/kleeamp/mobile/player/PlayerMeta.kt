@@ -623,6 +623,7 @@ internal fun artistOrTagLine(station: Station?): String {
     val raw = when (station.source) {
         StationSource.Local -> deEchoArtistLine(station.artistAlbum.split("·"), 2)
         StationSource.Podcast -> deEchoArtistLine(listOf(station.artist), 1)
+        StationSource.Provider -> deEchoArtistLine(station.artistAlbum.split("·"), 2)
         // Channel tracks are real songs with artists; the live channel
         // itself falls through to tags like any other station.
         StationSource.Cliamp ->

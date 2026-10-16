@@ -945,6 +945,7 @@ class PlaybackService : MediaSessionService() {
             val raw = when (station.source) {
                 StationSource.Local -> deEchoArtistLine(station.artistAlbum.split("·"), 2)
                 StationSource.Podcast -> deEchoArtistLine(listOf(station.artist), 1)
+                StationSource.Provider -> deEchoArtistLine(station.artistAlbum.split("·"), 2)
                 StationSource.Cliamp ->
                     if (station.isChannelTrack) deEchoArtistLine(station.artistAlbum.split("·"), 2)
                     else station.meta
