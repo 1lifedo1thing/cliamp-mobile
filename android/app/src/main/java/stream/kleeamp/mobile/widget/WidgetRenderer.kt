@@ -388,17 +388,16 @@ object WidgetRenderer {
      */
     private fun widgetSubtitle(track: String, station: Station?): String {
         if (track.isNotBlank()) return track
-        val raw = when (station?.source) {
-            StationSource.Cliamp -> "cliamp radio"
-            StationSource.Local -> station.artistAlbum.ifBlank { "local audio" }
-            StationSource.Podcast -> station.artist.ifBlank { "podcast" }
-            StationSource.Provider -> station.artistAlbum.ifBlank { station.meta.ifBlank { "provider" } }
-            else -> station?.meta?.ifBlank { "live stream" }.orEmpty().ifBlank { "pick a station" }
+        if (station == null) return "pick a station"
+        // Channel tracks name their artist like any song; the live channel
+        // keeps its radio label. Source echoes never reach the widget line;
+        // a missing artist reads "unknown", never empty.
+        if (station.source == StationSource.Cliamp && !station.isChannelTrack) return "cliamp radio"
+        val raw = when (station.source) {
+            StationSource.Local -> station.artistAlbum
+            StationSource.Podcast -> station.artist
+            else -> station.meta
         }
-        // Source echoes never reach the widget line either; only the cold
-        // empty state keeps a guiding fallback.
-        return deEchoArtistLine(raw.split("·"), 3).ifBlank {
-            if (station == null) "pick a station" else ""
-        }
+        return deEchoArtistLine(raw.split("·"), 3).ifBlank { "unknown" }
     }
 }

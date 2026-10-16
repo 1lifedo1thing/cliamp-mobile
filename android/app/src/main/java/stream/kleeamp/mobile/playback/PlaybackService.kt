@@ -938,13 +938,19 @@ class PlaybackService : MediaSessionService() {
 
         /**
          * The artist/subtitle line the notification reads, per source. Real
-         * metadata only, minus any source echo: the lockscreen never repeats
-         * what the in-app badge rows already say.
+         * metadata only, minus any source echo; channel tracks name their
+         * artist like any song, and the line never reads empty.
          */
-        fun notificationArtist(station: Station): String = when (station.source) {
-            StationSource.Local -> deEchoArtistLine(station.artistAlbum.split("·"), 2)
-            StationSource.Podcast -> deEchoArtistLine(listOf(station.artist), 1)
-            else -> deEchoArtistLine(station.meta.split("·"), 3)
+        fun notificationArtist(station: Station): String {
+            val raw = when (station.source) {
+                StationSource.Local -> deEchoArtistLine(station.artistAlbum.split("·"), 2)
+                StationSource.Podcast -> deEchoArtistLine(listOf(station.artist), 1)
+                StationSource.Cliamp ->
+                    if (station.isChannelTrack) deEchoArtistLine(station.artistAlbum.split("·"), 2)
+                    else station.meta
+                else -> station.meta
+            }
+            return raw.ifBlank { "unknown" }
         }
     }
 }

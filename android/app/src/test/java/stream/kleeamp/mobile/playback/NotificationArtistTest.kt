@@ -22,10 +22,30 @@ class NotificationArtistTest {
 
     @Test
     fun sourceEchoesNeverReachTheLockscreen() {
-        assertEquals("", PlaybackService.notificationArtist(station(StationSource.Local, artist = "my music")))
-        assertEquals("", PlaybackService.notificationArtist(station(StationSource.Podcast, artist = "Podcast")))
-        assertEquals("", PlaybackService.notificationArtist(station(StationSource.Local)))
-        assertEquals("", PlaybackService.notificationArtist(station(StationSource.Directory)))
+        assertEquals("unknown", PlaybackService.notificationArtist(station(StationSource.Local, artist = "my music")))
+        assertEquals("unknown", PlaybackService.notificationArtist(station(StationSource.Directory)))
+    }
+
+    @Test
+    fun cliampTracksNameTheirArtist() {
+        assertEquals(
+            "some artist",
+            PlaybackService.notificationArtist(
+                Station(
+                    id = "cliamp:ch:1",
+                    name = "track",
+                    url = "u",
+                    source = StationSource.Cliamp,
+                    artist = "some artist",
+                )
+            ),
+        )
+    }
+
+    @Test
+    fun aMissingArtistReadsUnknownNeverEmpty() {
+        assertEquals("unknown", PlaybackService.notificationArtist(station(StationSource.Local)))
+        assertEquals("unknown", PlaybackService.notificationArtist(station(StationSource.Podcast)))
     }
 
     @Test

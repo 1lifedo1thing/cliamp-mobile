@@ -24,11 +24,39 @@ class ArtistOrTagLineTest {
 
     @Test
     fun sourceEchoesNeverReachTheArtistLine() {
-        assertEquals("", artistOrTagLine(station(StationSource.Local, artist = "my music")))
-        assertEquals("", artistOrTagLine(station(StationSource.Podcast, artist = "Podcast")))
+        assertEquals(
+            "discovery",
+            artistOrTagLine(station(StationSource.Local, artist = "my music", album = "discovery")),
+        )
+        assertEquals("unknown", artistOrTagLine(station(StationSource.Podcast, artist = "Podcast")))
         assertEquals(
             "synthwave",
             artistOrTagLine(station(StationSource.Directory, tags = "synthwave")),
+        )
+    }
+
+    @Test
+    fun cliampTracksNameTheirArtist() {
+        assertEquals(
+            "some artist",
+            artistOrTagLine(
+                Station(
+                    id = "cliamp:ch:1",
+                    name = "track",
+                    url = "u",
+                    source = StationSource.Cliamp,
+                    artist = "some artist",
+                )
+            ),
+        )
+    }
+
+    @Test
+    fun aMissingArtistReadsUnknownNeverEmpty() {
+        assertEquals("unknown", artistOrTagLine(station(StationSource.Directory)))
+        assertEquals(
+            "unknown",
+            artistOrTagLine(station(StationSource.Local, artist = "my music", album = "my music")),
         )
     }
 

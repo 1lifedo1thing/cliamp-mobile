@@ -623,7 +623,13 @@ internal fun artistOrTagLine(station: Station?): String {
     val raw = when (station.source) {
         StationSource.Local -> deEchoArtistLine(station.artistAlbum.split("·"), 2)
         StationSource.Podcast -> deEchoArtistLine(listOf(station.artist), 1)
+        // Channel tracks are real songs with artists; the live channel
+        // itself falls through to tags like any other station.
+        StationSource.Cliamp ->
+            if (station.isChannelTrack) deEchoArtistLine(station.artistAlbum.split("·"), 2)
+            else deEchoArtistLine(station.tagList, 3)
         else -> deEchoArtistLine(station.tagList, 3)
     }.ifBlank { deEchoArtistLine(station.tagList, 3) }
-    return raw
+    // An artist slot never reads empty: "unknown" beats a blank line.
+    return raw.ifBlank { "unknown" }
 }
