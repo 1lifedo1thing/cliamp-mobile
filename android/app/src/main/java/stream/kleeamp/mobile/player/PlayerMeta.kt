@@ -414,7 +414,13 @@ internal fun PlayerMeta(
  * The source · country · votes row under the stream title: an
  * accent-washed source badge, the country in secondary ink, and the
  * vote count with a heart in amber - one line, always.
+ *
+ * Fixed height: badge-only, badge+country and fallback variants all
+ * measure differently, and without the pin every track change nudges
+ * the transport below up or down a few dp.
  */
+private val SourceLineHeight = 24.dp
+
 @Composable
 internal fun SourceLine(
     station: Station?,
@@ -422,18 +428,20 @@ internal fun SourceLine(
 ) {
     val p = LocalPalette.current
     if (station == null) {
-        Mono(
-            "15 cliamp channels · 50k+ directory",
-            KleeampType.body.copy(lineHeight = MetaLineHeight),
-            p.inkTertiary,
-            maxLines = 1,
-        )
+        Box(modifier.height(SourceLineHeight), contentAlignment = Alignment.CenterStart) {
+            Mono(
+                "15 cliamp channels · 50k+ directory",
+                KleeampType.body.copy(lineHeight = MetaLineHeight),
+                p.inkTertiary,
+                maxLines = 1,
+            )
+        }
         return
     }
     val country = station.country.takeIf { it.isNotBlank() && station.source != StationSource.Cliamp }
         ?.lowercase()
     Row(
-        modifier,
+        modifier.height(SourceLineHeight),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
