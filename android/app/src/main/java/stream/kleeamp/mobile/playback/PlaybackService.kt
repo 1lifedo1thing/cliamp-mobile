@@ -694,10 +694,14 @@ class PlaybackService : MediaSessionService() {
         }
 
         /**
-         * Media id of the item whose notification metadata was just refreshed
-         * below. Its replace surfaces here as a transition too; clearing the
-         * title on that would fight the very update that caused it.
+         * Media id of the last item transition we processed. replaceMediaItem
+         * (how the ICY title and the artwork reach the notification) keeps
+         * the same media id and surfaces here too; clearing the title on
+         * that would fight the very update that caused it. A real
+         * navigation lands on a different id, so only same-id transitions
+         * are exempt.
          */
+        private var lastTransitionId: String? = null
         private var icyRefreshId: String? = null
 
         /**
@@ -800,21 +804,24 @@ class PlaybackService : MediaSessionService() {
                     ?.let { (application as KleeampApp).player.stationForMediaId(it) }
                 if (station != null) loadArtwork(station)
             }
-            // replaceMediaItem (how the ICY title reaches the notification)
-            // surfaces here too; clearing the title on that would fight the
-            // very update that caused it. A real navigation lands on a
-            // different item, so only the refreshed item is exempt.
+            // replaceMediaItem (how the ICY title and the artwork reach the
+            // notification) surfaces here too with the same media id;
+            // clearing the title on that would fight the very update that
+            // caused it. A real navigation lands on a different item, so
+            // only a changed id clears.
             if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) {
-                val refreshed = mediaItem?.mediaId?.let { it == icyRefreshId } == true
+                val id = mediaItem?.mediaId
+                val refreshed = id != null && (id == icyRefreshId || id == lastTransitionId)
                 icyRefreshId = null
                 if (!refreshed) {
                     PlaybackBus.publishStreamTitle("")
                     // Real source change: drop stale analyzer + peak state so
-                    // the new station never wears the old one's caps. ICY
-                    // title refreshes (refreshed==true) skip this — animation
-                    // continues across metadata updates.
+                    // the new station never wears the old one's caps. Metadata
+                    // refreshes (same id) skip this — animation continues
+                    // across title and artwork updates.
                     analyzer.reset()
                 }
+                lastTransitionId = id
             }
             publishWidgetState()
             syncProgressTicker()
@@ -876,10 +883,16 @@ class PlaybackService : MediaSessionService() {
                         )
                         .setIsBrowsable(false)
                         .setIsPlayable(true)
-                        .setMediaType(MediaMetadata.MEDIA_TYPE_RADIO_STATION)
+                        .setMediaType(mediaType(station))
                         .build()
                 )
                 .build()
+
+        private fun mediaType(station: Station): Int = when {
+            station.source == StationSource.Podcast -> MediaMetadata.MEDIA_TYPE_PODCAST_EPISODE
+            station.isTrack -> MediaMetadata.MEDIA_TYPE_MUSIC
+            else -> MediaMetadata.MEDIA_TYPE_RADIO_STATION
+        }
 
         /** The artist/subtitle line the notification reads, per source. */
         fun notificationArtist(station: Station): String = when (station.source) {

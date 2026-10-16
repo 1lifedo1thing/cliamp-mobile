@@ -44,6 +44,7 @@ class Reconnector(
     private var retryJob: Job? = null
     private var watchdogJob: Job? = null
     private var bufferingSince = 0L
+    private var lastErrorRecoverable = true
     private var connectivity: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
@@ -70,7 +71,8 @@ class Reconnector(
     private inner class Listener : Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
             if (!player.playWhenReady) return
-            if (!recoverable(error)) {
+            lastErrorRecoverable = recoverable(error)
+            if (!lastErrorRecoverable) {
                 Log.w(TAG, "not retrying: ${error.errorCodeName}")
                 return
             }
@@ -83,11 +85,22 @@ class Reconnector(
                     // a stream that actually delivers audio resets the ladder
                     attempt = 0
                     bufferingSince = 0
+                    lastErrorRecoverable = true
                     retryJob?.cancel()
                     onState(false, 0)
                 }
                 Player.STATE_BUFFERING ->
                     if (bufferingSince == 0L) bufferingSince = System.currentTimeMillis()
+                Player.STATE_IDLE ->
+                    // An error parks here; a plain stop clears items too.
+                    // Keep bufferingSince so a network return can re-prime
+                    // a genuine stall, but do not reset the error gate here:
+                    // a non-recoverable error must stay non-recoverable
+                    // until READY proves otherwise.
+                    if (player.mediaItemCount == 0) {
+                        bufferingSince = 0
+                        lastErrorRecoverable = true
+                    }
                 else -> bufferingSince = 0
             }
         }
@@ -139,7 +152,11 @@ class Reconnector(
                 // state has to happen inside the launch, not around it.
                 scope.launch {
                     if (!player.playWhenReady) return@launch
-                    if (player.playbackState != Player.STATE_IDLE && !isRetrying) return@launch
+                    if (!lastErrorRecoverable) return@launch
+                    val stalledBuffering = player.playbackState == Player.STATE_BUFFERING &&
+                        bufferingSince != 0L &&
+                        System.currentTimeMillis() - bufferingSince > 5_000
+                    if (player.playbackState != Player.STATE_IDLE && !isRetrying && !stalledBuffering) return@launch
                     retryJob?.cancel()
                     attempt = 0
                     onState(true, 1)
