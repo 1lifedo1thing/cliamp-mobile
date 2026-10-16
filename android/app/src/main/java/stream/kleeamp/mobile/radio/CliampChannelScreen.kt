@@ -53,6 +53,7 @@ import stream.kleeamp.mobile.chrome.microPress
 import stream.kleeamp.mobile.chrome.rememberArt
 import stream.kleeamp.mobile.chrome.scrollToTop
 import stream.kleeamp.mobile.model.Station
+import stream.kleeamp.mobile.model.deEchoArtistLine
 import stream.kleeamp.mobile.prefs.PlaylistSort
 import stream.kleeamp.mobile.prefs.sortedStations
 import stream.kleeamp.mobile.theme.KleeampShape
@@ -301,7 +302,7 @@ private fun ChannelTrackRow(
             maxLines = 2,
         )
         Mono(
-            station.artistAlbum.ifBlank { "cliamp radio" },
+            deEchoArtistLine(station.artistAlbum.split("·"), 2).ifBlank { "unknown" },
             KleeampType.rowSecondary,
             p.inkTertiary,
             maxLines = 1,

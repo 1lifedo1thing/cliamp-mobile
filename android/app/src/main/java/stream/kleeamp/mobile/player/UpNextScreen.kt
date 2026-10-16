@@ -56,6 +56,7 @@ import androidx.media3.common.util.UnstableApi
 import stream.kleeamp.mobile.KleeampApp
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
+import stream.kleeamp.mobile.model.deEchoArtistLine
 import stream.kleeamp.mobile.library.durationLabel
 import stream.kleeamp.mobile.player.vis.Visualizer
 import stream.kleeamp.mobile.playback.DurationProbe
@@ -465,13 +466,15 @@ private fun upNextDuration(
     return if (ms > 0) durationLabel(ms) else "–:––"
 }
 
-private fun sourceSubtitle(s: Station): String = when {
-    !s.isTrack -> "live stream"
-    s.artist.isNotBlank() -> s.artist
-    s.album.isNotBlank() -> s.album
-    s.source == StationSource.Local -> "local audio"
-    s.source == StationSource.Podcast -> "podcast"
-    s.source == StationSource.Provider -> "provider"
-    s.source == StationSource.Cliamp -> "cliamp radio"
-    else -> "<unknown>"
+private fun sourceSubtitle(s: Station): String {
+    if (!s.isTrack) return "live stream"
+    val raw = when {
+        s.artist.isNotBlank() -> s.artist
+        s.album.isNotBlank() -> s.album
+        s.source == StationSource.Local -> "local audio"
+        s.source == StationSource.Podcast -> "podcast"
+        s.source == StationSource.Provider -> "provider"
+        else -> ""
+    }
+    return deEchoArtistLine(raw.split("·"), 2).ifBlank { "unknown" }
 }
