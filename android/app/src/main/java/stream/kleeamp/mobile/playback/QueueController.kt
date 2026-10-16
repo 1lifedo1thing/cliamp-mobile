@@ -73,6 +73,14 @@ internal class QueueController(
     val currentUpNext: List<Station> get() = model.currentUpNext
 
     /**
+     * What the Up Next screen lists: the whole source for finite track
+     * lists, the bounded player window otherwise. Indices into it are
+     * absolute source positions; the player still walks the window.
+     */
+    val panelList: StateFlow<List<Station>> get() = model.panelList
+    val panelIndex: StateFlow<Int> get() = model.panelIndex
+
+    /**
      * The station behind a Media3 item id (item ids are station ids), or null.
      * Lets observers that fire mid-transition - before the published station
      * has caught up - resolve what is actually audible right now instead of
@@ -219,6 +227,25 @@ internal class QueueController(
         if (index !in model.currentUpNext.indices) return
         _navTimerJob?.cancel()
         _navPending = model.windowBase + index
+        applyNavigation()
+    }
+
+    /**
+     * Plays the panel position: an absolute source index for full-list
+     * panels, a window index otherwise. The navigation machinery (in-place
+     * seek vs window slide) is shared with every other play path.
+     */
+    fun playPanelEntry(panelPosition: Int) {
+        val src = model.source
+        val abs = if (src.isNotEmpty() && src.all { it.isTrack }) {
+            if (panelPosition !in src.indices) return
+            panelPosition
+        } else {
+            if (panelPosition !in model.currentUpNext.indices) return
+            model.windowBase + panelPosition
+        }
+        _navTimerJob?.cancel()
+        _navPending = abs
         applyNavigation()
     }
 
@@ -604,6 +631,7 @@ internal class QueueController(
             bridge.cancelExtend()
             model.source = model.source + station
             model.baseSource = model.source
+            model.publishPanel()
             PlaybackBus.publishSource(model.source)
             onSync()
             return
@@ -621,6 +649,30 @@ internal class QueueController(
     /** Play [station] with [from] as a brand-new Up Next list, replacing whatever was there. */
     fun replaceUpNext(station: Station, from: List<Station>) {
         play(station, from)
+    }
+
+    /** Drop the panel position, keeping the playing item stable. */
+    fun removePanelEntry(panelPosition: Int) {
+        val src = model.source
+        if (src.isNotEmpty() && src.all { it.isTrack }) {
+            if (panelPosition !in src.indices) return
+            val base = model.windowBase
+            val size = model.currentUpNext.size
+            if (panelPosition in base until base + size) {
+                removeFromUpNext(panelPosition - base)
+                return
+            }
+            snapshotForUndo()
+            model.source = src.toMutableList().also { it.removeAt(panelPosition) }
+            model.baseSource = model.source
+            if (panelPosition < base) model.windowBase = base - 1
+            model.publishPanel()
+            PlaybackBus.publishSource(model.source)
+            PlaybackBus.station.value?.let(::persistWidgetWindow)
+            onSync()
+            return
+        }
+        removeFromUpNext(panelPosition)
     }
 
     /** Drop the station at [index], keeping the playing item stable. */
@@ -650,6 +702,44 @@ internal class QueueController(
             upNextIndexAfterMove(qi, from, to),
         )
         applyUpNextToPlayer(previousUpNext = q, edit = { it.moveMediaItem(from, to) })
+    }
+
+    /**
+     * Moves the panel position, keeping the playing item stable. Inside the
+     * player window this is the seamless in-place move; across the window
+     * edge the source reorders and the window rebuilds around the audible
+     * item, keeping its position when it survives.
+     */
+    fun movePanelEntry(fromAbs: Int, toAbs: Int) {
+        val src = model.source
+        if (src.isEmpty() || !src.all { it.isTrack }) {
+            val base = model.windowBase
+            val size = model.currentUpNext.size
+            if (fromAbs in base until base + size && toAbs in base until base + size) {
+                reorderUpNext(fromAbs - base, toAbs - base)
+            }
+            return
+        }
+        if (fromAbs !in src.indices || toAbs !in src.indices || fromAbs == toAbs) return
+        val base = model.windowBase
+        val size = model.currentUpNext.size
+        if (fromAbs in base until base + size && toAbs in base until base + size) {
+            reorderUpNext(fromAbs - base, toAbs - base)
+            return
+        }
+        snapshotForUndo()
+        val reordered = src.toMutableList()
+        val item = reordered.removeAt(fromAbs)
+        reordered.add(toAbs.coerceIn(0, reordered.size), item)
+        model.source = reordered
+        model.baseSource = reordered
+        model.ringFallback = false
+        val audibleId = model.currentUpNext.getOrNull(model.currentIndex)?.id
+        val abs = reordered.indexOfFirst { it.id == audibleId }.coerceAtLeast(0)
+        val w = model.rewindow(abs)
+        PlaybackBus.publishSource(reordered)
+        PlaybackBus.station.value?.let(::persistWidgetWindow)
+        bridge.rebuildWindow(w.window, w.index)
     }
 
     /** Clear only pending playback; keep the audible item and its source identity. */

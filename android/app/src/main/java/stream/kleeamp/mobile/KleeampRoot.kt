@@ -870,8 +870,8 @@ fun KleeampRoot(
                 current = station,
                 playing = playerState.playing,
                 onPlay = { index ->
-                    player.currentUpNext.getOrNull(index)?.let(repository::reportPlay)
-                    player.playUpNextEntry(index)
+                    player.panelList.value.getOrNull(index)?.let(repository::reportPlay)
+                    player.playPanelEntry(index)
                 },
                 onDismiss = { upNextOpen = false },
             )

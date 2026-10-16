@@ -147,6 +147,9 @@ class PlayerConnection(
     val upNext: StateFlow<List<Station>> get() = queue.upNext
     val upNextIndex: StateFlow<Int> get() = queue.upNextIndex
     val currentUpNext: List<Station> get() = queue.currentUpNext
+    /** Full panel list + absolute index for the Up Next screen. */
+    val panelList: StateFlow<List<Station>> get() = queue.panelList
+    val panelIndex: StateFlow<Int> get() = queue.panelIndex
     val shuffle: StateFlow<Boolean> get() = queue.shuffle
     val repeat: StateFlow<RepeatMode> get() = queue.repeat
     fun setFallbackSource(list: List<Station>) = queue.setFallbackSource(list)
@@ -155,6 +158,7 @@ class PlayerConnection(
     /** Read-only preview of what prev/next would land on; null where a key would no-op. */
     internal fun peekAdjacent(): Pair<Station?, Station?> = queue.peekAdjacent()
     fun playUpNextEntry(index: Int) = queue.playUpNextEntry(index)
+    fun playPanelEntry(panelPosition: Int) = queue.playPanelEntry(panelPosition)
     fun play(station: Station, from: List<Station> = emptyList()) {
         // Each section keeps its own pace when switched on: apply it
         // synchronously so the media job (and every later transition) reads
@@ -173,14 +177,21 @@ class PlayerConnection(
     fun prev() = queue.prev()
     fun addToUpNext(station: Station, at: Int = Int.MAX_VALUE) {
         queue.addToUpNext(station, at)
-        // Fires the root "Added to Up Next" pill. Play Next routes around
-        // this on purpose: it queues too, but under its own name.
-        PlaybackBus.publishQueued()
+        // Fires the root confirmation pill, naming the queued song so the
+        // add reads even when it lands at the end of a long list.
+        PlaybackBus.publishQueued("Queued · ${station.name}")
     }
-    fun playNext(station: Station) = queue.playNext(station)
+    fun playNext(station: Station) {
+        queue.playNext(station)
+        // Play Next queues too, under its own name - it never confirmed
+        // anything before, so its adds read as silently doing nothing.
+        PlaybackBus.publishQueued("Up next · ${station.name}")
+    }
     fun replaceUpNext(station: Station, from: List<Station>) = queue.replaceUpNext(station, from)
     fun removeFromUpNext(index: Int) = queue.removeFromUpNext(index)
+    fun removePanelEntry(panelPosition: Int) = queue.removePanelEntry(panelPosition)
     fun reorderUpNext(from: Int, to: Int) = queue.reorderUpNext(from, to)
+    fun movePanelEntry(fromAbs: Int, toAbs: Int) = queue.movePanelEntry(fromAbs, toAbs)
     fun clearUpNext() = queue.clearUpNext()
     val canUndo: StateFlow<Boolean> get() = queue.canUndo
     fun undo() = queue.undo()

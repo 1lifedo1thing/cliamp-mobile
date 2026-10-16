@@ -63,6 +63,17 @@ class QueueModel {
 
     val currentUpNext: List<Station> get() = _upNext.value
     val currentIndex: Int get() = _upNextIndex.value
+
+    /**
+     * What the Up Next screen lists. Finite track lists (local files,
+     * episodes, provider albums, channel tracks) show the whole source so
+     * nothing queued reads as lost; live-mixed lists keep the bounded
+     * player window. The player itself always walks the window.
+     */
+    private val _panelList = MutableStateFlow<List<Station>>(emptyList())
+    val panelList: StateFlow<List<Station>> = _panelList.asStateFlow()
+    private val _panelIndex = MutableStateFlow(-1)
+    val panelIndex: StateFlow<Int> = _panelIndex.asStateFlow()
     val shuffleOn: Boolean get() = _shuffle.value
     val repeatMode: RepeatMode get() = _repeat.value
 
@@ -81,10 +92,32 @@ class QueueModel {
     fun setWindow(window: List<Station>, index: Int) {
         _upNext.value = window
         _upNextIndex.value = index
+        publishPanel()
     }
 
     fun setIndex(index: Int) {
         _upNextIndex.value = index
+        publishPanel()
+    }
+
+    /**
+     * Refreshes the panel list and the position inside it after any
+     * window or source change. Emits only on real change, so the hot
+     * 2 Hz reconcile tick that re-sets an identical index costs nothing.
+     */
+    fun publishPanel() {
+        val window = _upNext.value
+        val (list, idx) =
+            if (source.isNotEmpty() && source.all { it.isTrack }) {
+                val abs = (windowBase + _upNextIndex.value)
+                    .takeIf { _upNextIndex.value in window.indices && it in source.indices }
+                    ?: -1
+                source to abs
+            } else {
+                window to _upNextIndex.value
+            }
+        _panelList.value = list
+        _panelIndex.value = idx
     }
 
     /** Where play-next lands: right after current, or appended when nothing is current. */
@@ -103,6 +136,7 @@ class QueueModel {
         windowBase = w.base
         _upNext.value = w.window
         _upNextIndex.value = w.index
+        publishPanel()
         return w
     }
 
@@ -122,6 +156,7 @@ class QueueModel {
         source = window
         baseSource = window
         windowBase = 0
+        publishPanel()
     }
 
     /**
@@ -203,5 +238,6 @@ class QueueModel {
             _upNextIndex.value = order.indexOfFirst { it.url == station.url }
             windowBase = 0
         }
+        publishPanel()
     }
 }

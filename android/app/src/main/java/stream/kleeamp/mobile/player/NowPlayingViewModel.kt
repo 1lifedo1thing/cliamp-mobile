@@ -125,8 +125,8 @@ class NowPlayingViewModel(
         ) { lib, maps ->
             lib.copy(boostMaps = maps)
         },
-        player.upNext,
-        player.upNextIndex,
+        player.panelList,
+        player.panelIndex,
         prefs.boostDb,
     ) { bus, lib, upNext, upNextIndex, boost ->
         // Before anything has been played this session the live bus carries no

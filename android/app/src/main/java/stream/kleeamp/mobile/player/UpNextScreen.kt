@@ -96,8 +96,8 @@ fun UpNextScreen(
     onPlay: (Int) -> Unit,
     onBack: () -> Unit,
 ) {
-    val upNext by player.upNext.collectAsStateWithLifecycle()
-    val upNextIndex by player.upNextIndex.collectAsStateWithLifecycle()
+    val upNext by player.panelList.collectAsStateWithLifecycle()
+    val upNextIndex by player.panelIndex.collectAsStateWithLifecycle()
     val canUndo by player.canUndo.collectAsStateWithLifecycle()
     // The card meter follows the applied visualizer like every other meter;
     // read the setting here so only this screen recomposes when it changes.
@@ -134,15 +134,15 @@ fun UpNextScreen(
         generation = generation,
         savedDurations = savedDurations,
         liveDurationMs = playerState.durationMs,
-        onPlay = { if (player.upNext.value == upNext) onPlay(it) },
+        onPlay = { if (player.panelList.value == upNext) onPlay(it) },
         onClear = player::clearUpNext,
         canUndo = canUndo,
         onUndo = player::undo,
         onMove = { from, to ->
-            if (player.upNext.value == upNext) player.reorderUpNext(from, to)
+            if (player.panelList.value == upNext) player.movePanelEntry(from, to)
         },
         onRemove = { index ->
-            if (player.upNext.value == upNext) player.removeFromUpNext(index)
+            if (player.panelList.value == upNext) player.removePanelEntry(index)
         },
         onBack = onBack,
     )
