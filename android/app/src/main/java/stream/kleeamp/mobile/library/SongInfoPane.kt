@@ -199,11 +199,21 @@ private fun SongInfoView(
     val path = songFilePath(s)
     // File rows only read when there is a real file: streams would show a
     // zero size and a URL for a location. Local songs count as files even
-    // though they play by content uri; on Android 10 the OS will not stat
-    // shared files, so an unreadable size reads as "—", never 0.0 MB.
+    // though they play by content uri; shared files cannot be stat()ed
+    // under scoped storage, so content rows read MediaStore SIZE instead.
     val isFile = s.source == StationSource.Local || s.url.startsWith("file://")
     val sizeLabel = remember(s.id, s.url) {
-        val len = runCatching { File(path).length() }.getOrDefault(0L)
+        val len = runCatching {
+            if (s.url.startsWith("content://")) {
+                context.contentResolver.query(
+                    android.net.Uri.parse(s.url),
+                    arrayOf(android.provider.MediaStore.Audio.Media.SIZE),
+                    null, null, null,
+                )?.use { c -> if (c.moveToFirst()) c.getLong(0) else 0L } ?: 0L
+            } else {
+                File(path).length()
+            }
+        }.getOrDefault(0L)
         if (!isFile || len <= 0) "—"
         else String.format(Locale.US, "%.1f MB", len / 1_048_576f)
     }

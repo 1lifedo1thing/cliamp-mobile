@@ -572,6 +572,47 @@ class Prefs(private val context: Context) {
         put(K.lastStation, Http.json.encodeToString(s))
 
     /**
+     * Re-keys DataStore stations cached before the content-uri switch.
+     * Room favorites/history/stats migrate in LocalLibrary; the queue,
+     * last station and widget windows live here as JSON and would otherwise
+     * keep pointing at unplayable file:// urls (audible once via the
+     * legacy fallback, then re-persisted as file:// forever).
+     */
+    suspend fun healLegacyLocalStations(byPath: Map<String, Station>) {
+        if (byPath.isEmpty()) return
+        context.settingsStore.edit { p ->
+            p[K.queue]?.let { raw -> healStationList(raw, byPath)?.let { fixed -> p[K.queue] = fixed } }
+            p[K.wNext]?.let { raw -> healStationList(raw, byPath)?.let { fixed -> p[K.wNext] = fixed } }
+            p[K.wSource]?.let { raw -> healStationList(raw, byPath)?.let { fixed -> p[K.wSource] = fixed } }
+            p[K.lastStation]?.let { raw ->
+                healStation(raw, byPath)?.let { fixed -> p[K.lastStation] = fixed }
+            }
+        }
+    }
+
+    private fun healOneLegacyStation(s: Station, byPath: Map<String, Station>): Station {
+        if (!s.url.startsWith("file://")) return s
+        val path = runCatching {
+            java.net.URLDecoder.decode(s.url.removePrefix("file://"), "UTF-8")
+        }.getOrNull() ?: s.url.removePrefix("file://")
+        return byPath[path] ?: s
+    }
+
+    private fun healStationList(raw: String?, byPath: Map<String, Station>): String? {
+        if (raw.isNullOrBlank()) return raw
+        val list = runCatching { Http.json.decodeFromString<List<Station>>(raw) }.getOrNull()
+            ?: return raw
+        if (list.none { it.url.startsWith("file://") }) return raw
+        return Http.json.encodeToString(list.map { healOneLegacyStation(it, byPath) })
+    }
+
+    private fun healStation(raw: String, byPath: Map<String, Station>): String? {
+        val s = runCatching { Http.json.decodeFromString<Station>(raw) }.getOrNull() ?: return null
+        val fixed = healOneLegacyStation(s, byPath)
+        return if (fixed.url != s.url) Http.json.encodeToString(fixed) else null
+    }
+
+    /**
      * Serializes favourite writes. The check and the write happen inside one
      * lock so rapid taps invert strictly in order instead of racing on a
      * stale membership read and collapsing into a single effect.

@@ -458,6 +458,11 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
         for (old in db.history().fileUrls()) migrateHistoryUrl(db, byPath, old)
         for (old in db.stats().fileUrls()) migrateStatsUrl(db, byPath, old)
         for (old in db.podcasts().fileUrls()) migrateProgressUrl(db, byPath, old)
+        // DataStore windows (queue, last station, widget) keep JSON snapshots
+        // that the Room migration above never touches.
+        runCatching {
+            stream.kleeamp.mobile.prefs.Prefs(appContext).healLegacyLocalStations(byPath)
+        }
     }
 
     /** Fresh row for a legacy file:// url, matched by DATA path. */
