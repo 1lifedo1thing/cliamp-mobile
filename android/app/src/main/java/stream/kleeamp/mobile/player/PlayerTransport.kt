@@ -133,13 +133,16 @@ internal fun PlayerTransport(
             )
         }
 
-        // What the transport shows follows what the player says the
-        // source can do, not what kind of station it is. A local file,
-        // a podcast, a provider track and a cliamp channel track scrub;
-        // ICY radio does not. The bar stays up during reconnecting or
-        // stream error so the layout never jumps; seeks then no-op.
-        if (model.state.scrubbable) {
-            val seekEnabled = model.reconnect == 0 && model.error == null
+        // Tracks always scrub: local files, podcasts, provider tracks
+        // and cliamp channel tracks. Live radio keeps the streaming rule.
+        // The bar stays up during reconnecting or stream error and while
+        // the duration is still unknown, so a track never flashes a
+        // "playing" label instead; seeks then no-op until seekable.
+        if (model.shownStation?.isTrack == true) {
+            // Touchable even before load: a touch primes the position and
+            // the track loads from there once the duration lands. Only a
+            // hard error disables it; reconnecting still accepts the prime.
+            val seekEnabled = model.error == null
             val fraction = if (model.state.durationMs > 0) {
                 model.state.positionMs.toFloat() / model.state.durationMs
             } else 0f

@@ -1069,7 +1069,9 @@ private fun ScopedMiniPlayer(
 ) {
     val recent by prefs.history.collectAsState(initial = emptyList())
     val shown = station ?: recent.firstOrNull()
-    val inGrace = stream.kleeamp.mobile.player.rememberNavGrace(shown?.id)
+    val inGrace = stream.kleeamp.mobile.player.rememberNavGraceSince(
+        stream.kleeamp.mobile.playback.PlaybackBus.stationChangedAtMs,
+    )
     MiniPlayer(
         station = shown,
         streamTitle = streamTitle,

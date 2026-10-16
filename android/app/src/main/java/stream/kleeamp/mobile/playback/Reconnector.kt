@@ -45,6 +45,12 @@ class Reconnector(
     private var watchdogJob: Job? = null
     private var bufferingSince = 0L
     private var lastErrorRecoverable = true
+    // prepare() resets the item to its default position: harmless on live
+    // radio, but a podcast sought mid-file would restart at 0:00 after a
+    // blip. Hold finite-track positions across re-primes, restored on READY.
+    private var restoreStationId: String? = null
+    private var restoreIndex = 0
+    private var restorePosMs = 0L
     private var connectivity: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
@@ -72,10 +78,15 @@ class Reconnector(
         override fun onPlayerError(error: PlaybackException) {
             if (!player.playWhenReady) return
             lastErrorRecoverable = recoverable(error)
+            android.util.Log.d(
+                "kleeamp/seek",
+                "playerError ${error.errorCodeName} id=${PlaybackBus.station.value?.id}",
+            )
             if (!lastErrorRecoverable) {
                 Log.w(TAG, "not retrying: ${error.errorCodeName}")
                 return
             }
+            snapshotTrackPosition()
             scheduleRetry("error ${error.errorCodeName}")
         }
 
@@ -88,6 +99,7 @@ class Reconnector(
                     lastErrorRecoverable = true
                     retryJob?.cancel()
                     onState(false, 0)
+                    restoreTrackPosition()
                 }
                 Player.STATE_BUFFERING ->
                     if (bufferingSince == 0L) bufferingSince = System.currentTimeMillis()
@@ -124,6 +136,44 @@ class Reconnector(
         scheduleRetry("stalled for ${stallTimeoutMs / 1000}s with no error")
     }
 
+    /**
+     * Remembers a finite track's position before a re-prime: only a real
+     * offset is worth holding (early blips have nothing to lose), and an
+     * existing hold is never overwritten with a reset-to-zero read, so a
+     * second blip cannot erase the first hold.
+     */
+    private fun snapshotTrackPosition() {
+        val station = PlaybackBus.station.value
+        if (station?.isTrack != true) {
+            restoreStationId = null
+            restorePosMs = 0L
+            return
+        }
+        val pos = player.currentPosition
+        if (pos > 5_000) {
+            restoreStationId = station.id
+            restoreIndex = player.currentMediaItemIndex
+            restorePosMs = pos
+        }
+    }
+
+    /** Re-seeks a held track position once audio is flowing again. */
+    private fun restoreTrackPosition() {
+        val rid = restoreStationId
+        val idx = restoreIndex
+        val held = restorePosMs
+        restoreStationId = null
+        restoreIndex = 0
+        restorePosMs = 0L
+        val stationNow = PlaybackBus.station.value
+        val cur = player.currentPosition
+        android.util.Log.d("kleeamp/seek", "restore check rid=$rid now=${stationNow?.id} held=$held cur=$cur")
+        if (!shouldRestoreTrackPosition(rid, stationNow?.takeIf { it.isTrack }?.id, held, cur)) return
+        val at = idx.coerceIn(0, (player.mediaItemCount - 1).coerceAtLeast(0))
+        val ok = runCatching { player.seekTo(at, held) }.isSuccess
+        android.util.Log.d("kleeamp/seek", "restore fired id=$rid idx=$at pos=$held ok=$ok")
+    }
+
     private fun scheduleRetry(reason: String) {
         if (retryJob?.isActive == true) return
         val wait = backoff[attempt.coerceAtMost(backoff.lastIndex)]
@@ -136,6 +186,7 @@ class Reconnector(
                 onState(false, 0)
                 return@launch
             }
+            snapshotTrackPosition()
             player.prepare()
             player.play()
         }
@@ -160,6 +211,7 @@ class Reconnector(
                     retryJob?.cancel()
                     attempt = 0
                     onState(true, 1)
+                    snapshotTrackPosition()
                     player.prepare()
                     player.play()
                 }
@@ -195,3 +247,17 @@ internal fun isRecoverablePlaybackError(errorCode: Int): Boolean = when (errorCo
     -> false
     else -> true
 }
+
+/**
+ * Whether a held track position should win on READY: same finite track,
+ * a real offset was held, and the player came back well short of it
+ * (a re-prime resets to 0). Pure so unit tests can pin it.
+ */
+internal fun shouldRestoreTrackPosition(
+    savedStationId: String?,
+    currentStationId: String?,
+    savedPosMs: Long,
+    currentPosMs: Long,
+): Boolean =
+    !savedStationId.isNullOrBlank() && savedStationId == currentStationId &&
+        savedPosMs > 5_000 && currentPosMs < savedPosMs - 3_000

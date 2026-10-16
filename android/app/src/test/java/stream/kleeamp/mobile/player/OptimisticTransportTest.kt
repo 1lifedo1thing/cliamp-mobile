@@ -33,4 +33,31 @@ class OptimisticTransportTest {
         assertEquals(0, effectiveReconnect(2, inGrace = true))
         assertEquals(2, effectiveReconnect(2, inGrace = false))
     }
+
+    @Test
+    fun wantCoversNavBeforeItemsArrive() {
+        // Right after a tap the queue is building and Media3 holds nothing
+        // yet: intent still reads as wanted so the grace shows playing.
+        assertTrue(shouldWantPlaying(playWhenReady = true, mediaItemCount = 0, transitioning = true))
+        assertTrue(shouldWantPlaying(playWhenReady = true, mediaItemCount = 1, transitioning = false))
+        // Paused stays unwanted even mid-shuffle; empty idle wants nothing.
+        assertFalse(shouldWantPlaying(playWhenReady = false, mediaItemCount = 1, transitioning = true))
+        assertFalse(shouldWantPlaying(playWhenReady = true, mediaItemCount = 0, transitioning = false))
+        assertFalse(shouldWantPlaying(playWhenReady = false, mediaItemCount = 0, transitioning = false))
+    }
+
+    @Test
+    fun idleWithIntentAndNavCountAsLoading() {
+        // IDLE holding items with intent is a load, not a pause.
+        assertTrue(shouldReportBuffering(false, true, 1, true, false, false))
+        // A nav in flight without audio yet is a load too.
+        assertTrue(shouldReportBuffering(false, false, 1, true, true, false))
+        assertTrue(shouldReportBuffering(true, false, 1, true, false, false))
+        // Paused, empty idle and actively playing never report loading.
+        assertFalse(shouldReportBuffering(false, true, 1, false, false, false))
+        assertFalse(shouldReportBuffering(false, true, 0, true, false, false))
+        assertFalse(shouldReportBuffering(false, false, 0, false, false, false))
+        assertFalse(shouldReportBuffering(false, false, 1, true, true, true))
+        assertFalse(shouldReportBuffering(false, false, 1, true, false, true))
+    }
 }

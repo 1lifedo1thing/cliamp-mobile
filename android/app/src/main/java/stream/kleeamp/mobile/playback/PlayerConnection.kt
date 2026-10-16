@@ -34,6 +34,8 @@ import stream.kleeamp.mobile.model.StationSource
 import stream.kleeamp.mobile.model.wrapNext
 import stream.kleeamp.mobile.play.QueuePolicy
 import stream.kleeamp.mobile.play.RepeatMode
+import stream.kleeamp.mobile.player.shouldReportBuffering
+import stream.kleeamp.mobile.player.shouldWantPlaying
 import stream.kleeamp.mobile.widget.WidgetRenderer
 import java.io.IOException
 
@@ -48,6 +50,9 @@ private const val PROGRESS_INTERVAL = 5_000L
  * back to where it started.
  */
 internal const val SEEK_END_MARGIN_MS = 250L
+
+/** Diagnosing podcast seeks resetting to zero; remove once pinned. */
+private const val SEEK_TAG = "kleeamp/seek"
 
 /**
  * Seek target in ms for [fraction] of [durationMs], or null when there is
@@ -252,6 +257,9 @@ class PlayerConnection(
     private var progressWrite: Job? = null
     /** Station the last sync reconciled, so IDLE keeps its timeline. */
     private var prevStationId: String? = null
+    /** Seek fraction primed before the duration is known; applied on READY. */
+    private var pendingSeekFraction: Float? = null
+    private var pendingSeekStationId: String? = null
 
     fun connect() {
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
@@ -319,7 +327,7 @@ class PlayerConnection(
     }
 
     // Single 2 Hz reconciliation choke point; splitting risks publish-order bugs.
-    @Suppress("CyclomaticComplexMethod", "NestedBlockDepth")
+    @Suppress("CyclomaticComplexMethod", "NestedBlockDepth", "LongMethod")
     private fun syncInternal() {
         val c = controller ?: return
 
@@ -351,11 +359,29 @@ class PlayerConnection(
             else -> 0L
         }
         prevStationId = stationNow?.id
+        // Intent covers a nav still building its queue (no items yet), and
+        // IDLE-with-items plus a nav in flight count as loading: ExoPlayer
+        // reports neither BUFFERING nor playing there, which used to read as
+        // PAUSED once the optimistic grace expired.
+        val transitioning = changingPlayback
+        val want = shouldWantPlaying(
+            c.playWhenReady,
+            c.mediaItemCount,
+            transitioning,
+        )
+        val bufferingNow = shouldReportBuffering(
+            c.playbackState == Player.STATE_BUFFERING,
+            c.playbackState == Player.STATE_IDLE,
+            c.mediaItemCount,
+            c.playWhenReady,
+            transitioning,
+            c.isPlaying,
+        )
         _state.value = PlayerState(
             playing = c.isPlaying,
-            buffering = c.playbackState == Player.STATE_BUFFERING,
+            buffering = bufferingNow,
             idle = c.playbackState == Player.STATE_IDLE && c.mediaItemCount == 0,
-            wantPlaying = c.playWhenReady && c.mediaItemCount > 0,
+            wantPlaying = want,
             positionMs = keptPosition,
             bufferedMs = (c.bufferedPosition - c.currentPosition).coerceAtLeast(0),
             volume = c.volume,
@@ -368,6 +394,12 @@ class PlayerConnection(
             hasPrev = navAvailability.hasPrev,
             hasNext = navAvailability.hasNext,
         )
+
+        // A seek primed before load lands here: once the player leaves IDLE
+        // with a known duration the track jumps to the touched point
+        // instead of starting at 0. Station-scoped so a skip in between
+        // drops the stale prime.
+        applyPendingSeek(c)
 
         // Track positions are written from here because this is the only
         // place that already holds both the station and the player's clock.
@@ -434,7 +466,10 @@ class PlayerConnection(
 
     fun toggle(fallback: Station? = null) {
         val c = controller ?: return
-        if (c.isPlaying) c.pause()
+        // Pause on intent, not just audibility: isPlaying is false through
+        // the whole buffering stall, so tapping pause there used to fall
+        // into the play branch and restart the load instead of pausing it.
+        if (c.isPlaying || c.playWhenReady) c.pause()
         else {
             if (c.mediaItemCount == 0) {
                 // Nothing loaded this session. Prefer the live bus station, but
@@ -471,27 +506,115 @@ class PlayerConnection(
     /**
      * Seeks by fraction rather than milliseconds so the caller does not need to
      * know the duration, and so a drag on a 3 minute track and a 3 hour one
-     * behave the same.
+     * behave the same. Works for every finite track (local, podcast,
+     * provider, cliamp channel tracks) using the player duration first and
+     * the station row as fallback while the extractor is still probing;
+     * live streams ignore it. Touching the bar before load primes the
+     * position: the fraction is remembered and applied once the player
+     * leaves IDLE with a known duration, so the track loads from the
+     * seeked time instead of starting at 0.
      */
     fun seekTo(fraction: Float) {
-        val c = controller ?: return
-        if (!c.isCurrentMediaItemSeekable) return
-        val d = c.duration
-        if (d == C.TIME_UNSET || d <= 0) return
-        val target = seekTargetMs(d, fraction) ?: return
-        c.seekTo(target)
-        sync()
+        val station = PlaybackBus.station.value ?: return
+        if (!station.isTrack) return
+        primeSeek(station, fraction.coerceIn(0f, 1f))
     }
 
     /** Skips by whole seconds, clamped to the item; live streams ignore it. */
     fun seekBy(seconds: Int) {
-        val c = controller ?: return
-        if (!c.isCurrentMediaItemSeekable) return
-        val d = c.duration
-        if (d == C.TIME_UNSET || d <= 0) return
-        val target = seekByTargetMs(c.currentPosition, d, seconds) ?: return
-        c.seekTo(target)
-        sync()
+        val station = PlaybackBus.station.value ?: return
+        if (!station.isTrack) return
+        val c = controller
+        val d = c?.duration?.takeIf { it != C.TIME_UNSET && it > 0 }
+            ?: station.durationMs.takeIf { it > 0 }
+            ?: run {
+                // No duration yet: prime the middle so a skip still wakes
+                // the track instead of no-oping; sync refines nothing here.
+                primeSeek(station, 0.5f)
+                return
+            }
+        val pos = (c?.currentPosition?.takeIf { it > 0 } ?: _state.value.positionMs)
+            .coerceAtLeast(0)
+        val target = seekByTargetMs(pos, d, seconds) ?: return
+        primeSeek(station, target.toFloat() / d)
+    }
+
+    /**
+     * Records the wanted fraction and fires it when the player can take it.
+     * Seeks against an IDLE player are ignored by ExoPlayer, so the prime
+     * is kept until sync sees READY/BUFFERING with a known duration; a
+     * station change in between drops the stale prime.
+     */
+    private fun primeSeek(station: Station, fraction: Float) {
+        pendingSeekFraction = fraction
+        pendingSeekStationId = station.id
+        PlaybackBus.lastSeekMs = System.currentTimeMillis()
+        val c = controller
+        android.util.Log.d(
+            SEEK_TAG,
+            "prime id=${station.id} f=$fraction items=${c?.mediaItemCount} " +
+                "st=${c?.playbackState} seekable=${c?.isCurrentMediaItemSeekable}",
+        )
+        if (c == null || c.mediaItemCount == 0) {
+            play(station)
+            return
+        }
+        if (!applyPendingSeek(c)) sync()
+    }
+
+    /** Applies a primed seek when the player can take it. True when fired. */
+    @Suppress("ReturnCount")
+    private fun applyPendingSeek(c: Player): Boolean {
+        val pending = pendingSeekFraction ?: return false
+        val pendingId = pendingSeekStationId ?: return false
+        val stationNow = PlaybackBus.station.value ?: return false
+        if (pendingId != stationNow.id) {
+            android.util.Log.d(SEEK_TAG, "drop prime: station changed $pendingId -> ${stationNow.id}")
+            pendingSeekFraction = null
+            pendingSeekStationId = null
+            return false
+        }
+        // IDLE ignores seeks: hold the prime through reconnect retries
+        // instead of firing into the void and clearing it (which read as
+        // "tap, then back to zero" on slow podcast/local loads).
+        if (c.playbackState == Player.STATE_IDLE) {
+            android.util.Log.d(SEEK_TAG, "hold prime: IDLE id=${stationNow.id} pos=${c.currentPosition}")
+            return false
+        }
+        // A seek fired before the item reports seekable is dropped by
+        // ExoPlayer yet looks sent here (seekTo returns void), clearing the
+        // prime and snapping a long podcast back to zero once the UI's
+        // 2s hold releases. Keep priming until the player can take it.
+        if (!c.isCurrentMediaItemSeekable) {
+            android.util.Log.d(SEEK_TAG, "hold prime: not seekable id=${stationNow.id} st=${c.playbackState}")
+            return false
+        }
+        if (!c.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) {
+            android.util.Log.d(SEEK_TAG, "hold prime: seek not granted id=${stationNow.id}")
+            return false
+        }
+        val d = c.duration.takeIf { it != C.TIME_UNSET && it > 0 }
+            ?: stationNow.durationMs.takeIf { it > 0 }
+            ?: run {
+                android.util.Log.d(SEEK_TAG, "hold prime: no duration id=${stationNow.id} st=${c.playbackState}")
+                return false
+            }
+        val target = seekTargetMs(d, pending)
+        if (target == null) {
+            pendingSeekFraction = null
+            pendingSeekStationId = null
+            return false
+        }
+        val ok = runCatching { c.seekTo(target) }.isSuccess
+        android.util.Log.d(
+            SEEK_TAG,
+            "fire prime: id=${stationNow.id} f=$pending d=$d target=$target st=${c.playbackState}",
+        )
+        if (ok) {
+            pendingSeekFraction = null
+            pendingSeekStationId = null
+        }
+        return ok
     }
 
     fun setVolume(v: Float) {
