@@ -39,4 +39,23 @@ class SeekTargetTest {
         assertEquals(0L, seekTargetMs(100L, 1f))
         assertEquals(0L, seekTargetMs(100L, 0.5f))
     }
+
+    @Test
+    fun primedAndFiredTargetsBeatASettlingClock() {
+        // A fresh touch owns the clock from the tap, not the binder trip.
+        assertEquals(120_000L, resolveKeptPosition(10_000L, true, true, 10_000L, 120_000L, null))
+        // A fired seek keeps it until the player lands on it.
+        assertEquals(120_000L, resolveKeptPosition(10_000L, true, true, 10_000L, null, 120_000L))
+    }
+
+    @Test
+    fun staleWindowNeverLendsItsClock() {
+        // New episode tapped while the old item still fills the window:
+        // the old 30min clock must not show under the new title.
+        assertEquals(0L, resolveKeptPosition(1_800_000L, false, false, 1_800_000L, null, null))
+        // Same station through IDLE still carries the last tick.
+        assertEquals(10_000L, resolveKeptPosition(0L, true, true, 10_000L, null, null))
+        // Live player clock wins once it matches the station.
+        assertEquals(10_000L, resolveKeptPosition(10_000L, true, true, 5_000L, null, null))
+    }
 }

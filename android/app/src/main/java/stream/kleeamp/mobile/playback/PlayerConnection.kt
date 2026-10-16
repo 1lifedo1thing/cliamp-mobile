@@ -54,6 +54,34 @@ internal const val SEEK_END_MARGIN_MS = 250L
 /** Diagnosing podcast seeks resetting to zero; remove once pinned. */
 private const val SEEK_TAG = "kleeamp/seek"
 
+/** How long a fired seek owns the clock until the player lands on it. */
+private const val FIRED_SEEK_HOLD_MS = 2_000L
+
+/** Close enough to the fired target to call the seek landed. */
+private const val SEEK_LANDED_TOLERANCE_MS = 1_500L
+
+/**
+ * Which clock the UI reads this tick. Pure so unit tests can pin the
+ * priority: a primed/fired seek target wins over the player's still-settling
+ * clock (which otherwise flashes the old spot on every seek), a stale window
+ * mid-nav never lends its clock to the new station, and only then does the
+ * previous tick carry through IDLE.
+ */
+internal fun resolveKeptPosition(
+    rawPositionMs: Long,
+    itemMatchesStation: Boolean,
+    sameStationAsPrev: Boolean,
+    prevPositionMs: Long,
+    pendingTargetMs: Long?,
+    firedTargetMs: Long?,
+): Long = when {
+    pendingTargetMs != null -> pendingTargetMs
+    firedTargetMs != null -> firedTargetMs
+    rawPositionMs > 0 && itemMatchesStation -> rawPositionMs
+    sameStationAsPrev -> prevPositionMs
+    else -> 0L
+}
+
 /**
  * Seek target in ms for [fraction] of [durationMs], or null when there is
  * nothing sane to seek to. Pure so it can be unit-tested on the JVM.
@@ -260,6 +288,10 @@ class PlayerConnection(
     /** Seek fraction primed before the duration is known; applied on READY. */
     private var pendingSeekFraction: Float? = null
     private var pendingSeekStationId: String? = null
+    /** Last fired seek target, held until the player lands on it. */
+    private var firedSeekTargetMs: Long? = null
+    private var firedSeekStationId: String? = null
+    private var firedSeekAtMs = 0L
 
     fun connect() {
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
@@ -353,11 +385,38 @@ class PlayerConnection(
                 (c.playbackState == Player.STATE_IDLE || c.playbackState == Player.STATE_BUFFERING)
             )
         val rawPosition = c.currentPosition.coerceAtLeast(0)
-        val keptPosition = when {
-            rawPosition > 0 -> rawPosition
-            stationNow?.id == prevStationId -> prev.positionMs
-            else -> 0L
+        val itemMatches = stationNow != null && c.currentMediaItem?.mediaId == stationNow.id
+        val sameStation = stationNow?.id == prevStationId
+        // A primed touch owns the clock from the tap, not from the binder
+        // round-trip: without this every seek first flashes the old spot in
+        // the time readouts (the bar already holds its committed target).
+        val pendingTarget = pendingSeekFraction
+            ?.takeIf { pendingSeekStationId == stationNow?.id }
+            ?.let { seekTargetMs(keptDuration, it) }
+        // A fired seek keeps owning the clock until the player lands on it
+        // or the window expires (mirrors the scrubber's 2s committed hold,
+        // which only covers the bar, never the clocks).
+        val nowMs = System.currentTimeMillis()
+        if (firedSeekTargetMs != null &&
+            (firedSeekStationId != stationNow?.id || nowMs - firedSeekAtMs >= FIRED_SEEK_HOLD_MS)
+        ) {
+            firedSeekTargetMs = null
+            firedSeekStationId = null
         }
+        var firedTarget = firedSeekTargetMs
+        if (firedTarget != null && kotlin.math.abs(rawPosition - firedTarget) < SEEK_LANDED_TOLERANCE_MS) {
+            firedTarget = null
+            firedSeekTargetMs = null
+            firedSeekStationId = null
+        }
+        val keptPosition = resolveKeptPosition(
+            rawPosition,
+            itemMatches,
+            sameStation,
+            prev.positionMs,
+            pendingTarget,
+            firedTarget,
+        )
         prevStationId = stationNow?.id
         // Intent covers a nav still building its queue (no items yet), and
         // IDLE-with-items plus a nav in flight count as loading: ExoPlayer
@@ -613,6 +672,9 @@ class PlayerConnection(
         if (ok) {
             pendingSeekFraction = null
             pendingSeekStationId = null
+            firedSeekTargetMs = target
+            firedSeekStationId = stationNow.id
+            firedSeekAtMs = System.currentTimeMillis()
         }
         return ok
     }
