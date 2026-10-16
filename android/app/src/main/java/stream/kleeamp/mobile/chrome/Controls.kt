@@ -444,6 +444,7 @@ fun Scrubber(
     fraction: Float,
     modifier: Modifier = Modifier,
     onSeek: (Float) -> Unit,
+    enabled: Boolean = true,
 ) {
     val p = LocalPalette.current
     var dragging by remember { mutableStateOf(false) }
@@ -486,7 +487,10 @@ fun Scrubber(
             // gesture the parent steals seeks NOTHING instead of degrading to
             // a tap-seek at the down point (which is what snapped fast-flung
             // drags back to where the finger landed).
-            .pointerInput(Unit) {
+            // Disabled (reconnecting / stream error): the bar stays visible
+            // so the layout never jumps, but gestures are ignored.
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val startFraction = (down.position.x / size.width).coerceIn(0f, 1f)

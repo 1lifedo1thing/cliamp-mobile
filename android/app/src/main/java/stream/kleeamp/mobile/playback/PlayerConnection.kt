@@ -250,6 +250,8 @@ class PlayerConnection(
     private var lastProgressWrite = 0L
     /** A slow sink must not stack: one write per tick, never overlapping. */
     private var progressWrite: Job? = null
+    /** Station the last sync reconciled, so IDLE keeps its timeline. */
+    private var prevStationId: String? = null
 
     fun connect() {
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
@@ -325,17 +327,41 @@ class PlayerConnection(
         queue.reconcileMediaWindow(c, changingPlayback)
 
         val navAvailability = queue.navAvailability()
+        val prev = _state.value
+        val stationNow = PlaybackBus.station.value
+        // Keep the timeline up during reconnecting/IDLE so the seek bar
+        // never vanishes for tracks: ExoPlayer reports no duration and
+        // not-seekable while parked in IDLE, which would flip scrubbable
+        // false and swap the bar for the streaming rule mid-retry.
+        val rawDuration = c.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L
+        val keptDuration = when {
+            rawDuration > 0 -> rawDuration
+            stationNow?.id == prevStationId && prev.durationMs > 0 -> prev.durationMs
+            else -> stationNow?.durationMs ?: 0L
+        }
+        val rawSeekable = c.isCurrentMediaItemSeekable
+        val keptSeekable = rawSeekable || (
+            stationNow?.isTrack == true && keptDuration > 0 &&
+                (c.playbackState == Player.STATE_IDLE || c.playbackState == Player.STATE_BUFFERING)
+            )
+        val rawPosition = c.currentPosition.coerceAtLeast(0)
+        val keptPosition = when {
+            rawPosition > 0 -> rawPosition
+            stationNow?.id == prevStationId -> prev.positionMs
+            else -> 0L
+        }
+        prevStationId = stationNow?.id
         _state.value = PlayerState(
             playing = c.isPlaying,
             buffering = c.playbackState == Player.STATE_BUFFERING,
             idle = c.playbackState == Player.STATE_IDLE && c.mediaItemCount == 0,
             wantPlaying = c.playWhenReady && c.mediaItemCount > 0,
-            positionMs = c.currentPosition.coerceAtLeast(0),
+            positionMs = keptPosition,
             bufferedMs = (c.bufferedPosition - c.currentPosition).coerceAtLeast(0),
             volume = c.volume,
-            durationMs = c.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L,
-            seekable = c.isCurrentMediaItemSeekable,
-            live = c.isCurrentMediaItemLive,
+            durationMs = keptDuration,
+            seekable = keptSeekable,
+            live = c.isCurrentMediaItemLive && stationNow?.isTrack != true,
             speed = c.playbackParameters.speed,
             sleepAtMs = _sleepAtMs.value,
             repeat = queue.repeatMode,

@@ -395,7 +395,7 @@ object WidgetRenderer {
             StationSource.Cliamp -> "cliamp radio"
             StationSource.Local -> station.artistAlbum.ifBlank { "local audio" }
             StationSource.Podcast -> station.artist.ifBlank { "podcast" }
-            StationSource.Provider -> station.meta.ifBlank { "live stream" }
+            StationSource.Provider -> station.artistAlbum.ifBlank { station.meta.ifBlank { "provider" } }
             else -> station?.meta?.ifBlank { "live stream" }.orEmpty().ifBlank { "pick a station" }
         }
     }

@@ -468,5 +468,10 @@ private fun upNextDuration(
 private fun sourceSubtitle(s: Station): String = when {
     !s.isTrack -> "live stream"
     s.artist.isNotBlank() -> s.artist
+    s.album.isNotBlank() -> s.album
+    s.source == StationSource.Local -> "local audio"
+    s.source == StationSource.Podcast -> "podcast"
+    s.source == StationSource.Provider -> "provider"
+    s.source == StationSource.Cliamp -> "cliamp radio"
     else -> "<unknown>"
 }

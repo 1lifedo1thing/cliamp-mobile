@@ -88,6 +88,7 @@ internal val Station.sourceLine: String
         StationSource.Cliamp -> "cliamp radio"
         StationSource.Local -> artistAlbum.ifBlank { "local audio" }
         StationSource.Podcast -> artist.ifBlank { "podcast" }
+        StationSource.Provider -> artistAlbum.ifBlank { meta.ifBlank { "provider" } }
         else -> meta.ifBlank { "live stream" }
     }
 

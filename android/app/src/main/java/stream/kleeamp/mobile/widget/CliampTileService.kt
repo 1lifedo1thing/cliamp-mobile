@@ -54,7 +54,11 @@ class CliampTileService : TileService() {
             label = station?.name ?: "kleeamp"
             // setSubtitle needs API 29; older tiles show the label alone.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                subtitle = if (playing) "streaming" else "stopped"
+                subtitle = when {
+                    !playing -> "stopped"
+                    station?.isTrack == true -> "playing"
+                    else -> "streaming"
+                }
             }
             icon = Icon.createWithResource(this@CliampTileService, R.drawable.ic_notification)
             updateTile()
