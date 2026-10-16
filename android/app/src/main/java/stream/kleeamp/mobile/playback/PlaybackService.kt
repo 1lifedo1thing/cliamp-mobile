@@ -63,6 +63,7 @@ import stream.kleeamp.mobile.R
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.model.StationSource
+import stream.kleeamp.mobile.model.deEchoArtistLine
 import stream.kleeamp.mobile.model.wrapNext
 import stream.kleeamp.mobile.net.Http
 import stream.kleeamp.mobile.widget.WidgetRenderer
@@ -935,11 +936,15 @@ class PlaybackService : MediaSessionService() {
             else -> MediaMetadata.MEDIA_TYPE_RADIO_STATION
         }
 
-        /** The artist/subtitle line the notification reads, per source. */
+        /**
+         * The artist/subtitle line the notification reads, per source. Real
+         * metadata only, minus any source echo: the lockscreen never repeats
+         * what the in-app badge rows already say.
+         */
         fun notificationArtist(station: Station): String = when (station.source) {
-            StationSource.Local -> station.artistAlbum.ifBlank { "local audio" }
-            StationSource.Podcast -> station.artist.ifBlank { "podcast" }
-            else -> station.meta.ifBlank { "cliamp radio" }
+            StationSource.Local -> deEchoArtistLine(station.artistAlbum.split("·"), 2)
+            StationSource.Podcast -> deEchoArtistLine(listOf(station.artist), 1)
+            else -> deEchoArtistLine(station.meta.split("·"), 3)
         }
     }
 }

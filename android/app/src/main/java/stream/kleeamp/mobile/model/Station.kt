@@ -93,6 +93,30 @@ internal val Station.sourceLine: String
     }
 
 /**
+ * Segments that name the origin, never the music. Artist slots (player
+ * row, mini bar, notification) drop any segment echoing these instead
+ * of repeating what the source badge already says.
+ */
+internal val SourceEchoes = setOf(
+    "cliamp radio",
+    "directory",
+    "on device",
+    "provider",
+    "podcast",
+    "custom",
+    "local audio",
+    "live stream",
+    "my music",
+)
+
+/** Join the first [take] segments minus any source echo. Pure for tests. */
+internal fun deEchoArtistLine(segments: List<String>, take: Int): String = segments
+    .map { it.trim() }
+    .filter { it.isNotEmpty() && it.lowercase() !in SourceEchoes }
+    .take(take)
+    .joinToString(" · ")
+
+/**
  * The [count] stations after index [i] of this list, wrapping around the end.
  * Radio-style lists play as a ring, and the widget's up-next row is exactly
  * this: the four stations that come next in the list being played. Kotlin's

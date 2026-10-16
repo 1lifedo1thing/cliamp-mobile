@@ -45,7 +45,6 @@ import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.model.StationSource
-import stream.kleeamp.mobile.model.sourceLine
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
@@ -115,7 +114,7 @@ fun MiniPlayer(
                             reconnecting > 0 -> "reconnecting · $reconnecting"
                             buffering -> "buffering…"
                             streamTitle.isNotBlank() -> streamTitle
-                            else -> station.sourceLine
+                            else -> artistOrTagLine(station)
                         },
                         KleeampType.rowSecondary,
                         if (buffering || reconnecting > 0) p.amber else p.inkTertiary,

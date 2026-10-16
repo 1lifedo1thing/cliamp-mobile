@@ -23,6 +23,7 @@ import stream.kleeamp.mobile.MainActivity
 import stream.kleeamp.mobile.R
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
+import stream.kleeamp.mobile.model.deEchoArtistLine
 import stream.kleeamp.mobile.chrome.clock
 import stream.kleeamp.mobile.theme.KleeampPalette
 import stream.kleeamp.mobile.theme.decodeCustomThemeOrNull
@@ -387,12 +388,17 @@ object WidgetRenderer {
      */
     private fun widgetSubtitle(track: String, station: Station?): String {
         if (track.isNotBlank()) return track
-        return when (station?.source) {
+        val raw = when (station?.source) {
             StationSource.Cliamp -> "cliamp radio"
             StationSource.Local -> station.artistAlbum.ifBlank { "local audio" }
             StationSource.Podcast -> station.artist.ifBlank { "podcast" }
             StationSource.Provider -> station.artistAlbum.ifBlank { station.meta.ifBlank { "provider" } }
             else -> station?.meta?.ifBlank { "live stream" }.orEmpty().ifBlank { "pick a station" }
+        }
+        // Source echoes never reach the widget line either; only the cold
+        // empty state keeps a guiding fallback.
+        return deEchoArtistLine(raw.split("·"), 3).ifBlank {
+            if (station == null) "pick a station" else ""
         }
     }
 }

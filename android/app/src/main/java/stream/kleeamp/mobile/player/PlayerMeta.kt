@@ -70,6 +70,7 @@ import androidx.media3.common.util.UnstableApi
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.model.StationSource
+import stream.kleeamp.mobile.model.deEchoArtistLine
 import stream.kleeamp.mobile.player.vis.StereoMetrics
 import stream.kleeamp.mobile.player.vis.Visualizer
 import stream.kleeamp.mobile.playback.AudioOutput
@@ -400,10 +401,10 @@ internal fun PlayerMeta(
                 KleeampType.trackTitle.copy(lineHeight = NameLineHeight),
                 p.ink,
             )
-            MarqueeLabel(
-                model.streamTitle.ifBlank { model.error ?: artistOrTagLine(model.shownStation) },
-                KleeampType.rowPrimary.copy(lineHeight = TitleLineHeight),
-                if (model.error != null && model.streamTitle.isBlank()) p.destructiveInk else p.inkSecondary,
+            ArtistLine(
+                text = model.streamTitle.ifBlank { model.error ?: artistOrTagLine(model.shownStation) },
+                live = model.streamTitle.isNotBlank() && model.error == null,
+                error = model.error != null && model.streamTitle.isBlank(),
             )
         }
         SourceLine(model.shownStation)
@@ -477,7 +478,48 @@ internal fun SourceLine(
     }
 }
 
-/** Short source name for the badge; pure so unit tests can pin it. */
+/**
+ * The artist/stream-title line: a music note in accent while a live song
+ * plays, quiet tertiary otherwise, with the marquee taking the rest of
+ * the row. Fixed content shape, so track changes never shift the row.
+ */
+@Composable
+private fun ArtistLine(
+    text: String,
+    live: Boolean,
+    error: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    Row(
+        modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Icon(
+            KleeampIcons.MusicNote,
+            null,
+            Modifier.size(12.dp),
+            tint = when {
+                error -> p.destructiveInk
+                live -> p.accent
+                else -> p.inkTertiary
+            },
+        )
+        MarqueeLabel(
+            text,
+            KleeampType.rowPrimary.copy(lineHeight = TitleLineHeight),
+            when {
+                error -> p.destructiveInk
+                live -> p.ink
+                else -> p.inkSecondary
+            },
+            Modifier.weight(1f),
+        )
+    }
+}
+
+/** Short source name for the badge. Pure for tests. */
 internal fun sourceLabel(source: StationSource): String = when (source) {
     StationSource.Cliamp -> "cliamp radio"
     StationSource.Directory -> "directory"
@@ -585,13 +627,14 @@ internal fun RepeatAction(repeat: Repeat, onClick: () -> Unit) {
  * The line beneath the track title in the expanded player: the artist for
  * local files (and podcasts), the stream title normally, and the station tags
  * as a last resort - mirroring the mini player's artist line so the artist is
- * always named under the song.
+ * always named under the song. Pure so unit tests can pin it.
  */
 internal fun artistOrTagLine(station: Station?): String {
     if (station == null) return ""
-    return when (station.source) {
-        StationSource.Local -> station.artistAlbum
-        StationSource.Podcast -> station.artist
-        else -> station.tagList.take(3).joinToString(" · ")
-    }.ifBlank { station.tagList.take(3).joinToString(" · ") }
+    val raw = when (station.source) {
+        StationSource.Local -> deEchoArtistLine(station.artistAlbum.split("·"), 2)
+        StationSource.Podcast -> deEchoArtistLine(listOf(station.artist), 1)
+        else -> deEchoArtistLine(station.tagList, 3)
+    }.ifBlank { deEchoArtistLine(station.tagList, 3) }
+    return raw
 }
