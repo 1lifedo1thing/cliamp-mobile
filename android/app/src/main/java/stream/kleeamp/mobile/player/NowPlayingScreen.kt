@@ -171,11 +171,12 @@ fun NowPlayingScreen(
         AudioOutputs.current(context, uiState.outputDevice)
     }
 
-    // Optimistic 3s window after every track change: most slow streams
-    // join inside it, so keep the pause glyph and hide buffering /
-    // reconnecting instead of blinking. Pause inside the window still
-    // reads as paused via wantPlaying.
-    val inGrace = rememberNavGrace(uiState.shownStation?.id)
+    // Optimistic 3s window anchored on the navigation itself: most slow
+    // streams join inside it, so keep the pause glyph and hide buffering /
+    // reconnecting instead of blinking. Anchored on the bus timestamp, not
+    // composition, so opening the sheet late never restarts the window over
+    // a stall. Pause inside the window still reads as paused via wantPlaying.
+    val inGrace = rememberNavGraceSince(PlaybackBus.stationChangedAtMs)
     val effState = uiState.playerState.copy(
         playing = effectivePlaying(
             uiState.playerState.playing,

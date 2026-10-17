@@ -8,7 +8,6 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
-import android.os.SystemClock
 import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
@@ -24,6 +23,7 @@ import stream.kleeamp.mobile.MainActivity
 import stream.kleeamp.mobile.R
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.model.StationSource
+import stream.kleeamp.mobile.model.deEchoArtistLine
 import stream.kleeamp.mobile.chrome.clock
 import stream.kleeamp.mobile.theme.KleeampPalette
 import stream.kleeamp.mobile.theme.decodeCustomThemeOrNull
@@ -195,10 +195,8 @@ object WidgetRenderer {
                     delay(100)
                     val req = synchronized(lock) { Req(pending, pendingCold) }
                     val ctx = synchronized(lock) { appContext } ?: return@launch
-                    val t0 = SystemClock.uptimeMillis()
                     runCatching { render(ctx, req) }
                         .onFailure { Log.e("kleeamp/wid", "widget push failed", it) }
-                    Log.d("kleeamp/wid", "widget push ms=${SystemClock.uptimeMillis() - t0}")
                 } while (synchronized(lock) { again })
             } finally {
                 // A request that slipped in after the last drain check set
@@ -236,7 +234,6 @@ object WidgetRenderer {
             val tiny = h < MINIMAL_MAX_HEIGHT_DP && w < COMPACT_MAX_WIDTH_DP
             val minimal = !tiny && h < MINIMAL_MAX_HEIGHT_DP
             val compact = !tiny && !minimal && (w < COMPACT_MAX_WIDTH_DP || h < COMPACT_MAX_HEIGHT_DP)
-            Log.d("kleeamp/wid", "widget layout id=$id cell=${w}x${h} tiny=$tiny minimal=$minimal compact=$compact")
             mgr.updateAppWidget(id, buildViews(ctx, row, p, compact, minimal, tiny))
         }
     }
@@ -391,12 +388,17 @@ object WidgetRenderer {
      */
     private fun widgetSubtitle(track: String, station: Station?): String {
         if (track.isNotBlank()) return track
-        return when (station?.source) {
-            StationSource.Cliamp -> "cliamp radio"
-            StationSource.Local -> station.artistAlbum.ifBlank { "local audio" }
-            StationSource.Podcast -> station.artist.ifBlank { "podcast" }
-            StationSource.Provider -> station.meta.ifBlank { "live stream" }
-            else -> station?.meta?.ifBlank { "live stream" }.orEmpty().ifBlank { "pick a station" }
+        if (station == null) return "pick a station"
+        // Channel tracks name their artist like any song; the live channel
+        // keeps its radio label. Source echoes never reach the widget line;
+        // a missing artist reads "unknown", never empty.
+        if (station.source == StationSource.Cliamp && !station.isChannelTrack) return "cliamp radio"
+        val raw = when (station.source) {
+            StationSource.Local -> station.artistAlbum
+            StationSource.Podcast -> station.artist
+            StationSource.Provider -> station.artistAlbum
+            else -> station.meta
         }
+        return deEchoArtistLine(raw.split("·"), 3).ifBlank { "unknown" }
     }
 }

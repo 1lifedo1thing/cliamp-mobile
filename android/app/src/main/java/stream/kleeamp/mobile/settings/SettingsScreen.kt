@@ -103,6 +103,7 @@ fun SettingsScreen(
     val skipBackSec = uiState.skipBackSec
     val skipFwdSec = uiState.skipFwdSec
     val autoResume = uiState.autoResume
+    val resumePodcasts = uiState.resumePodcasts
     val autoDownload = uiState.autoDownload
     val autoCellular = uiState.autoCellular
     val cleanupPlayed = uiState.cleanupPlayed
@@ -244,6 +245,11 @@ fun SettingsScreen(
         HairlineDivider()
 
         SectionLabel("podcasts")
+        ToggleRow(
+            title = "Auto-resume episodes",
+            checked = resumePodcasts,
+            onChange = { vm.onEvent(SettingsViewModel.Event.SetResumePodcasts(it)) },
+        )
         ToggleRow(
             title = "Auto-download episodes",
             checked = autoDownload,

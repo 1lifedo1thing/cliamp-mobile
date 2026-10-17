@@ -133,13 +133,23 @@ internal fun PlayerTransport(
             )
         }
 
-        // What the transport shows follows what the player says the
-        // source can do, not what kind of station it is. A local file
-        // and a provider track scrub; ICY radio does not.
-        if (model.state.scrubbable && model.reconnect == 0 && model.error == null) {
+        // Tracks always scrub: local files, podcasts, provider tracks
+        // and cliamp channel tracks. Live radio keeps the streaming rule.
+        // The bar stays up during reconnecting or stream error and while
+        // the duration is still unknown, so a track never flashes a
+        // "playing" label instead; seeks then no-op until seekable.
+        if (model.shownStation?.isTrack == true) {
+            // Touchable even before load: a touch primes the position and
+            // the track loads from there once the duration lands. Only a
+            // hard error disables it; reconnecting still accepts the prime.
+            val seekEnabled = model.error == null
+            val fraction = if (model.state.durationMs > 0) {
+                model.state.positionMs.toFloat() / model.state.durationMs
+            } else 0f
             Scrubber(
-                fraction = model.state.positionMs.toFloat() / model.state.durationMs,
+                fraction = fraction,
                 onSeek = actions.onSeek,
+                enabled = seekEnabled,
             )
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 4.dp),
@@ -154,13 +164,22 @@ internal fun PlayerTransport(
                     p.inkSecondary,
                     Modifier.microPress(onClick = actions.onOpenSleep),
                 )
-                Mono(
-                    sleepRemaining(model) ?: "-" + clock(
-                        (model.state.durationMs - model.state.positionMs).coerceAtLeast(0),
-                    ),
-                    KleeampType.time,
-                    if (model.state.sleepAtMs != null) p.accent else p.inkSecondary,
-                )
+                if (model.reconnect > 0) {
+                    Mono(
+                        "reconnecting · ${model.reconnect}",
+                        KleeampType.time,
+                        p.amber,
+                        maxLines = 1,
+                    )
+                } else {
+                    Mono(
+                        sleepRemaining(model) ?: "-" + clock(
+                            (model.state.durationMs - model.state.positionMs).coerceAtLeast(0),
+                        ),
+                        KleeampType.time,
+                        if (model.state.sleepAtMs != null) p.accent else p.inkSecondary,
+                    )
+                }
             }
         } else {
             StreamingRule(
@@ -319,7 +338,7 @@ internal fun statusLabel(model: PlayerModel): String = when {
     model.reconnect > 0 -> "RECONNECTING · ${model.reconnect}"
     model.error != null -> "STREAM ERROR"
     model.state.buffering -> "BUFFERING"
-    model.state.playing -> "ON AIR"
+    model.state.playing -> if (model.shownStation?.isTrack == true) "PLAYING" else "ON AIR"
     model.shownStation != null -> "PAUSED"
     else -> "NOTHING TUNED"
 }
@@ -367,7 +386,7 @@ internal fun transportLabel(model: PlayerModel): String = when {
     model.reconnect > 0 -> "reconnecting"
     model.error != null -> "no signal"
     model.state.buffering -> "buffering"
-    model.state.playing -> "streaming"
+    model.state.playing -> if (model.shownStation?.isTrack == true) "playing" else "streaming"
     model.shownStation != null -> "paused"
     else -> "stopped"
 }

@@ -33,6 +33,7 @@ class SettingsViewModel(
         val mono: Boolean = false,
         val buffer: Int = 20,
         val autoResume: Boolean = false,
+        val resumePodcasts: Boolean = true,
         val autoDownload: Boolean = false,
         val autoCellular: Boolean = false,
         val cleanupPlayed: CleanupScope = CleanupScope.Off,
@@ -55,6 +56,7 @@ class SettingsViewModel(
     sealed interface Event {
         data class SetPalette(val key: String) : Event
         data class SetAutoResume(val v: Boolean) : Event
+        data class SetResumePodcasts(val v: Boolean) : Event
         data class SetResumeLocal(val v: Boolean) : Event
         data class SetAutoDownload(val v: Boolean) : Event
         data class SetAutoCellular(val v: Boolean) : Event
@@ -94,6 +96,7 @@ class SettingsViewModel(
         val mono: Boolean = false,
         val buffer: Int = 20,
         val autoResume: Boolean = false,
+        val resumePodcasts: Boolean = true,
         val autoDownload: Boolean = false,
         val autoCellular: Boolean = false,
         val cleanupPlayed: CleanupScope = CleanupScope.Off,
@@ -159,6 +162,10 @@ class SettingsViewModel(
         ) { playback, skip ->
             playback.copy(skipBackSec = skip.first, skipFwdSec = skip.second)
         }.combine(
+            prefs.resumePodcasts,
+        ) { playback, resume ->
+            playback.copy(resumePodcasts = resume)
+        }.combine(
             prefs.boostPerSection,
         ) { playback, per ->
             playback.copy(boostPerSection = per)
@@ -190,6 +197,7 @@ class SettingsViewModel(
             mono = playback.mono,
             buffer = playback.buffer,
             autoResume = playback.autoResume,
+            resumePodcasts = playback.resumePodcasts,
             autoDownload = playback.autoDownload,
             autoCellular = playback.autoCellular,
             cleanupPlayed = playback.cleanupPlayed,
@@ -215,6 +223,7 @@ class SettingsViewModel(
         when (e) {
             is Event.SetPalette -> viewModelScope.launch { prefs.setPalette(e.key) }
             is Event.SetAutoResume -> viewModelScope.launch { prefs.setAutoResume(e.v) }
+            is Event.SetResumePodcasts -> viewModelScope.launch { prefs.setResumePodcasts(e.v) }
             is Event.SetResumeLocal -> viewModelScope.launch { prefs.setResumeLocal(e.v) }
             is Event.SetAutoDownload -> viewModelScope.launch { prefs.setAutoDownload(e.v) }
             is Event.SetAutoCellular -> viewModelScope.launch { prefs.setAutoCellular(e.v) }

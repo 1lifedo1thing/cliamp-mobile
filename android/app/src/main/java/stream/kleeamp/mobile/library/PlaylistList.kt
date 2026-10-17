@@ -180,7 +180,6 @@ internal fun PlaylistList(
             ) { pl ->
                 PlaylistRow(
                     pl = pl,
-                    pinned = true,
                     onOpen = onOpen,
                     onOpenMenu = { menuPl = pl to true },
                 )
@@ -196,7 +195,6 @@ internal fun PlaylistList(
             ) { pl ->
                 PlaylistRow(
                     pl = pl,
-                    pinned = false,
                     onOpen = onOpen,
                     onOpenMenu = { menuPl = pl to false },
                 )
@@ -286,7 +284,6 @@ internal fun PlaylistList(
 @Composable
 private fun PlaylistRow(
     pl: PlaylistStore.Playlist,
-    pinned: Boolean,
     onOpen: (PlaylistStore.Playlist) -> Unit,
     onOpenMenu: () -> Unit,
 ) {

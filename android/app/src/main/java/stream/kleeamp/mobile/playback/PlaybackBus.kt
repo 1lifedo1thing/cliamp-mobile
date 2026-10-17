@@ -62,16 +62,34 @@ object PlaybackBus {
     private val _reconnectAttempt = MutableStateFlow(0)
     val reconnectAttempt: StateFlow<Int> = _reconnectAttempt.asStateFlow()
 
+    /**
+     * Last user/auto seek, millis. Artwork and ICY metadata swaps rebuild the
+     * playing item (which resets its position), so they stand down for a
+     * moment after a seek instead of dragging a stale position back over it.
+     */
+    @Volatile var lastSeekMs: Long = 0L
+
+    /**
+     * When the audible station last changed, millis. The optimistic 3s grace
+     * anchors here — not on composition — so opening the player sheet does
+     * not restart the window and hide a stall that began minutes ago.
+     */
+    @Volatile var stationChangedAtMs: Long = 0L
+
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
     /**
      * Counts user queue adds: each [publishQueued] bumps it, so observers
      * see every add distinctly even back-to-back. The root pill hosts the
-     * "Added to Up Next" confirmation off this.
+     * confirmation off this, reading the human text from [queuedText].
      */
     private val _queuedCount = MutableStateFlow(0)
     val queuedCount: StateFlow<Int> = _queuedCount.asStateFlow()
+
+    /** Human confirmation for the last queue add, set before the count bumps. */
+    private val _queuedText = MutableStateFlow("")
+    val queuedText: StateFlow<String> = _queuedText.asStateFlow()
 
     fun publishSpectrum(v: FloatArray) { _spectrum.value = v }
     fun publishSpectrumLive(v: Boolean) { _spectrumLive.value = v }
@@ -79,12 +97,19 @@ object PlaybackBus {
     fun publishWaveform(v: FloatArray) { _waveform.value = v }
     fun publishStereo(v: StereoMetrics) { _stereo.value = v }
     fun publishStreamTitle(v: String) { _streamTitle.value = v }
-    fun publishStation(v: Station?) { _station.value = v; if (v != null) _streamTitle.value = "" }
+    fun publishStation(v: Station?) {
+        if (v != null && v.id != _station.value?.id) stationChangedAtMs = System.currentTimeMillis()
+        _station.value = v
+        if (v != null) _streamTitle.value = ""
+    }
     fun publishSource(v: List<Station>) { _source.value = v }
     fun publishFormat(v: StreamFormat) { _format.value = v }
     fun publishError(v: String?) { _error.value = v }
     fun publishReconnect(attempt: Int) { _reconnectAttempt.value = attempt }
-    fun publishQueued() { _queuedCount.value += 1 }
+    fun publishQueued(text: String = "") {
+        _queuedText.value = text
+        _queuedCount.value += 1
+    }
 }
 
 data class StreamFormat(

@@ -63,9 +63,9 @@ import stream.kleeamp.mobile.R
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.model.StationSource
+import stream.kleeamp.mobile.model.deEchoArtistLine
 import stream.kleeamp.mobile.model.wrapNext
 import stream.kleeamp.mobile.net.Http
-import stream.kleeamp.mobile.net.redactUrl
 import stream.kleeamp.mobile.widget.WidgetRenderer
 import stream.kleeamp.mobile.prefs.Prefs
 import stream.kleeamp.mobile.prefs.MaxBoostDb
@@ -379,6 +379,18 @@ class PlaybackService : MediaSessionService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
         ): MediaSession.ConnectionResult {
+            // Positional seek is not in the default player set: without these
+            // the app's own MediaController.seekTo() is dropped session-side
+            // ("Controller isn't allowed"), so the bar holds the dragged
+            // spot and snaps back - glaring on long podcasts. Player codes
+            // travel in Player.Commands, not SessionCommands. This also
+            // lights up the lockscreen seek bar.
+            val playerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
+                .add(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+                .add(Player.COMMAND_SEEK_TO_MEDIA_ITEM)
+                .add(Player.COMMAND_SEEK_BACK)
+                .add(Player.COMMAND_SEEK_FORWARD)
+                .build()
             val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
                 .add(SessionCommand(CMD_PREV_STATION, Bundle.EMPTY))
                 .add(SessionCommand(CMD_NEXT_STATION, Bundle.EMPTY))
@@ -387,6 +399,7 @@ class PlaybackService : MediaSessionService() {
                 .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller)
                 .setAvailableSessionCommands(commands)
+                .setAvailablePlayerCommands(playerCommands)
                 .setMediaButtonPreferences(buttons(false, false))
                 .build()
         }
@@ -440,26 +453,53 @@ class PlaybackService : MediaSessionService() {
                 if (attempt < 2) kotlinx.coroutines.delay(2_000)
             }
             val cover = art ?: return@launch
-            // The bus may still name the previous track this early, so the
-            // freshness check below reads the player, not the bus: only stamp
-            // art onto the item it was decoded for.
-            val item = player.currentMediaItem ?: return@launch
-            if (item.mediaId != station.id) return@launch
-            val bytes = StationArtwork.withArt(this@PlaybackService, station, cover)
-            val fresh = player.currentMediaItem
-                ?.takeIf { it.mediaId == station.id } ?: return@launch
-            if (fresh.mediaMetadata.artworkData?.contentEquals(bytes) == true) return@launch
-            player.replaceMediaItem(
-                player.currentMediaItemIndex,
-                fresh.buildUpon()
-                    .setMediaMetadata(
-                        fresh.mediaMetadata.buildUpon()
-                            .setArtworkData(bytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
-                            .build()
-                    )
-                    .build(),
-            )
+            standDownForSeek()
+            swapArtwork(station, cover)
         }
+    }
+
+    /** Waits out a seek in flight so the swap below reads a settled clock. */
+    private suspend fun standDownForSeek() {
+        val sinceSeek = System.currentTimeMillis() - PlaybackBus.lastSeekMs
+        if (sinceSeek in 0 until SEEK_STAND_DOWN_MS) {
+            kotlinx.coroutines.delay(SEEK_STAND_DOWN_MS - sinceSeek)
+        }
+    }
+
+    /**
+     * Stamps fetched art onto its item. replaceMediaItem resets the item to
+     * its default position, so a local file, podcast or channel track would
+     * jump back to 0:00 when its art lands; live radio sits on the live edge
+     * either way, so only finite tracks hold their position.
+     */
+    private fun swapArtwork(station: Station, cover: android.graphics.Bitmap) {
+        // The bus may still name the previous track this early, so the
+        // freshness check below reads the player, not the bus: only stamp
+        // art onto the item it was decoded for.
+        val item = player.currentMediaItem ?: return
+        if (item.mediaId != station.id) return
+        val bytes = StationArtwork.withArt(this@PlaybackService, station, cover)
+        val fresh = player.currentMediaItem
+            ?.takeIf { it.mediaId == station.id } ?: return
+        if (fresh.mediaMetadata.artworkData?.contentEquals(bytes) == true) return
+        // replaceMediaItem resets the item to its default position, so a
+        // local file, podcast or channel track would jump back to 0:00 a
+        // few seconds after tune (or after a seek) when its art lands.
+        // Live radio sits on the live edge either way. Hold the position
+        // for finite tracks.
+        val index = player.currentMediaItemIndex
+        val pos = player.currentPosition.coerceAtLeast(0)
+        player.replaceMediaItem(
+            index,
+            fresh.buildUpon()
+                .setMediaMetadata(
+                    fresh.mediaMetadata.buildUpon()
+                        .setArtworkData(bytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                        .build()
+                )
+                .build(),
+        )
+        if (station.isTrack && pos > 0) runCatching { player.seekTo(index, pos) }
     }
 
     /**
@@ -518,12 +558,6 @@ class PlaybackService : MediaSessionService() {
             seekable = seekable,
             durationMs = duration,
         )
-        Log.d(
-            "kleeamp/wid",
-            "publishWidgetState playing=${next.playing} streamTitle=${next.track} " +
-                "url=${redactUrl(next.url)} station=${station?.name} " +
-                "seekable=${next.seekable} duration=${next.durationMs}",
-        )
         // Both halves of the cache update synchronously. lastWidgetSourceKey
         // used to be assigned inside the launch below (and only when upNext
         // was non-empty), so after a cold start it stayed null forever, the
@@ -555,9 +589,6 @@ class PlaybackService : MediaSessionService() {
                     shuffled,
                 )
             )
-            val names = upNext.map { it.name }
-            Log.d("kleeamp/wid", "nextUp source.size=${source.size} count=${upNext.size} names=$names")
-            // An active source may intentionally have no upcoming items.
             // Preserve the persisted fallback only when no session source exists.
             if (sourceChanged && source.isNotEmpty()) {
                 prefs0.setWidgetNext(upNext)
@@ -716,8 +747,12 @@ class PlaybackService : MediaSessionService() {
             val current = item.mediaMetadata
             if (current.artist?.toString() == songTitle) return
             icyRefreshId = item.mediaId
+            // Same reset as the artwork swap: hold a finite track's clock
+            // across the rebuild so an ICY refresh never restarts an episode.
+            val index = player.currentMediaItemIndex
+            val pos = player.currentPosition.coerceAtLeast(0)
             player.replaceMediaItem(
-                player.currentMediaItemIndex,
+                index,
                 item.buildUpon()
                     .setMediaMetadata(
                         current.buildUpon()
@@ -727,6 +762,7 @@ class PlaybackService : MediaSessionService() {
                     )
                     .build(),
             )
+            if (station.isTrack && pos > 0) runCatching { player.seekTo(index, pos) }
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -862,6 +898,12 @@ class PlaybackService : MediaSessionService() {
 
         /** Minimum gap between analyser re-attach attempts; see the ticker. */
         const val FX_RETRY_MS = 2000L
+        /**
+         * How long artwork/metadata swaps stand down after a seek. The swap
+         * rebuilds the item (resetting its position), so firing on a stale
+         * pre-seek read drags a fresh seek back to zero.
+         */
+        const val SEEK_STAND_DOWN_MS = 5_000L
         const val CMD_PREV_STATION = "stream.kleeamp.mobile.PREV_STATION"
         const val CMD_NEXT_STATION = "stream.kleeamp.mobile.NEXT_STATION"
         const val CMD_SHUFFLE = "stream.kleeamp.mobile.SHUFFLE"
@@ -894,11 +936,22 @@ class PlaybackService : MediaSessionService() {
             else -> MediaMetadata.MEDIA_TYPE_RADIO_STATION
         }
 
-        /** The artist/subtitle line the notification reads, per source. */
-        fun notificationArtist(station: Station): String = when (station.source) {
-            StationSource.Local -> station.artistAlbum.ifBlank { "local audio" }
-            StationSource.Podcast -> station.artist.ifBlank { "podcast" }
-            else -> station.meta.ifBlank { "cliamp radio" }
+        /**
+         * The artist/subtitle line the notification reads, per source. Real
+         * metadata only, minus any source echo; channel tracks name their
+         * artist like any song, and the line never reads empty.
+         */
+        fun notificationArtist(station: Station): String {
+            val raw = when (station.source) {
+                StationSource.Local -> deEchoArtistLine(station.artistAlbum.split("·"), 2)
+                StationSource.Podcast -> deEchoArtistLine(listOf(station.artist), 1)
+                StationSource.Provider -> deEchoArtistLine(station.artistAlbum.split("·"), 2)
+                StationSource.Cliamp ->
+                    if (station.isChannelTrack) deEchoArtistLine(station.artistAlbum.split("·"), 2)
+                    else station.meta
+                else -> station.meta
+            }
+            return raw.ifBlank { "unknown" }
         }
     }
 }

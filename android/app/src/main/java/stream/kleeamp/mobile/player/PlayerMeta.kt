@@ -70,6 +70,7 @@ import androidx.media3.common.util.UnstableApi
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.model.StationSource
+import stream.kleeamp.mobile.model.deEchoArtistLine
 import stream.kleeamp.mobile.player.vis.StereoMetrics
 import stream.kleeamp.mobile.player.vis.Visualizer
 import stream.kleeamp.mobile.playback.AudioOutput
@@ -384,6 +385,11 @@ internal fun outputIcon(kind: OutputKind?): androidx.compose.ui.graphics.vector.
 private val NameLineHeight = (28 * 1.7).sp
 private val TitleLineHeight = (15 * 1.75).sp
 private val MetaLineHeight = (13 * 1.8).sp
+/**
+ * Hero glyph size. The line height stays [NameLineHeight], so the bigger
+ * face fits the exact same box - presence without layout shift.
+ */
+private val HeroFontSize = 30.sp
 
 @Composable
 internal fun PlayerMeta(
@@ -397,22 +403,119 @@ internal fun PlayerMeta(
         key(model.shownStation?.id) {
             MarqueeLabel(
                 model.shownStation?.name ?: "pick a station",
-                KleeampType.trackTitle.copy(lineHeight = NameLineHeight),
+                KleeampType.trackTitle.copy(fontSize = HeroFontSize, lineHeight = NameLineHeight),
                 p.ink,
             )
-            MarqueeLabel(
-                model.streamTitle.ifBlank { model.error ?: artistOrTagLine(model.shownStation) },
-                KleeampType.rowPrimary.copy(lineHeight = TitleLineHeight),
-                if (model.error != null && model.streamTitle.isBlank()) p.destructiveInk else p.inkSecondary,
+            ArtistLine(
+                text = model.streamTitle.ifBlank { model.error ?: artistOrTagLine(model.shownStation) },
+                live = model.streamTitle.isNotBlank() && model.error == null,
+                error = model.error != null && model.streamTitle.isBlank(),
             )
         }
-        Mono(
-            sourceLine(model.shownStation),
-            KleeampType.body.copy(lineHeight = MetaLineHeight),
-            p.inkTertiary,
-            maxLines = 1,
-        )
+        SourceLine(model.shownStation)
     }
+}
+
+/**
+ * The source · country · votes row under the stream title: an
+ * accent-washed source badge, the country in secondary ink, and the
+ * vote count with a heart in amber - one line, always.
+ *
+ * Fixed height: badge-only, badge+country and fallback variants all
+ * measure differently, and without the pin every track change nudges
+ * the transport below up or down a few dp.
+ */
+private val SourceLineHeight = 24.dp
+
+@Composable
+internal fun SourceLine(
+    station: Station?,
+    modifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    if (station == null) {
+        Box(modifier.height(SourceLineHeight), contentAlignment = Alignment.CenterStart) {
+            Mono(
+                "15 cliamp channels · 50k+ directory",
+                KleeampType.body.copy(lineHeight = MetaLineHeight),
+                p.inkTertiary,
+                maxLines = 1,
+            )
+        }
+        return
+    }
+    val country = station.country.takeIf { it.isNotBlank() && station.source != StationSource.Cliamp }
+        ?.lowercase()
+    Row(
+        modifier.height(SourceLineHeight),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(KleeampShape.small))
+                .background(p.accent.copy(alpha = 0.16f))
+                .padding(horizontal = 7.dp, vertical = 3.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Mono(sourceLabel(station.source).uppercase(), KleeampType.chip, p.accent, maxLines = 1)
+        }
+        if (country != null) {
+            Mono("·", KleeampType.body, p.inkFaint, maxLines = 1)
+            Mono(
+                country,
+                KleeampType.body.copy(lineHeight = MetaLineHeight),
+                p.inkSecondary,
+                Modifier.weight(1f, fill = false),
+                maxLines = 1,
+            )
+        }
+        if (station.votes > 0) {
+            Mono("·", KleeampType.body, p.inkFaint, maxLines = 1)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(KleeampIcons.HeartFilled, "votes", Modifier.size(10.dp), tint = p.amber)
+                Mono(compact(station.votes), KleeampType.body, p.amber, maxLines = 1)
+            }
+        }
+    }
+}
+
+/**
+ * The artist/stream-title line: a music note in accent while a live song
+ * plays, quiet tertiary otherwise, with the marquee taking the rest of
+ * the row. Fixed content shape, so track changes never shift the row.
+ */
+@Composable
+private fun ArtistLine(
+    text: String,
+    live: Boolean,
+    error: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    MarqueeLabel(
+        text,
+        KleeampType.rowPrimary.copy(lineHeight = TitleLineHeight),
+        when {
+            error -> p.destructiveInk
+            live -> p.ink
+            else -> p.inkSecondary
+        },
+        modifier.fillMaxWidth(),
+    )
+}
+
+/** Short source name for the badge. Pure for tests. */
+internal fun sourceLabel(source: StationSource): String = when (source) {
+    StationSource.Cliamp -> "cliamp radio"
+    StationSource.Directory -> "directory"
+    StationSource.Local -> "on device"
+    StationSource.Provider -> "provider"
+    StationSource.Podcast -> "podcast"
+    StationSource.Custom -> "custom"
 }
 
 
@@ -420,16 +523,7 @@ internal fun PlayerMeta(
 internal fun sourceLine(shownStation: Station?): String {
     val parts = buildList {
         shownStation?.let { s ->
-            add(
-                when (s.source) {
-                    StationSource.Cliamp -> "cliamp radio"
-                    StationSource.Directory -> "directory"
-                    StationSource.Local -> "on device"
-                    StationSource.Provider -> "provider"
-                    StationSource.Podcast -> "podcast"
-                    StationSource.Custom -> "custom"
-                }
-            )
+            add(sourceLabel(s.source))
             if (s.country.isNotBlank() && s.source != StationSource.Cliamp) add(s.country.lowercase())
             if (s.votes > 0) add("${compact(s.votes)} votes")
         }
@@ -522,13 +616,21 @@ internal fun RepeatAction(repeat: Repeat, onClick: () -> Unit) {
  * The line beneath the track title in the expanded player: the artist for
  * local files (and podcasts), the stream title normally, and the station tags
  * as a last resort - mirroring the mini player's artist line so the artist is
- * always named under the song.
+ * always named under the song. Pure so unit tests can pin it.
  */
 internal fun artistOrTagLine(station: Station?): String {
     if (station == null) return ""
-    return when (station.source) {
-        StationSource.Local -> station.artistAlbum
-        StationSource.Podcast -> station.artist
-        else -> station.tagList.take(3).joinToString(" · ")
-    }.ifBlank { station.tagList.take(3).joinToString(" · ") }
+    val raw = when (station.source) {
+        StationSource.Local -> deEchoArtistLine(station.artistAlbum.split("·"), 2)
+        StationSource.Podcast -> deEchoArtistLine(listOf(station.artist), 1)
+        StationSource.Provider -> deEchoArtistLine(station.artistAlbum.split("·"), 2)
+        // Channel tracks are real songs with artists; the live channel
+        // itself falls through to tags like any other station.
+        StationSource.Cliamp ->
+            if (station.isChannelTrack) deEchoArtistLine(station.artistAlbum.split("·"), 2)
+            else deEchoArtistLine(station.tagList, 3)
+        else -> deEchoArtistLine(station.tagList, 3)
+    }.ifBlank { deEchoArtistLine(station.tagList, 3) }
+    // An artist slot never reads empty: "unknown" beats a blank line.
+    return raw.ifBlank { "unknown" }
 }

@@ -130,6 +130,8 @@ class Prefs(private val context: Context) {
         val skipFwdSec = intPreferencesKey("skip_fwd_sec")
         val lbToken = stringPreferencesKey("lb_token")
         val autoResume = booleanPreferencesKey("auto_resume")
+        /** Episodes reopen where they stopped. On by default. */
+        val resumePodcasts = booleanPreferencesKey("resume_podcasts")
         val autoDownload = booleanPreferencesKey("auto_download")
         val autoCellular = booleanPreferencesKey("auto_cellular")
         val cleanupPlayed = stringPreferencesKey("cleanup_played")
@@ -146,6 +148,8 @@ class Prefs(private val context: Context) {
         val wSource = stringPreferencesKey("w_source")
         val queue = stringPreferencesKey("queue")
         val queueIndex = intPreferencesKey("queue_index")
+        /** True when [queue] holds the whole source, not just the window. */
+        val queueFull = booleanPreferencesKey("queue_full")
         val downloads = stringPreferencesKey("downloads")
         val customTheme = stringPreferencesKey("custom_theme")
         val playlistSorts = stringPreferencesKey("playlist_sorts")  // slug -> PlaylistSort.ordinal
@@ -171,6 +175,8 @@ class Prefs(private val context: Context) {
     val eqEnabled: Flow<Boolean> = context.settingsStore.data.map { it[K.eqEnabled] ?: false }
     val eqPreset: Flow<String> = context.settingsStore.data.map { it[K.eqPreset] ?: "flat" }
     val autoResume: Flow<Boolean> = context.settingsStore.data.map { it[K.autoResume] ?: false }
+    /** Episodes reopen where they stopped. On by default. */
+    val resumePodcasts: Flow<Boolean> = context.settingsStore.data.map { it[K.resumePodcasts] ?: true }
     /** Latest episodes fetch themselves for subscribed shows. Off by default. */
     val autoDownload: Flow<Boolean> = context.settingsStore.data.map { it[K.autoDownload] ?: false }
     /** Auto-download may use metered data. Off by default: wifi-only unless opted in. */
@@ -293,10 +299,11 @@ class Prefs(private val context: Context) {
 
     /**
      * Last session's Up Next window plus the position inside it, so a cold
-     * start opens on the remembered queue instead of an empty one. The window
-     * is already bounded (WINDOW=60 in PlayerConnection), the same size class
-     * as the widget's persisted lists - the full source list is deliberately
-     * not stored, it can be the whole local library.
+     * start opens on the remembered queue instead of an empty one. Finite
+     * track lists persist whole (up to a few hundred entries); anything
+     * bigger - or any mixed/live list - persists the bounded window
+     * (WINDOW=60 in PlayerConnection), the same size class as the
+     * widget's persisted lists.
      */
     val queue: Flow<List<Station>> = context.settingsStore.data.map { p ->
         p[K.queue]?.let { raw ->
@@ -304,13 +311,15 @@ class Prefs(private val context: Context) {
         } ?: emptyList()
     }
     val queueIndex: Flow<Int> = context.settingsStore.data.map { it[K.queueIndex] ?: 0 }
+    val queueFull: Flow<Boolean> = context.settingsStore.data.map { it[K.queueFull] ?: false }
 
     /** Write the queue window and position in one transaction so cold-boot
      * readers never see a list from one play with another's index. */
-    suspend fun setQueue(stations: List<Station>, index: Int) {
+    suspend fun setQueue(stations: List<Station>, index: Int, full: Boolean = false) {
         context.settingsStore.edit {
             it[K.queue] = Http.json.encodeToString(stations)
             it[K.queueIndex] = index
+            it[K.queueFull] = full
         }
     }
     val custom: Flow<List<Station>> =
@@ -429,6 +438,7 @@ class Prefs(private val context: Context) {
     suspend fun setEqEnabled(v: Boolean) = put(K.eqEnabled, v)
     suspend fun setEqPreset(v: String) = put(K.eqPreset, v)
     suspend fun setAutoResume(v: Boolean) = put(K.autoResume, v)
+    suspend fun setResumePodcasts(v: Boolean) = put(K.resumePodcasts, v)
     suspend fun setAutoDownload(v: Boolean) = put(K.autoDownload, v)
     suspend fun setAutoCellular(v: Boolean) = put(K.autoCellular, v)
     suspend fun setCleanupPlayed(v: CleanupScope) = put(K.cleanupPlayed, v.key)

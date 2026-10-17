@@ -21,6 +21,7 @@ class PodcastShowViewModel(
         val autoDownload: Boolean,
         val showState: ShowState,
         val progress: Map<String, EpisodeProgress>,
+        val resumePodcasts: Boolean = true,
         val subscriptions: List<PodcastShow>,
         val favorites: Set<String>,
     )
@@ -66,13 +67,15 @@ class PodcastShowViewModel(
         ) { show, progress, subscriptions, favorites ->
             ShowBits(show, progress, subscriptions, favorites.mapTo(HashSet()) { it.url })
         },
-    ) { x, y ->
+        prefs.resumePodcasts,
+    ) { x, y, resume ->
         UiState(
             dlStates = x.states,
             dlEntries = x.entries,
             autoDownload = x.autoDownload,
             showState = y.show,
             progress = y.progress,
+            resumePodcasts = resume,
             subscriptions = y.subscriptions,
             favorites = y.favorites,
         )

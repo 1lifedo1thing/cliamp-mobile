@@ -25,8 +25,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -45,7 +45,6 @@ import stream.kleeamp.mobile.art.SeedPlate
 import stream.kleeamp.mobile.model.Station
 import stream.kleeamp.mobile.art.StationArtSource
 import stream.kleeamp.mobile.model.StationSource
-import stream.kleeamp.mobile.model.sourceLine
 import stream.kleeamp.mobile.theme.KleeampShape
 import stream.kleeamp.mobile.theme.KleeampType
 import stream.kleeamp.mobile.theme.LocalPalette
@@ -61,6 +60,9 @@ fun MiniPlayer(
     reconnecting: Int = 0,
     hasPrev: Boolean = false,
     hasNext: Boolean = false,
+    /** Elapsed/duration ms: paints the position hairline on tracks. */
+    positionMs: Long = 0L,
+    durationMs: Long = 0L,
     onPrev: () -> Unit = {},
     onNext: () -> Unit = {},
     onOpenUpNext: () -> Unit,
@@ -92,11 +94,25 @@ fun MiniPlayer(
                         ),
                     ),
             )
+            // Position hairline along the bar's bottom edge on tracks with
+            // a known length: overlay only, so the bar measures exactly
+            // as before with or without it.
+            if (!empty && station?.isTrack == true && durationMs > 0) {
+                val done = (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)
+                Box(
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth(done)
+                        .height(2.dp)
+                        .background(p.accent),
+                )
+            }
             Row(
                 Modifier
                     .fillMaxWidth()
                     .microPress(onClick = onOpen)
                     .dragUpToOpen(onOpen)
+                    .swipeToStep(onPrev, onNext)
                     .padding(horizontal = Gutter, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -115,7 +131,7 @@ fun MiniPlayer(
                             reconnecting > 0 -> "reconnecting · $reconnecting"
                             buffering -> "buffering…"
                             streamTitle.isNotBlank() -> streamTitle
-                            else -> station.sourceLine
+                            else -> artistOrTagLine(station)
                         },
                         KleeampType.rowSecondary,
                         if (buffering || reconnecting > 0) p.amber else p.inkTertiary,
@@ -145,13 +161,6 @@ fun MiniPlayer(
                 Box(
                     Modifier
                         .size(38.dp)
-                        .graphicsLayer {
-                            // The play key swells with the music: a layer
-                            // transform, still the moment it pauses.
-                            val pulse = 1f + 0.12f * energy
-                            scaleX = pulse
-                            scaleY = pulse
-                        }
                         .microPress(onClick = onToggle)
                         .clip(RoundedCornerShape(KleeampShape.medium))
                         .background(if (p.dark) p.accent else p.ink),
@@ -192,6 +201,27 @@ private fun Modifier.dragUpToOpen(onOpen: () -> Unit): Modifier = pointerInput(o
         onDragCancel = { travel = 0f },
     )
 }
+
+/**
+ * Swiping the bar sideways steps the queue: left for next, right for
+ * previous. Same travel threshold as the upward open, taps untouched,
+ * and a short fling back stays put.
+ */
+private fun Modifier.swipeToStep(onPrev: () -> Unit, onNext: () -> Unit): Modifier =
+    pointerInput(onPrev, onNext) {
+        val threshold = 64.dp.toPx()
+        var travel = 0f
+        detectHorizontalDragGestures(
+            onDragStart = { travel = 0f },
+            onHorizontalDrag = { _, amount -> travel += amount },
+            onDragEnd = {
+                if (travel < -threshold) onNext()
+                else if (travel > threshold) onPrev()
+                travel = 0f
+            },
+            onDragCancel = { travel = 0f },
+        )
+    }
 
 /** A small prev/next key for the mini bar transport cluster. */@Composable
 private fun MiniKey(

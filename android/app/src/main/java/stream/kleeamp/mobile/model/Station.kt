@@ -88,8 +88,33 @@ internal val Station.sourceLine: String
         StationSource.Cliamp -> "cliamp radio"
         StationSource.Local -> artistAlbum.ifBlank { "local audio" }
         StationSource.Podcast -> artist.ifBlank { "podcast" }
+        StationSource.Provider -> artistAlbum.ifBlank { meta.ifBlank { "provider" } }
         else -> meta.ifBlank { "live stream" }
     }
+
+/**
+ * Segments that name the origin, never the music. Artist slots (player
+ * row, mini bar, notification) drop any segment echoing these instead
+ * of repeating what the source badge already says.
+ */
+internal val SourceEchoes = setOf(
+    "cliamp radio",
+    "directory",
+    "on device",
+    "provider",
+    "podcast",
+    "custom",
+    "local audio",
+    "live stream",
+    "my music",
+)
+
+/** Join the first [take] segments minus any source echo. Pure for tests. */
+internal fun deEchoArtistLine(segments: List<String>, take: Int): String = segments
+    .map { it.trim() }
+    .filter { it.isNotEmpty() && it.lowercase() !in SourceEchoes }
+    .take(take)
+    .joinToString(" · ")
 
 /**
  * The [count] stations after index [i] of this list, wrapping around the end.

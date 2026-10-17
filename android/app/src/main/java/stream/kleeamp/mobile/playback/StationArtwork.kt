@@ -210,6 +210,15 @@ object StationArtwork {
         paint.color = Color.parseColor(CAPTION)
         val caption = when {
             station.source == StationSource.Cliamp -> "[ ${station.slug} · cliamp radio ]"
+            station.source == StationSource.Local ->
+                if (station.album.isNotBlank()) "[ ${station.album.lowercase()} · ${station.artist.lowercase()} ]"
+                else "[ local file ]"
+            station.source == StationSource.Provider ->
+                if (station.album.isNotBlank()) "[ ${station.album.lowercase()} · ${station.artist.lowercase()} ]"
+                else "[ provider ]"
+            station.source == StationSource.Podcast ->
+                if (station.artist.isNotBlank()) "[ ${station.artist.lowercase()} · podcast ]"
+                else "[ podcast ]"
             station.countryCode.isNotBlank() -> "[ ${station.countryCode.lowercase()} · live stream ]"
             else -> "[ live stream ]"
         }

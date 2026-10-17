@@ -99,6 +99,7 @@ fun PodcastShowScreen(
     val autoOn = ui.autoDownload
     val state = ui.showState
     val progress = ui.progress
+    val showProgress = ui.resumePodcasts
     val subscriptions = ui.subscriptions
 
     val show = state.show
@@ -248,7 +249,7 @@ fun PodcastShowScreen(
                     EpisodeRow(
                         episode = state.episodes[i],
                         station = station,
-                        progress = progress[station.url],
+                        progress = if (showProgress) progress[station.url] else null,
                         active = current?.url == station.url,
                         playing = playing && current?.url == station.url,
                         dlState = dl,
@@ -274,7 +275,7 @@ fun PodcastShowScreen(
         menuIndex?.let { mi ->
             queue.getOrNull(mi)?.let { s ->
                 val mdl = dlStates[s.url] ?: DownloadState.Idle
-                val done = progress[s.url]?.completed == true
+                val done = showProgress && progress[s.url]?.completed == true
                 ContextMenuSheet(
                     title = s.name,
                     subtitle = listOfNotNull(

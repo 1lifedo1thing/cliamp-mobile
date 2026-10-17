@@ -31,4 +31,15 @@ class ReconnectorTest {
         assertTrue(isRecoverablePlaybackError(PlaybackException.ERROR_CODE_TIMEOUT))
         assertTrue(isRecoverablePlaybackError(PlaybackException.ERROR_CODE_FAILED_RUNTIME_CHECK))
     }
+
+    @Test
+    fun trackPositionRestoresAfterReprime() {
+        // A podcast at 90s re-primed to 0 restores; a different station,
+        // a trivial offset or an already-close position does not.
+        assertTrue(shouldRestoreTrackPosition("pod:a:1", "pod:a:1", 90_000, 0))
+        assertFalse(shouldRestoreTrackPosition("pod:a:1", "pod:a:2", 90_000, 0))
+        assertFalse(shouldRestoreTrackPosition("pod:a:1", "pod:a:1", 2_000, 0))
+        assertFalse(shouldRestoreTrackPosition("pod:a:1", "pod:a:1", 90_000, 89_000))
+        assertFalse(shouldRestoreTrackPosition(null, "pod:a:1", 90_000, 0))
+    }
 }

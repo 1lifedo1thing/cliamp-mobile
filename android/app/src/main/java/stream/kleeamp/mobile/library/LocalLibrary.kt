@@ -229,15 +229,10 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
             _loading.value = true
         }
 
-        val tQuery = System.currentTimeMillis()
         val found = runCatching { querySongs() }.getOrElse { e ->
             if (_songs.value.isEmpty()) _error.value = e.message ?: "could not read the library"
             _songs.value
         }
-        android.util.Log.d(
-            "kleeamp/library",
-            "query ${found.size} songs in ${System.currentTimeMillis() - tQuery}ms",
-        )
 
         // The list (and the spinner going away) always wins over the cache
         // write: rows are up the moment the cursor closes, however slow the
@@ -247,12 +242,7 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
         _loading.value = false
 
         if (found != cached.orEmpty()) {
-            val tCache = System.currentTimeMillis()
             writeCache(found)
-            android.util.Log.d(
-                "kleeamp/library",
-                "cache write ${found.size} songs in ${System.currentTimeMillis() - tCache}ms",
-            )
         }
         // Favorites, history, counters and resume positions are keyed by
         // playback url: rows cached before the content-uri switch still
@@ -349,26 +339,6 @@ class LocalLibrary(context: Context, private val scope: CoroutineScope) {
             uri = uri,
             cover = if (cols.albumId >= 0) albumArtUri(c.getLong(cols.albumId)).orEmpty() else "",
         )
-    }
-
-    /** Companion cover image in the track's own folder, if the user keeps one. Kept for a later optional miss path on a visible row — never on the scan path. */
-    private fun nearestCover(dir: File?): String? {
-        if (dir == null) return null
-        val covers = listOf(
-            "cover.jpg", "cover.png", "folder.jpg", "folder.png",
-            "albumart.jpg", "albumart.png", "front.jpg", "front.png",
-        )
-        val named = covers.firstNotNullOfOrNull { name ->
-            File(dir, name).takeIf { it.isFile }
-        }
-        if (named != null) return Uri.fromFile(named).toString()
-        // Fall back to any image in the same folder (some viewers drop a
-        // "folder.jpg"-style file with a different name). If none, leaving it
-        // blank lets the embedded-art fallback in LocalArt/StationArtSource win.
-        val image = dir.listFiles()?.firstOrNull {
-            it.isFile && it.extension.lowercase() in setOf("jpg", "jpeg", "png")
-        }
-        return image?.let { Uri.fromFile(it).toString() }
     }
 
     // ── disk cache ──────────────────────────────────────────────────────────
